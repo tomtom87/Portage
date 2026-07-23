@@ -4,4 +4,5 @@ module UcpMcp
   class UnknownCapabilityError < Error; end
   class UnknownActionError < Error; end
   class CapabilityNotAdvertisedError < Error; end
+  class AuthenticationError < Error; end
 end
