@@ -34,7 +34,9 @@ module UcpMcp
     # @return [UcpMcp::Identity] linked profile for an exchanged OAuth token
     def link_identity(oauth_token:) = not_implemented
 
-    private def not_implemented
+    private
+
+    def not_implemented
       raise UcpMcp::NotImplementedError, "#{self.class} does not implement this capability"
     end
   end

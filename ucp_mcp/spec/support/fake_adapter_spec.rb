@@ -5,8 +5,8 @@ RSpec.describe UcpMcp::Support::FakeAdapter do
   subject(:adapter) { described_class.new }
   let(:product) do
     UcpMcp::Product.new(id: "prod_1", title: "Cold Brew", description: "desc",
-                         price: UcpMcp::Money.new(amount_minor: 500, currency: "USD"),
-                         available: true, variants: [], url: "https://example.com/prod_1")
+                        price: UcpMcp::Money.new(amount_minor: 500, currency: "USD"),
+                        available: true, variants: [], url: "https://example.com/prod_1")
   end
 
   before { adapter.seed_product(product) }

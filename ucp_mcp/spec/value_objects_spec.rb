@@ -31,7 +31,7 @@ RSpec.describe "UcpMcp value objects" do
       unit_price = UcpMcp::Money.new(amount_minor: 500, currency: "USD")
       total = UcpMcp::Money.new(amount_minor: 1000, currency: "USD")
       item = UcpMcp::LineItem.new(id: "li_1", product_id: "prod_1", quantity: 2,
-                                   unit_price: unit_price, total: total)
+                                  unit_price: unit_price, total: total)
       expect(item.quantity).to eq(2)
       expect(item.total.amount_minor).to eq(1000)
     end
@@ -39,7 +39,8 @@ RSpec.describe "UcpMcp value objects" do
 
   describe UcpMcp::Cart do
     it "holds line items and a subtotal" do
-      cart = UcpMcp::Cart.new(id: "cart_1", line_items: [], subtotal: UcpMcp::Money.new(amount_minor: 0, currency: "USD"), currency: "USD")
+      cart = UcpMcp::Cart.new(id: "cart_1", line_items: [],
+                              subtotal: UcpMcp::Money.new(amount_minor: 0, currency: "USD"), currency: "USD")
       expect(cart.line_items).to eq([])
     end
   end
@@ -48,9 +49,9 @@ RSpec.describe "UcpMcp value objects" do
     it "holds checkout state" do
       zero = UcpMcp::Money.new(amount_minor: 0, currency: "USD")
       checkout = UcpMcp::Checkout.new(id: "chk_1", status: "pending", line_items: [],
-                                       subtotal: zero, tax: zero, total: zero,
-                                       currency: "USD", locale: "en-US",
-                                       available_payment_handlers: [])
+                                      subtotal: zero, tax: zero, total: zero,
+                                      currency: "USD", locale: "en-US",
+                                      available_payment_handlers: [])
       expect(checkout.status).to eq("pending")
     end
   end
@@ -59,7 +60,7 @@ RSpec.describe "UcpMcp value objects" do
     it "holds order state" do
       total = UcpMcp::Money.new(amount_minor: 500, currency: "USD")
       order = UcpMcp::Order.new(id: "ord_1", status: "placed", line_items: [],
-                                 total: total, currency: "USD", placed_at: "2026-07-23T00:00:00Z")
+                                total: total, currency: "USD", placed_at: "2026-07-23T00:00:00Z")
       expect(order.status).to eq("placed")
     end
   end

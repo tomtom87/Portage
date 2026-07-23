@@ -31,18 +31,18 @@ module UcpMcp
       def add_line_item(cart_id:, product_id:, quantity:, idempotency_key:)
         dedup(idempotency_key) do
           cart = @carts[cart_id] || UcpMcp::Cart.new(id: cart_id, line_items: [],
-                                                      subtotal: UcpMcp::Money.new(amount_minor: 0, currency: "USD"),
-                                                      currency: "USD")
+                                                     subtotal: UcpMcp::Money.new(amount_minor: 0, currency: "USD"),
+                                                     currency: "USD")
           product = @products.fetch(product_id)
           unit_price = product.price
           total = UcpMcp::Money.new(amount_minor: unit_price.amount_minor * quantity, currency: unit_price.currency)
           line_item = UcpMcp::LineItem.new(id: next_id("li"), product_id: product_id,
-                                            quantity: quantity, unit_price: unit_price, total: total)
+                                           quantity: quantity, unit_price: unit_price, total: total)
           new_subtotal = UcpMcp::Money.new(
             amount_minor: cart.subtotal.amount_minor + total.amount_minor, currency: cart.currency
           )
           @carts[cart_id] = UcpMcp::Cart.new(id: cart_id, line_items: cart.line_items + [line_item],
-                                              subtotal: new_subtotal, currency: cart.currency)
+                                             subtotal: new_subtotal, currency: cart.currency)
         end
       end
 
@@ -51,8 +51,10 @@ module UcpMcp
           cart = @carts.fetch(cart_id)
           removed, remaining = cart.line_items.partition { |li| li.id == line_item_id }
           removed_total = removed.sum { |li| li.total.amount_minor }
-          new_subtotal = UcpMcp::Money.new(amount_minor: cart.subtotal.amount_minor - removed_total, currency: cart.currency)
-          @carts[cart_id] = UcpMcp::Cart.new(id: cart_id, line_items: remaining, subtotal: new_subtotal, currency: cart.currency)
+          new_subtotal = UcpMcp::Money.new(amount_minor: cart.subtotal.amount_minor - removed_total,
+                                           currency: cart.currency)
+          @carts[cart_id] =
+            UcpMcp::Cart.new(id: cart_id, line_items: remaining, subtotal: new_subtotal, currency: cart.currency)
         end
       end
 
@@ -63,15 +65,15 @@ module UcpMcp
           @checkouts[next_id("chk")] = nil
           id = @checkouts.keys.last
           @checkouts[id] = UcpMcp::Checkout.new(id: id, status: "pending", line_items: line_items,
-                                                 subtotal: subtotal, tax: zero, total: subtotal,
-                                                 currency: "USD", locale: "en-US", available_payment_handlers: [])
+                                                subtotal: subtotal, tax: zero, total: subtotal,
+                                                currency: "USD", locale: "en-US", available_payment_handlers: [])
         end
       end
 
       def complete_checkout(checkout_id:, payment_token:, idempotency_key:)
         dedup(idempotency_key) do
           checkout = @checkouts.fetch(checkout_id)
-          @checkouts[checkout_id] = UcpMcp::Checkout.new(**checkout.to_h.merge(status: "completed"))
+          @checkouts[checkout_id] = UcpMcp::Checkout.new(**checkout.to_h, status: "completed")
         end
       end
 

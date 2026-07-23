@@ -3,11 +3,11 @@ require "spec_helper"
 RSpec.describe UcpMcp::CapabilityRegistry do
   let(:catalog_capability) do
     UcpMcp::Capability.new(name: "dev.ucp.shopping.catalog", version: "1",
-                            actions: { "search_catalog" => :search_catalog })
+                           actions: { "search_catalog" => :search_catalog })
   end
   let(:cart_capability) do
     UcpMcp::Capability.new(name: "dev.ucp.shopping.cart", version: "1",
-                            actions: { "get_cart" => :get_cart })
+                           actions: { "get_cart" => :get_cart })
   end
   let(:registry) { described_class.new(capabilities: [catalog_capability, cart_capability]) }
 

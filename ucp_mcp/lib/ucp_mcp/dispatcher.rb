@@ -12,9 +12,7 @@ module UcpMcp
       capability_definition = @registry.find(capability)
       raise UnknownCapabilityError, capability if capability_definition.nil?
 
-      unless capability_definition.advertised_for?(@adapter)
-        raise CapabilityNotAdvertisedError, capability
-      end
+      raise CapabilityNotAdvertisedError, capability unless capability_definition.advertised_for?(@adapter)
 
       method_name = capability_definition.actions[action]
       raise UnknownActionError, action if method_name.nil?

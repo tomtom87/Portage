@@ -1,0 +1,45 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  SuggestExtensions: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*.rb"
+    - "*.gemspec"
+
+Metrics/MethodLength:
+  Max: 15
+
+Metrics/AbcSize:
+  Max: 25
+
+Metrics/ParameterLists:
+  Max: 6
+
+Style/HashSlice:
+  Enabled: false
+
+Lint/UnusedMethodArgument:
+  Exclude:
+    - "lib/ucp_mcp/adapter.rb"
+    - "spec/**/*.rb"
+
+Lint/MissingSuper:
+  Exclude:
+    - "spec/**/*.rb"
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Gemspec/RequireMFA:
+  Enabled: false
