@@ -12,6 +12,8 @@ require_relative "ucp_mcp/capabilities/order"
 require_relative "ucp_mcp/capabilities/identity_linking"
 require_relative "ucp_mcp/capability_registry"
 require_relative "ucp_mcp/dispatcher"
+require_relative "ucp_mcp/mcp/server"
+require_relative "ucp_mcp/rack/manifest_endpoint"
 
 module UcpMcp
 end
