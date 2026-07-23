@@ -28,4 +28,33 @@ RSpec.describe UcpMcp::Rack::ManifestEndpoint do
 
     expect(last_response.status).to eq(404)
   end
+
+  context "with payment handlers configured" do
+    let(:manifest) do
+      UcpMcp::Manifest.new(adapter: adapter, business: { name: "Test Roastery" },
+                           payment_handlers: [{ type: "card_token" }])
+    end
+
+    it "refuses to serve over plaintext HTTP (§9)" do
+      get "/.well-known/ucp"
+
+      expect(last_response.status).to eq(496)
+    end
+
+    it "serves normally over TLS" do
+      get "/.well-known/ucp", {}, { "HTTPS" => "on" }
+
+      expect(last_response.status).to eq(200)
+    end
+
+    it "serves over plaintext when explicitly allowed for local development" do
+      def app
+        described_class.new(manifest: manifest, allow_insecure: true)
+      end
+
+      get "/.well-known/ucp"
+
+      expect(last_response.status).to eq(200)
+    end
+  end
 end
