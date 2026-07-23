@@ -15,8 +15,9 @@ module UcpMcp
     #   `signing_keys` verifies it (supports a current+next key set for
     #   rotation — the caller picks which signer/kid pair is "current").
     #   Algorithm-agnostic by design: the gem doesn't dictate Ed25519 vs RSA.
-    def initialize(adapter:, business:, registry: CapabilityRegistry.default,
-                   payment_handlers: [], signing_keys: [], signer: nil)
+    def initialize(adapter:, business: UcpMcp.configuration.business, registry: UcpMcp.configuration.registry,
+                   payment_handlers: UcpMcp.configuration.payment_handlers,
+                   signing_keys: UcpMcp.configuration.signing_keys, signer: UcpMcp.configuration.signer)
       @adapter = adapter
       @business = business
       @registry = registry

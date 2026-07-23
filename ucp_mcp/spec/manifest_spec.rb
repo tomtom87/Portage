@@ -45,4 +45,14 @@ RSpec.describe UcpMcp::Manifest do
     expected_bytesize = JSON.generate(signed.except(:signature)).bytesize
     expect(Base64.strict_decode64(signed[:signature][:value])).to eq("sig(#{expected_bytesize})")
   end
+
+  it "falls back to UcpMcp.configuration for collaborators not passed explicitly" do
+    UcpMcp.configure { |c| c.payment_handlers = [{ type: "configured_handler" }] }
+
+    result = described_class.new(adapter: adapter, business: business).to_h
+
+    expect(result[:payment_handlers]).to eq([{ type: "configured_handler" }])
+  ensure
+    UcpMcp.instance_variable_set(:@configuration, nil)
+  end
 end

@@ -11,10 +11,10 @@ module UcpMcp
       # doesn't need one keyword argument per collaborator.
       Context = Struct.new(:dispatcher, :authenticator, :rate_limiter, :logger, keyword_init: true)
 
-      def self.build(adapter:, registry: UcpMcp::CapabilityRegistry.default,
-                     authenticator: UcpMcp::UnconfiguredAuthenticator.new,
-                     rate_limiter: UcpMcp::NullRateLimiter.new,
-                     logger: Logger.new($stdout), **server_opts)
+      def self.build(adapter:, registry: UcpMcp.configuration.registry,
+                     authenticator: UcpMcp.configuration.authenticator,
+                     rate_limiter: UcpMcp.configuration.rate_limiter,
+                     logger: UcpMcp.configuration.logger, **server_opts)
         context = Context.new(dispatcher: UcpMcp::Dispatcher.new(adapter: adapter, registry: registry),
                               authenticator: authenticator, rate_limiter: rate_limiter, logger: logger)
         tools = registry.advertised(adapter).flat_map do |capability|
