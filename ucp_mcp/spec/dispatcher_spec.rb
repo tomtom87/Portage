@@ -35,6 +35,17 @@ RSpec.describe UcpMcp::Dispatcher do
     expect(response[:structuredContent].line_items.size).to eq(1)
   end
 
+  it "rejects a complete_checkout call whose payment_token looks like a raw PAN (§9)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [], idempotency_key: "chk1" })[:structuredContent]
+
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout.id, payment_token: "4111111111111111",
+                                   idempotency_key: "chk1-complete" })
+    end.to raise_error(UcpMcp::RawPanRejectedError)
+  end
+
   it "raises UnknownCapabilityError for a capability name that isn't registered" do
     expect { dispatcher.call(capability: "dev.ucp.shopping.nonexistent", action: "whatever", arguments: {}) }
       .to raise_error(UcpMcp::UnknownCapabilityError, /dev\.ucp\.shopping\.nonexistent/)

@@ -5,4 +5,5 @@ module UcpMcp
   class UnknownActionError < Error; end
   class CapabilityNotAdvertisedError < Error; end
   class AuthenticationError < Error; end
+  class RawPanRejectedError < Error; end
 end

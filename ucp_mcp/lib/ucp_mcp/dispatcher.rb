@@ -17,6 +17,8 @@ module UcpMcp
       method_name = capability_definition.actions[action]
       raise UnknownActionError, action if method_name.nil?
 
+      UcpMcp::PaymentTokenGuard.validate!(arguments[:payment_token]) if arguments.key?(:payment_token)
+
       result = @adapter.public_send(method_name, **arguments)
       wrap(result)
     end
