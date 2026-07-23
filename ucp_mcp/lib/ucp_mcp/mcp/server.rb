@@ -9,13 +9,14 @@ module UcpMcp
     class Server
       # Collaborators shared by every generated tool, bundled so build_tool
       # doesn't need one keyword argument per collaborator.
-      Context = Struct.new(:dispatcher, :authenticator, :logger, keyword_init: true)
+      Context = Struct.new(:dispatcher, :authenticator, :rate_limiter, :logger, keyword_init: true)
 
       def self.build(adapter:, registry: UcpMcp::CapabilityRegistry.default,
                      authenticator: UcpMcp::UnconfiguredAuthenticator.new,
+                     rate_limiter: UcpMcp::NullRateLimiter.new,
                      logger: Logger.new($stdout), **server_opts)
         context = Context.new(dispatcher: UcpMcp::Dispatcher.new(adapter: adapter, registry: registry),
-                              authenticator: authenticator, logger: logger)
+                              authenticator: authenticator, rate_limiter: rate_limiter, logger: logger)
         tools = registry.advertised(adapter).flat_map do |capability|
           capability.actions.map do |action_name, method_name|
             build_tool(adapter: adapter, capability: capability, action_name: action_name,
@@ -47,7 +48,8 @@ module UcpMcp
         UcpMcp::Observability.log(context.logger, "tool_called", capability: capability.name,
                                                                  action: action_name, arguments: kwargs)
 
-        rejection = authorize(context.authenticator, server_context, mutating: mutating)
+        rejection = authorize(context.authenticator, server_context, mutating: mutating) ||
+                    rate_limit(context.rate_limiter, server_context, capability.name, mutating: mutating)
         return rejection if rejection
 
         result = context.dispatcher.call(capability: capability.name, action: action_name, arguments: kwargs)
@@ -60,6 +62,18 @@ module UcpMcp
         authenticator.call(server_context)
         nil
       rescue UcpMcp::AuthenticationError => e
+        ::MCP::Tool::Response.new([{ type: "text", text: e.message }], error: true)
+      end
+
+      # @param key [Object] whatever the consumer's RateLimiter derives an
+      #   identity from — the gem hands over the raw MCP server_context
+      #   rather than inventing its own per-session/per-key extraction (§9).
+      def self.rate_limit(rate_limiter, key, capability_name, mutating:)
+        return unless mutating
+
+        rate_limiter.check!(key, capability_name)
+        nil
+      rescue UcpMcp::RateLimitExceededError => e
         ::MCP::Tool::Response.new([{ type: "text", text: e.message }], error: true)
       end
     end

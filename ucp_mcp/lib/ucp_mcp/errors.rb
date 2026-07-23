@@ -6,4 +6,5 @@ module UcpMcp
   class CapabilityNotAdvertisedError < Error; end
   class AuthenticationError < Error; end
   class RawPanRejectedError < Error; end
+  class RateLimitExceededError < Error; end
 end

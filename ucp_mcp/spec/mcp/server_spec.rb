@@ -89,6 +89,51 @@ RSpec.describe UcpMcp::Mcp::Server do
     expect(response[:result][:isError]).to be_falsey
   end
 
+  it "leaves mutating calls unlimited by default (no bundled rate limiter, §9)" do
+    authenticator = Class.new(UcpMcp::Authenticator) { def call(_ctx) = :authorized }.new
+    unlimited_server = described_class.build(adapter: adapter, authenticator: authenticator)
+
+    response = unlimited_server.handle({
+                                         jsonrpc: "2.0", id: 9, method: "tools/call",
+                                         params: { name: "add_line_item",
+                                                   arguments: { cart_id: "cart_1", product_id: "prod_1",
+                                                                quantity: 1, idempotency_key: "k3" } }
+                                       })
+
+    expect(response[:result][:isError]).to be_falsey
+  end
+
+  it "blocks a mutating call once a configured RateLimiter says so (§9)" do
+    authenticator = Class.new(UcpMcp::Authenticator) { def call(_ctx) = :authorized }.new
+    limiter = Class.new(UcpMcp::RateLimiter) do
+      def check!(_key, _capability) = raise(UcpMcp::RateLimitExceededError, "too many requests")
+    end.new
+    limited_server = described_class.build(adapter: adapter, authenticator: authenticator, rate_limiter: limiter)
+
+    response = limited_server.handle({
+                                       jsonrpc: "2.0", id: 10, method: "tools/call",
+                                       params: { name: "add_line_item",
+                                                 arguments: { cart_id: "cart_1", product_id: "prod_1",
+                                                              quantity: 1, idempotency_key: "k4" } }
+                                     })
+
+    expect(response[:result][:isError]).to be true
+  end
+
+  it "never rate-limits read-only catalog calls" do
+    limiter = Class.new(UcpMcp::RateLimiter) do
+      def check!(_key, _capability) = raise(UcpMcp::RateLimitExceededError, "too many requests")
+    end.new
+    limited_server = described_class.build(adapter: adapter, rate_limiter: limiter)
+
+    response = limited_server.handle({
+                                       jsonrpc: "2.0", id: 11, method: "tools/call",
+                                       params: { name: "get_product", arguments: { product_id: "prod_1" } }
+                                     })
+
+    expect(response[:result][:isError]).to be_falsey
+  end
+
   it "logs a redacted tool_called event through the configured logger (§12)" do
     io = StringIO.new
     logger = Logger.new(io)

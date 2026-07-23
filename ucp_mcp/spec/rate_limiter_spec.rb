@@ -1,0 +1,13 @@
+require "spec_helper"
+
+RSpec.describe UcpMcp::NullRateLimiter do
+  it "never limits, regardless of key or capability" do
+    expect { described_class.new.check!("any-key", "dev.ucp.shopping.cart") }.not_to raise_error
+  end
+end
+
+RSpec.describe UcpMcp::RateLimiter do
+  it "is abstract — the base class raises if #check! isn't overridden" do
+    expect { described_class.new.check!("key", "dev.ucp.shopping.cart") }.to raise_error(UcpMcp::NotImplementedError)
+  end
+end
