@@ -15,6 +15,7 @@ require_relative "ucp_mcp/capability_negotiator"
 require_relative "ucp_mcp/dispatcher"
 require_relative "ucp_mcp/mcp/server"
 require_relative "ucp_mcp/rack/manifest_endpoint"
+require_relative "ucp_mcp/rack/webhook_endpoint"
 
 module UcpMcp
 end
