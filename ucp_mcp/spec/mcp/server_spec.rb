@@ -1,5 +1,6 @@
 require "spec_helper"
 require "support/fake_adapter"
+require "stringio"
 
 RSpec.describe UcpMcp::Mcp::Server do
   let(:adapter) { UcpMcp::Support::FakeAdapter.new }
@@ -86,5 +87,21 @@ RSpec.describe UcpMcp::Mcp::Server do
                                     })
 
     expect(response[:result][:isError]).to be_falsey
+  end
+
+  it "logs a redacted tool_called event through the configured logger (§12)" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 8, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" } }
+                         })
+
+    logged = JSON.parse(io.string.lines.last)
+    expect(logged["event"]).to eq("tool_called")
+    expect(logged["action"]).to eq("get_product")
   end
 end
