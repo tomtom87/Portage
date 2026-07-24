@@ -37,6 +37,29 @@ RSpec.describe UcpMcp::SchemaValidator do
     expect(validator.errors_for("schemas/shopping/cart.json", invalid_cart)).not_to be_empty
   end
 
+  # Built from the real UcpMcp::Order/OrderLineItem value objects — proves
+  # the order_line_item quantity/status shape and the fulfillment/
+  # checkout_id/permalink_url fields Order added this pass actually conform,
+  # not just Cart/Checkout.
+  let(:valid_order_payload) do
+    item = UcpMcp::Item.new(id: "prod_1", title: "Cold Brew", price: 500)
+    line_item = UcpMcp::OrderLineItem.new(
+      id: "oli_1", item: item, quantity: { original: 2, total: 2, fulfilled: 2 },
+      totals: [UcpMcp::Total.new(type: "subtotal", amount: 1000), UcpMcp::Total.new(type: "total", amount: 1000)],
+      status: "fulfilled"
+    )
+    order = UcpMcp::Order.new(
+      id: "order_1", checkout_id: "chk_1", permalink_url: "https://example.com/orders/1",
+      line_items: [line_item], fulfillment: {}, currency: "USD",
+      totals: [UcpMcp::Total.new(type: "subtotal", amount: 1000), UcpMcp::Total.new(type: "total", amount: 1000)]
+    )
+    UcpMcp::WireEnvelope.wrap("dev.ucp.shopping.order", order.to_wire_h)
+  end
+
+  it "validates a spec-conformant Order payload built from UcpMcp::Order against the vendored schema" do
+    expect(validator.errors_for("schemas/shopping/order.json", valid_order_payload)).to eq([])
+  end
+
   describe "method_names" do
     it "lists the method names declared by the vendored UCP shopping MCP OpenRPC document" do
       names = validator.method_names("services/shopping/mcp.openrpc.json")

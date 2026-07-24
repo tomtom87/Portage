@@ -69,16 +69,32 @@ module UcpMcp
     end
   end
 
-  # schemas/shopping/order.json. NOTE: not fully spec-conformant yet — the
-  # real schema also requires checkout_id/permalink_url/fulfillment, and its
-  # line items are a distinct, richer order_line_item shape (quantity as
-  # {original,total,fulfilled} + a status enum), not this LineItem. Only the
-  # envelope + totals-array parity fixes from this pass are applied here;
-  # the rest is tracked as a separate, explicitly-known follow-up.
-  Order = Data.define(:id, :status, :line_items, :currency, :totals, :placed_at) do
+  # schemas/shopping/types/order_line_item.json — distinct from LineItem:
+  # quantity is {original,total,fulfilled} tracking, plus a derived status
+  # enum, not a bare integer.
+  OrderLineItem = Data.define(:id, :item, :quantity, :totals, :status, :parent_id) do
+    def initialize(id:, item:, quantity:, totals:, status:, parent_id: nil) = super
+
     def to_wire_h
-      { "id" => id, "status" => status, "line_items" => line_items.map(&:to_wire_h),
-        "currency" => currency, "totals" => totals.map(&:to_wire_h), "placed_at" => placed_at }
+      q = { "total" => quantity[:total], "fulfilled" => quantity[:fulfilled] }
+      q["original"] = quantity[:original] if quantity[:original]
+      h = { "id" => id, "item" => item.to_wire_h, "quantity" => q, "totals" => totals.map(&:to_wire_h),
+            "status" => status }
+      h["parent_id"] = parent_id if parent_id
+      h
+    end
+  end
+
+  # schemas/shopping/order.json — requires ucp/id/checkout_id/permalink_url/
+  # line_items/fulfillment/currency/totals. `fulfillment` has no required
+  # inner fields (expectations/events are both optional), so an adapter that
+  # doesn't model buyer-facing delivery expectations yet can pass {} and
+  # still be schema-conformant.
+  Order = Data.define(:id, :checkout_id, :permalink_url, :line_items, :fulfillment, :currency, :totals) do
+    def to_wire_h
+      { "id" => id, "checkout_id" => checkout_id, "permalink_url" => permalink_url,
+        "line_items" => line_items.map(&:to_wire_h), "fulfillment" => fulfillment,
+        "currency" => currency, "totals" => totals.map(&:to_wire_h) }
     end
   end
 

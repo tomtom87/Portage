@@ -77,12 +77,30 @@ RSpec.describe "UcpMcp value objects" do
     end
   end
 
+  describe UcpMcp::OrderLineItem do
+    it "holds order-specific quantity tracking and a derived status" do
+      item = UcpMcp::Item.new(id: "prod_1", title: "Cold Brew", price: 500)
+      totals = [UcpMcp::Total.new(type: "subtotal", amount: 1000), UcpMcp::Total.new(type: "total", amount: 1000)]
+      line_item = UcpMcp::OrderLineItem.new(id: "oli_1", item: item, quantity: { original: 2, total: 2, fulfilled: 1 },
+                                            totals: totals, status: "partial")
+
+      expect(line_item.to_wire_h).to eq(
+        { "id" => "oli_1", "item" => { "id" => "prod_1", "title" => "Cold Brew", "price" => 500 },
+          "quantity" => { "total" => 2, "fulfilled" => 1, "original" => 2 },
+          "totals" => [{ "type" => "subtotal", "amount" => 1000 }, { "type" => "total", "amount" => 1000 }],
+          "status" => "partial" }
+      )
+    end
+  end
+
   describe UcpMcp::Order do
-    it "holds order state with a totals array" do
+    it "holds order state with checkout_id/permalink_url/fulfillment and a totals array" do
       total = UcpMcp::Total.new(type: "total", amount: 500)
-      order = UcpMcp::Order.new(id: "ord_1", status: "placed", line_items: [],
-                                currency: "USD", totals: [total], placed_at: "2026-07-23T00:00:00Z")
-      expect(order.status).to eq("placed")
+      order = UcpMcp::Order.new(id: "ord_1", checkout_id: "chk_1", permalink_url: "https://example.com/orders/1",
+                                line_items: [], fulfillment: {}, currency: "USD", totals: [total])
+
+      expect(order.checkout_id).to eq("chk_1")
+      expect(order.to_wire_h["fulfillment"]).to eq({})
       expect(order.to_wire_h["totals"]).to eq([{ "type" => "total", "amount" => 500 }])
     end
   end
