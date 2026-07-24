@@ -72,6 +72,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  json_schemer (~> 2.5)
   rack-test (~> 2.1)
   rspec (~> 3.13)
   rubocop

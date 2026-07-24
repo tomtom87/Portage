@@ -16,6 +16,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "mcp", "~> 0.24"
   spec.add_dependency "rack", "~> 3.0"
 
+  spec.add_development_dependency "json_schemer", "~> 2.5"
   spec.add_development_dependency "rack-test", "~> 2.1"
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop"
