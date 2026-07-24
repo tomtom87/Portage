@@ -33,6 +33,10 @@ module UcpMcp
         # exception — see #complete_checkout), so this adapter keeps its own
         # in-process dedup table rather than relying on the API.
         @idempotency_results = {}
+        # Shopify's Cart has no native "checkout status" field — Checkout is
+        # modeled as the same underlying Cart, so status is tracked here
+        # across the create/update/complete/cancel lifecycle, keyed by cart id.
+        @checkout_status = {}
       end
 
       def search_catalog(query:, limit:)
@@ -47,40 +51,48 @@ module UcpMcp
       end
 
       def get_cart(cart_id:)
-        data = @client.storefront_query(Queries::GET_CART, variables: { id: cart_id })
-        cart_node = data["cart"]
+        cart_node = fetch_cart_node(cart_id)
         cart_node && Mapper.cart(cart_node)
       end
 
-      def add_line_item(cart_id:, product_id:, quantity:, idempotency_key:)
-        dedup(idempotency_key) do
-          line = { merchandiseId: product_id, quantity: quantity }
-          data = @client.storefront_query(Queries::CART_LINES_ADD, variables: { cartId: cart_id, lines: [line] })
-          Mapper.cart(unwrap!(data, "cartLinesAdd"))
-        end
+      def create_cart(line_items:, idempotency_key:)
+        dedup(idempotency_key) { Mapper.cart(create_cart_node(line_items)) }
       end
 
-      def remove_line_item(cart_id:, line_item_id:, idempotency_key:)
-        dedup(idempotency_key) do
-          data = @client.storefront_query(Queries::CART_LINES_REMOVE, variables: { cartId: cart_id,
-                                                                                   lineIds: [line_item_id] })
-          Mapper.cart(unwrap!(data, "cartLinesRemove"))
-        end
+      # Full replacement, matching UCP's real cart semantics: Storefront has
+      # no atomic "replace all lines" mutation, so this removes every current
+      # line then adds the desired ones back (two Storefront calls).
+      def update_cart(cart_id:, line_items:, idempotency_key:)
+        dedup(idempotency_key) { Mapper.cart(replace_lines(cart_id, line_items)) }
+      end
+
+      # Shopify has no cart-cancellation mutation — carts simply expire.
+      # Returns the cart unchanged; there's nothing more accurate to do here
+      # against the real API.
+      def cancel_cart(cart_id:, idempotency_key:)
+        dedup(idempotency_key) { get_cart(cart_id: cart_id) }
       end
 
       def create_checkout(line_items:, idempotency_key:)
         dedup(idempotency_key) do
-          lines = line_items.map { |li| { merchandiseId: li.product_id, quantity: li.quantity } }
-          data = @client.storefront_query(Queries::CART_CREATE, variables: { input: { lines: lines } })
-          Mapper.checkout(unwrap!(data, "cartCreate"), status: "pending")
+          cart_node = create_cart_node(line_items)
+          @checkout_status[cart_node["id"]] = "incomplete"
+          Mapper.checkout(cart_node, status: "incomplete")
         end
       end
 
-      def update_checkout(checkout_id:, updates:, idempotency_key:)
+      def get_checkout(checkout_id:)
+        cart_node = fetch_cart_node(checkout_id)
+        cart_node && Mapper.checkout(cart_node, status: @checkout_status.fetch(checkout_id, "incomplete"))
+      end
+
+      # Full replacement, same rationale as #update_cart — Shopify checkout
+      # *is* the cart object.
+      def update_checkout(checkout_id:, line_items:, idempotency_key:)
         dedup(idempotency_key) do
-          data = @client.storefront_query(Queries::CART_BUYER_IDENTITY_UPDATE,
-                                          variables: { cartId: checkout_id, buyerIdentity: updates })
-          Mapper.checkout(unwrap!(data, "cartBuyerIdentityUpdate"), status: "pending")
+          cart_node = replace_lines(checkout_id, line_items)
+          @checkout_status[checkout_id] = "incomplete"
+          Mapper.checkout(cart_node, status: "incomplete")
         end
       end
 
@@ -96,6 +108,14 @@ module UcpMcp
         dedup(idempotency_key) { submit_payment(checkout_id, payment_token, idempotency_key) }
       end
 
+      def cancel_checkout(checkout_id:, idempotency_key:)
+        dedup(idempotency_key) do
+          @checkout_status[checkout_id] = "canceled"
+          cart_node = fetch_cart_node(checkout_id)
+          Mapper.checkout(cart_node, status: "canceled")
+        end
+      end
+
       def get_order(order_id:)
         data = @client.admin_query(Queries::GET_ORDER, variables: { id: order_id })
         node = data["order"]
@@ -104,12 +124,38 @@ module UcpMcp
 
       private
 
+      def fetch_cart_node(cart_id)
+        @client.storefront_query(Queries::GET_CART, variables: { id: cart_id })["cart"]
+      end
+
+      def cart_lines(line_items)
+        line_items.map { |li| { merchandiseId: li[:product_id], quantity: li[:quantity] } }
+      end
+
+      def create_cart_node(line_items)
+        data = @client.storefront_query(Queries::CART_CREATE, variables: { input: { lines: cart_lines(line_items) } })
+        unwrap!(data, "cartCreate")
+      end
+
+      def replace_lines(cart_id, line_items)
+        current_line_ids = fetch_cart_node(cart_id).dig("lines", "nodes").map { |n| n["id"] }
+        unless current_line_ids.empty?
+          removed = @client.storefront_query(Queries::CART_LINES_REMOVE,
+                                             variables: { cartId: cart_id, lineIds: current_line_ids })
+          unwrap!(removed, "cartLinesRemove")
+        end
+        return fetch_cart_node(cart_id) if line_items.empty?
+
+        added = @client.storefront_query(Queries::CART_LINES_ADD,
+                                         variables: { cartId: cart_id, lines: cart_lines(line_items) })
+        unwrap!(added, "cartLinesAdd")
+      end
+
       # Reuses idempotency_key as cartSubmitForCompletion's own attemptId too
       # — Shopify natively dedups that one call via SubmitAlreadyAccepted, on
       # top of #complete_checkout's own dedup wrapper.
       def submit_payment(checkout_id, payment_token, idempotency_key)
-        cart_data = @client.storefront_query(Queries::GET_CART, variables: { id: checkout_id })
-        cart_node = cart_data.fetch("cart") { raise UcpMcp::Shopify::Error, "cart #{checkout_id} not found" }
+        cart_node = fetch_cart_node(checkout_id) || (raise UcpMcp::Shopify::Error, "cart #{checkout_id} not found")
         total = cart_node.dig("cost", "totalAmount")
 
         payment_data = @client.storefront_query(
@@ -122,7 +168,9 @@ module UcpMcp
 
         submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
                                                variables: { cartId: checkout_id, attemptToken: idempotency_key })
-        Mapper.checkout(cart_node, status: unwrap_submit!(submit_data))
+        status = unwrap_submit!(submit_data)
+        @checkout_status[checkout_id] = status
+        Mapper.checkout(cart_node, status: status)
       end
 
       def dedup(idempotency_key)
@@ -147,7 +195,7 @@ module UcpMcp
         result = payload["result"]
         raise UcpMcp::Shopify::Error, result.dig("errors", 0, "message") if result["errors"]
 
-        result.key?("pollAfter") ? "pending" : "completed"
+        result.key?("pollAfter") ? "complete_in_progress" : "completed"
       end
     end
   end

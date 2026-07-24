@@ -37,7 +37,7 @@ module UcpMcp
           nodes {
             id quantity
             cost { totalAmount { amount currencyCode } }
-            merchandise { ... on ProductVariant { id product { id } price { amount currencyCode } } }
+            merchandise { ... on ProductVariant { id product { id title } price { amount currencyCode } } }
           }
         }
       GRAPHQL
@@ -113,7 +113,7 @@ module UcpMcp
             createdAt
             lineItems(first: 100) {
               nodes { id quantity discountedTotalSet { shopMoney { amount currencyCode } }
-                      variant { id price { amount currencyCode } } }
+                      variant { id title price { amount currencyCode } } }
             }
           }
         }

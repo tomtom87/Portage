@@ -30,6 +30,13 @@ Metrics/ModuleLength:
   Exclude:
     - "lib/ucp_mcp/shopify/queries.rb"
 
+# The generic adapter implements all 4 Cart + 5 Checkout capability methods
+# plus catalog/order against one client — that's real one-adapter-per-backend
+# breadth (§7.1), not a class doing too many unrelated things.
+Metrics/ClassLength:
+  Exclude:
+    - "lib/ucp_mcp/shopify/adapter.rb"
+
 Lint/UnusedMethodArgument:
   Exclude:
     - "spec/**/*.rb"

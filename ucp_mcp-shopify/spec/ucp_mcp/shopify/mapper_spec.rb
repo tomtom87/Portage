@@ -33,7 +33,7 @@ RSpec.describe UcpMcp::Shopify::Mapper do
     end
   end
 
-  describe ".cart" do
+  describe ".cart / .checkout" do
     let(:node) do
       {
         "id" => "gid://shopify/Cart/1",
@@ -43,33 +43,39 @@ RSpec.describe UcpMcp::Shopify::Mapper do
         "lines" => { "nodes" => [
           { "id" => "gid://shopify/CartLine/1", "quantity" => 2,
             "cost" => { "totalAmount" => { "amount" => "10.00", "currencyCode" => "USD" } },
-            "merchandise" => { "id" => "gid://shopify/ProductVariant/1",
+            "merchandise" => { "id" => "gid://shopify/ProductVariant/1", "product" => { "title" => "Cold Brew" },
                                "price" => { "amount" => "5.00", "currencyCode" => "USD" } } }
         ] }
       }
     end
 
-    it "maps a Shopify cart node to a UcpMcp::Cart with its line items" do
+    it "maps a Shopify cart node to a UcpMcp::Cart with its line items and totals array" do
       cart = described_class.cart(node)
 
       expect(cart.id).to eq("gid://shopify/Cart/1")
-      expect(cart.subtotal).to eq(UcpMcp::Money.new(amount_minor: 1000, currency: "USD"))
+      expect(cart.totals).to eq([
+                                  UcpMcp::Total.new(type: "subtotal", amount: 1000),
+                                  UcpMcp::Total.new(type: "tax", amount: 100),
+                                  UcpMcp::Total.new(type: "total", amount: 1100)
+                                ])
       expect(cart.line_items).to eq([
-                                      UcpMcp::LineItem.new(id: "gid://shopify/CartLine/1",
-                                                           product_id: "gid://shopify/ProductVariant/1",
-                                                           quantity: 2,
-                                                           unit_price: UcpMcp::Money.new(amount_minor: 500,
-                                                                                         currency: "USD"),
-                                                           total: UcpMcp::Money.new(amount_minor: 1000,
-                                                                                    currency: "USD"))
+                                      UcpMcp::LineItem.new(
+                                        id: "gid://shopify/CartLine/1",
+                                        item: UcpMcp::Item.new(id: "gid://shopify/ProductVariant/1",
+                                                               title: "Cold Brew", price: 500),
+                                        quantity: 2,
+                                        totals: [UcpMcp::Total.new(type: "subtotal", amount: 1000),
+                                                 UcpMcp::Total.new(type: "total", amount: 1000)]
+                                      )
                                     ])
     end
 
-    it "sets Checkout status from the caller rather than any Shopify field" do
+    it "sets Checkout status from the caller rather than any Shopify field, and includes required links" do
       checkout = described_class.checkout(node, status: "completed")
 
       expect(checkout.status).to eq("completed")
-      expect(checkout.total).to eq(UcpMcp::Money.new(amount_minor: 1100, currency: "USD"))
+      expect(checkout.links).to eq([])
+      expect(checkout.totals.find { |t| t.type == "total" }.amount).to eq(1100)
     end
   end
 
@@ -82,7 +88,7 @@ RSpec.describe UcpMcp::Shopify::Mapper do
         "lineItems" => { "nodes" => [
           { "id" => "gid://shopify/LineItem/1", "quantity" => 2,
             "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } },
-            "variant" => { "id" => "gid://shopify/ProductVariant/1",
+            "variant" => { "id" => "gid://shopify/ProductVariant/1", "title" => "Default",
                            "price" => { "amount" => "5.00", "currencyCode" => "USD" } } }
         ] }
       }
@@ -93,7 +99,7 @@ RSpec.describe UcpMcp::Shopify::Mapper do
 
       expect(order.id).to eq("gid://shopify/Order/1")
       expect(order.status).to eq("FULFILLED")
-      expect(order.total).to eq(UcpMcp::Money.new(amount_minor: 1100, currency: "USD"))
+      expect(order.totals).to eq([UcpMcp::Total.new(type: "total", amount: 1100)])
       expect(order.line_items.first.quantity).to eq(2)
     end
   end
