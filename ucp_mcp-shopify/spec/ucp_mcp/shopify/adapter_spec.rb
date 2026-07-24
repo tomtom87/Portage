@@ -224,15 +224,15 @@ RSpec.describe UcpMcp::Shopify::Adapter do
   describe "#get_order" do
     it "queries the Admin API and maps the result to a UcpMcp::Order" do
       stub_admin({ data: { order: {
-                   id: "gid://shopify/Order/1", displayFulfillmentStatus: "UNFULFILLED",
+                   id: "gid://shopify/Order/1", statusPageUrl: "https://ucp-test.myshopify.com/orders/abc123",
                    currentTotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
-                   createdAt: "2026-07-24T00:00:00Z", lineItems: { nodes: [] }
+                   lineItems: { nodes: [] }
                  } } })
 
       order = adapter.get_order(order_id: "gid://shopify/Order/1")
 
       expect(order).to be_a(UcpMcp::Order)
-      expect(order.status).to eq("UNFULFILLED")
+      expect(order.permalink_url).to eq("https://ucp-test.myshopify.com/orders/abc123")
     end
 
     it "returns nil for an order the API doesn't find" do

@@ -108,12 +108,14 @@ module UcpMcp
         query GetOrder($id: ID!) {
           order(id: $id) {
             id
-            displayFulfillmentStatus
+            statusPageUrl
             currentTotalPriceSet { shopMoney { amount currencyCode } }
-            createdAt
             lineItems(first: 100) {
-              nodes { id quantity discountedTotalSet { shopMoney { amount currencyCode } }
-                      variant { id title price { amount currencyCode } } }
+              nodes {
+                id quantity currentQuantity unfulfilledQuantity
+                discountedTotalSet { shopMoney { amount currencyCode } }
+                variant { id title price { amount currencyCode } }
+              }
             }
           }
         }

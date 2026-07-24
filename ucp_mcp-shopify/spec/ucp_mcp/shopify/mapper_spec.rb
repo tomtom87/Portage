@@ -82,11 +82,10 @@ RSpec.describe UcpMcp::Shopify::Mapper do
   describe ".order" do
     let(:node) do
       {
-        "id" => "gid://shopify/Order/1", "displayFulfillmentStatus" => "FULFILLED",
+        "id" => "gid://shopify/Order/1", "statusPageUrl" => "https://ucp-test.myshopify.com/orders/abc123",
         "currentTotalPriceSet" => { "shopMoney" => { "amount" => "11.00", "currencyCode" => "USD" } },
-        "createdAt" => "2026-07-24T00:00:00Z",
         "lineItems" => { "nodes" => [
-          { "id" => "gid://shopify/LineItem/1", "quantity" => 2,
+          { "id" => "gid://shopify/LineItem/1", "quantity" => 2, "currentQuantity" => 2, "unfulfilledQuantity" => 0,
             "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } },
             "variant" => { "id" => "gid://shopify/ProductVariant/1", "title" => "Default",
                            "price" => { "amount" => "5.00", "currencyCode" => "USD" } } }
@@ -98,9 +97,30 @@ RSpec.describe UcpMcp::Shopify::Mapper do
       order = described_class.order(node)
 
       expect(order.id).to eq("gid://shopify/Order/1")
-      expect(order.status).to eq("FULFILLED")
+      expect(order.permalink_url).to eq("https://ucp-test.myshopify.com/orders/abc123")
+      expect(order.fulfillment).to eq({})
       expect(order.totals).to eq([UcpMcp::Total.new(type: "total", amount: 1100)])
-      expect(order.line_items.first.quantity).to eq(2)
+      expect(order.line_items.first.quantity).to eq({ original: 2, total: 2, fulfilled: 2 })
+      expect(order.line_items.first.status).to eq("fulfilled")
+    end
+
+    it "derives partial/processing/removed line item status from quantity tracking" do
+      partial = described_class.order_line_item(
+        { "id" => "li_1", "quantity" => 3, "currentQuantity" => 3, "unfulfilledQuantity" => 1,
+          "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } }, "variant" => nil }
+      )
+      processing = described_class.order_line_item(
+        { "id" => "li_2", "quantity" => 3, "currentQuantity" => 3, "unfulfilledQuantity" => 3,
+          "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } }, "variant" => nil }
+      )
+      removed = described_class.order_line_item(
+        { "id" => "li_3", "quantity" => 3, "currentQuantity" => 0, "unfulfilledQuantity" => 0,
+          "discountedTotalSet" => { "shopMoney" => { "amount" => "0.00", "currencyCode" => "USD" } }, "variant" => nil }
+      )
+
+      expect(partial.status).to eq("partial")
+      expect(processing.status).to eq("processing")
+      expect(removed.status).to eq("removed")
     end
   end
 end

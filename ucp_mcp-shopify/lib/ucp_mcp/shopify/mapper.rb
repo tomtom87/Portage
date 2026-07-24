@@ -72,29 +72,51 @@ module UcpMcp
         )
       end
 
+      # NOTE: `checkout_id` is required by the real schema for
+      # checkout/order reconciliation, but Shopify's Order type has no field
+      # linking back to the originating cart/checkout — there's nothing to
+      # map it from. Left blank until Shopify exposes one (or this adapter
+      # tracks the cart->order link itself, the way @checkout_status already
+      # tracks cart->checkout status). `fulfillment` is similarly left as an
+      # empty object: expectations/events aren't required by the schema, and
+      # modeling Shopify's `fulfillments`/`fulfillmentOrders` into UCP's
+      # buyer-facing expectation/event shape is real work, tracked
+      # separately rather than guessed at here.
       def order(node)
         total_amount = minor_units(node.dig("currentTotalPriceSet", "shopMoney"))
         UcpMcp::Order.new(
           id: node["id"],
-          status: node["displayFulfillmentStatus"],
+          checkout_id: "",
+          permalink_url: node["statusPageUrl"],
           line_items: node.dig("lineItems", "nodes").map { |n| order_line_item(n) },
+          fulfillment: {},
           currency: node.dig("currentTotalPriceSet", "shopMoney", "currencyCode"),
-          totals: [UcpMcp::Total.new(type: "total", amount: total_amount)],
-          placed_at: node["createdAt"]
+          totals: [UcpMcp::Total.new(type: "total", amount: total_amount)]
         )
       end
 
       def order_line_item(node)
         variant_node = node["variant"]
         line_total = minor_units(node.dig("discountedTotalSet", "shopMoney"))
-        UcpMcp::LineItem.new(
+        total = node["currentQuantity"]
+        fulfilled = total - node["unfulfilledQuantity"]
+        UcpMcp::OrderLineItem.new(
           id: node["id"],
           item: UcpMcp::Item.new(id: variant_node && variant_node["id"], title: variant_node && variant_node["title"],
                                  price: variant_node && minor_units(variant_node["price"])),
-          quantity: node["quantity"],
+          quantity: { original: node["quantity"], total: total, fulfilled: fulfilled },
           totals: [UcpMcp::Total.new(type: "subtotal", amount: line_total),
-                   UcpMcp::Total.new(type: "total", amount: line_total)]
+                   UcpMcp::Total.new(type: "total", amount: line_total)],
+          status: order_line_item_status(total, fulfilled)
         )
+      end
+
+      def order_line_item_status(total, fulfilled)
+        return "removed" if total.zero?
+        return "fulfilled" if fulfilled == total
+        return "partial" if fulfilled.positive?
+
+        "processing"
       end
 
       # Builds the top-level totals array (exactly one subtotal + one total,
