@@ -58,9 +58,9 @@ RSpec.describe UcpMcp::Mcp::Server do
   it "rejects a mutating call by default (§9 — no anonymous mutation)" do
     response = server.handle({
                                jsonrpc: "2.0", id: 5, method: "tools/call",
-                               params: { name: "add_line_item",
-                                         arguments: { cart_id: "cart_1", product_id: "prod_1",
-                                                      quantity: 1, idempotency_key: "k1" } }
+                               params: { name: "create_cart",
+                                         arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                                      idempotency_key: "k1" } }
                              })
 
     expect(response[:result][:isError]).to be true
@@ -81,9 +81,9 @@ RSpec.describe UcpMcp::Mcp::Server do
 
     response = authed_server.handle({
                                       jsonrpc: "2.0", id: 7, method: "tools/call",
-                                      params: { name: "add_line_item",
-                                                arguments: { cart_id: "cart_1", product_id: "prod_1",
-                                                             quantity: 1, idempotency_key: "k2" } }
+                                      params: { name: "create_cart",
+                                                arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                                             idempotency_key: "k2" } }
                                     })
 
     expect(response[:result][:isError]).to be_falsey
@@ -95,9 +95,9 @@ RSpec.describe UcpMcp::Mcp::Server do
 
     response = unlimited_server.handle({
                                          jsonrpc: "2.0", id: 9, method: "tools/call",
-                                         params: { name: "add_line_item",
-                                                   arguments: { cart_id: "cart_1", product_id: "prod_1",
-                                                                quantity: 1, idempotency_key: "k3" } }
+                                         params: { name: "create_cart",
+                                                   arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                                                idempotency_key: "k3" } }
                                        })
 
     expect(response[:result][:isError]).to be_falsey
@@ -112,9 +112,9 @@ RSpec.describe UcpMcp::Mcp::Server do
 
     response = limited_server.handle({
                                        jsonrpc: "2.0", id: 10, method: "tools/call",
-                                       params: { name: "add_line_item",
-                                                 arguments: { cart_id: "cart_1", product_id: "prod_1",
-                                                              quantity: 1, idempotency_key: "k4" } }
+                                       params: { name: "create_cart",
+                                                 arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                                              idempotency_key: "k4" } }
                                      })
 
     expect(response[:result][:isError]).to be true

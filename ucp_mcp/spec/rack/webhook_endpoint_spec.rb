@@ -8,7 +8,7 @@ RSpec.describe UcpMcp::Rack::WebhookEndpoint do
   let(:secret) { "shh" }
   let(:events) { [] }
   let(:manifest_order_payload) do
-    { id: "order_1", status: "placed", line_items: [], total: { amount_minor: 0, currency: "USD" },
+    { id: "order_1", status: "placed", line_items: [], totals: [{ type: "total", amount: 0 }],
       currency: "USD", placed_at: "2026-07-23T00:00:00Z" }
   end
 

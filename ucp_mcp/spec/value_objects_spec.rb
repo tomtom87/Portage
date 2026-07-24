@@ -26,42 +26,64 @@ RSpec.describe "UcpMcp value objects" do
     end
   end
 
+  describe UcpMcp::Total do
+    it "serializes type/amount, omitting display_text when absent" do
+      total = UcpMcp::Total.new(type: "subtotal", amount: 1000)
+      expect(total.to_wire_h).to eq({ "type" => "subtotal", "amount" => 1000 })
+    end
+
+    it "includes display_text when present" do
+      total = UcpMcp::Total.new(type: "tax", amount: 50, display_text: "Sales Tax")
+      expect(total.to_wire_h).to eq({ "type" => "tax", "amount" => 50, "display_text" => "Sales Tax" })
+    end
+  end
+
+  describe UcpMcp::Item do
+    it "holds product identity for a line item" do
+      item = UcpMcp::Item.new(id: "prod_1", title: "Cold Brew", price: 500)
+      expect(item.to_wire_h).to eq({ "id" => "prod_1", "title" => "Cold Brew", "price" => 500 })
+    end
+  end
+
   describe UcpMcp::LineItem do
-    it "holds a product/quantity/price triple" do
-      unit_price = UcpMcp::Money.new(amount_minor: 500, currency: "USD")
-      total = UcpMcp::Money.new(amount_minor: 1000, currency: "USD")
-      item = UcpMcp::LineItem.new(id: "li_1", product_id: "prod_1", quantity: 2,
-                                  unit_price: unit_price, total: total)
-      expect(item.quantity).to eq(2)
-      expect(item.total.amount_minor).to eq(1000)
+    it "holds an item/quantity/totals triple, matching the real wire shape" do
+      item = UcpMcp::Item.new(id: "prod_1", title: "Cold Brew", price: 500)
+      totals = [UcpMcp::Total.new(type: "subtotal", amount: 1000), UcpMcp::Total.new(type: "total", amount: 1000)]
+      line_item = UcpMcp::LineItem.new(id: "li_1", item: item, quantity: 2, totals: totals)
+
+      expect(line_item.quantity).to eq(2)
+      expect(line_item.to_wire_h).to eq(
+        { "id" => "li_1", "item" => { "id" => "prod_1", "title" => "Cold Brew", "price" => 500 },
+          "quantity" => 2,
+          "totals" => [{ "type" => "subtotal", "amount" => 1000 }, { "type" => "total", "amount" => 1000 }] }
+      )
     end
   end
 
   describe UcpMcp::Cart do
-    it "holds line items and a subtotal" do
-      cart = UcpMcp::Cart.new(id: "cart_1", line_items: [],
-                              subtotal: UcpMcp::Money.new(amount_minor: 0, currency: "USD"), currency: "USD")
+    it "holds line items and a totals array, with no ucp envelope of its own" do
+      cart = UcpMcp::Cart.new(id: "cart_1", line_items: [], currency: "USD", totals: [])
       expect(cart.line_items).to eq([])
+      expect(cart.to_wire_h).not_to have_key("ucp")
     end
   end
 
   describe UcpMcp::Checkout do
-    it "holds checkout state" do
-      zero = UcpMcp::Money.new(amount_minor: 0, currency: "USD")
-      checkout = UcpMcp::Checkout.new(id: "chk_1", status: "pending", line_items: [],
-                                      subtotal: zero, tax: zero, total: zero,
-                                      currency: "USD", locale: "en-US",
-                                      available_payment_handlers: [])
-      expect(checkout.status).to eq("pending")
+    it "holds checkout state with the real status enum and required links array" do
+      checkout = UcpMcp::Checkout.new(id: "chk_1", status: "incomplete", line_items: [], currency: "USD",
+                                      totals: [], links: [])
+      expect(checkout.status).to eq("incomplete")
+      expect(checkout.to_wire_h["links"]).to eq([])
     end
   end
 
   describe UcpMcp::Order do
-    it "holds order state" do
-      total = UcpMcp::Money.new(amount_minor: 500, currency: "USD")
+    it "holds order state with a totals array" do
+      total = UcpMcp::Total.new(type: "total", amount: 500)
       order = UcpMcp::Order.new(id: "ord_1", status: "placed", line_items: [],
-                                total: total, currency: "USD", placed_at: "2026-07-23T00:00:00Z")
+                                currency: "USD", totals: [total], placed_at: "2026-07-23T00:00:00Z")
       expect(order.status).to eq("placed")
+      expect(order.to_wire_h["totals"]).to eq([{ "type" => "total", "amount" => 500 }])
     end
   end
 

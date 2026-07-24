@@ -4,9 +4,10 @@ module UcpMcp
       name: "dev.ucp.shopping.cart",
       version: "1",
       actions: {
+        "create_cart" => :create_cart,
         "get_cart" => :get_cart,
-        "add_line_item" => :add_line_item,
-        "remove_line_item" => :remove_line_item
+        "update_cart" => :update_cart,
+        "cancel_cart" => :cancel_cart
       }
     )
   end

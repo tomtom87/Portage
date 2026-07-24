@@ -7,15 +7,20 @@ RSpec.describe UcpMcp::Adapter do
     expect { adapter.search_catalog(query: "x", limit: 1) }.to raise_error(UcpMcp::NotImplementedError)
     expect { adapter.get_product(product_id: "p") }.to raise_error(UcpMcp::NotImplementedError)
     expect { adapter.get_cart(cart_id: "c") }.to raise_error(UcpMcp::NotImplementedError)
-    expect { adapter.add_line_item(cart_id: "c", product_id: "p", quantity: 1, idempotency_key: "k") }
+    expect { adapter.create_cart(line_items: [], idempotency_key: "k") }
       .to raise_error(UcpMcp::NotImplementedError)
-    expect { adapter.remove_line_item(cart_id: "c", line_item_id: "li", idempotency_key: "k") }
+    expect { adapter.update_cart(cart_id: "c", line_items: [], idempotency_key: "k") }
+      .to raise_error(UcpMcp::NotImplementedError)
+    expect { adapter.cancel_cart(cart_id: "c", idempotency_key: "k") }
       .to raise_error(UcpMcp::NotImplementedError)
     expect { adapter.create_checkout(line_items: [], idempotency_key: "k") }
       .to raise_error(UcpMcp::NotImplementedError)
-    expect { adapter.update_checkout(checkout_id: "c", updates: {}, idempotency_key: "k") }
+    expect { adapter.get_checkout(checkout_id: "c") }.to raise_error(UcpMcp::NotImplementedError)
+    expect { adapter.update_checkout(checkout_id: "c", line_items: [], idempotency_key: "k") }
       .to raise_error(UcpMcp::NotImplementedError)
     expect { adapter.complete_checkout(checkout_id: "c", payment_token: "t", idempotency_key: "k") }
+      .to raise_error(UcpMcp::NotImplementedError)
+    expect { adapter.cancel_checkout(checkout_id: "c", idempotency_key: "k") }
       .to raise_error(UcpMcp::NotImplementedError)
     expect { adapter.get_order(order_id: "o") }.to raise_error(UcpMcp::NotImplementedError)
     expect { adapter.link_identity(oauth_token: "t") }.to raise_error(UcpMcp::NotImplementedError)

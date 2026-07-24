@@ -20,13 +20,18 @@ module UcpMcp
       UcpMcp::PaymentTokenGuard.validate!(arguments[:payment_token]) if arguments.key?(:payment_token)
 
       result = @adapter.public_send(method_name, **arguments)
-      wrap(result)
+      wrap(capability, result)
     end
 
     private
 
-    def wrap(result)
-      { content: [{ type: "text", text: result.inspect }], structuredContent: result }
+    def wrap(capability_name, result)
+      unless result.respond_to?(:to_wire_h)
+        return { content: [{ type: "text", text: result.inspect }], structuredContent: result }
+      end
+
+      payload = UcpMcp::WireEnvelope.wrap(capability_name, result.to_wire_h)
+      { content: [{ type: "text", text: payload.inspect }], structuredContent: payload }
     end
   end
 end

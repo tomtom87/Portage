@@ -28,45 +28,38 @@ module UcpMcp
         @carts[cart_id]
       end
 
-      def add_line_item(cart_id:, product_id:, quantity:, idempotency_key:)
+      def create_cart(line_items:, idempotency_key:)
         dedup(idempotency_key) do
-          cart = @carts[cart_id] || UcpMcp::Cart.new(id: cart_id, line_items: [],
-                                                     subtotal: UcpMcp::Money.new(amount_minor: 0, currency: "USD"),
-                                                     currency: "USD")
-          product = @products.fetch(product_id)
-          unit_price = product.price
-          total = UcpMcp::Money.new(amount_minor: unit_price.amount_minor * quantity, currency: unit_price.currency)
-          line_item = UcpMcp::LineItem.new(id: next_id("li"), product_id: product_id,
-                                           quantity: quantity, unit_price: unit_price, total: total)
-          new_subtotal = UcpMcp::Money.new(
-            amount_minor: cart.subtotal.amount_minor + total.amount_minor, currency: cart.currency
-          )
-          @carts[cart_id] = UcpMcp::Cart.new(id: cart_id, line_items: cart.line_items + [line_item],
-                                             subtotal: new_subtotal, currency: cart.currency)
+          id = next_id("cart")
+          @carts[id] = store_cart(id, line_items)
         end
       end
 
-      def remove_line_item(cart_id:, line_item_id:, idempotency_key:)
+      def update_cart(cart_id:, line_items:, idempotency_key:)
+        dedup(idempotency_key) { @carts[cart_id] = store_cart(cart_id, line_items) }
+      end
+
+      def cancel_cart(cart_id:, idempotency_key:)
         dedup(idempotency_key) do
-          cart = @carts.fetch(cart_id)
-          removed, remaining = cart.line_items.partition { |li| li.id == line_item_id }
-          removed_total = removed.sum { |li| li.total.amount_minor }
-          new_subtotal = UcpMcp::Money.new(amount_minor: cart.subtotal.amount_minor - removed_total,
-                                           currency: cart.currency)
-          @carts[cart_id] =
-            UcpMcp::Cart.new(id: cart_id, line_items: remaining, subtotal: new_subtotal, currency: cart.currency)
+          @carts.delete(cart_id)
+          UcpMcp::Cart.new(id: cart_id, line_items: [], currency: "USD", totals: zero_totals)
         end
       end
 
       def create_checkout(line_items:, idempotency_key:)
         dedup(idempotency_key) do
-          zero = UcpMcp::Money.new(amount_minor: 0, currency: "USD")
-          subtotal = UcpMcp::Money.new(amount_minor: line_items.sum { |li| li.total.amount_minor }, currency: "USD")
-          @checkouts[next_id("chk")] = nil
-          id = @checkouts.keys.last
-          @checkouts[id] = UcpMcp::Checkout.new(id: id, status: "pending", line_items: line_items,
-                                                subtotal: subtotal, tax: zero, total: subtotal,
-                                                currency: "USD", locale: "en-US", available_payment_handlers: [])
+          id = next_id("chk")
+          @checkouts[id] = store_checkout(id, line_items, status: "incomplete")
+        end
+      end
+
+      def get_checkout(checkout_id:)
+        @checkouts[checkout_id]
+      end
+
+      def update_checkout(checkout_id:, line_items:, idempotency_key:)
+        dedup(idempotency_key) do
+          @checkouts[checkout_id] = store_checkout(checkout_id, line_items, status: "incomplete")
         end
       end
 
@@ -77,7 +70,48 @@ module UcpMcp
         end
       end
 
+      def cancel_checkout(checkout_id:, idempotency_key:)
+        dedup(idempotency_key) do
+          checkout = @checkouts.fetch(checkout_id)
+          @checkouts[checkout_id] = UcpMcp::Checkout.new(**checkout.to_h, status: "canceled")
+        end
+      end
+
       private
+
+      def store_cart(id, requested_line_items)
+        line_items = build_line_items(requested_line_items)
+        UcpMcp::Cart.new(id: id, line_items: line_items, currency: "USD", totals: totals_for(line_items))
+      end
+
+      def store_checkout(id, requested_line_items, status:)
+        line_items = build_line_items(requested_line_items)
+        UcpMcp::Checkout.new(id: id, status: status, line_items: line_items, currency: "USD",
+                             totals: totals_for(line_items), links: [])
+      end
+
+      def build_line_items(requested)
+        requested.map do |req|
+          product = @products.fetch(req[:product_id])
+          total = product.price.amount_minor * req[:quantity]
+          UcpMcp::LineItem.new(
+            id: next_id("li"),
+            item: UcpMcp::Item.new(id: product.id, title: product.title, price: product.price.amount_minor),
+            quantity: req[:quantity],
+            totals: [UcpMcp::Total.new(type: "subtotal", amount: total),
+                     UcpMcp::Total.new(type: "total", amount: total)]
+          )
+        end
+      end
+
+      def totals_for(line_items)
+        subtotal = line_items.sum { |li| li.totals.find { |t| t.type == "total" }.amount }
+        [UcpMcp::Total.new(type: "subtotal", amount: subtotal), UcpMcp::Total.new(type: "total", amount: subtotal)]
+      end
+
+      def zero_totals
+        [UcpMcp::Total.new(type: "subtotal", amount: 0), UcpMcp::Total.new(type: "total", amount: 0)]
+      end
 
       def dedup(idempotency_key)
         return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)

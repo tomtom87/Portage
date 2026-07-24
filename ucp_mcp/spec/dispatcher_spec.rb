@@ -27,12 +27,13 @@ RSpec.describe UcpMcp::Dispatcher do
     expect(response[:content]).to eq([{ type: "text", text: product.inspect }])
   end
 
-  it "routes a cart mutation through, idempotency_key included" do
-    response = dispatcher.call(capability: "dev.ucp.shopping.cart", action: "add_line_item",
-                               arguments: { cart_id: "cart_1", product_id: "prod_1", quantity: 1,
+  it "routes a cart mutation through, idempotency_key included, wrapped in the ucp envelope" do
+    response = dispatcher.call(capability: "dev.ucp.shopping.cart", action: "create_cart",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
                                             idempotency_key: "k1" })
 
-    expect(response[:structuredContent].line_items.size).to eq(1)
+    expect(response[:structuredContent]["line_items"].size).to eq(1)
+    expect(response[:structuredContent]["ucp"]).to eq({ "version" => "2026-04-08" })
   end
 
   it "rejects a complete_checkout call whose payment_token looks like a raw PAN (§9)" do
@@ -41,7 +42,7 @@ RSpec.describe UcpMcp::Dispatcher do
 
     expect do
       dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
-                      arguments: { checkout_id: checkout.id, payment_token: "4111111111111111",
+                      arguments: { checkout_id: checkout["id"], payment_token: "4111111111111111",
                                    idempotency_key: "chk1-complete" })
     end.to raise_error(UcpMcp::RawPanRejectedError)
   end

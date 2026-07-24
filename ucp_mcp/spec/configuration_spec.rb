@@ -38,9 +38,9 @@ RSpec.describe UcpMcp do
 
     response = server.handle({
                                jsonrpc: "2.0", id: 1, method: "tools/call",
-                               params: { name: "add_line_item",
-                                         arguments: { cart_id: "c1", product_id: "p1",
-                                                      quantity: 1, idempotency_key: "k1" } }
+                               params: { name: "create_cart",
+                                         arguments: { line_items: [{ product_id: "p1", quantity: 1 }],
+                                                      idempotency_key: "k1" } }
                              })
 
     expect(response[:result][:isError]).to be_falsey
