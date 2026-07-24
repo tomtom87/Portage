@@ -1,0 +1,7 @@
+require "ucp_mcp"
+require_relative "ucp_mcp/shopify/version"
+require_relative "ucp_mcp/shopify/errors"
+require_relative "ucp_mcp/shopify/client"
+require_relative "ucp_mcp/shopify/queries"
+require_relative "ucp_mcp/shopify/mapper"
+require_relative "ucp_mcp/shopify/adapter"
