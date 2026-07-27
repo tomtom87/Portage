@@ -84,6 +84,7 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       {
         "id" => "gid://shopify/Order/1", "statusPageUrl" => "https://ucp-test.myshopify.com/orders/abc123",
         "currentTotalPriceSet" => { "shopMoney" => { "amount" => "11.00", "currencyCode" => "USD" } },
+        "currentSubtotalPriceSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } },
         "lineItems" => { "nodes" => [
           { "id" => "gid://shopify/LineItem/1", "quantity" => 2, "currentQuantity" => 2, "unfulfilledQuantity" => 0,
             "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } },
@@ -100,7 +101,8 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       expect(order.checkout_id).to eq("")
       expect(order.permalink_url).to eq("https://ucp-test.myshopify.com/orders/abc123")
       expect(order.fulfillment).to eq({ "expectations" => [], "events" => [] })
-      expect(order.totals).to eq([Portage::Ucp::Total.new(type: "total", amount: 1100)])
+      expect(order.totals).to eq([Portage::Ucp::Total.new(type: "subtotal", amount: 1000),
+                                  Portage::Ucp::Total.new(type: "total", amount: 1100)])
       expect(order.line_items.first.quantity).to eq({ original: 2, total: 2, fulfilled: 2 })
       expect(order.line_items.first.status).to eq("fulfilled")
     end

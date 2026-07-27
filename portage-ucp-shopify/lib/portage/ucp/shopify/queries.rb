@@ -111,6 +111,7 @@ module Portage
               id
               statusPageUrl
               currentTotalPriceSet { shopMoney { amount currencyCode } }
+              currentSubtotalPriceSet { shopMoney { amount currencyCode } }
               lineItems(first: 100) {
                 nodes {
                   id quantity currentQuantity unfulfilledQuantity

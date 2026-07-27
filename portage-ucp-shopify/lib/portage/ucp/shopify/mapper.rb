@@ -80,6 +80,7 @@ module Portage
         # Portage::Ucp::Shopify::Adapter#link_cart_to_order) and passes it in here,
         # the same way #checkout's `status:` is caller-supplied.
         def order(node, checkout_id: "")
+          subtotal_amount = minor_units(node.dig("currentSubtotalPriceSet", "shopMoney"))
           total_amount = minor_units(node.dig("currentTotalPriceSet", "shopMoney"))
           Portage::Ucp::Order.new(
             id: node["id"],
@@ -88,7 +89,8 @@ module Portage
             line_items: node.dig("lineItems", "nodes").map { |n| order_line_item(n) },
             fulfillment: fulfillment(node),
             currency: node.dig("currentTotalPriceSet", "shopMoney", "currencyCode"),
-            totals: [Portage::Ucp::Total.new(type: "total", amount: total_amount)]
+            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal_amount),
+                     Portage::Ucp::Total.new(type: "total", amount: total_amount)]
           )
         end
 

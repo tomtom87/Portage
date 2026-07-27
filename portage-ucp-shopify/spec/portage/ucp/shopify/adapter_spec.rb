@@ -204,6 +204,7 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
                                 idempotency_key: "chk1-link")
       stub_admin({ data: { order: { id: "gid://shopify/Order/1", statusPageUrl: nil,
                                     currentTotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+                                    currentSubtotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
                                     lineItems: { nodes: [] } } } })
       order = adapter.get_order(order_id: "gid://shopify/Order/1")
 
@@ -248,6 +249,7 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       stub_admin({ data: { order: {
                    id: "gid://shopify/Order/1", statusPageUrl: "https://ucp-test.myshopify.com/orders/abc123",
                    currentTotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+                   currentSubtotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
                    lineItems: { nodes: [] }
                  } } })
 
