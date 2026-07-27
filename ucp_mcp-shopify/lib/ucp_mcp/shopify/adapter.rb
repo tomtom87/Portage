@@ -37,6 +37,12 @@ module UcpMcp
         # modeled as the same underlying Cart, so status is tracked here
         # across the create/update/complete/cancel lifecycle, keyed by cart id.
         @checkout_status = {}
+        # Shopify's Order has no field back to its originating cart, so
+        # #order_checkout_id (populated once a cart actually completes, via
+        # #link_cart_to_order) is the only source for the schema-required
+        # checkout_id — keyed by order id, since that's what #get_order is
+        # called with.
+        @order_checkout_ids = {}
       end
 
       def search_catalog(query:, limit:)
@@ -119,7 +125,7 @@ module UcpMcp
       def get_order(order_id:)
         data = @client.admin_query(Queries::GET_ORDER, variables: { id: order_id })
         node = data["order"]
-        node && Mapper.order(node)
+        node && Mapper.order(node, checkout_id: @order_checkout_ids.fetch(order_id, ""))
       end
 
       private
@@ -170,7 +176,25 @@ module UcpMcp
                                                variables: { cartId: checkout_id, attemptToken: idempotency_key })
         status = unwrap_submit!(submit_data)
         @checkout_status[checkout_id] = status
+        link_cart_to_order(checkout_id) if status == "completed"
         Mapper.checkout(cart_node, status: status)
+      end
+
+      # Best-effort: if `status` is `complete_in_progress` (SubmitThrottled),
+      # the order doesn't exist yet, so there's nothing to look up — a poller
+      # calling #get_checkout again later would need to retry this too, which
+      # this adapter doesn't do on its own. If the order search index hasn't
+      # caught up yet even for a synchronously-completed cart, this silently
+      # finds nothing and #get_order's checkout_id stays blank rather than
+      # raising, matching the "not information-complete but schema-valid"
+      # posture used elsewhere in this file.
+      def link_cart_to_order(checkout_id)
+        token = checkout_id[%r{Cart/([^?]+)}, 1]
+        return unless token
+
+        data = @client.admin_query(Queries::ORDER_BY_CART_TOKEN, variables: { query: "cart_token:#{token}" })
+        order_node = data.dig("orders", "nodes", 0)
+        @order_checkout_ids[order_node["id"]] = checkout_id if order_node
       end
 
       def dedup(idempotency_key)

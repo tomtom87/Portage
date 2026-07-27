@@ -117,7 +117,39 @@ module UcpMcp
                 variant { id title price { amount currencyCode } }
               }
             }
+            fulfillmentOrders(first: 25) {
+              nodes {
+                id
+                fulfillAt
+                deliveryMethod { methodType }
+                destination { address1 address2 city province zip countryCode firstName lastName phone }
+                lineItems(first: 100) {
+                  nodes { totalQuantity lineItem { id } }
+                }
+              }
+            }
+            fulfillments(first: 25) {
+              id
+              displayStatus
+              createdAt
+              trackingInfo(first: 5) { company number url }
+              fulfillmentLineItems(first: 100) {
+                nodes { quantity lineItem { id } }
+              }
+            }
           }
+        }
+      GRAPHQL
+
+      # Storefront's cartSubmitForCompletion never returns the resulting
+      # order's id (its SubmitSuccess payload only carries attemptId) — the
+      # Admin API's `orders(query:)` search supports a documented
+      # `cart_token:` filter ("the token references the cart that's
+      # associated with an order"), which is the only way to reconcile a
+      # completed cart back to the Order it produced.
+      ORDER_BY_CART_TOKEN = <<~GRAPHQL.freeze
+        query OrderByCartToken($query: String!) {
+          orders(first: 1, query: $query) { nodes { id } }
         }
       GRAPHQL
     end

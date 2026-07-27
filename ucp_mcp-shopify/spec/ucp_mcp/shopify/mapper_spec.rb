@@ -93,34 +93,103 @@ RSpec.describe UcpMcp::Shopify::Mapper do
       }
     end
 
-    it "maps a Shopify order node to a UcpMcp::Order" do
+    it "maps a Shopify order node to a UcpMcp::Order, defaulting checkout_id when the caller doesn't supply one" do
       order = described_class.order(node)
 
       expect(order.id).to eq("gid://shopify/Order/1")
+      expect(order.checkout_id).to eq("")
       expect(order.permalink_url).to eq("https://ucp-test.myshopify.com/orders/abc123")
-      expect(order.fulfillment).to eq({})
+      expect(order.fulfillment).to eq({ "expectations" => [], "events" => [] })
       expect(order.totals).to eq([UcpMcp::Total.new(type: "total", amount: 1100)])
       expect(order.line_items.first.quantity).to eq({ original: 2, total: 2, fulfilled: 2 })
       expect(order.line_items.first.status).to eq("fulfilled")
     end
 
+    it "threads a caller-supplied checkout_id through, the same way #checkout's status is caller-supplied" do
+      order = described_class.order(node, checkout_id: "gid://shopify/Cart/1")
+
+      expect(order.checkout_id).to eq("gid://shopify/Cart/1")
+    end
+
     it "derives partial/processing/removed line item status from quantity tracking" do
+      shared = { "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } },
+                 "variant" => nil }
       partial = described_class.order_line_item(
-        { "id" => "li_1", "quantity" => 3, "currentQuantity" => 3, "unfulfilledQuantity" => 1,
-          "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } }, "variant" => nil }
+        shared.merge("id" => "li_1", "quantity" => 3, "currentQuantity" => 3, "unfulfilledQuantity" => 1)
       )
       processing = described_class.order_line_item(
-        { "id" => "li_2", "quantity" => 3, "currentQuantity" => 3, "unfulfilledQuantity" => 3,
-          "discountedTotalSet" => { "shopMoney" => { "amount" => "10.00", "currencyCode" => "USD" } }, "variant" => nil }
+        shared.merge("id" => "li_2", "quantity" => 3, "currentQuantity" => 3, "unfulfilledQuantity" => 3)
       )
       removed = described_class.order_line_item(
-        { "id" => "li_3", "quantity" => 3, "currentQuantity" => 0, "unfulfilledQuantity" => 0,
-          "discountedTotalSet" => { "shopMoney" => { "amount" => "0.00", "currencyCode" => "USD" } }, "variant" => nil }
+        shared.merge("id" => "li_3", "quantity" => 3, "currentQuantity" => 0, "unfulfilledQuantity" => 0,
+                     "discountedTotalSet" => { "shopMoney" => { "amount" => "0.00", "currencyCode" => "USD" } })
       )
 
       expect(partial.status).to eq("partial")
       expect(processing.status).to eq("processing")
       expect(removed.status).to eq("removed")
+    end
+  end
+
+  describe ".fulfillment" do
+    let(:node) do
+      {
+        "fulfillmentOrders" => { "nodes" => [
+          { "id" => "gid://shopify/FulfillmentOrder/1", "fulfillAt" => "2026-07-25T00:00:00Z",
+            "deliveryMethod" => { "methodType" => "SHIPPING" },
+            "destination" => { "address1" => "1 Main St", "address2" => nil, "city" => "Boston",
+                               "province" => "MA", "zip" => "02110", "countryCode" => "US",
+                               "firstName" => "Ada", "lastName" => "Lovelace", "phone" => nil },
+            "lineItems" => { "nodes" => [
+              { "totalQuantity" => 2, "lineItem" => { "id" => "gid://shopify/LineItem/1" } }
+            ] } }
+        ] },
+        "fulfillments" => [
+          { "id" => "gid://shopify/Fulfillment/1", "displayStatus" => "IN_TRANSIT",
+            "createdAt" => "2026-07-26T00:00:00Z",
+            "trackingInfo" => [{ "company" => "UPS", "number" => "1Z999", "url" => "https://ups.example/1Z999" }],
+            "fulfillmentLineItems" => { "nodes" => [
+              { "quantity" => 2, "lineItem" => { "id" => "gid://shopify/LineItem/1" } },
+              { "quantity" => 0, "lineItem" => { "id" => "gid://shopify/LineItem/2" } }
+            ] } }
+        ]
+      }
+    end
+
+    it "maps fulfillmentOrders to expectations with destination and method_type" do
+      fulfillment = described_class.fulfillment(node)
+
+      expect(fulfillment["expectations"]).to eq([
+                                                  { "id" => "gid://shopify/FulfillmentOrder/1",
+                                                    "line_items" => [{ "id" => "gid://shopify/LineItem/1",
+                                                                       "quantity" => 2 }],
+                                                    "method_type" => "shipping",
+                                                    "destination" => { "street_address" => "1 Main St",
+                                                                       "address_locality" => "Boston",
+                                                                       "address_region" => "MA",
+                                                                       "address_country" => "US",
+                                                                       "postal_code" => "02110",
+                                                                       "first_name" => "Ada",
+                                                                       "last_name" => "Lovelace" },
+                                                    "fulfillable_on" => "2026-07-25T00:00:00Z" }
+                                                ])
+    end
+
+    it "maps fulfillments to events with tracking info, dropping zero-quantity line item refs" do
+      fulfillment = described_class.fulfillment(node)
+
+      expect(fulfillment["events"]).to eq([
+                                            { "id" => "gid://shopify/Fulfillment/1",
+                                              "occurred_at" => "2026-07-26T00:00:00Z", "type" => "in_transit",
+                                              "line_items" => [{ "id" => "gid://shopify/LineItem/1",
+                                                                 "quantity" => 2 }],
+                                              "tracking_number" => "1Z999",
+                                              "tracking_url" => "https://ups.example/1Z999", "carrier" => "UPS" }
+                                          ])
+    end
+
+    it "defaults to empty expectations/events when the order has no fulfillment data" do
+      expect(described_class.fulfillment({})).to eq({ "expectations" => [], "events" => [] })
     end
   end
 end

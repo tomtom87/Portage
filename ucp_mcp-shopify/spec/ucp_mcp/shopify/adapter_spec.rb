@@ -182,11 +182,33 @@ RSpec.describe UcpMcp::Shopify::Adapter do
         .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
       stub_storefront({ data: { cartSubmitForCompletion: { result: { attemptId: "a1" }, userErrors: [] } } })
         .with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
+      stub_admin({ data: { orders: { nodes: [{ id: "gid://shopify/Order/1" }] } } })
 
       checkout = adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
                                            idempotency_key: "chk1-complete")
 
       expect(checkout.status).to eq("completed")
+    end
+
+    it "links the cart to the resulting order via a cart_token order search, for #get_order's checkout_id" do
+      stub_storefront({ data: { cart: cart_response } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
+      stub_storefront({ data: { cartSubmitForCompletion: { result: { attemptId: "a1" }, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
+      order_stub = stub_admin({ data: { orders: { nodes: [{ id: "gid://shopify/Order/1" }] } } })
+                   .with(body: hash_including("variables" => { "query" => "cart_token:1" }))
+
+      adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
+                                idempotency_key: "chk1-link")
+      stub_admin({ data: { order: { id: "gid://shopify/Order/1", statusPageUrl: nil,
+                                    currentTotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+                                    lineItems: { nodes: [] } } } })
+      order = adapter.get_order(order_id: "gid://shopify/Order/1")
+
+      expect(order_stub).to have_been_requested
+      expect(order.checkout_id).to eq("gid://shopify/Cart/1")
     end
 
     it "maps a poll-required submission to complete_in_progress" do

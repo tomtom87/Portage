@@ -29,6 +29,10 @@ Metrics/ParameterLists:
 Metrics/ModuleLength:
   Exclude:
     - "lib/ucp_mcp/shopify/queries.rb"
+    # Mapper is one file mapping every Shopify shape to its UCP counterpart
+    # 1:1 — that's breadth (one mapping function per node type), not a
+    # module doing too many unrelated things.
+    - "lib/ucp_mcp/shopify/mapper.rb"
 
 # The generic adapter implements all 4 Cart + 5 Checkout capability methods
 # plus catalog/order against one client — that's real one-adapter-per-backend

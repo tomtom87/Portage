@@ -72,24 +72,19 @@ module UcpMcp
         )
       end
 
-      # NOTE: `checkout_id` is required by the real schema for
-      # checkout/order reconciliation, but Shopify's Order type has no field
-      # linking back to the originating cart/checkout — there's nothing to
-      # map it from. Left blank until Shopify exposes one (or this adapter
-      # tracks the cart->order link itself, the way @checkout_status already
-      # tracks cart->checkout status). `fulfillment` is similarly left as an
-      # empty object: expectations/events aren't required by the schema, and
-      # modeling Shopify's `fulfillments`/`fulfillmentOrders` into UCP's
-      # buyer-facing expectation/event shape is real work, tracked
-      # separately rather than guessed at here.
-      def order(node)
+      # `checkout_id` isn't a Shopify Order field — nothing on Order links
+      # back to its originating cart, so the adapter resolves it itself (via
+      # a cart_token order search at completion time, see
+      # UcpMcp::Shopify::Adapter#link_cart_to_order) and passes it in here,
+      # the same way #checkout's `status:` is caller-supplied.
+      def order(node, checkout_id: "")
         total_amount = minor_units(node.dig("currentTotalPriceSet", "shopMoney"))
         UcpMcp::Order.new(
           id: node["id"],
-          checkout_id: "",
+          checkout_id: checkout_id,
           permalink_url: node["statusPageUrl"],
           line_items: node.dig("lineItems", "nodes").map { |n| order_line_item(n) },
-          fulfillment: {},
+          fulfillment: fulfillment(node),
           currency: node.dig("currentTotalPriceSet", "shopMoney", "currencyCode"),
           totals: [UcpMcp::Total.new(type: "total", amount: total_amount)]
         )
@@ -117,6 +112,83 @@ module UcpMcp
         return "partial" if fulfilled.positive?
 
         "processing"
+      end
+
+      # DeliveryMethodType (Shopify) -> method_type enum (UCP). Unmapped
+      # values (new enum members Shopify adds later) fall back to "shipping"
+      # rather than raising, so a schema-valid guess beats a hard failure.
+      DELIVERY_METHOD_TYPES = {
+        "SHIPPING" => "shipping", "LOCAL" => "shipping", "PICKUP_POINT" => "shipping",
+        "PICK_UP" => "pickup", "RETAIL" => "pickup",
+        "NONE" => "digital"
+      }.freeze
+
+      # FulfillmentDisplayStatus (Shopify) -> fulfillment_event `type` (UCP).
+      # Unmapped values fall back to "processing", same rationale as above.
+      FULFILLMENT_EVENT_TYPES = {
+        "ATTEMPTED_DELIVERY" => "failed_attempt", "CANCELED" => "canceled", "CONFIRMED" => "processing",
+        "DELAYED" => "in_transit", "DELIVERED" => "delivered", "FAILURE" => "failed_attempt",
+        "FULFILLED" => "shipped", "CARRIER_PICKED_UP" => "shipped", "IN_TRANSIT" => "in_transit",
+        "LABEL_PRINTED" => "processing", "LABEL_PURCHASED" => "processing", "LABEL_VOIDED" => "canceled",
+        "MARKED_AS_FULFILLED" => "shipped", "NOT_DELIVERED" => "undeliverable", "OUT_FOR_DELIVERY" => "in_transit",
+        "READY_FOR_PICKUP" => "processing", "PICKED_UP" => "delivered", "SUBMITTED" => "processing"
+      }.freeze
+
+      # Builds the buyer-facing `fulfillment` hash (schemas/shopping/
+      # order.json's `expectations`/`events`) from Shopify's
+      # fulfillmentOrders (what's expected to ship, and to where) and
+      # fulfillments (what actually shipped, with tracking). Plain hashes,
+      # not value objects — `fulfillment` on UcpMcp::Order is itself an
+      # untyped Hash (see value_objects.rb), since the schema has no
+      # required inner fields.
+      def fulfillment(node)
+        {
+          "expectations" => (node.dig("fulfillmentOrders", "nodes") || []).map { |n| expectation(n) },
+          "events" => (node["fulfillments"] || []).map { |n| fulfillment_event(n) }
+        }
+      end
+
+      def expectation(node)
+        h = {
+          "id" => node["id"],
+          "line_items" => (node.dig("lineItems", "nodes") || []).map { |n| order_line_ref(n, n["totalQuantity"]) },
+          "method_type" => DELIVERY_METHOD_TYPES.fetch(node.dig("deliveryMethod", "methodType"), "shipping"),
+          "destination" => postal_address(node["destination"])
+        }
+        h["fulfillable_on"] = node["fulfillAt"] if node["fulfillAt"]
+        h
+      end
+
+      def postal_address(node)
+        return {} unless node
+
+        {
+          "street_address" => node["address1"], "extended_address" => node["address2"],
+          "address_locality" => node["city"], "address_region" => node["province"],
+          "address_country" => node["countryCode"], "postal_code" => node["zip"],
+          "first_name" => node["firstName"], "last_name" => node["lastName"], "phone_number" => node["phone"]
+        }.compact
+      end
+
+      def fulfillment_event(node)
+        tracking = node.dig("trackingInfo", 0) || {}
+        line_items = (node.dig("fulfillmentLineItems", "nodes") || [])
+                     .map { |n| order_line_ref(n, n["quantity"]) }
+                     .select { |n| n["quantity"]&.positive? }
+        {
+          "id" => node["id"], "occurred_at" => node["createdAt"],
+          "type" => FULFILLMENT_EVENT_TYPES.fetch(node["displayStatus"], "processing"),
+          "line_items" => line_items
+        }.merge(tracking_fields(tracking))
+      end
+
+      def order_line_ref(node, quantity)
+        { "id" => node.dig("lineItem", "id"), "quantity" => quantity }
+      end
+
+      def tracking_fields(tracking)
+        { "tracking_number" => tracking["number"], "tracking_url" => tracking["url"],
+          "carrier" => tracking["company"] }.compact
       end
 
       # Builds the top-level totals array (exactly one subtotal + one total,
