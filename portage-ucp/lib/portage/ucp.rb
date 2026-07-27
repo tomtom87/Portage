@@ -1,0 +1,28 @@
+require_relative "ucp/version"
+require_relative "ucp/configuration"
+require_relative "ucp/errors"
+require_relative "ucp/value_objects"
+require_relative "ucp/wire_envelope"
+require_relative "ucp/adapter"
+require_relative "ucp/payment_token_guard"
+require_relative "ucp/authenticator"
+require_relative "ucp/rate_limiter"
+require_relative "ucp/observability"
+require_relative "ucp/capability"
+require_relative "ucp/manifest"
+require_relative "ucp/capabilities/catalog"
+require_relative "ucp/capabilities/cart"
+require_relative "ucp/capabilities/checkout"
+require_relative "ucp/capabilities/order"
+require_relative "ucp/capabilities/identity_linking"
+require_relative "ucp/capability_registry"
+require_relative "ucp/capability_negotiator"
+require_relative "ucp/dispatcher"
+require_relative "ucp/mcp/server"
+require_relative "ucp/rack/manifest_endpoint"
+require_relative "ucp/rack/webhook_endpoint"
+
+module Portage
+  module Ucp
+  end
+end

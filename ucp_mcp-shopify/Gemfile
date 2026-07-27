@@ -1,5 +1,0 @@
-source "https://rubygems.org"
-
-gemspec
-
-gem "ucp_mcp", path: "../ucp_mcp"

@@ -1,0 +1,7 @@
+require "portage/ucp"
+require_relative "shopify/version"
+require_relative "shopify/errors"
+require_relative "shopify/client"
+require_relative "shopify/queries"
+require_relative "shopify/mapper"
+require_relative "shopify/adapter"
