@@ -1,0 +1,29 @@
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+
+RSpec::Core::RakeTask.new(:spec)
+
+task default: :spec
+
+desc "Exchange SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET for an admin_access_token " \
+     "(SHOPIFY_SHOP_DOMAIN, e.g. ucp-test-bc2vif1p.myshopify.com)"
+task :shopify_access_token do
+  require_relative "lib/portage/ucp/shopify"
+
+  shop_domain = ENV.fetch("SHOPIFY_SHOP_DOMAIN")
+  client_id = ENV.fetch("SHOPIFY_CLIENT_ID")
+  client_secret = ENV.fetch("SHOPIFY_CLIENT_SECRET")
+
+  result = Portage::Ucp::Shopify::AccessTokenFetcher.new(
+    shop_domain: shop_domain, client_id: client_id, client_secret: client_secret
+  ).fetch
+
+  expires_in = if result.expires_in
+                 "#{result.expires_in}s"
+               else
+                 "not returned (treat as non-expiring until Shopify says otherwise)"
+               end
+
+  puts "admin_access_token: #{result.access_token}"
+  puts "expires_in: #{expires_in}"
+end
