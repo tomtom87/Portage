@@ -1,0 +1,25 @@
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+
+RSpec::Core::RakeTask.new(:spec)
+
+task default: :spec
+
+desc "Verify WOOCOMMERCE_CONSUMER_KEY/SECRET against WOOCOMMERCE_SITE_URL by listing one product. " \
+     "Unlike Shopify/Wix, WooCommerce Admin keys are static — there's no token to exchange."
+task :woocommerce_smoke_test do
+  require_relative "lib/portage/ucp/woocommerce"
+
+  client = Portage::Ucp::WooCommerce::Client.new(
+    site_url: ENV.fetch("WOOCOMMERCE_SITE_URL"),
+    consumer_key: ENV.fetch("WOOCOMMERCE_CONSUMER_KEY"),
+    consumer_secret: ENV.fetch("WOOCOMMERCE_CONSUMER_SECRET")
+  )
+
+  products = client.admin_get("/products?per_page=1")
+  if products.empty?
+    puts "credentials valid, but the store has no products"
+  else
+    puts "credentials valid: #{products.first['name']}"
+  end
+end

@@ -1,0 +1,6 @@
+require "portage/ucp"
+require_relative "woocommerce/version"
+require_relative "woocommerce/errors"
+require_relative "woocommerce/client"
+require_relative "woocommerce/mapper"
+require_relative "woocommerce/adapter"
