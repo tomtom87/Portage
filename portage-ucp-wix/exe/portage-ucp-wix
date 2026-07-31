@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Standalone MCP server over stdio. Configure the site connection via env
+# vars, and — since this gem ships with permissive-nothing defaults (see
+# README's "Security hooks") — wire a real Authenticator/RateLimiter/etc. via
+# a config file loaded with PORTAGE_UCP_CONFIG, the same way `rackup -r` or
+# Sidekiq's `-r` work — see ../examples/portage_ucp.rb for a starting point.
+# Without one, the server still starts but rejects every mutating call.
+#
+# Only WIX_ACCESS_TOKEN is read here, not client_id/client_secret/
+# instance_id: this exe expects a site-scoped token you've already fetched
+# (e.g. via `bundle exec rake wix_access_token`) and refresh out-of-band,
+# same as any other long-lived process holding a token with an expiry.
+
+require "portage/ucp"
+require "portage/ucp/wix"
+
+require ENV["PORTAGE_UCP_CONFIG"] if ENV["PORTAGE_UCP_CONFIG"]
+
+client = Portage::Ucp::Wix::Client.new(access_token: ENV.fetch("WIX_ACCESS_TOKEN"))
+adapter = Portage::Ucp::Wix::Adapter.new(client: client)
+
+Portage::Ucp::Mcp::Server.build(adapter: adapter).start
