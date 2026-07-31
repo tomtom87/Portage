@@ -10,14 +10,16 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-Two gems, mirroring how Faraday/Devise split core-vs-adapter:
+Four gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 | Gem | Role |
 |---|---|
 | [`portage-ucp`](portage-ucp/) | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. Zero commerce-backend deps — works with any backend that implements `Adapter`, Shopify or otherwise. |
 | [`portage-ucp-shopify`](portage-ucp-shopify/) | Shopify adapter — implements `Adapter` against Shopify's Admin + Storefront GraphQL APIs. One consumer of the core gem, not a dependency of it. |
+| [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
+| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
 
-A backend that isn't Shopify (WooCommerce, Wix, a hand-rolled Rails store) writes its own thin `Adapter` subclass against `portage-ucp` directly — `portage-ucp-shopify` is just the first one, used for the examples below because it's the one that exists today.
+A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the three adapters above are just the ones that exist today, used for the examples below because Shopify's is the most complete.
 
 **Already on Shopify and wondering why you'd need this at all** — Shopify ships its own native Universal Commerce Agent app that auto-serves `/.well-known/ucp` with checkout+order capabilities, no code required. This gem is for the gap that app leaves: `cart`/`catalog` capabilities it doesn't advertise, a signed manifest it can't produce, and a self-hosted setup for backends other than Shopify. Full comparison in [Why `/.well-known/ucp`?](#why-wellknownucp).
 
@@ -40,6 +42,8 @@ A backend that isn't Shopify (WooCommerce, Wix, a hand-rolled Rails store) write
 - Ruby >= 3.2
 - `mcp` gem `~> 0.24` (pulled in by `portage-ucp`)
 - For `portage-ucp-shopify`: a Shopify Admin API access token, a Storefront API access token, or both — each capability family works independently if you only have one.
+- For `portage-ucp-wix`: a Wix app client_id/client_secret plus the target site's instance_id, exchanged for a site-scoped access token.
+- For `portage-ucp-woocommerce`: a WooCommerce Admin REST API consumer key/secret pair (static, generated in wp-admin) — no token exchange needed.
 
 ## Quickstart
 
@@ -334,6 +338,8 @@ Each gem manages its own tests/lint independently:
 ```bash
 cd portage-ucp && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-shopify && bundle exec rspec && bundle exec rubocop
+cd portage-ucp-wix && bundle exec rspec && bundle exec rubocop
+cd portage-ucp-woocommerce && bundle exec rspec && bundle exec rubocop
 ```
 
 See [`PLAN.md`](PLAN.md) for the design rationale and decision history behind this project.
