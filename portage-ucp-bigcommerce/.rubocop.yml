@@ -1,0 +1,51 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  SuggestExtensions: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*.rb"
+    - "*.gemspec"
+
+Metrics/MethodLength:
+  Max: 15
+
+Metrics/AbcSize:
+  Max: 25
+
+Metrics/ParameterLists:
+  Max: 6
+
+Metrics/ModuleLength:
+  Exclude:
+    # Mapper is one file mapping every BigCommerce shape to its UCP
+    # counterpart 1:1 — that's breadth (one mapping function per node
+    # type), not a module doing too many unrelated things.
+    - "lib/portage/ucp/bigcommerce/mapper.rb"
+
+# The generic adapter implements all 4 Cart + 5 Checkout capability methods
+# plus catalog/order against one client — that's real one-adapter-per-backend
+# breadth (§7.1), not a class doing too many unrelated things.
+Metrics/ClassLength:
+  Exclude:
+    - "lib/portage/ucp/bigcommerce/adapter.rb"
+
+Lint/UnusedMethodArgument:
+  Exclude:
+    - "spec/**/*.rb"
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Gemspec/RequireMFA:
+  Enabled: false

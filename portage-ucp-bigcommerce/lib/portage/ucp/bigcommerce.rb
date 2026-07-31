@@ -1,0 +1,6 @@
+require "portage/ucp"
+require_relative "bigcommerce/version"
+require_relative "bigcommerce/errors"
+require_relative "bigcommerce/client"
+require_relative "bigcommerce/mapper"
+require_relative "bigcommerce/adapter"

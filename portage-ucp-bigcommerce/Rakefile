@@ -1,0 +1,25 @@
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+
+RSpec::Core::RakeTask.new(:spec)
+
+task default: :spec
+
+desc "Verify BIGCOMMERCE_CLIENT_ID/ACCESS_TOKEN against BIGCOMMERCE_STORE_HASH by listing one product. " \
+     "Unlike Shopify/Wix, BigCommerce API account credentials are static — there's no token to exchange."
+task :bigcommerce_smoke_test do
+  require_relative "lib/portage/ucp/bigcommerce"
+
+  client = Portage::Ucp::BigCommerce::Client.new(
+    store_hash: ENV.fetch("BIGCOMMERCE_STORE_HASH"),
+    client_id: ENV.fetch("BIGCOMMERCE_CLIENT_ID"),
+    access_token: ENV.fetch("BIGCOMMERCE_ACCESS_TOKEN")
+  )
+
+  products = client.v3_get("/catalog/products?limit=1")["data"]
+  if products.empty?
+    puts "credentials valid, but the store has no products"
+  else
+    puts "credentials valid: #{products.first['name']}"
+  end
+end
