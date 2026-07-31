@@ -1,0 +1,25 @@
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+
+RSpec::Core::RakeTask.new(:spec)
+
+task default: :spec
+
+desc "Exchange WIX_CLIENT_ID/WIX_CLIENT_SECRET for a site access_token (WIX_INSTANCE_ID, " \
+     "the app's instance id for the target site)"
+task :wix_access_token do
+  require_relative "lib/portage/ucp/wix"
+
+  instance_id = ENV.fetch("WIX_INSTANCE_ID")
+  client_id = ENV.fetch("WIX_CLIENT_ID")
+  client_secret = ENV.fetch("WIX_CLIENT_SECRET")
+
+  result = Portage::Ucp::Wix::AccessTokenFetcher.new(
+    client_id: client_id, client_secret: client_secret, instance_id: instance_id
+  ).fetch
+
+  expires_in = result.expires_in ? "#{result.expires_in}s" : "not returned"
+
+  puts "access_token: #{result.access_token}"
+  puts "expires_in: #{expires_in}"
+end

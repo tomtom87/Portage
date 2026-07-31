@@ -1,0 +1,7 @@
+require "portage/ucp"
+require_relative "wix/version"
+require_relative "wix/errors"
+require_relative "wix/client"
+require_relative "wix/access_token_fetcher"
+require_relative "wix/mapper"
+require_relative "wix/adapter"
