@@ -1,0 +1,7 @@
+require "portage/ucp"
+require_relative "magento/version"
+require_relative "magento/errors"
+require_relative "magento/client"
+require_relative "magento/access_token_fetcher"
+require_relative "magento/mapper"
+require_relative "magento/adapter"

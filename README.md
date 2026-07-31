@@ -10,7 +10,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-Four gems, mirroring how Faraday/Devise split core-vs-adapter:
+Six gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 | Gem | Role |
 |---|---|
@@ -19,6 +19,7 @@ Four gems, mirroring how Faraday/Devise split core-vs-adapter:
 | [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
 | [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
 | [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | BigCommerce adapter — implements `Adapter` against a BigCommerce store's v3 Catalog/Carts/Checkouts APIs and v2 Orders API. |
+| [`portage-ucp-magento`](portage-ucp-magento/) | Magento/Adobe Commerce adapter — implements `Adapter` against a Magento site's REST v1 API (admin-token catalog/order, anonymous guest-cart cart/checkout). |
 
 A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the three adapters above are just the ones that exist today, used for the examples below because Shopify's is the most complete.
 
@@ -46,6 +47,7 @@ A backend on some other stack (a hand-rolled Rails store, another platform entir
 - For `portage-ucp-wix`: a Wix app client_id/client_secret plus the target site's instance_id, exchanged for a site-scoped access token.
 - For `portage-ucp-woocommerce`: a WooCommerce Admin REST API consumer key/secret pair (static, generated in wp-admin) — no token exchange needed.
 - For `portage-ucp-bigcommerce`: a BigCommerce API account client_id/access_token pair (static, generated in the control panel) plus your store hash — no token exchange needed.
+- For `portage-ucp-magento`: a Magento admin bearer token, exchanged from username/password — plus a `default_address:` and payment method id if you'll call `complete_checkout` (see that gem's README for why).
 
 ## Quickstart
 
@@ -343,6 +345,7 @@ cd portage-ucp-shopify && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-wix && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-woocommerce && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-bigcommerce && bundle exec rspec && bundle exec rubocop
+cd portage-ucp-magento && bundle exec rspec && bundle exec rubocop
 ```
 
 See [`PLAN.md`](PLAN.md) for the design rationale and decision history behind this project.
