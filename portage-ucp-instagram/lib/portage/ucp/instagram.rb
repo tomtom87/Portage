@@ -1,0 +1,7 @@
+require "portage/ucp"
+require_relative "instagram/version"
+require_relative "instagram/errors"
+require_relative "instagram/client"
+require_relative "instagram/access_token_fetcher"
+require_relative "instagram/mapper"
+require_relative "instagram/adapter"

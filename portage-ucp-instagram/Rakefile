@@ -1,0 +1,22 @@
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+
+RSpec::Core::RakeTask.new(:spec)
+
+task default: :spec
+
+desc "Exchange a short-lived Graph API token for a long-lived one (~60 days). " \
+     "INSTAGRAM_CLIENT_ID/SECRET, INSTAGRAM_SHORT_LIVED_TOKEN."
+task :instagram_access_token do
+  require_relative "lib/portage/ucp/instagram"
+
+  result = Portage::Ucp::Instagram::AccessTokenFetcher.new(
+    client_id: ENV.fetch("INSTAGRAM_CLIENT_ID"),
+    client_secret: ENV.fetch("INSTAGRAM_CLIENT_SECRET"),
+    short_lived_token: ENV.fetch("INSTAGRAM_SHORT_LIVED_TOKEN")
+  ).fetch
+
+  puts "access_token: #{result.access_token}"
+  puts "expires_in: #{result.expires_in}s (~60 days — re-run Business Login consent after that, no refresh " \
+       "grant exists)"
+end
