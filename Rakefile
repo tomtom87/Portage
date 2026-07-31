@@ -9,6 +9,8 @@ GEMS = %w[
   portage-ucp-woocommerce
   portage-ucp-bigcommerce
   portage-ucp-magento
+  portage-ucp-etsy
+  portage-ucp-instagram
 ].freeze
 
 desc "Run rspec + rubocop for every gem, in order, stopping at the first failure"

@@ -10,7 +10,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-Six gems, mirroring how Faraday/Devise split core-vs-adapter:
+Eight gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 | Gem | Role |
 |---|---|
@@ -20,8 +20,10 @@ Six gems, mirroring how Faraday/Devise split core-vs-adapter:
 | [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
 | [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | BigCommerce adapter — implements `Adapter` against a BigCommerce store's v3 Catalog/Carts/Checkouts APIs and v2 Orders API. |
 | [`portage-ucp-magento`](portage-ucp-magento/) | Magento/Adobe Commerce adapter — implements `Adapter` against a Magento site's REST v1 API (admin-token catalog/order, anonymous guest-cart cart/checkout). |
+| [`portage-ucp-etsy`](portage-ucp-etsy/) | Etsy adapter — real catalog/order against Etsy's Open API v3; checkout is redirect-link only (Etsy's public API has no cart/checkout endpoint). |
+| [`portage-ucp-instagram`](portage-ucp-instagram/) | Instagram/Facebook Shops adapter — real catalog against Meta's Graph API Commerce Catalog; checkout is redirect-link only, and order lookup only works for "checkout on Instagram/Facebook" merchants. |
 
-A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the three adapters above are just the ones that exist today, used for the examples below because Shopify's is the most complete.
+A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the adapters above are just the ones that exist today, used for the examples below because Shopify's is the most complete. Not every backend has a real cart/checkout API to back — Etsy and Instagram/Facebook Shops don't, so those two adapters only implement catalog/order for real and fall back to a redirect-link `Checkout` instead of a full transactional one (see their READMEs).
 
 **Already on Shopify and wondering why you'd need this at all** — Shopify ships its own native Universal Commerce Agent app that auto-serves `/.well-known/ucp` with checkout+order capabilities, no code required. This gem is for the gap that app leaves: `cart`/`catalog` capabilities it doesn't advertise, a signed manifest it can't produce, and a self-hosted setup for backends other than Shopify. Full comparison in [Why `/.well-known/ucp`?](#why-wellknownucp).
 
@@ -48,6 +50,8 @@ A backend on some other stack (a hand-rolled Rails store, another platform entir
 - For `portage-ucp-woocommerce`: a WooCommerce Admin REST API consumer key/secret pair (static, generated in wp-admin) — no token exchange needed.
 - For `portage-ucp-bigcommerce`: a BigCommerce API account client_id/access_token pair (static, generated in the control panel) plus your store hash — no token exchange needed.
 - For `portage-ucp-magento`: a Magento admin bearer token, exchanged from username/password — plus a `default_address:` and payment method id if you'll call `complete_checkout` (see that gem's README for why).
+- For `portage-ucp-etsy`: an Etsy OAuth access_token (from shop-owner consent) plus your app's `x-api-key` — catalog/order only, checkout is redirect-link (see that gem's README for why).
+- For `portage-ucp-instagram`: a Meta Graph API long-lived access token plus your Commerce Catalog id — catalog only, checkout is redirect-link and order lookup only works for "checkout on Instagram/Facebook" merchants (see that gem's README for why).
 
 ## Quickstart
 
@@ -356,6 +360,8 @@ cd portage-ucp-wix && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-woocommerce && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-bigcommerce && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-magento && bundle exec rspec && bundle exec rubocop
+cd portage-ucp-etsy && bundle exec rspec && bundle exec rubocop
+cd portage-ucp-instagram && bundle exec rspec && bundle exec rubocop
 ```
 
 Or run the full suite across every gem in one command, via the root `Rakefile` — it just shells into each gem dir in turn and stops at the first failure, no root-level bundle or cross-gem dependency involved:

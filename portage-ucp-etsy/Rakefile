@@ -1,0 +1,21 @@
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
+
+RSpec::Core::RakeTask.new(:spec)
+
+task default: :spec
+
+desc "Refresh ETSY_REFRESH_TOKEN for a new access_token (ETSY_CLIENT_ID). Persist the new " \
+     "refresh_token this prints — Etsy invalidates the old one on every refresh."
+task :etsy_access_token do
+  require_relative "lib/portage/ucp/etsy"
+
+  result = Portage::Ucp::Etsy::AccessTokenFetcher.new(
+    client_id: ENV.fetch("ETSY_CLIENT_ID"),
+    refresh_token: ENV.fetch("ETSY_REFRESH_TOKEN")
+  ).fetch
+
+  puts "access_token: #{result.access_token}"
+  puts "refresh_token: #{result.refresh_token} (save this — the old one is now invalid)"
+  puts "expires_in: #{result.expires_in}s"
+end
