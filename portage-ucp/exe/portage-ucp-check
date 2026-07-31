@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Point this at any storefront URL and find out what portage-ucp can do with
+# it: whether it already serves a native /.well-known/ucp manifest, and if
+# not, which portage-ucp-<adapter> gem matches the platform — probed live
+# when that adapter's env vars (see each gem's README) are already set.
+#
+#   portage-ucp-check https://your-shop.myshopify.com
+#   portage-ucp-check your-shop.myshopify.com   # scheme defaults to https
+
+require "json"
+require "portage/ucp"
+
+url = ARGV.first
+if url.nil? || url.empty?
+  warn "usage: portage-ucp-check <store url>"
+  exit 1
+end
+
+report = Portage::Ucp::Check.call(url)
+puts JSON.pretty_generate(report)
+
+found_something = !report[:native_ucp].nil? || report.dig(:live_probe, :status) == "ok"
+exit(found_something ? 0 : 1)
