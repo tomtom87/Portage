@@ -104,6 +104,16 @@ PORTAGE_UCP_CONFIG=./config/portage_ucp.rb bundle exec portage-ucp-shopify
 Without it, the server still starts but rejects every mutating call — the
 `UnconfiguredAuthenticator` default from [Security hooks](#security-hooks--nothing-is-permissive-by-default) below.
 
+Every adapter gem ships the same executable, `examples/portage_ucp.rb` starting point, and `PORTAGE_UCP_CONFIG` hook — just point `bundle exec` at the one matching your backend and fill in its env vars:
+
+| Gem | Executable | Required env vars |
+|---|---|---|
+| `portage-ucp-shopify` | `portage-ucp-shopify` | `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ADMIN_ACCESS_TOKEN` and/or `SHOPIFY_STOREFRONT_ACCESS_TOKEN` |
+| `portage-ucp-wix` | `portage-ucp-wix` | `WIX_ACCESS_TOKEN` |
+| `portage-ucp-woocommerce` | `portage-ucp-woocommerce` | `WOOCOMMERCE_SITE_URL`, `WOOCOMMERCE_CONSUMER_KEY`, `WOOCOMMERCE_CONSUMER_SECRET`; optional `WOOCOMMERCE_CURRENCY` (default `USD`), `WOOCOMMERCE_PAYMENT_METHOD` (for `complete_checkout`) |
+| `portage-ucp-bigcommerce` | `portage-ucp-bigcommerce` | `BIGCOMMERCE_STORE_HASH`, `BIGCOMMERCE_CLIENT_ID`, `BIGCOMMERCE_ACCESS_TOKEN`, `BIGCOMMERCE_SITE_URL`; optional `BIGCOMMERCE_CURRENCY` (default `USD`), `BIGCOMMERCE_PAYMENT_GATEWAY_ID` (for `complete_checkout`) |
+| `portage-ucp-magento` | `portage-ucp-magento` | `MAGENTO_BASE_URL`, `MAGENTO_ADMIN_TOKEN`; optional `MAGENTO_CURRENCY` (default `USD`), `MAGENTO_SITE_URL`, `MAGENTO_PAYMENT_METHOD`/`MAGENTO_DEFAULT_ADDRESS` (a JSON object, for `complete_checkout`) |
+
 An agent connecting to it can now do this end to end — shown here as simplified `tools/call name { args }` shorthand, not the literal JSON-RPC envelope on the wire:
 
 ```
