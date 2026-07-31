@@ -347,7 +347,7 @@ See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkou
 
 ## Development
 
-Each gem manages its own tests/lint independently:
+Each gem manages its own tests/lint independently — its own `Gemfile`/`Gemfile.lock`, own `spec/`, no shared state or run-order dependency between gems:
 
 ```bash
 cd portage-ucp && bundle exec rspec && bundle exec rubocop
@@ -356,6 +356,12 @@ cd portage-ucp-wix && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-woocommerce && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-bigcommerce && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-magento && bundle exec rspec && bundle exec rubocop
+```
+
+Or run the full suite across every gem in one command, via the root `Rakefile` — it just shells into each gem dir in turn and stops at the first failure, no root-level bundle or cross-gem dependency involved:
+
+```bash
+rake spec   # == rake, spec is the default task
 ```
 
 See [`PLAN.md`](PLAN.md) for the design rationale and decision history behind this project.
