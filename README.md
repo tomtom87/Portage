@@ -74,7 +74,29 @@ server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
 server.start # stdio, or mount as Streamable HTTP per the `mcp` gem's own docs
 ```
 
-That's a running MCP server. An agent connecting to it can now do this end to end — shown here as simplified `tools/call name { args }` shorthand, not the literal JSON-RPC envelope on the wire:
+That's a running MCP server, wired up inline. `portage-ucp-shopify` also ships an
+executable that does steps 1 and 3 for you, so you don't need a throwaway Ruby file
+just to point an MCP client (Claude Desktop, etc.) at a `command`:
+
+```bash
+bundle exec portage-ucp-shopify   # stdio, reads SHOPIFY_SHOP_DOMAIN /
+                                   # SHOPIFY_ADMIN_ACCESS_TOKEN / SHOPIFY_STOREFRONT_ACCESS_TOKEN
+```
+
+Step 2 (wiring a real `authenticator`/`rate_limiter`/`business`) still has to come from
+you — the exe won't guess those — so point `PORTAGE_UCP_CONFIG` at a Ruby file that
+calls `Portage::Ucp.configure`, the same `-r`-a-file pattern `rackup`/Sidekiq use.
+[`portage-ucp-shopify/examples/portage_ucp.rb`](portage-ucp-shopify/examples/portage_ucp.rb)
+is a copy-paste starting point (bearer-token authenticator, in-process rate limiter):
+
+```bash
+PORTAGE_UCP_CONFIG=./config/portage_ucp.rb bundle exec portage-ucp-shopify
+```
+
+Without it, the server still starts but rejects every mutating call — the
+`UnconfiguredAuthenticator` default from [Security hooks](#security-hooks--nothing-is-permissive-by-default) below.
+
+An agent connecting to it can now do this end to end — shown here as simplified `tools/call name { args }` shorthand, not the literal JSON-RPC envelope on the wire:
 
 ```
 tools/call search_catalog { query: "snowboard", limit: 5 }
