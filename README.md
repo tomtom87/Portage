@@ -18,6 +18,7 @@ Four gems, mirroring how Faraday/Devise split core-vs-adapter:
 | [`portage-ucp-shopify`](portage-ucp-shopify/) | Shopify adapter — implements `Adapter` against Shopify's Admin + Storefront GraphQL APIs. One consumer of the core gem, not a dependency of it. |
 | [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
 | [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
+| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | BigCommerce adapter — implements `Adapter` against a BigCommerce store's v3 Catalog/Carts/Checkouts APIs and v2 Orders API. |
 
 A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the three adapters above are just the ones that exist today, used for the examples below because Shopify's is the most complete.
 
@@ -44,6 +45,7 @@ A backend on some other stack (a hand-rolled Rails store, another platform entir
 - For `portage-ucp-shopify`: a Shopify Admin API access token, a Storefront API access token, or both — each capability family works independently if you only have one.
 - For `portage-ucp-wix`: a Wix app client_id/client_secret plus the target site's instance_id, exchanged for a site-scoped access token.
 - For `portage-ucp-woocommerce`: a WooCommerce Admin REST API consumer key/secret pair (static, generated in wp-admin) — no token exchange needed.
+- For `portage-ucp-bigcommerce`: a BigCommerce API account client_id/access_token pair (static, generated in the control panel) plus your store hash — no token exchange needed.
 
 ## Quickstart
 
@@ -340,6 +342,7 @@ cd portage-ucp && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-shopify && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-wix && bundle exec rspec && bundle exec rubocop
 cd portage-ucp-woocommerce && bundle exec rspec && bundle exec rubocop
+cd portage-ucp-bigcommerce && bundle exec rspec && bundle exec rubocop
 ```
 
 See [`PLAN.md`](PLAN.md) for the design rationale and decision history behind this project.
