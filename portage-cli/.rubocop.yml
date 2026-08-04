@@ -1,0 +1,45 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  SuggestExtensions: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*.rb"
+    - "*.gemspec"
+
+Metrics/MethodLength:
+  Max: 15
+
+Metrics/AbcSize:
+  Max: 25
+
+Metrics/ParameterLists:
+  Max: 6
+
+# Buy implements the full discover -> homepage-fallback -> platform-detect ->
+# adapter-fallback algorithm end to end in one class on purpose (§ PLAN.md's
+# 2026-08-04 handoff) — that's breadth (one method per branch of one
+# documented algorithm), not a class doing too many unrelated things.
+Metrics/ClassLength:
+  Exclude:
+    - "lib/portage/cli/buy.rb"
+
+Lint/UnusedMethodArgument:
+  Exclude:
+    - "spec/**/*.rb"
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Gemspec/RequireMFA:
+  Enabled: false

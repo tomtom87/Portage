@@ -4,6 +4,8 @@
 # `cd gem && bundle exec rspec && bundle exec rubocop` five times by hand.
 GEMS = %w[
   portage-ucp
+  portage-ucp-client
+  portage-cli
   portage-ucp-shopify
   portage-ucp-wix
   portage-ucp-woocommerce
