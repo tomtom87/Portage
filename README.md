@@ -10,11 +10,13 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-Eight gems, mirroring how Faraday/Devise split core-vs-adapter:
+Ten gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 | Gem | Role |
 |---|---|
 | [`portage-ucp`](portage-ucp/) | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. Zero commerce-backend deps — works with any backend that implements `Adapter`, Shopify or otherwise. |
+| [`portage-ucp-client`](portage-ucp-client/) | Client-side SDK — the other direction from every gem below: connect to somebody else's manifest (or drive your own `Adapter` directly) and act as the shopper's agent. Loopback/stdio/HTTP transports behind one interface. |
+| [`portage-cli`](portage-cli/) | Ships the `portage` command — `portage buy <url>` tries native UCP discovery first, falls back to a platform adapter only when you already have that platform's own credentials, and says so plainly otherwise. |
 | [`portage-ucp-shopify`](portage-ucp-shopify/) | Shopify adapter — implements `Adapter` against Shopify's Admin + Storefront GraphQL APIs. One consumer of the core gem, not a dependency of it. |
 | [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
 | [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
@@ -26,6 +28,8 @@ Eight gems, mirroring how Faraday/Devise split core-vs-adapter:
 A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the adapters above are just the ones that exist today, used for the examples below because Shopify's is the most complete. Not every backend has a real cart/checkout API to back — Etsy and Instagram/Facebook Shops don't, so those two adapters only implement catalog/order for real and fall back to a redirect-link `Checkout` instead of a full transactional one (see their READMEs).
 
 **Already on Shopify and wondering why you'd need this at all** — Shopify ships its own native Universal Commerce Agent app that auto-serves `/.well-known/ucp` with checkout+order capabilities, no code required. This gem is for the gap that app leaves: `cart`/`catalog` capabilities it doesn't advertise, a signed manifest it can't produce, and a self-hosted setup for backends other than Shopify. Full comparison in [Why `/.well-known/ucp`?](#why-wellknownucp).
+
+**Who needs credentials here, and who doesn't:** the merchant sets this up *once*, using their own store's credentials (Shopify Admin token, WooCommerce consumer key, whatever). That's the only credentialed step in the whole system. After that manifest is live at `/.well-known/ucp`, **any shopper's AI agent — on any harness, with zero credentials of its own — can discover it and buy from it.** The shopper never sees a Shopify token or a WooCommerce key; they authenticate (if at all) with their own payment handler, not with your store. This is the same trust model as a merchant integrating hosted checkout today — one-time setup by the merchant, open-ended public use by anyone who finds it. See the [walkthrough](#detailed-walkthrough-an-agent-buys-a-snowboard) below for the full "shopper agent → your live manifest → bought" path, credential-free the whole way.
 
 ## Contents
 
@@ -155,83 +159,53 @@ Read this before wiring a server up to anything real — every default here is d
 
 ## Detailed walkthrough: an agent buys a snowboard
 
-A shopper tells their AI agent: *"Find me a snowboard under $600 and buy it."* The agent already discovered your store's manifest at `/.well-known/ucp`, saw `dev.ucp.shopping.catalog`/`cart`/`checkout` advertised, and connects over MCP. Here's the actual tool-call sequence hitting your server, and what runs behind each call.
+A shopper tells their AI agent: *"Find me a snowboard under $600 and buy it."* This shopper has no account with you, no API key, no relationship with your store beyond finding it — none of that is required on their end. Their agent discovered your store's manifest at `/.well-known/ucp`, saw `dev.ucp.shopping.catalog`/`cart`/`checkout` advertised, and connects over MCP using nothing but that public manifest.
 
-**1. Agent searches the catalog**
-
-```
-tools/call search_catalog { "query": "snowboard", "limit": 5 }
-```
+Below is that agent's side of the conversation — runnable today via `portage-ucp-client`'s loopback transport (`Client.for_adapter`), which drives your real `Adapter` in-process through the exact same `Authenticator`/`RateLimiter`/`Dispatcher` stack a real stdio/HTTP connection would, just without the wire hop. Swap `Client.for_adapter(adapter)` for `Client.discover("https://your-shop.example")` and this is unchanged for a real remote store — that's the point of one client interface across all three transports (§ `portage-ucp-client`).
 
 ```ruby
-adapter.search_catalog(query: "snowboard", limit: 5)
+require "portage/ucp"
+require "portage/ucp/client"
+
+# In real life: session = Portage::Ucp::Client.discover("https://your-shop.example")
+# Here: driving your own Adapter directly, in-process, for a fully runnable example.
+session = Portage::Ucp::Client.for_adapter(adapter, authenticator: my_authenticator)
+
+# 1. Search the catalog
+products = session.search_catalog(query: "snowboard", limit: 5)
 # => [#<Portage::Ucp::Product id: "gid://shopify/Product/1", title: "Powder Chaser 158cm",
 #      price: #<Money amount_minor: 54900, currency: "USD">, available: true, ...>, ...]
-```
 
-**2. Agent pulls full detail on the one that fits the budget**
-
-```
-tools/call get_product { "product_id": "gid://shopify/Product/1" }
-```
-
-```ruby
-adapter.get_product(product_id: "gid://shopify/Product/1")
+# 2. Pull full detail on the one that fits the budget
+product = session.get_product(product_id: products.first.id)
 # => variants: [{ id: "gid://shopify/ProductVariant/11", title: "158cm", available: true, price: ... }]
+
+# 3. Create a checkout for the variant picked — idempotency_key is generated for you
+checkout = session.create_checkout(line_items: [{ product_id: "gid://shopify/ProductVariant/11", quantity: 1 }])
+# => { "id" => "gid://shopify/Cart/abc", "status" => "incomplete", "totals" => [...], ... }
+
+# A real checkout can come back requires_escalation instead — that's normal data (a link
+# to follow), not a failure. Branch on it before assuming you can complete_checkout next.
+if checkout["status"] == "requires_escalation"
+  puts "Buyer must act first: #{checkout['links'].first['url']}"
+else
+  # 4. Complete checkout with a tokenized payment credential — never a raw card number.
+  # PaymentTokenGuard runs client-side automatically; a raw PAN raises RawPanRejectedError
+  # before it ever reaches the wire, let alone your Adapter.
+  completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: "spt_1a2b3c...")
+  # => { "id" => "gid://shopify/Cart/abc", "status" => "completed", ... }
+
+  # 5. Fetch the resulting order, if you have an order id to look up
+  order = session.get_order(order_id: "gid://shopify/Order/9001")
+  # => { "id" => ..., "checkout_id" => "gid://shopify/Cart/abc",
+  #      "permalink_url" => "https://your-shop.example/...",
+  #      "fulfillment" => { "expectations" => [...], "events" => [] }, "totals" => [...] }
+end
 ```
 
-**3. Agent creates a checkout for the variant it picked**
+Reusing the same `idempotency_key` on a retry (dropped connection, agent double-submit) replays the cached result instead of charging twice — you don't have to think about this, `Session` generates one per mutating call unless you pass your own.
 
-```
-tools/call create_checkout {
-  "line_items": [{ "product_id": "gid://shopify/ProductVariant/11", "quantity": 1 }],
-  "idempotency_key": "b3f1-..."
-}
-```
-
-Before this runs, the framework checks `Authenticator#call` (does this session own an authorized payment context?) and `RateLimiter#check!` — reject either and the agent gets an MCP error response instead of ever reaching your `Adapter`.
-
-```ruby
-adapter.create_checkout(line_items: [{ product_id: "gid://shopify/ProductVariant/11", quantity: 1 }],
-                        idempotency_key: "b3f1-...")
-# => #<Checkout id: "gid://shopify/Cart/abc", status: "incomplete", totals: [...], ...>
-```
-
-**4. Agent completes checkout with a tokenized payment credential**
-
-The agent never handles a raw card number — it exchanges the shopper's payment method with a payment handler first and gets back a single-use token.
-
-```
-tools/call complete_checkout {
-  "checkout_id": "gid://shopify/Cart/abc",
-  "payment_token": "spt_1a2b3c...",
-  "idempotency_key": "b3f1-..."
-}
-```
-
-`Portage::Ucp::PaymentTokenGuard` runs first — if `payment_token` looked like a raw PAN instead of an opaque token, this raises before your `Adapter` ever sees it.
-
-```ruby
-adapter.complete_checkout(checkout_id: "gid://shopify/Cart/abc", payment_token: "spt_1a2b3c...",
-                          idempotency_key: "b3f1-...")
-# => #<Checkout id: "gid://shopify/Cart/abc", status: "completed", ...>
-```
-
-Reusing the same `idempotency_key` on a retry (dropped connection, agent double-submit) replays the cached result instead of charging twice.
-
-**5. Agent (or your own order-sync webhook) fetches the resulting order**
-
-```
-tools/call get_order { "order_id": "gid://shopify/Order/9001" }
-```
-
-```ruby
-adapter.get_order(order_id: "gid://shopify/Order/9001")
-# => #<Order id: ..., checkout_id: "gid://shopify/Cart/abc", permalink_url: "https://your-shop.example/...",
-#      fulfillment: { "expectations" => [...], "events" => [] }, totals: [...] >
-```
-
-Meanwhile `Portage::Ucp::Rack::WebhookEndpoint` receives Shopify's fulfillment updates independently and calls your `on_order_event` callback as tracking events land — the shopper's agent can poll `get_order` again later to answer "where's my snowboard?" without you building that plumbing yourself.
+On the server side, none of this changed: `Authenticator#call` and `RateLimiter#check!` still gate every mutating call before it reaches your `Adapter`, exactly as before — the loopback transport runs the real `Portage::Ucp::Mcp::Server` stack, it doesn't bypass it. Meanwhile `Portage::Ucp::Rack::WebhookEndpoint` receives Shopify's fulfillment updates independently and calls your `on_order_event` callback as tracking events land — the shopper's agent can poll `get_order` again later to answer "where's my snowboard?" without you building that plumbing yourself.
 
 ### Serving the discovery manifest and webhooks
 
