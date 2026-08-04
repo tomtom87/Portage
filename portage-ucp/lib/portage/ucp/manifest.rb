@@ -5,7 +5,9 @@ module Portage
   module Ucp
     # Builds the /.well-known/ucp discovery document: protocol version, the
     # business's advertised capabilities (only those the Adapter overrides —
-    # see Capability#advertised_for?), payment handlers, and signing keys.
+    # see Capability#advertised_for?), payment handlers, signing keys, and the
+    # services array (transport + endpoint, e.g. {transport: "mcp", endpoint:
+    # "https://..."}) a client needs to find where to actually connect.
     # Signing keys are never generated here — see §9, consumer-provided only.
     class Manifest
       UCP_VERSION = "2026-04-08".freeze
@@ -18,19 +20,22 @@ module Portage
       #   Algorithm-agnostic by design: the gem doesn't dictate Ed25519 vs RSA.
       def initialize(adapter:, business: Portage::Ucp.configuration.business, registry: Portage::Ucp.configuration.registry,
                      payment_handlers: Portage::Ucp.configuration.payment_handlers,
-                     signing_keys: Portage::Ucp.configuration.signing_keys, signer: Portage::Ucp.configuration.signer)
+                     signing_keys: Portage::Ucp.configuration.signing_keys, signer: Portage::Ucp.configuration.signer,
+                     services: Portage::Ucp.configuration.services)
         @adapter = adapter
         @business = business
         @registry = registry
         @payment_handlers = payment_handlers
         @signing_keys = signing_keys
         @signer = signer
+        @services = services
       end
 
       def to_h
         payload = {
           ucp_version: UCP_VERSION,
           business: @business,
+          services: @services,
           capabilities: @registry.advertised(@adapter).map do |capability|
             { name: capability.name, version: capability.version }
           end,

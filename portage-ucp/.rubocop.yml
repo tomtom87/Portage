@@ -25,9 +25,23 @@ Metrics/AbcSize:
 
 Metrics/ParameterLists:
   Max: 6
+  Exclude:
+    # Manifest.new takes one keyword per top-level manifest field (business,
+    # payment_handlers, signing_keys, signer, services) so each can be passed
+    # explicitly or fall back to Portage::Ucp.configuration independently —
+    # collapsing them into an options hash would lose that per-field default.
+    - "lib/portage/ucp/manifest.rb"
 
 Style/HashSlice:
   Enabled: false
+
+# One Platform entry per adapter gem (marker regexes + env var names + build
+# lambdas) — that's breadth (one declaration per platform), not a class doing
+# too many unrelated things. Same justification style as portage-ucp-shopify's
+# Adapter/Mapper excludes.
+Metrics/ClassLength:
+  Exclude:
+    - "lib/portage/ucp/resolver.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:

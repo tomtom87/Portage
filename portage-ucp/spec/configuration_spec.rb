@@ -14,6 +14,7 @@ RSpec.describe Portage::Ucp do
     expect(config.rate_limiter).to be_a(Portage::Ucp::NullRateLimiter)
     expect(config.payment_handlers).to eq([])
     expect(config.signing_keys).to eq([])
+    expect(config.services).to eq([])
   end
 
   it "yields the same configuration instance every call, letting a consumer set it once" do

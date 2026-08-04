@@ -9,7 +9,7 @@ module Portage
     # through every call site.
     class Configuration
       attr_accessor :registry, :authenticator, :rate_limiter, :logger,
-                    :business, :signer, :payment_handlers, :signing_keys
+                    :business, :signer, :payment_handlers, :signing_keys, :services
 
       def initialize
         @registry = CapabilityRegistry.default
@@ -18,6 +18,7 @@ module Portage
         @logger = Logger.new($stdout)
         @payment_handlers = []
         @signing_keys = []
+        @services = []
       end
     end
 

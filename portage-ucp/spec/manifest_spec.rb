@@ -29,6 +29,19 @@ RSpec.describe Portage::Ucp::Manifest do
     expect(result[:signing_keys]).to eq([{ kid: "k1", public_key: "..." }])
   end
 
+  it "includes the services array a client needs to find where to connect" do
+    manifest = described_class.new(
+      adapter: adapter, business: business,
+      services: [{ transport: "mcp", endpoint: "https://example.com/mcp" }]
+    )
+
+    expect(manifest.to_h[:services]).to eq([{ transport: "mcp", endpoint: "https://example.com/mcp" }])
+  end
+
+  it "defaults services to an empty array when none are configured" do
+    expect(manifest.to_h[:services]).to eq([])
+  end
+
   it "has no signature block when no signer is configured" do
     expect(manifest.to_h).not_to have_key(:signature)
   end
@@ -47,11 +60,15 @@ RSpec.describe Portage::Ucp::Manifest do
   end
 
   it "falls back to Portage::Ucp.configuration for collaborators not passed explicitly" do
-    Portage::Ucp.configure { |c| c.payment_handlers = [{ type: "configured_handler" }] }
+    Portage::Ucp.configure do |c|
+      c.payment_handlers = [{ type: "configured_handler" }]
+      c.services = [{ transport: "mcp", endpoint: "https://configured.example.com/mcp" }]
+    end
 
     result = described_class.new(adapter: adapter, business: business).to_h
 
     expect(result[:payment_handlers]).to eq([{ type: "configured_handler" }])
+    expect(result[:services]).to eq([{ transport: "mcp", endpoint: "https://configured.example.com/mcp" }])
   ensure
     Portage::Ucp.instance_variable_set(:@configuration, nil)
   end

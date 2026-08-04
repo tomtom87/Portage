@@ -21,6 +21,7 @@ require_relative "ucp/dispatcher"
 require_relative "ucp/mcp/server"
 require_relative "ucp/rack/manifest_endpoint"
 require_relative "ucp/rack/webhook_endpoint"
+require_relative "ucp/resolver"
 require_relative "ucp/check"
 
 module Portage

@@ -1,13 +1,18 @@
 module Portage
   module Ucp
-    class Check
+    # Shared platform-detection + adapter-building logic for anything that
+    # needs to go from "a URL" to "a live Adapter for whatever commerce
+    # platform that URL runs on" — originally `Check`-only, now also used by
+    # `portage buy`'s adapter-fallback step. Neither caller should duplicate
+    # the platform table; both go through here.
+    class Resolver
       Platform = Struct.new(:name, :gem, :require_path, :namespace, :markers, :env, :required, :build_client,
                             :build_adapter, keyword_init: true)
 
       # One entry per adapter gem: how to recognize the platform from its
       # homepage, which env vars its Client/Adapter need (mirroring each
       # gem's exe/, see their READMEs), and how to build a live instance from
-      # those env vars for #probe.
+      # those env vars.
       PLATFORMS = [
         Platform.new(
           name: "Shopify", gem: "portage-ucp-shopify", require_path: "portage/ucp/shopify", namespace: "Shopify",
@@ -92,6 +97,37 @@ module Portage
           build_adapter: ->(ns, client, env) { ns::Adapter.new(client: client, catalog_id: env.fetch(:catalog_id)) }
         )
       ].freeze
+
+      # @return [Platform, nil] the first platform whose markers match the
+      #   given homepage body/headers, or nil if nothing recognizable was found.
+      def self.detect_platform(body, headers)
+        haystack = [body, headers.to_a.flatten.join(" ")].compact.join(" ")
+        PLATFORMS.find { |platform| platform.markers.any? { |marker| haystack =~ marker } }
+      end
+
+      # @return [Hash<Symbol, String, nil>] the platform's env vars read from
+      #   the process environment, keyed the same as Platform#env/#required.
+      def self.env_for(platform)
+        platform.env.transform_values { |var| ENV.fetch(var, nil) }
+      end
+
+      # @return [Array<String>] the env var names still missing for this
+      #   platform to be usable, or an empty array if all required vars are set.
+      def self.missing_env(platform, env)
+        platform.required.select { |key| env[key].nil? }.map { |key| platform.env[key] }
+      end
+
+      # Builds a live Adapter for the given platform from the given env hash
+      # (as returned by .env_for). Raises LoadError if the adapter gem isn't
+      # installed — callers decide how to handle that (e.g. Check reports it
+      # as a skipped probe rather than crashing).
+      # @return [Portage::Ucp::Adapter]
+      def self.build_adapter(platform, env)
+        require platform.require_path
+        namespace = Portage::Ucp.const_get(platform.namespace)
+        client = platform.build_client.call(namespace, env)
+        platform.build_adapter.call(namespace, client, env)
+      end
     end
   end
 end

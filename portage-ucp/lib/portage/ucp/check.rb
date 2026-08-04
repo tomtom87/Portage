@@ -8,7 +8,7 @@ module Portage
     # portage-ucp can do with it. Checks for a native `/.well-known/ucp`
     # manifest first (the store may already speak UCP without this gem, see
     # README's "Why /.well-known/ucp?"); if there isn't one, detects the
-    # commerce platform from the page itself (see Check::PLATFORMS) and names
+    # commerce platform from the page itself (see Resolver) and names
     # the matching portage-ucp-<adapter> gem — probing it live when that
     # adapter's env vars are already set, so "best match" means a
     # confirmed-working adapter, not just a guess.
@@ -29,7 +29,7 @@ module Portage
         return { url: @uri.to_s, native_ucp: manifest } if manifest
 
         body, headers = fetch_homepage
-        platform = detect_platform(body, headers)
+        platform = Resolver.detect_platform(body, headers)
 
         report = { url: @uri.to_s, native_ucp: nil, platform: platform&.name, recommended_gem: platform&.gem }
         report[:live_probe] = probe(platform) if platform
@@ -58,28 +58,16 @@ module Portage
         [nil, {}]
       end
 
-      def detect_platform(body, headers)
-        haystack = [body, headers.to_a.flatten.join(" ")].compact.join(" ")
-        PLATFORMS.find { |platform| platform.markers.any? { |marker| haystack =~ marker } }
-      end
-
       def probe(platform)
-        env = platform.env.transform_values { |var| ENV.fetch(var, nil) }
-        missing = missing_required(platform, env)
+        env = Resolver.env_for(platform)
+        missing = Resolver.missing_env(platform, env)
         return { status: "skipped", reason: "missing env vars: #{missing.join(', ')}" } if missing.any?
 
         run_probe(platform, env)
       end
 
-      def missing_required(platform, env)
-        platform.required.select { |key| env[key].nil? }.map { |key| platform.env[key] }
-      end
-
       def run_probe(platform, env)
-        require platform.require_path
-        namespace = Portage::Ucp.const_get(platform.namespace)
-        client = platform.build_client.call(namespace, env)
-        adapter = platform.build_adapter.call(namespace, client, env)
+        adapter = Resolver.build_adapter(platform, env)
         product = adapter.search_catalog(query: "", limit: 1)&.first
         { status: "ok", sample_product: product && { id: product.id, title: product.title } }
       rescue LoadError
@@ -106,5 +94,3 @@ module Portage
     end
   end
 end
-
-require_relative "check/platforms"
