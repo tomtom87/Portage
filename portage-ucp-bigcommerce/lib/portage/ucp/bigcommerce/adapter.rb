@@ -222,7 +222,14 @@ module Portage
 
           @checkout_status[checkout_id] = "completed"
           @order_checkout_ids[order_id.to_s] = checkout_id
-          Mapper.checkout(checkout_node, id: checkout_id, status: "completed")
+          Mapper.checkout(checkout_node, id: checkout_id, status: "completed", order: order_confirmation(order_id))
+        end
+
+        # Same order-status URL pattern as Mapper.order's `permalink_url`.
+        def order_confirmation(order_id)
+          Portage::Ucp::OrderConfirmation.new(
+            id: order_id.to_s, permalink_url: "#{@site_url}/account.php?action=order_status&order_id=#{order_id}"
+          )
         end
 
         def dedup(idempotency_key)

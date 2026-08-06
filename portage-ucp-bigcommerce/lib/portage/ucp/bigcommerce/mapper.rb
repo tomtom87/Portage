@@ -87,7 +87,7 @@ module Portage
         # resource with its own lifecycle enum, so the Adapter tracks status
         # itself and passes it in, same rationale as
         # Portage::Ucp::Shopify::Mapper.checkout and Portage::Ucp::WooCommerce::Mapper.checkout.
-        def checkout(node, id:, status:)
+        def checkout(node, id:, status:, order: nil)
           cart_node = node["cart"] || node
 
           Portage::Ucp::Checkout.new(
@@ -96,7 +96,8 @@ module Portage
             line_items: cart(cart_node, id: id).line_items,
             currency: cart_node.dig("currency", "code"),
             totals: checkout_totals(node, cart_node),
-            links: []
+            links: [],
+            order: order
           )
         end
 

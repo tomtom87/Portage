@@ -168,6 +168,11 @@ RSpec.describe Portage::Ucp::BigCommerce::Adapter do
                                            idempotency_key: "chk1-complete")
 
       expect(checkout.status).to eq("completed")
+      expect(checkout.order).to eq(
+        Portage::Ucp::OrderConfirmation.new(
+          id: "99", permalink_url: "https://shop.example.com/account.php?action=order_status&order_id=99"
+        )
+      )
       expect(order_stub).to have_been_requested
       expect(token_stub).to have_been_requested
       expect(payment_stub).to have_been_requested
