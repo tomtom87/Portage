@@ -13,18 +13,22 @@ Gem::Specification.new do |spec|
                      "actual buy calls); no single adapter gem is a hard dependency."
   spec.authors = ["Tom Whitbread"]
   spec.license = "MIT"
+  spec.homepage = "https://github.com/tomtom87/Portage/tree/main/portage-cli"
   spec.required_ruby_version = ">= 3.2"
 
-  spec.files = Dir["lib/**/*.rb", "exe/*", "README.md", "LICENSE"]
-  spec.require_paths = ["lib"]
+  spec.files = Dir["lib/**/*.rb", "exe/*", "README.md", "LICENSE", "CHANGELOG.md"]
+  spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
+  spec.require_paths = ["lib"]
 
   spec.add_dependency "portage-ucp", "~> 0.1"
   spec.add_dependency "portage-ucp-client", "~> 0.1"
 
   spec.add_development_dependency "rspec", "~> 3.13"
-  spec.add_development_dependency "rubocop"
+  spec.add_development_dependency "rubocop", "~> 1.88"
   spec.add_development_dependency "webmock", "~> 3.24"
-  spec.add_development_dependency "yard"
+  spec.add_development_dependency "yard", "~> 0.9"
+  spec.metadata["source_code_uri"] = "https://github.com/tomtom87/Portage/tree/main/portage-cli"
+  spec.metadata["changelog_uri"] = "https://github.com/tomtom87/Portage/blob/main/portage-cli/CHANGELOG.md"
   spec.metadata["rubygems_mfa_required"] = "true"
 end
