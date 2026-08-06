@@ -7,12 +7,16 @@ module Portage
       # (`graph.facebook.com`) — a non-2xx status with a JSON
       # `{error: {message, type, code}}` body.
       class ApiError < Error
-        attr_reader :status, :body
+        include Portage::Ucp::Support::ApiError
 
-        def initialize(status, body)
-          @status = status
-          @body = body
-          super("Instagram/Graph API error (#{status}): #{body.dig('error', 'message') || body}")
+        private
+
+        # Not just "Instagram": the same client and errors cover Facebook
+        # Shops, since both sit on one Meta Graph API surface.
+        def api_label = "Instagram/Graph"
+
+        def detail(body)
+          body.dig("error", "message") || body
         end
       end
     end

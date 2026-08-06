@@ -1,5 +1,3 @@
-require "bigdecimal"
-
 module Portage
   module Ucp
     module Instagram
@@ -28,9 +26,7 @@ module Portage
         # `amount`/`currency` fields — this is the shape #order and
         # #order_line_item work with.
         def money_from_parts(amount, currency)
-          return Portage::Ucp::Money.new(amount_minor: 0, currency: currency) unless amount
-
-          Portage::Ucp::Money.new(amount_minor: (BigDecimal(amount.to_s) * 100).to_i, currency: currency)
+          Portage::Ucp::Support::Amounts.money(amount, currency)
         end
 
         # `node["variants_detail"]` is adapter-populated, not a real Meta
@@ -94,15 +90,13 @@ module Portage
             id: node["id"],
             item: Portage::Ucp::Item.new(id: node["id"], title: node["name"], price: unit_price),
             quantity: quantity,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)]
+            totals: Portage::Ucp::Support::Totals.line(line_total)
           )
         end
 
         def totals(products)
           subtotal = products.sum { |p| money(p["price"]).amount_minor * (p["quantity"] || 1) }
-          [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
-           Portage::Ucp::Total.new(type: "total", amount: subtotal)]
+          Portage::Ucp::Support::Totals.summary(subtotal: subtotal, total: subtotal)
         end
 
         # Meta's Commerce Order resource only exists at all for "Checkout on
@@ -128,8 +122,7 @@ module Portage
             line_items: items.map { |n| order_line_item(n, status) },
             fulfillment: Portage::Ucp::Fulfillment.new,
             currency: node.dig("estimated_payment_details", "total_amount", "currency"),
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
-                     Portage::Ucp::Total.new(type: "total", amount: total)]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal, total: total)
           )
         end
 
@@ -143,8 +136,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: node["retailer_id"].to_s, title: node["product_name"],
                                          price: unit_price),
             quantity: { original: quantity, total: quantity, fulfilled: fulfilled },
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)],
+            totals: Portage::Ucp::Support::Totals.line(line_total),
             status: status
           )
         end

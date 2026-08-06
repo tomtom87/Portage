@@ -38,14 +38,15 @@ module Portage
       class Adapter < Portage::Ucp::Adapter
         PRODUCT_FIELDS = "id,name,description,price,availability,url,item_group_id".freeze
 
+        # §9a dedup via Support::Idempotency, so an agent's retry on a
+        # dropped connection doesn't build a second, different in-memory
+        # Checkout for the same intent.
+        include Portage::Ucp::Support::Idempotency
+
         def initialize(client:, catalog_id:)
           super()
           @client = client
           @catalog_id = catalog_id
-          # §9a: mutating Adapter methods must dedup by idempotency_key so
-          # an agent's retry on a dropped connection doesn't build a second,
-          # different in-memory Checkout for the same intent.
-          @idempotency_results = {}
           @checkouts = {}
         end
 
@@ -110,12 +111,6 @@ module Portage
 
         def product_with_quantity(line_item)
           @client.get("/#{line_item[:product_id]}?fields=id,name,price,url").merge("quantity" => line_item[:quantity])
-        end
-
-        def dedup(idempotency_key)
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
-
-          @idempotency_results[idempotency_key] = yield
         end
       end
     end

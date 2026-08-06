@@ -12,6 +12,8 @@ module Portage
       # gems — a generic adapter that any Ruby app can drop in only needs a
       # base URL and a bearer token, trivially stubbable with WebMock.
       class Client
+        include Portage::Ucp::Support::HttpClient
+
         DEFAULT_API_VERSION = "v21.0".freeze
 
         def initialize(access_token:, api_version: DEFAULT_API_VERSION)
@@ -20,18 +22,13 @@ module Portage
         end
 
         def get(path)
-          req = Net::HTTP::Get.new(URI("https://graph.facebook.com/#{@api_version}#{path}"))
-          req["Authorization"] = "Bearer #{@access_token}"
-
-          uri = req.uri
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
-          parsed = response.body.nil? || response.body.empty? ? {} : JSON.parse(response.body)
-          unless response.is_a?(Net::HTTPSuccess)
-            raise Portage::Ucp::Instagram::ApiError.new(response.code.to_i, parsed)
-          end
-
-          parsed
+          json_request(Net::HTTP::Get, "https://graph.facebook.com/#{@api_version}#{path}",
+                       headers: { "Authorization" => "Bearer #{@access_token}" })
         end
+
+        private
+
+        def api_error_class = Portage::Ucp::Instagram::ApiError
       end
     end
   end
