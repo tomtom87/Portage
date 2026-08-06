@@ -1,5 +1,3 @@
-require "bigdecimal"
-
 module Portage
   module Ucp
     module Shopify
@@ -13,13 +11,14 @@ module Portage
       module Mapper
         module_function
 
+        # Both take a Shopify MoneyV2 node ({amount:, currencyCode:}) rather
+        # than a bare amount — the arithmetic itself is Support::Amounts'.
         def money(price)
-          Portage::Ucp::Money.new(amount_minor: (BigDecimal(price["amount"]) * 100).to_i,
-                                  currency: price["currencyCode"])
+          Portage::Ucp::Support::Amounts.money(price["amount"], price["currencyCode"])
         end
 
         def minor_units(price)
-          (BigDecimal(price["amount"]) * 100).to_i
+          Portage::Ucp::Support::Amounts.decimal_to_minor(price["amount"])
         end
 
         def product(node)
@@ -55,8 +54,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: merchandise["id"], title: merchandise.dig("product", "title"),
                                          price: minor_units(merchandise["price"])),
             quantity: node["quantity"],
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)]
+            totals: Portage::Ucp::Support::Totals.line(line_total)
           )
         end
 
@@ -90,8 +88,7 @@ module Portage
             line_items: node.dig("lineItems", "nodes").map { |n| order_line_item(n) },
             fulfillment: fulfillment(node),
             currency: node.dig("currentTotalPriceSet", "shopMoney", "currencyCode"),
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal_amount),
-                     Portage::Ucp::Total.new(type: "total", amount: total_amount)]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal_amount, total: total_amount)
           )
         end
 
@@ -106,18 +103,9 @@ module Portage
                                          title: variant_node && variant_node["title"],
                                          price: variant_node && minor_units(variant_node["price"])),
             quantity: { original: node["quantity"], total: total, fulfilled: fulfilled },
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)],
-            status: order_line_item_status(total, fulfilled)
+            totals: Portage::Ucp::Support::Totals.line(line_total),
+            status: Portage::Ucp::Support::LineItemStatus.derive(total: total, fulfilled: fulfilled)
           )
-        end
-
-        def order_line_item_status(total, fulfilled)
-          return "removed" if total.zero?
-          return "fulfilled" if fulfilled == total
-          return "partial" if fulfilled.positive?
-
-          "processing"
         end
 
         # DeliveryMethodType (Shopify) -> method_type enum (UCP). Unmapped
@@ -189,15 +177,12 @@ module Portage
           { "id" => node.dig("lineItem", "id"), "quantity" => quantity }
         end
 
-        # Builds the top-level totals array (exactly one subtotal + one total,
-        # plus an optional tax entry) from Shopify's cost breakdown.
+        # Builds the top-level totals array from Shopify's cost breakdown.
         def totals(node)
           cost = node["cost"]
-          entries = [Portage::Ucp::Total.new(type: "subtotal", amount: minor_units(cost["subtotalAmount"]))]
-          tax = minor_units(cost["totalTaxAmount"])
-          entries << Portage::Ucp::Total.new(type: "tax", amount: tax) if tax.positive?
-          entries << Portage::Ucp::Total.new(type: "total", amount: minor_units(cost["totalAmount"]))
-          entries
+          Portage::Ucp::Support::Totals.summary(subtotal: minor_units(cost["subtotalAmount"]),
+                                                tax: minor_units(cost["totalTaxAmount"]),
+                                                total: minor_units(cost["totalAmount"]))
         end
       end
     end

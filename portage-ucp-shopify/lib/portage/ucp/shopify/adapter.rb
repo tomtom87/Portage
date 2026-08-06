@@ -24,26 +24,20 @@ module Portage
       # object. UCP's create_checkout/update_checkout/complete_checkout are
       # threaded onto that one underlying Cart id.
       class Adapter < Portage::Ucp::Adapter
+        # Neither Storefront cart mutations nor cartPaymentUpdate take an
+        # idempotency key natively — cartSubmitForCompletion's attemptId is
+        # the one exception, see #submit_payment — so §9a dedup comes from
+        # Support::Idempotency's in-process table.
+        include Portage::Ucp::Support::Idempotency
+        # Shopify's Cart has no native "checkout status" field (Checkout is
+        # modeled as the same underlying Cart), and its Order has no field
+        # back to the cart that produced it — both are tracked adapter-side
+        # via Support::CheckoutState.
+        include Portage::Ucp::Support::CheckoutState
+
         def initialize(client:)
           super()
           @client = client
-          # §9a: mutating Adapter methods must dedup by idempotency_key so an
-          # agent's retry on a dropped connection can't double-charge. Neither
-          # Storefront cart mutations nor cartPaymentUpdate take an idempotency
-          # key natively (cartSubmitForCompletion's attemptId is the one
-          # exception — see #complete_checkout), so this adapter keeps its own
-          # in-process dedup table rather than relying on the API.
-          @idempotency_results = {}
-          # Shopify's Cart has no native "checkout status" field — Checkout is
-          # modeled as the same underlying Cart, so status is tracked here
-          # across the create/update/complete/cancel lifecycle, keyed by cart id.
-          @checkout_status = {}
-          # Shopify's Order has no field back to its originating cart, so
-          # #order_checkout_id (populated once a cart actually completes, via
-          # #link_cart_to_order) is the only source for the schema-required
-          # checkout_id — keyed by order id, since that's what #get_order is
-          # called with.
-          @order_checkout_ids = {}
         end
 
         def search_catalog(query:, limit:)
@@ -83,14 +77,14 @@ module Portage
         def create_checkout(line_items:, idempotency_key:)
           dedup(idempotency_key) do
             cart_node = create_cart_node(line_items)
-            @checkout_status[cart_node["id"]] = "incomplete"
+            record_checkout_status(cart_node["id"], "incomplete")
             Mapper.checkout(cart_node, status: "incomplete")
           end
         end
 
         def get_checkout(checkout_id:)
           cart_node = fetch_cart_node(checkout_id)
-          cart_node && Mapper.checkout(cart_node, status: @checkout_status.fetch(checkout_id, "incomplete"))
+          cart_node && Mapper.checkout(cart_node, status: checkout_status(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart — Shopify checkout
@@ -98,7 +92,7 @@ module Portage
         def update_checkout(checkout_id:, line_items:, idempotency_key:)
           dedup(idempotency_key) do
             cart_node = replace_lines(checkout_id, line_items)
-            @checkout_status[checkout_id] = "incomplete"
+            record_checkout_status(checkout_id, "incomplete")
             Mapper.checkout(cart_node, status: "incomplete")
           end
         end
@@ -117,7 +111,7 @@ module Portage
 
         def cancel_checkout(checkout_id:, idempotency_key:)
           dedup(idempotency_key) do
-            @checkout_status[checkout_id] = "canceled"
+            record_checkout_status(checkout_id, "canceled")
             cart_node = fetch_cart_node(checkout_id)
             Mapper.checkout(cart_node, status: "canceled")
           end
@@ -126,7 +120,7 @@ module Portage
         def get_order(order_id:)
           data = @client.admin_query(Queries::GET_ORDER, variables: { id: order_id })
           node = data["order"]
-          node && Mapper.order(node, checkout_id: @order_checkout_ids.fetch(order_id, ""))
+          node && Mapper.order(node, checkout_id: checkout_id_for(order_id))
         end
 
         private
@@ -170,7 +164,7 @@ module Portage
           submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
                                                  variables: { cartId: checkout_id, attemptToken: idempotency_key })
           status = unwrap_submit!(submit_data)
-          @checkout_status[checkout_id] = status
+          record_checkout_status(checkout_id, status)
           order = link_cart_to_order(checkout_id) if status == "completed"
           Mapper.checkout(cart_node, status: status, order: order)
         end
@@ -203,14 +197,8 @@ module Portage
           order_node = data.dig("orders", "nodes", 0)
           return unless order_node
 
-          @order_checkout_ids[order_node["id"]] = checkout_id
+          record_order_checkout(order_node["id"], checkout_id)
           Portage::Ucp::OrderConfirmation.new(id: order_node["id"], permalink_url: order_node["statusPageUrl"])
-        end
-
-        def dedup(idempotency_key)
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
-
-          @idempotency_results[idempotency_key] = yield
         end
 
         def unwrap!(data, field)
