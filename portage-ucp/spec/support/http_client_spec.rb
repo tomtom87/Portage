@@ -24,6 +24,10 @@ RSpec.describe Portage::Ucp::Support::HttpClient do
       def authed_get(path)
         json_request(Net::HTTP::Get, "https://example.test#{path}", headers: { "X-Auth-Token" => "secret" })
       end
+
+      def basic_auth_get(path)
+        json_request(Net::HTTP::Get, "https://example.test#{path}", basic_auth: %w[key secret])
+      end
     end
   end
 
@@ -47,6 +51,11 @@ RSpec.describe Portage::Ucp::Support::HttpClient do
     client.authed_get("/orders")
     expect(a_request(:get, "https://example.test/orders")
       .with(headers: { "X-Auth-Token" => "secret" })).to have_been_made
+  end
+
+  it "authorizes with HTTP Basic when given a user/password pair" do
+    stub_request(:get, "https://example.test/products").with(basic_auth: %w[key secret]).to_return(body: "{}")
+    expect(client.basic_auth_get("/products")).to eq({})
   end
 
   it "treats an empty success body as an empty hash — a 204 isn't a parse error" do

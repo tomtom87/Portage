@@ -17,13 +17,17 @@ module Portage
       module HttpClient
         private
 
+        # @param basic_auth [Array(String, String), nil] user/password pair
+        #   for APIs authorized with HTTP Basic rather than a header token
+        #   (e.g. WooCommerce's Admin consumer key/secret).
         # @param raw [Boolean] return the Net::HTTPResponse itself instead of
         #   the parsed body — for callers that need response headers (e.g.
         #   WooCommerce's Cart-Token session threading). They call #parse!
         #   themselves once they're done reading headers.
-        def json_request(http_method, uri, body: nil, headers: {}, raw: false)
+        def json_request(http_method, uri, body: nil, headers: {}, basic_auth: nil, raw: false)
           uri = URI(uri.to_s)
           request = http_method.new(uri)
+          request.basic_auth(*basic_auth) if basic_auth
           headers.each { |name, value| request[name] = value }
           request["Content-Type"] ||= "application/json"
           request.body = JSON.generate(body) if body
