@@ -27,6 +27,8 @@ module Portage
       # authorized with a short-lived payment access token rather than the
       # store's own API credentials — see #process_payment.
       class Client
+        include Portage::Ucp::Support::HttpClient
+
         def initialize(store_hash:, client_id:, access_token:)
           @store_hash = store_hash
           @client_id = client_id
@@ -62,40 +64,25 @@ module Portage
         # the store's own client_id/access_token — BigCommerce scopes a
         # payment token to a single order for a single completion attempt.
         def process_payment(payment_access_token:, order_id:, payment_instrument:)
-          uri = URI("https://payments.bigcommerce.com/stores/#{@store_hash}/payments")
-          req = Net::HTTP::Post.new(uri)
-          req["Authorization"] = payment_access_token
-          req["Content-Type"] = "application/vnd.bc.payments.v1+json"
-          req["Accept"] = "application/vnd.bc.payments.v1+json"
-          req.body = JSON.generate({ payment: { instrument: payment_instrument }, order: { id: order_id } })
-
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
-          parse!(response)
+          json_request(
+            Net::HTTP::Post, "https://payments.bigcommerce.com/stores/#{@store_hash}/payments",
+            body: { payment: { instrument: payment_instrument }, order: { id: order_id } },
+            headers: { "Authorization" => payment_access_token,
+                       "Content-Type" => "application/vnd.bc.payments.v1+json",
+                       "Accept" => "application/vnd.bc.payments.v1+json" }
+          )
         end
 
         private
 
         def admin_request(http_method, version, path, body = nil)
-          req = http_method.new(URI("https://api.bigcommerce.com/stores/#{@store_hash}/#{version}#{path}"))
-          req["X-Auth-Client"] = @client_id
-          req["X-Auth-Token"] = @access_token
-          req["Content-Type"] = "application/json"
-          req["Accept"] = "application/json"
-          req.body = JSON.generate(body) if body
-
-          uri = req.uri
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
-          parse!(response)
+          json_request(http_method, "https://api.bigcommerce.com/stores/#{@store_hash}/#{version}#{path}",
+                       body: body,
+                       headers: { "X-Auth-Client" => @client_id, "X-Auth-Token" => @access_token,
+                                  "Accept" => "application/json" })
         end
 
-        def parse!(response)
-          parsed = response.body.nil? || response.body.empty? ? {} : JSON.parse(response.body)
-          unless response.is_a?(Net::HTTPSuccess)
-            raise Portage::Ucp::BigCommerce::ApiError.new(response.code.to_i, parsed)
-          end
-
-          parsed
-        end
+        def api_error_class = Portage::Ucp::BigCommerce::ApiError
       end
     end
   end

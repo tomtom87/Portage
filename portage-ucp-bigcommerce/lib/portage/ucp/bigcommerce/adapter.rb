@@ -30,28 +30,25 @@ module Portage
       # against a live store" posture as Portage::Ucp::Shopify::Adapter and
       # Portage::Ucp::WooCommerce::Adapter's own payment steps.
       class Adapter < Portage::Ucp::Adapter
+        # Neither the Carts nor the Checkouts API takes an idempotency key
+        # natively, so §9a dedup comes from Support::Idempotency's in-process
+        # table.
+        include Portage::Ucp::Support::Idempotency
+        # BigCommerce's Checkout has no native status field of its own, and
+        # v2 Orders don't link back to the Checkout that produced them —
+        # both are tracked adapter-side via Support::CheckoutState, keyed by
+        # the shared cart/checkout id.
+        include Portage::Ucp::Support::CheckoutState
+        # The v3 and v2 APIs both answer a missing resource with a 404 rather
+        # than an empty body, which UCP's reads report as nil.
+        include Portage::Ucp::Support::NotFound
+
         def initialize(client:, site_url:, currency:, payment_gateway_id: nil)
           super()
           @client = client
           @site_url = site_url.chomp("/")
           @currency = currency
           @payment_gateway_id = payment_gateway_id
-          # §9a: mutating Adapter methods must dedup by idempotency_key so an
-          # agent's retry on a dropped connection can't double-charge.
-          # Neither the Carts nor Checkouts API takes an idempotency key
-          # natively, so this adapter keeps its own in-process dedup table,
-          # same as Portage::Ucp::Shopify::Adapter and Portage::Ucp::WooCommerce::Adapter.
-          @idempotency_results = {}
-          # BigCommerce's Checkout has no native status field of its own —
-          # tracked here across the create/update/complete/cancel lifecycle,
-          # keyed by the shared cart/checkout id.
-          @checkout_status = {}
-          # v2 Orders don't link back to the Checkout that produced them, so
-          # the Adapter records it itself at #complete_checkout time, keyed
-          # by the resulting order id — same rationale as
-          # Portage::Ucp::Shopify::Adapter#link_cart_to_order and
-          # Portage::Ucp::WooCommerce::Adapter's @order_checkout_ids.
-          @order_checkout_ids = {}
         end
 
         def search_catalog(query:, limit:)
@@ -60,21 +57,17 @@ module Portage
         end
 
         def get_product(product_id:)
-          node = @client.v3_get("/catalog/products/#{product_id}?include=variants")["data"]
-          node && Mapper.product(node, currency: @currency, site_url: @site_url)
-        rescue Portage::Ucp::BigCommerce::ApiError => e
-          raise unless e.status == 404
-
-          nil
+          nil_on_not_found do
+            node = @client.v3_get("/catalog/products/#{product_id}?include=variants")["data"]
+            node && Mapper.product(node, currency: @currency, site_url: @site_url)
+          end
         end
 
         def get_cart(cart_id:)
-          node = fetch_cart_node(cart_id)
-          node && Mapper.cart(node, id: cart_id)
-        rescue Portage::Ucp::BigCommerce::ApiError => e
-          raise unless e.status == 404
-
-          nil
+          nil_on_not_found do
+            node = fetch_cart_node(cart_id)
+            node && Mapper.cart(node, id: cart_id)
+          end
         end
 
         def create_cart(line_items:, idempotency_key:)
@@ -112,18 +105,16 @@ module Portage
         def create_checkout(line_items:, idempotency_key:)
           dedup(idempotency_key) do
             cart_node = @client.v3_post("/carts", { line_items: cart_lines(line_items) })["data"]
-            @checkout_status[cart_node["id"]] = "incomplete"
+            record_checkout_status(cart_node["id"], "incomplete")
             Mapper.checkout(fetch_checkout_node(cart_node["id"]), id: cart_node["id"], status: "incomplete")
           end
         end
 
         def get_checkout(checkout_id:)
-          node = fetch_checkout_node(checkout_id)
-          node && Mapper.checkout(node, id: checkout_id, status: @checkout_status.fetch(checkout_id, "incomplete"))
-        rescue Portage::Ucp::BigCommerce::ApiError => e
-          raise unless e.status == 404
-
-          nil
+          nil_on_not_found do
+            node = fetch_checkout_node(checkout_id)
+            node && Mapper.checkout(node, id: checkout_id, status: checkout_status(checkout_id))
+          end
         end
 
         # Full replacement, same rationale as #update_cart — BigCommerce's
@@ -131,7 +122,7 @@ module Portage
         def update_checkout(checkout_id:, line_items:, idempotency_key:)
           dedup(idempotency_key) do
             replace_cart_lines(checkout_id, line_items)
-            @checkout_status[checkout_id] = "incomplete"
+            record_checkout_status(checkout_id, "incomplete")
             Mapper.checkout(fetch_checkout_node(checkout_id), id: checkout_id, status: "incomplete")
           end
         end
@@ -145,22 +136,20 @@ module Portage
         # tracked status canceled without touching the underlying cart.
         def cancel_checkout(checkout_id:, idempotency_key:)
           dedup(idempotency_key) do
-            @checkout_status[checkout_id] = "canceled"
+            record_checkout_status(checkout_id, "canceled")
             Mapper.checkout(fetch_checkout_node(checkout_id), id: checkout_id, status: "canceled")
           end
         end
 
         def get_order(order_id:)
-          node = @client.v2_get("/orders/#{order_id}")
-          return nil unless node["id"]
+          nil_on_not_found do
+            node = @client.v2_get("/orders/#{order_id}")
+            next nil unless node["id"]
 
-          products = @client.v2_get("/orders/#{order_id}/products")
-          Mapper.order(node, products: products, site_url: @site_url,
-                             checkout_id: @order_checkout_ids.fetch(order_id.to_s, ""))
-        rescue Portage::Ucp::BigCommerce::ApiError => e
-          raise unless e.status == 404
-
-          nil
+            products = @client.v2_get("/orders/#{order_id}/products")
+            Mapper.order(node, products: products, site_url: @site_url,
+                               checkout_id: checkout_id_for(order_id))
+          end
         end
 
         private
@@ -175,9 +164,7 @@ module Portage
         end
 
         def delete_cart(cart_id)
-          @client.v3_delete("/carts/#{cart_id}")
-        rescue Portage::Ucp::BigCommerce::ApiError => e
-          raise unless e.status == 404
+          nil_on_not_found { @client.v3_delete("/carts/#{cart_id}") }
         end
 
         # Maps a UCP line item request straight to `{product_id, quantity}`.
@@ -220,8 +207,8 @@ module Portage
                                   payment_instrument: { type: "tokenized_instrument", token: payment_token,
                                                         gateway: @payment_gateway_id })
 
-          @checkout_status[checkout_id] = "completed"
-          @order_checkout_ids[order_id.to_s] = checkout_id
+          record_checkout_status(checkout_id, "completed")
+          record_order_checkout(order_id, checkout_id)
           Mapper.checkout(checkout_node, id: checkout_id, status: "completed", order: order_confirmation(order_id))
         end
 
@@ -230,12 +217,6 @@ module Portage
           Portage::Ucp::OrderConfirmation.new(
             id: order_id.to_s, permalink_url: "#{@site_url}/account.php?action=order_status&order_id=#{order_id}"
           )
-        end
-
-        def dedup(idempotency_key)
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
-
-          @idempotency_results[idempotency_key] = yield
         end
       end
     end

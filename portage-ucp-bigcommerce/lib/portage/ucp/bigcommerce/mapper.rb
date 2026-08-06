@@ -1,5 +1,3 @@
-require "bigdecimal"
-
 module Portage
   module Ucp
     module BigCommerce
@@ -16,13 +14,11 @@ module Portage
         module_function
 
         def money(amount, currency)
-          Portage::Ucp::Money.new(amount_minor: minor_units(amount), currency: currency)
+          Portage::Ucp::Support::Amounts.money(amount, currency)
         end
 
         def minor_units(amount)
-          return 0 if amount.nil? || amount == ""
-
-          (BigDecimal(amount.to_s) * 100).to_i
+          Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
         # `site_url` is only used to turn `custom_url.url` (always store-
@@ -77,8 +73,8 @@ module Portage
             id: id,
             line_items: items.map { |n| cart_line_item(n) },
             currency: currency,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: minor_units(node["base_amount"])),
-                     Portage::Ucp::Total.new(type: "total", amount: minor_units(node["cart_amount"]))]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: minor_units(node["base_amount"]),
+                                                          total: minor_units(node["cart_amount"]))
           )
         end
 
@@ -102,13 +98,11 @@ module Portage
         end
 
         def checkout_totals(node, cart_node)
-          totals = [Portage::Ucp::Total.new(type: "subtotal",
-                                            amount: minor_units(node["subtotal"] || cart_node["base_amount"]))]
-          tax = minor_units(node["tax_total"])
-          totals << Portage::Ucp::Total.new(type: "tax", amount: tax) if tax.positive?
-          totals << Portage::Ucp::Total.new(type: "total",
-                                            amount: minor_units(node["grand_total"] || cart_node["cart_amount"]))
-          totals
+          Portage::Ucp::Support::Totals.summary(
+            subtotal: minor_units(node["subtotal"] || cart_node["base_amount"]),
+            tax: minor_units(node["tax_total"]),
+            total: minor_units(node["grand_total"] || cart_node["cart_amount"])
+          )
         end
 
         # CAVEAT: assumes physical/digital cart line items carry plain
@@ -124,8 +118,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: (node["variant_id"] || node["product_id"]).to_s, title: node["name"],
                                          price: unit_price, image_url: node["image_url"]),
             quantity: node["quantity"],
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: minor_units(node["extended_list_price"])),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)]
+            totals: Portage::Ucp::Support::Totals.line(minor_units(node["extended_list_price"]), line_total)
           )
         end
 
@@ -158,8 +151,8 @@ module Portage
             line_items: products.map { |n| order_line_item(n, status) },
             fulfillment: Portage::Ucp::Fulfillment.new,
             currency: currency,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: minor_units(node["subtotal_ex_tax"])),
-                     Portage::Ucp::Total.new(type: "total", amount: minor_units(node["total_inc_tax"]))]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: minor_units(node["subtotal_ex_tax"]),
+                                                          total: minor_units(node["total_inc_tax"]))
           )
         end
 
@@ -171,8 +164,8 @@ module Portage
             item: Portage::Ucp::Item.new(id: node["product_id"].to_s, title: node["name"],
                                          price: minor_units(node["price_ex_tax"])),
             quantity: { original: quantity, total: quantity, fulfilled: fulfilled },
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: minor_units(node["total_ex_tax"])),
-                     Portage::Ucp::Total.new(type: "total", amount: minor_units(node["total_inc_tax"]))],
+            totals: Portage::Ucp::Support::Totals.line(minor_units(node["total_ex_tax"]),
+                                                       minor_units(node["total_inc_tax"])),
             status: status
           )
         end

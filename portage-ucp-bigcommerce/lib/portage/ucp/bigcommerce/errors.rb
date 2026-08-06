@@ -10,12 +10,12 @@ module Portage
       # `errors` array/hash instead — so this tries both rather than assuming
       # one.
       class ApiError < Error
-        attr_reader :status, :body
+        include Portage::Ucp::Support::ApiError
 
-        def initialize(status, body)
-          @status = status
-          @body = body
-          super("BigCommerce API error (#{status}): #{body['title'] || body['errors'] || body}")
+        private
+
+        def detail(body)
+          body["title"] || body["errors"] || body
         end
       end
     end
