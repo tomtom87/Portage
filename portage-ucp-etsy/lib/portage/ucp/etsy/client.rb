@@ -17,6 +17,8 @@ module Portage
       # Etsy checks both independently, unlike Shopify/Wix/WooCommerce/
       # Magento, where the bearer token alone is sufficient.
       class Client
+        include Portage::Ucp::Support::HttpClient
+
         BASE_URL = "https://api.etsy.com/v3/application".freeze
 
         def initialize(access_token:, api_key:)
@@ -31,17 +33,11 @@ module Portage
         private
 
         def request(http_method, path)
-          req = http_method.new(URI("#{BASE_URL}#{path}"))
-          req["Authorization"] = "Bearer #{@access_token}"
-          req["x-api-key"] = @api_key
-
-          uri = req.uri
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
-          parsed = response.body.nil? || response.body.empty? ? {} : JSON.parse(response.body)
-          raise Portage::Ucp::Etsy::ApiError.new(response.code.to_i, parsed) unless response.is_a?(Net::HTTPSuccess)
-
-          parsed
+          json_request(http_method, "#{BASE_URL}#{path}",
+                       headers: { "Authorization" => "Bearer #{@access_token}", "x-api-key" => @api_key })
         end
+
+        def api_error_class = Portage::Ucp::Etsy::ApiError
       end
     end
   end

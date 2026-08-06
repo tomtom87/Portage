@@ -81,8 +81,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: node["listing_id"].to_s, title: node["title"],
                                          price: node.dig("price", "amount")),
             quantity: node["quantity"] || 1,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total(node)),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total(node))]
+            totals: Portage::Ucp::Support::Totals.line(line_total(node))
           )
         end
 
@@ -92,8 +91,7 @@ module Portage
 
         def totals(listings)
           subtotal = listings.sum { |l| line_total(l) }
-          [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
-           Portage::Ucp::Total.new(type: "total", amount: subtotal)]
+          Portage::Ucp::Support::Totals.summary(subtotal: subtotal, total: subtotal)
         end
 
         # Etsy core has no per-transaction fulfillment tracking on the
@@ -125,8 +123,8 @@ module Portage
             line_items: (node["transactions"] || []).map { |n| order_line_item(n, status) },
             fulfillment: Portage::Ucp::Fulfillment.new,
             currency: node.dig("total_price", "currency_code"),
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: money(node["subtotal"]).amount_minor),
-                     Portage::Ucp::Total.new(type: "total", amount: money(node["total_price"]).amount_minor)]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: money(node["subtotal"]).amount_minor,
+                                                          total: money(node["total_price"]).amount_minor)
           )
         end
 
@@ -139,8 +137,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: node["listing_id"].to_s, title: node["title"],
                                          price: node.dig("price", "amount")),
             quantity: { original: quantity, total: quantity, fulfilled: fulfilled },
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)],
+            totals: Portage::Ucp::Support::Totals.line(line_total),
             status: status
           )
         end

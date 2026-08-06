@@ -39,14 +39,18 @@ module Portage
       # seller OAuth identity is a separate concern from the shop-owner
       # access_token this gem uses for catalog/order reads.
       class Adapter < Portage::Ucp::Adapter
+        # §9a dedup via Support::Idempotency, so an agent's retry on a
+        # dropped connection doesn't build a second, different in-memory
+        # Checkout for the same intent.
+        include Portage::Ucp::Support::Idempotency
+        # Etsy answers a missing listing or receipt with a 404 rather than
+        # an empty body, which UCP's reads report as nil.
+        include Portage::Ucp::Support::NotFound
+
         def initialize(client:, shop_id:)
           super()
           @client = client
           @shop_id = shop_id
-          # §9a: mutating Adapter methods must dedup by idempotency_key so
-          # an agent's retry on a dropped connection doesn't build a second,
-          # different in-memory Checkout for the same intent.
-          @idempotency_results = {}
           @checkouts = {}
         end
 
@@ -62,15 +66,13 @@ module Portage
         end
 
         def get_product(product_id:)
-          node = @client.get("/listings/#{product_id}")
-          return nil unless node["listing_id"]
+          nil_on_not_found do
+            node = @client.get("/listings/#{product_id}")
+            next nil unless node["listing_id"]
 
-          inventory = @client.get("/listings/#{product_id}/inventory")
-          Mapper.product(node.merge("variants_detail" => inventory))
-        rescue Portage::Ucp::Etsy::ApiError => e
-          raise unless e.status == 404
-
-          nil
+            inventory = @client.get("/listings/#{product_id}/inventory")
+            Mapper.product(node.merge("variants_detail" => inventory))
+          end
         end
 
         def create_checkout(line_items:, idempotency_key:)
@@ -88,24 +90,16 @@ module Portage
         end
 
         def get_order(order_id:)
-          node = @client.get("/shops/#{@shop_id}/receipts/#{order_id}")
-          node["receipt_id"] ? Mapper.order(node) : nil
-        rescue Portage::Ucp::Etsy::ApiError => e
-          raise unless e.status == 404
-
-          nil
+          nil_on_not_found do
+            node = @client.get("/shops/#{@shop_id}/receipts/#{order_id}")
+            node["receipt_id"] ? Mapper.order(node) : nil
+          end
         end
 
         private
 
         def listing_with_quantity(line_item)
           @client.get("/listings/#{line_item[:product_id]}").merge("quantity" => line_item[:quantity])
-        end
-
-        def dedup(idempotency_key)
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
-
-          @idempotency_results[idempotency_key] = yield
         end
       end
     end

@@ -7,12 +7,12 @@ module Portage
       # (`api.etsy.com/v3/application`) — a non-2xx status with a JSON
       # `{error, error_description}` (OAuth) or `{error}` (REST) body.
       class ApiError < Error
-        attr_reader :status, :body
+        include Portage::Ucp::Support::ApiError
 
-        def initialize(status, body)
-          @status = status
-          @body = body
-          super("Etsy API error (#{status}): #{body['error_description'] || body['error'] || body}")
+        private
+
+        def detail(body)
+          body["error_description"] || body["error"] || body
         end
       end
     end
