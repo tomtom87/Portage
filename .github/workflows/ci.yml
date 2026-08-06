@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.2", "3.4"]
+        gem:
+          - portage-ucp
+          - portage-ucp-client
+          - portage-cli
+          - portage-ucp-shopify
+          - portage-ucp-wix
+          - portage-ucp-woocommerce
+          - portage-ucp-bigcommerce
+          - portage-ucp-magento
+          - portage-ucp-etsy
+          - portage-ucp-instagram
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          working-directory: ${{ matrix.gem }}
+      - name: rspec
+        working-directory: ${{ matrix.gem }}
+        run: bundle exec rspec
+      - name: rubocop
+        working-directory: ${{ matrix.gem }}
+        run: bundle exec rubocop

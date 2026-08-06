@@ -1,7 +1,7 @@
 # Root aggregate task only — each gem still owns its own tests/lint
 # independently (own Gemfile.lock, own bundle, no shared state), matching
 # README's "Development" section. This just saves typing out the same
-# `cd gem && bundle exec rspec && bundle exec rubocop` five times by hand.
+# `cd gem && bundle exec rspec && bundle exec rubocop` ten times by hand.
 GEMS = %w[
   portage-ucp
   portage-ucp-client
