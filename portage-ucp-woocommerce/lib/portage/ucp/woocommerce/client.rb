@@ -29,6 +29,8 @@ module Portage
       #   way from an earlier response. This client tracks both headers
       #   in-instance so callers don't have to.
       class Client
+        include Portage::Ucp::Support::HttpClient
+
         def initialize(site_url:, consumer_key:, consumer_secret:)
           @site_url = site_url.chomp("/")
           @consumer_key = consumer_key
@@ -62,45 +64,28 @@ module Portage
         private
 
         def admin_request(http_method, path, body = nil)
-          req = http_method.new(URI("#{@site_url}/wp-json/wc/v3#{path}"))
-          req.basic_auth(@consumer_key, @consumer_secret)
-          perform(req, body)
+          json_request(http_method, "#{@site_url}/wp-json/wc/v3#{path}",
+                       body: body, basic_auth: [@consumer_key, @consumer_secret])
         end
 
         # Threads `Cart-Token` on every call (once one's been seen) and
         # `Nonce` on writes — see the class-level comment. Both are
         # refreshed from whatever the response hands back, since WooCommerce
-        # can rotate the nonce between requests.
+        # can rotate the nonce between requests, which is why this reads the
+        # raw response before parsing it.
         def store_request(http_method, path, body = nil)
-          req = http_method.new(URI("#{@site_url}/wp-json/wc/store/v1#{path}"))
-          req["Cart-Token"] = @cart_token if @cart_token
-          req["Nonce"] = @nonce if @nonce && http_method != Net::HTTP::Get
-          response = perform(req, body, raw: true)
+          headers = {}
+          headers["Cart-Token"] = @cart_token if @cart_token
+          headers["Nonce"] = @nonce if @nonce && http_method != Net::HTTP::Get
+          response = json_request(http_method, "#{@site_url}/wp-json/wc/store/v1#{path}",
+                                  body: body, headers: headers, raw: true)
 
           @cart_token = response["Cart-Token"] if response["Cart-Token"]
           @nonce = response["Nonce"] if response["Nonce"]
           parse!(response)
         end
 
-        def perform(req, body, raw: false)
-          req["Content-Type"] = "application/json"
-          req.body = JSON.generate(body) if body
-
-          uri = req.uri
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |http| http.request(req) }
-          return response if raw
-
-          parse!(response)
-        end
-
-        def parse!(response)
-          parsed = response.body.nil? || response.body.empty? ? {} : JSON.parse(response.body)
-          unless response.is_a?(Net::HTTPSuccess)
-            raise Portage::Ucp::WooCommerce::ApiError.new(response.code.to_i, parsed)
-          end
-
-          parsed
-        end
+        def api_error_class = Portage::Ucp::WooCommerce::ApiError
       end
     end
   end

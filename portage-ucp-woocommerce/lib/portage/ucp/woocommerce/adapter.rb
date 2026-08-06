@@ -31,6 +31,18 @@ module Portage
       # live store" posture as Portage::Ucp::Shopify::Adapter's own payment
       # step.
       class Adapter < Portage::Ucp::Adapter
+        # The Store API takes no idempotency key natively, so §9a dedup comes
+        # from Support::Idempotency's in-process table.
+        include Portage::Ucp::Support::Idempotency
+        # Store API cart and checkout share one underlying session (keyed by
+        # Cart-Token) with no status of its own, and WC orders don't link
+        # back to the Cart-Token that produced them (see Mapper.order) —
+        # both are tracked adapter-side via Support::CheckoutState.
+        include Portage::Ucp::Support::CheckoutState
+        # The Admin API answers a missing product or order with a 404 rather
+        # than an empty body, which UCP's reads report as nil.
+        include Portage::Ucp::Support::NotFound
+
         def initialize(client:, site_url:, currency:, payment_method: nil, payment_data_key: "token")
           super()
           @client = client
@@ -38,20 +50,6 @@ module Portage
           @currency = currency
           @payment_method = payment_method
           @payment_data_key = payment_data_key
-          # §9a: mutating Adapter methods must dedup by idempotency_key so an
-          # agent's retry on a dropped connection can't double-charge. The
-          # Store API takes no idempotency key natively, so this adapter
-          # keeps its own in-process dedup table, same as
-          # Portage::Ucp::Shopify::Adapter.
-          @idempotency_results = {}
-          # Store API cart/checkout share one underlying session (keyed by
-          # Cart-Token), so status is tracked here across the create/
-          # update/complete/cancel lifecycle, keyed by that token.
-          @checkout_status = {}
-          # See Mapper.order's comment: WC orders don't link back to their
-          # originating Cart-Token, so the Adapter records it itself at
-          # #complete_checkout time, keyed by the resulting order id.
-          @order_checkout_ids = {}
         end
 
         def search_catalog(query:, limit:)
@@ -60,12 +58,10 @@ module Portage
         end
 
         def get_product(product_id:)
-          node = @client.admin_get("/products/#{product_id}")
-          node["id"] ? Mapper.product(with_variations(node), currency: @currency) : nil
-        rescue Portage::Ucp::WooCommerce::ApiError => e
-          raise unless e.status == 404
-
-          nil
+          nil_on_not_found do
+            node = @client.admin_get("/products/#{product_id}")
+            node["id"] ? Mapper.product(with_variations(node), currency: @currency) : nil
+          end
         end
 
         def get_cart(cart_id:)
@@ -95,20 +91,20 @@ module Portage
         def create_checkout(line_items:, idempotency_key:)
           dedup(idempotency_key) do
             node = replace_cart_lines(line_items)
-            @checkout_status[@client.cart_token] = "incomplete"
+            record_checkout_status(@client.cart_token, "incomplete")
             Mapper.checkout(node, id: @client.cart_token, status: "incomplete")
           end
         end
 
         def get_checkout(checkout_id:)
-          Mapper.checkout(fetch_cart_node, id: checkout_id, status: @checkout_status.fetch(checkout_id, "incomplete"))
+          Mapper.checkout(fetch_cart_node, id: checkout_id, status: checkout_status(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart.
         def update_checkout(checkout_id:, line_items:, idempotency_key:)
           dedup(idempotency_key) do
             node = replace_cart_lines(line_items)
-            @checkout_status[checkout_id] = "incomplete"
+            record_checkout_status(checkout_id, "incomplete")
             Mapper.checkout(node, id: checkout_id, status: "incomplete")
           end
         end
@@ -122,20 +118,18 @@ module Portage
         # status canceled without touching the underlying cart contents.
         def cancel_checkout(checkout_id:, idempotency_key:)
           dedup(idempotency_key) do
-            @checkout_status[checkout_id] = "canceled"
+            record_checkout_status(checkout_id, "canceled")
             Mapper.checkout(fetch_cart_node, id: checkout_id, status: "canceled")
           end
         end
 
         def get_order(order_id:)
-          node = @client.admin_get("/orders/#{order_id}")
-          return nil unless node["id"]
+          nil_on_not_found do
+            node = @client.admin_get("/orders/#{order_id}")
+            next nil unless node["id"]
 
-          Mapper.order(node, site_url: @site_url, checkout_id: @order_checkout_ids.fetch(order_id.to_s, ""))
-        rescue Portage::Ucp::WooCommerce::ApiError => e
-          raise unless e.status == 404
-
-          nil
+            Mapper.order(node, site_url: @site_url, checkout_id: checkout_id_for(order_id))
+          end
         end
 
         private
@@ -175,7 +169,7 @@ module Portage
                                       payment_method: @payment_method,
                                       payment_data: [{ key: @payment_data_key, value: payment_token }]
                                     })
-          @checkout_status[checkout_id] = "completed"
+          record_checkout_status(checkout_id, "completed")
           order = build_order_confirmation(data, checkout_id)
           Mapper.checkout(data, id: checkout_id, status: "completed", order: order)
         end
@@ -187,17 +181,11 @@ module Portage
         def build_order_confirmation(data, checkout_id)
           return unless data["order_id"]
 
-          @order_checkout_ids[data["order_id"].to_s] = checkout_id
+          record_order_checkout(data["order_id"], checkout_id)
           Portage::Ucp::OrderConfirmation.new(
             id: data["order_id"].to_s,
             permalink_url: "#{@site_url}/checkout/order-received/#{data['order_id']}/?key=#{data['order_key']}"
           )
-        end
-
-        def dedup(idempotency_key)
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
-
-          @idempotency_results[idempotency_key] = yield
         end
       end
     end

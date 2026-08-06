@@ -9,12 +9,12 @@ module Portage
       # body (`rest_*` codes on the Admin side, `woocommerce_rest_*`/
       # `woocommerce_store_api_*` on the Store side).
       class ApiError < Error
-        attr_reader :status, :body
+        include Portage::Ucp::Support::ApiError
 
-        def initialize(status, body)
-          @status = status
-          @body = body
-          super("WooCommerce API error (#{status}): #{body['message'] || body}")
+        private
+
+        def detail(body)
+          body["message"] || body
         end
       end
     end

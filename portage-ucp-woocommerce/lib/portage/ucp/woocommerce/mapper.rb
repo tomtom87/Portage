@@ -1,5 +1,3 @@
-require "bigdecimal"
-
 module Portage
   module Ucp
     module WooCommerce
@@ -16,13 +14,11 @@ module Portage
         module_function
 
         def money(amount, currency)
-          Portage::Ucp::Money.new(amount_minor: minor_units(amount), currency: currency)
+          Portage::Ucp::Support::Amounts.money(amount, currency)
         end
 
         def minor_units(amount)
-          return 0 if amount.nil? || amount == ""
-
-          (BigDecimal(amount.to_s) * 100).to_i
+          Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
         # `node["variations_detail"]` is adapter-populated, not a real WC
@@ -102,8 +98,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: node["id"].to_s, title: node["name"], price: unit_price,
                                          image_url: node.dig("images", 0, "thumbnail")),
             quantity: node["quantity"],
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)]
+            totals: Portage::Ucp::Support::Totals.line(line_total)
           )
         end
 
@@ -112,20 +107,15 @@ module Portage
         # 2) — unlike the Admin API's decimal strings, there's no BigDecimal
         # conversion needed here, just an integer parse.
         def minor_units_from_subunits(amount, _minor_unit)
-          return 0 if amount.nil?
-
-          amount.to_i
+          Portage::Ucp::Support::Amounts.subunits_to_minor(amount)
         end
 
         def totals(node)
-          entries = [Portage::Ucp::Total.new(type: "subtotal",
-                                             amount: minor_units_from_subunits(
-                                               node["total_items"], nil
-                                             ))]
-          tax = minor_units_from_subunits(node["total_tax"], nil)
-          entries << Portage::Ucp::Total.new(type: "tax", amount: tax) if tax.positive?
-          entries << Portage::Ucp::Total.new(type: "total", amount: minor_units_from_subunits(node["total_price"], nil))
-          entries
+          Portage::Ucp::Support::Totals.summary(
+            subtotal: minor_units_from_subunits(node["total_items"], nil),
+            tax: minor_units_from_subunits(node["total_tax"], nil),
+            total: minor_units_from_subunits(node["total_price"], nil)
+          )
         end
 
         # WooCommerce core has no per-line-item fulfillment tracking (that's
@@ -157,8 +147,7 @@ module Portage
             line_items: (node["line_items"] || []).map { |n| order_line_item(n, currency, status) },
             fulfillment: Portage::Ucp::Fulfillment.new,
             currency: currency,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
-                     Portage::Ucp::Total.new(type: "total", amount: minor_units(node["total"]))]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal, total: minor_units(node["total"]))
           )
         end
 
@@ -171,8 +160,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: (node["variation_id"] || node["product_id"]).to_s, title: node["name"],
                                          price: money(node["price"], currency).amount_minor),
             quantity: { original: quantity, total: quantity, fulfilled: fulfilled },
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)],
+            totals: Portage::Ucp::Support::Totals.line(line_total),
             status: status
           )
         end
