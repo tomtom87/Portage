@@ -171,8 +171,8 @@ module Portage
                                                  variables: { cartId: checkout_id, attemptToken: idempotency_key })
           status = unwrap_submit!(submit_data)
           @checkout_status[checkout_id] = status
-          link_cart_to_order(checkout_id) if status == "completed"
-          Mapper.checkout(cart_node, status: status)
+          order = link_cart_to_order(checkout_id) if status == "completed"
+          Mapper.checkout(cart_node, status: status, order: order)
         end
 
         def pay_for_cart(checkout_id, total, payment_token)
@@ -190,16 +190,21 @@ module Portage
         # calling #get_checkout again later would need to retry this too, which
         # this adapter doesn't do on its own. If the order search index hasn't
         # caught up yet even for a synchronously-completed cart, this silently
-        # finds nothing and #get_order's checkout_id stays blank rather than
-        # raising, matching the "not information-complete but schema-valid"
-        # posture used elsewhere in this file.
+        # finds nothing (returns nil, #get_order's checkout_id stays blank)
+        # rather than raising, matching the "not information-complete but
+        # schema-valid" posture used elsewhere in this file. Also the only
+        # place that can hand the freshly-created order id back to
+        # #complete_checkout's own caller — nothing else surfaces it.
         def link_cart_to_order(checkout_id)
           token = checkout_id[%r{Cart/([^?]+)}, 1]
           return unless token
 
           data = @client.admin_query(Queries::ORDER_BY_CART_TOKEN, variables: { query: "cart_token:#{token}" })
           order_node = data.dig("orders", "nodes", 0)
-          @order_checkout_ids[order_node["id"]] = checkout_id if order_node
+          return unless order_node
+
+          @order_checkout_ids[order_node["id"]] = checkout_id
+          Portage::Ucp::OrderConfirmation.new(id: order_node["id"], permalink_url: order_node["statusPageUrl"])
         end
 
         def dedup(idempotency_key)

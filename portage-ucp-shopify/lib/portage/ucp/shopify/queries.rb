@@ -151,7 +151,7 @@ module Portage
         # completed cart back to the Order it produced.
         ORDER_BY_CART_TOKEN = <<~GRAPHQL.freeze
           query OrderByCartToken($query: String!) {
-            orders(first: 1, query: $query) { nodes { id } }
+            orders(first: 1, query: $query) { nodes { id statusPageUrl } }
           }
         GRAPHQL
       end

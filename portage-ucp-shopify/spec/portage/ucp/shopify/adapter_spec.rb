@@ -182,12 +182,17 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
         .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
       stub_storefront({ data: { cartSubmitForCompletion: { result: { attemptId: "a1" }, userErrors: [] } } })
         .with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
-      stub_admin({ data: { orders: { nodes: [{ id: "gid://shopify/Order/1" }] } } })
+      stub_admin({ data: { orders: { nodes: [{ id: "gid://shopify/Order/1",
+                                               statusPageUrl: "https://ucp-test.myshopify.com/orders/abc123" }] } } })
 
       checkout = adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
                                            idempotency_key: "chk1-complete")
 
       expect(checkout.status).to eq("completed")
+      expect(checkout.order).to eq(
+        Portage::Ucp::OrderConfirmation.new(id: "gid://shopify/Order/1",
+                                            permalink_url: "https://ucp-test.myshopify.com/orders/abc123")
+      )
     end
 
     it "links the cart to the resulting order via a cart_token order search, for #get_order's checkout_id" do

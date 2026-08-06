@@ -63,14 +63,15 @@ module Portage
         # `status` isn't a Shopify Cart field — Cart/Checkout is one object in
         # Shopify's model, so the adapter tracks status itself across the
         # create/update/complete/cancel lifecycle and passes it in here.
-        def checkout(node, status:)
+        def checkout(node, status:, order: nil)
           Portage::Ucp::Checkout.new(
             id: node["id"],
             status: status,
             line_items: node.dig("lines", "nodes").map { |n| cart_line_item(n) },
             currency: node.dig("cost", "subtotalAmount", "currencyCode"),
             totals: totals(node),
-            links: []
+            links: [],
+            order: order
           )
         end
 
