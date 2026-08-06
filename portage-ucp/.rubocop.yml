@@ -39,6 +39,13 @@ Metrics/ParameterLists:
 Style/HashSlice:
   Enabled: false
 
+# Breadth, not complexity — one Data.define + to_wire_h per wire-schema type
+# (Fulfillment/Expectation/FulfillmentEvent/Adjustment alongside the existing
+# Total/Item/LineItem/etc.), same rationale as the ParameterLists exclude above.
+Metrics/ModuleLength:
+  Exclude:
+    - "lib/portage/ucp/value_objects.rb"
+
 # One Platform entry per adapter gem (marker regexes + env var names + build
 # lambdas) — that's breadth (one declaration per platform), not a class doing
 # too many unrelated things. Same justification style as portage-ucp-shopify's

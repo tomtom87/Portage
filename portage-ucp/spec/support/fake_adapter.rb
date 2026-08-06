@@ -92,7 +92,8 @@ module Portage
           id = next_id("ord")
           order = Portage::Ucp::Order.new(
             id: id, checkout_id: checkout.id, permalink_url: "https://example.com/orders/#{id}",
-            line_items: checkout.line_items, fulfillment: {}, currency: checkout.currency, totals: checkout.totals
+            line_items: checkout.line_items, fulfillment: Portage::Ucp::Fulfillment.new,
+            currency: checkout.currency, totals: checkout.totals
           )
           @orders[id] = order
         end

@@ -105,16 +105,79 @@ module Portage
       end
     end
 
-    # schemas/shopping/order.json — requires ucp/id/checkout_id/permalink_url/
-    # line_items/fulfillment/currency/totals. `fulfillment` has no required
-    # inner fields (expectations/events are both optional), so an adapter that
-    # doesn't model buyer-facing delivery expectations yet can pass {} and
-    # still be schema-conformant.
-    Order = Data.define(:id, :checkout_id, :permalink_url, :line_items, :fulfillment, :currency, :totals) do
+    # schemas/shopping/types/expectation.json — buyer-facing delivery grouping.
+    Expectation = Data.define(:id, :line_items, :method_type, :destination, :description, :fulfillable_on) do
+      def initialize(id:, line_items:, method_type:, destination:, description: nil, fulfillable_on: nil) = super
+
       def to_wire_h
-        { "id" => id, "checkout_id" => checkout_id, "permalink_url" => permalink_url,
-          "line_items" => line_items.map(&:to_wire_h), "fulfillment" => fulfillment,
-          "currency" => currency, "totals" => totals.map(&:to_wire_h) }
+        h = { "id" => id, "line_items" => line_items, "method_type" => method_type, "destination" => destination }
+        h["description"] = description if description
+        h["fulfillable_on"] = fulfillable_on if fulfillable_on
+        h
+      end
+    end
+
+    # schemas/shopping/types/fulfillment_event.json — append-only shipment event.
+    FulfillmentEvent = Data.define(:id, :occurred_at, :type, :line_items, :tracking_number, :tracking_url, :carrier,
+                                   :description) do
+      def initialize(id:, occurred_at:, type:, line_items:, tracking_number: nil, tracking_url: nil, carrier: nil,
+                     description: nil)
+        super
+      end
+
+      def to_wire_h
+        h = { "id" => id, "occurred_at" => occurred_at, "type" => type, "line_items" => line_items }
+        h["tracking_number"] = tracking_number if tracking_number
+        h["tracking_url"] = tracking_url if tracking_url
+        h["carrier"] = carrier if carrier
+        h["description"] = description if description
+        h
+      end
+    end
+
+    # schemas/shopping/order.json#/properties/fulfillment — no required inner
+    # fields (expectations/events are both optional), so an adapter that
+    # doesn't model buyer-facing delivery expectations yet can pass
+    # Fulfillment.new and still be schema-conformant.
+    Fulfillment = Data.define(:expectations, :events) do
+      def initialize(expectations: [], events: []) = super
+
+      def to_wire_h
+        { "expectations" => expectations.map(&:to_wire_h), "events" => events.map(&:to_wire_h) }
+      end
+    end
+
+    # schemas/shopping/types/adjustment.json — post-order event independent of
+    # fulfillment (refund, return, credit, price_adjustment, dispute,
+    # cancellation, ...). `status` is pending/completed/failed.
+    Adjustment = Data.define(:id, :type, :occurred_at, :status, :line_items, :totals, :description) do
+      def initialize(id:, type:, occurred_at:, status:, line_items: nil, totals: nil, description: nil) = super
+
+      def to_wire_h
+        h = { "id" => id, "type" => type, "occurred_at" => occurred_at, "status" => status }
+        h["line_items"] = line_items if line_items
+        h["totals"] = totals.map(&:to_wire_h) if totals
+        h["description"] = description if description
+        h
+      end
+    end
+
+    # schemas/shopping/order.json — requires ucp/id/checkout_id/permalink_url/
+    # line_items/fulfillment/currency/totals. `adjustments` is optional —
+    # omitted from the wire payload when empty.
+    Order = Data.define(:id, :checkout_id, :permalink_url, :line_items, :fulfillment, :currency, :totals,
+                        :adjustments) do
+      def initialize(id:, checkout_id:, permalink_url:, line_items:, fulfillment:, currency:, totals:,
+                     adjustments: [])
+        super
+      end
+
+      def to_wire_h
+        h = { "id" => id, "checkout_id" => checkout_id, "permalink_url" => permalink_url,
+              "line_items" => line_items.map(&:to_wire_h), "fulfillment" => fulfillment.to_wire_h,
+              "currency" => currency, "totals" => totals.map(&:to_wire_h) }
+        h["adjustments"] = adjustments.map(&:to_wire_h) unless adjustments.empty?
+        h
       end
     end
 

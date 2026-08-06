@@ -53,7 +53,7 @@ RSpec.describe Portage::Ucp::SchemaValidator do
     )
     order = Portage::Ucp::Order.new(
       id: "order_1", checkout_id: "chk_1", permalink_url: "https://example.com/orders/1",
-      line_items: [line_item], fulfillment: {}, currency: "USD",
+      line_items: [line_item], fulfillment: Portage::Ucp::Fulfillment.new, currency: "USD",
       totals: [Portage::Ucp::Total.new(type: "subtotal", amount: 1000),
                Portage::Ucp::Total.new(type: "total", amount: 1000)]
     )

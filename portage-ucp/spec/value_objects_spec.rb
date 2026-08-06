@@ -123,15 +123,73 @@ RSpec.describe "Portage::Ucp value objects" do
     end
   end
 
+  describe Portage::Ucp::Fulfillment do
+    it "defaults to empty expectations/events" do
+      expect(Portage::Ucp::Fulfillment.new.to_wire_h).to eq({ "expectations" => [], "events" => [] })
+    end
+
+    it "serializes expectations and events via their own to_wire_h" do
+      expectation = Portage::Ucp::Expectation.new(
+        id: "exp_1", line_items: [{ "id" => "oli_1", "quantity" => 1 }],
+        method_type: "shipping", destination: { "postal_code" => "10001" }
+      )
+      event = Portage::Ucp::FulfillmentEvent.new(
+        id: "evt_1", occurred_at: "2026-08-01T00:00:00Z", type: "shipped",
+        line_items: [{ "id" => "oli_1", "quantity" => 1 }], tracking_number: "1Z999"
+      )
+      fulfillment = Portage::Ucp::Fulfillment.new(expectations: [expectation], events: [event])
+
+      expect(fulfillment.to_wire_h).to eq(
+        { "expectations" => [{ "id" => "exp_1", "line_items" => [{ "id" => "oli_1", "quantity" => 1 }],
+                               "method_type" => "shipping", "destination" => { "postal_code" => "10001" } }],
+          "events" => [{ "id" => "evt_1", "occurred_at" => "2026-08-01T00:00:00Z", "type" => "shipped",
+                         "line_items" => [{ "id" => "oli_1", "quantity" => 1 }], "tracking_number" => "1Z999" }] }
+      )
+    end
+  end
+
+  describe Portage::Ucp::Adjustment do
+    it "serializes required fields, omitting optional ones when absent" do
+      adjustment = Portage::Ucp::Adjustment.new(id: "adj_1", type: "cancellation", occurred_at: "2026-08-01T00:00:00Z",
+                                                status: "completed")
+      expect(adjustment.to_wire_h).to eq(
+        { "id" => "adj_1", "type" => "cancellation", "occurred_at" => "2026-08-01T00:00:00Z", "status" => "completed" }
+      )
+    end
+
+    it "includes totals when present" do
+      totals = [Portage::Ucp::Total.new(type: "total", amount: -500)]
+      adjustment = Portage::Ucp::Adjustment.new(id: "adj_1", type: "refund", occurred_at: "2026-08-01T00:00:00Z",
+                                                status: "completed", totals: totals)
+      expect(adjustment.to_wire_h["totals"]).to eq([{ "type" => "total", "amount" => -500 }])
+    end
+  end
+
   describe Portage::Ucp::Order do
     it "holds order state with checkout_id/permalink_url/fulfillment and a totals array" do
       total = Portage::Ucp::Total.new(type: "total", amount: 500)
       order = Portage::Ucp::Order.new(id: "ord_1", checkout_id: "chk_1", permalink_url: "https://example.com/orders/1",
-                                      line_items: [], fulfillment: {}, currency: "USD", totals: [total])
+                                      line_items: [], fulfillment: Portage::Ucp::Fulfillment.new, currency: "USD",
+                                      totals: [total])
 
       expect(order.checkout_id).to eq("chk_1")
-      expect(order.to_wire_h["fulfillment"]).to eq({})
+      expect(order.to_wire_h["fulfillment"]).to eq({ "expectations" => [], "events" => [] })
       expect(order.to_wire_h["totals"]).to eq([{ "type" => "total", "amount" => 500 }])
+      expect(order.to_wire_h).not_to have_key("adjustments")
+    end
+
+    it "includes adjustments when present" do
+      total = Portage::Ucp::Total.new(type: "total", amount: 500)
+      adjustment = Portage::Ucp::Adjustment.new(id: "adj_1", type: "cancellation", occurred_at: "2026-08-01T00:00:00Z",
+                                                status: "completed")
+      order = Portage::Ucp::Order.new(id: "ord_1", checkout_id: "chk_1", permalink_url: "https://example.com/orders/1",
+                                      line_items: [], fulfillment: Portage::Ucp::Fulfillment.new, currency: "USD",
+                                      totals: [total], adjustments: [adjustment])
+
+      expect(order.to_wire_h["adjustments"]).to eq(
+        [{ "id" => "adj_1", "type" => "cancellation", "occurred_at" => "2026-08-01T00:00:00Z",
+           "status" => "completed" }]
+      )
     end
   end
 
