@@ -1,5 +1,3 @@
-require "bigdecimal"
-
 module Portage
   module Ucp
     module Magento
@@ -20,13 +18,11 @@ module Portage
         module_function
 
         def money(amount, currency)
-          Portage::Ucp::Money.new(amount_minor: minor_units(amount), currency: currency)
+          Portage::Ucp::Support::Amounts.money(amount, currency)
         end
 
         def minor_units(amount)
-          return 0 if amount.nil?
-
-          (BigDecimal(amount.to_s) * 100).to_i
+          Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
         def custom_attribute(node, code)
@@ -120,8 +116,7 @@ module Portage
             id: node["item_id"].to_s,
             item: Portage::Ucp::Item.new(id: node["sku"], title: node["name"], price: unit_price),
             quantity: quantity,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)]
+            totals: Portage::Ucp::Support::Totals.line(line_total)
           )
         end
 
@@ -133,10 +128,7 @@ module Portage
         def totals(items)
           subtotal = items.sum { |n| minor_units(n["row_total"]) }
           tax = items.sum { |n| minor_units(n["tax_amount"]) }
-          entries = [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal)]
-          entries << Portage::Ucp::Total.new(type: "tax", amount: tax) if tax.positive?
-          entries << Portage::Ucp::Total.new(type: "total", amount: subtotal + tax)
-          entries
+          Portage::Ucp::Support::Totals.summary(subtotal: subtotal, tax: tax, total: subtotal + tax)
         end
 
         # Magento core has no per-line-item fulfillment tracking on the
@@ -169,8 +161,7 @@ module Portage
             line_items: (node["items"] || []).map { |n| order_line_item(n, status) },
             fulfillment: Portage::Ucp::Fulfillment.new,
             currency: currency,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
-                     Portage::Ucp::Total.new(type: "total", amount: total)]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal, total: total)
           )
         end
 
@@ -182,8 +173,7 @@ module Portage
             id: node["item_id"].to_s,
             item: Portage::Ucp::Item.new(id: node["sku"], title: node["name"], price: minor_units(node["price"])),
             quantity: { original: quantity, total: quantity, fulfilled: fulfilled },
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)],
+            totals: Portage::Ucp::Support::Totals.line(line_total),
             status: status
           )
         end

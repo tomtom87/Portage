@@ -24,6 +24,8 @@ module Portage
       #   (`/guest-carts/*`) are anonymous by design — no token at all,
       #   identified purely by the masked cart id in the URL.
       class Client
+        include Portage::Ucp::Support::HttpClient
+
         def initialize(base_url:, admin_token: nil)
           @base_url = base_url.chomp("/")
           @admin_token = admin_token
@@ -54,27 +56,15 @@ module Portage
         def admin_request(http_method, path, body = nil)
           raise ArgumentError, "Portage::Ucp::Magento::Client requires admin_token for this call" unless @admin_token
 
-          req = http_method.new(URI("#{@base_url}/rest/V1#{path}"))
-          req["Authorization"] = "Bearer #{@admin_token}"
-          perform(req, body)
+          json_request(http_method, "#{@base_url}/rest/V1#{path}",
+                       body: body, headers: { "Authorization" => "Bearer #{@admin_token}" })
         end
 
         def guest_request(http_method, path, body = nil)
-          req = http_method.new(URI("#{@base_url}/rest/V1#{path}"))
-          perform(req, body)
+          json_request(http_method, "#{@base_url}/rest/V1#{path}", body: body)
         end
 
-        def perform(req, body)
-          req["Content-Type"] = "application/json"
-          req.body = JSON.generate(body) if body
-
-          uri = req.uri
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |http| http.request(req) }
-          parsed = response.body.nil? || response.body.empty? ? {} : JSON.parse(response.body)
-          raise Portage::Ucp::Magento::ApiError.new(response.code.to_i, parsed) unless response.is_a?(Net::HTTPSuccess)
-
-          parsed
-        end
+        def api_error_class = Portage::Ucp::Magento::ApiError
       end
     end
   end

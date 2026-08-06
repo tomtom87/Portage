@@ -8,12 +8,12 @@ module Portage
       # guest-cart side (cart, checkout) report errors the same way: a
       # non-2xx status with a JSON `{message, parameters}` body.
       class ApiError < Error
-        attr_reader :status, :body
+        include Portage::Ucp::Support::ApiError
 
-        def initialize(status, body)
-          @status = status
-          @body = body
-          super("Magento API error (#{status}): #{body['message'] || body}")
+        private
+
+        def detail(body)
+          body["message"] || body
         end
       end
     end

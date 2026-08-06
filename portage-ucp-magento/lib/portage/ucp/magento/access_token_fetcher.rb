@@ -18,6 +18,8 @@ module Portage
       # reports, so callers need their own refresh-on-401 strategy rather
       # than a reported expiry.
       class AccessTokenFetcher
+        include Portage::Ucp::Support::TokenExchange
+
         Result = Struct.new(:access_token, keyword_init: true)
 
         def initialize(base_url:, username:, password:)
@@ -27,15 +29,9 @@ module Portage
         end
 
         def fetch
-          uri = URI("#{@base_url}/rest/V1/integration/admin/token")
-          request = Net::HTTP::Post.new(uri)
-          request["Content-Type"] = "application/json"
-          request.body = JSON.generate(username: @username, password: @password)
-
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |http| http.request(request) }
-          body = JSON.parse(response.body)
-          raise Portage::Ucp::Magento::Error, "token exchange failed: #{body}" unless response.is_a?(Net::HTTPSuccess)
-
+          body = exchange("#{@base_url}/rest/V1/integration/admin/token",
+                          { username: @username, password: @password },
+                          error_class: Portage::Ucp::Magento::Error)
           Result.new(access_token: body)
         end
       end

@@ -34,6 +34,18 @@ module Portage
       #   against a live site with a real gateway installed — same posture
       #   as Portage::Ucp::WooCommerce::Adapter's own payment step.
       class Adapter < Portage::Ucp::Adapter
+        # The guest-cart API takes no idempotency key natively, so §9a dedup
+        # comes from Support::Idempotency's in-process table.
+        include Portage::Ucp::Support::Idempotency
+        # A Magento guest cart has no native status field, and an Order's own
+        # `quote_id` is the cart's internal integer id rather than the masked
+        # guest-cart id this gem uses (see Mapper.order) — both are tracked
+        # adapter-side via Support::CheckoutState.
+        include Portage::Ucp::Support::CheckoutState
+        # The admin-token API answers a missing product or order with a 404
+        # rather than an empty body, which UCP's reads report as nil.
+        include Portage::Ucp::Support::NotFound
+
         def initialize(client:, currency:, site_url: nil, payment_method: nil, payment_data_key: "cc_token",
                        default_address: nil)
           super()
@@ -43,22 +55,6 @@ module Portage
           @payment_method = payment_method
           @payment_data_key = payment_data_key
           @default_address = default_address
-          # §9a: mutating Adapter methods must dedup by idempotency_key so an
-          # agent's retry on a dropped connection can't double-charge. The
-          # guest-cart API takes no idempotency key natively, so this
-          # adapter keeps its own in-process dedup table, same as
-          # Portage::Ucp::Shopify::Adapter.
-          @idempotency_results = {}
-          # A Magento guest cart has no native status field, so status is
-          # tracked here across the create/update/complete/cancel
-          # lifecycle, keyed by the masked cart id.
-          @checkout_status = {}
-          # See Mapper.order's comment: an Order's own `quote_id` is the
-          # cart's internal integer id, not the masked guest-cart id this
-          # gem uses everywhere, and Magento doesn't expose that mapping via
-          # the API — so the Adapter records it itself at #complete_checkout
-          # time instead, same as Portage::Ucp::WooCommerce::Adapter.
-          @order_checkout_ids = {}
         end
 
         def search_catalog(query:, limit:)
@@ -71,12 +67,10 @@ module Portage
         end
 
         def get_product(product_id:)
-          node = @client.admin_get("/products/#{URI.encode_www_form_component(product_id)}")
-          node["sku"] ? Mapper.product(with_children(node), currency: @currency, site_url: @site_url) : nil
-        rescue Portage::Ucp::Magento::ApiError => e
-          raise unless e.status == 404
-
-          nil
+          nil_on_not_found do
+            node = @client.admin_get("/products/#{URI.encode_www_form_component(product_id)}")
+            node["sku"] ? Mapper.product(with_children(node), currency: @currency, site_url: @site_url) : nil
+          end
         end
 
         def get_cart(cart_id:)
@@ -121,7 +115,7 @@ module Portage
           dedup(idempotency_key) do
             cart_id = @client.guest_post("/guest-carts")
             add_items(cart_id, line_items)
-            @checkout_status[cart_id] = "incomplete"
+            record_checkout_status(cart_id, "incomplete")
             items, currency = cart_snapshot(cart_id)
             Mapper.checkout(items, id: cart_id, currency: currency, status: "incomplete")
           end
@@ -130,7 +124,7 @@ module Portage
         def get_checkout(checkout_id:)
           items, currency = cart_snapshot(checkout_id)
           Mapper.checkout(items, id: checkout_id, currency: currency,
-                                 status: @checkout_status.fetch(checkout_id, "incomplete"))
+                                 status: checkout_status(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart.
@@ -138,7 +132,7 @@ module Portage
           dedup(idempotency_key) do
             replace_items(checkout_id, line_items)
             items, currency = cart_snapshot(checkout_id)
-            @checkout_status[checkout_id] = "incomplete"
+            record_checkout_status(checkout_id, "incomplete")
             Mapper.checkout(items, id: checkout_id, currency: currency, status: "incomplete")
           end
         end
@@ -152,21 +146,19 @@ module Portage
         # canceled without touching the underlying cart contents.
         def cancel_checkout(checkout_id:, idempotency_key:)
           dedup(idempotency_key) do
-            @checkout_status[checkout_id] = "canceled"
+            record_checkout_status(checkout_id, "canceled")
             items, currency = cart_snapshot(checkout_id)
             Mapper.checkout(items, id: checkout_id, currency: currency, status: "canceled")
           end
         end
 
         def get_order(order_id:)
-          node = @client.admin_get("/orders/#{order_id}")
-          return nil unless node["entity_id"]
+          nil_on_not_found do
+            node = @client.admin_get("/orders/#{order_id}")
+            next nil unless node["entity_id"]
 
-          Mapper.order(node, checkout_id: @order_checkout_ids.fetch(order_id.to_s, ""))
-        rescue Portage::Ucp::Magento::ApiError => e
-          raise unless e.status == 404
-
-          nil
+            Mapper.order(node, checkout_id: checkout_id_for(order_id))
+          end
         end
 
         private
@@ -223,8 +215,8 @@ module Portage
           items, currency = cart_snapshot(checkout_id)
           submit_shipping_information(checkout_id)
           order_id = submit_payment_information(checkout_id, payment_token)
-          @checkout_status[checkout_id] = "completed"
-          @order_checkout_ids[order_id.to_s] = checkout_id
+          record_checkout_status(checkout_id, "completed")
+          record_order_checkout(order_id, checkout_id)
           Mapper.checkout(items, id: checkout_id, currency: currency, status: "completed",
                                  order: order_confirmation(order_id))
         end
@@ -249,12 +241,6 @@ module Portage
         # public order-status link to hand back here either.
         def order_confirmation(order_id)
           Portage::Ucp::OrderConfirmation.new(id: order_id.to_s, permalink_url: "")
-        end
-
-        def dedup(idempotency_key)
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
-
-          @idempotency_results[idempotency_key] = yield
         end
       end
     end
