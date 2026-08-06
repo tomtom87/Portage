@@ -156,7 +156,7 @@ module Portage
             checkout_id: checkout_id,
             permalink_url: "#{site_url}/account.php?action=order_status&order_id=#{node['id']}",
             line_items: products.map { |n| order_line_item(n, status) },
-            fulfillment: {},
+            fulfillment: Portage::Ucp::Fulfillment.new,
             currency: currency,
             totals: [Portage::Ucp::Total.new(type: "subtotal", amount: minor_units(node["subtotal_ex_tax"])),
                      Portage::Ucp::Total.new(type: "total", amount: minor_units(node["total_inc_tax"]))]

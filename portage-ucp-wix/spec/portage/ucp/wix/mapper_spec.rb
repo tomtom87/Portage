@@ -102,7 +102,7 @@ RSpec.describe Portage::Ucp::Wix::Mapper do
       expect(order.id).to eq("order_1")
       expect(order.checkout_id).to eq("checkout_1")
       expect(order.permalink_url).to eq("")
-      expect(order.fulfillment).to eq({})
+      expect(order.fulfillment).to eq(Portage::Ucp::Fulfillment.new)
       expect(order.totals).to eq([Portage::Ucp::Total.new(type: "subtotal", amount: 1000),
                                   Portage::Ucp::Total.new(type: "total", amount: 1000)])
       expect(order.line_items.first.quantity).to eq({ original: 2, total: 2, fulfilled: 2 })

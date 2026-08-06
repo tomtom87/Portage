@@ -167,7 +167,7 @@ module Portage
             checkout_id: checkout_id,
             permalink_url: "",
             line_items: (node["items"] || []).map { |n| order_line_item(n, status) },
-            fulfillment: {},
+            fulfillment: Portage::Ucp::Fulfillment.new,
             currency: currency,
             totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
                      Portage::Ucp::Total.new(type: "total", amount: total)]

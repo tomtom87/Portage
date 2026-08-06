@@ -123,7 +123,7 @@ module Portage
             checkout_id: "",
             permalink_url: "",
             line_items: (node["transactions"] || []).map { |n| order_line_item(n, status) },
-            fulfillment: {},
+            fulfillment: Portage::Ucp::Fulfillment.new,
             currency: node.dig("total_price", "currency_code"),
             totals: [Portage::Ucp::Total.new(type: "subtotal", amount: money(node["subtotal"]).amount_minor),
                      Portage::Ucp::Total.new(type: "total", amount: money(node["total_price"]).amount_minor)]

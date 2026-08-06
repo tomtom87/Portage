@@ -155,7 +155,7 @@ module Portage
             checkout_id: checkout_id,
             permalink_url: "#{site_url}/checkout/order-received/#{node['id']}/?key=#{node['order_key']}",
             line_items: (node["line_items"] || []).map { |n| order_line_item(n, currency, status) },
-            fulfillment: {},
+            fulfillment: Portage::Ucp::Fulfillment.new,
             currency: currency,
             totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
                      Portage::Ucp::Total.new(type: "total", amount: minor_units(node["total"]))]
