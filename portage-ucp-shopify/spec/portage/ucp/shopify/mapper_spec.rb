@@ -100,7 +100,7 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       expect(order.id).to eq("gid://shopify/Order/1")
       expect(order.checkout_id).to eq("")
       expect(order.permalink_url).to eq("https://ucp-test.myshopify.com/orders/abc123")
-      expect(order.fulfillment).to eq({ "expectations" => [], "events" => [] })
+      expect(order.fulfillment).to eq(Portage::Ucp::Fulfillment.new)
       expect(order.totals).to eq([Portage::Ucp::Total.new(type: "subtotal", amount: 1000),
                                   Portage::Ucp::Total.new(type: "total", amount: 1100)])
       expect(order.line_items.first.quantity).to eq({ original: 2, total: 2, fulfilled: 2 })
@@ -161,37 +161,39 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
     it "maps fulfillmentOrders to expectations with destination and method_type" do
       fulfillment = described_class.fulfillment(node)
 
-      expect(fulfillment["expectations"]).to eq([
-                                                  { "id" => "gid://shopify/FulfillmentOrder/1",
-                                                    "line_items" => [{ "id" => "gid://shopify/LineItem/1",
-                                                                       "quantity" => 2 }],
-                                                    "method_type" => "shipping",
-                                                    "destination" => { "street_address" => "1 Main St",
-                                                                       "address_locality" => "Boston",
-                                                                       "address_region" => "MA",
-                                                                       "address_country" => "US",
-                                                                       "postal_code" => "02110",
-                                                                       "first_name" => "Ada",
-                                                                       "last_name" => "Lovelace" },
-                                                    "fulfillable_on" => "2026-07-25T00:00:00Z" }
-                                                ])
+      expect(fulfillment.expectations.map(&:to_wire_h)).to eq([
+                                                                { "id" => "gid://shopify/FulfillmentOrder/1",
+                                                                  "line_items" => [{ "id" => "gid://shopify/LineItem/1",
+                                                                                     "quantity" => 2 }],
+                                                                  "method_type" => "shipping",
+                                                                  "destination" => { "street_address" => "1 Main St",
+                                                                                     "address_locality" => "Boston",
+                                                                                     "address_region" => "MA",
+                                                                                     "address_country" => "US",
+                                                                                     "postal_code" => "02110",
+                                                                                     "first_name" => "Ada",
+                                                                                     "last_name" => "Lovelace" },
+                                                                  "fulfillable_on" => "2026-07-25T00:00:00Z" }
+                                                              ])
     end
 
     it "maps fulfillments to events with tracking info, dropping zero-quantity line item refs" do
       fulfillment = described_class.fulfillment(node)
 
-      expect(fulfillment["events"]).to eq([
-                                            { "id" => "gid://shopify/Fulfillment/1",
-                                              "occurred_at" => "2026-07-26T00:00:00Z", "type" => "in_transit",
-                                              "line_items" => [{ "id" => "gid://shopify/LineItem/1",
-                                                                 "quantity" => 2 }],
-                                              "tracking_number" => "1Z999",
-                                              "tracking_url" => "https://ups.example/1Z999", "carrier" => "UPS" }
-                                          ])
+      expect(fulfillment.events.map(&:to_wire_h)).to eq([
+                                                          { "id" => "gid://shopify/Fulfillment/1",
+                                                            "occurred_at" => "2026-07-26T00:00:00Z",
+                                                            "type" => "in_transit",
+                                                            "line_items" => [{ "id" => "gid://shopify/LineItem/1",
+                                                                               "quantity" => 2 }],
+                                                            "tracking_number" => "1Z999",
+                                                            "tracking_url" => "https://ups.example/1Z999",
+                                                            "carrier" => "UPS" }
+                                                        ])
     end
 
     it "defaults to empty expectations/events when the order has no fulfillment data" do
-      expect(described_class.fulfillment({})).to eq({ "expectations" => [], "events" => [] })
+      expect(described_class.fulfillment({}).to_wire_h).to eq({ "expectations" => [], "events" => [] })
     end
   end
 end

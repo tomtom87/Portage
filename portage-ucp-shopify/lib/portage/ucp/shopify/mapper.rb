@@ -140,29 +140,25 @@ module Portage
           "READY_FOR_PICKUP" => "processing", "PICKED_UP" => "delivered", "SUBMITTED" => "processing"
         }.freeze
 
-        # Builds the buyer-facing `fulfillment` hash (schemas/shopping/
-        # order.json's `expectations`/`events`) from Shopify's
-        # fulfillmentOrders (what's expected to ship, and to where) and
-        # fulfillments (what actually shipped, with tracking). Plain hashes,
-        # not value objects — `fulfillment` on Portage::Ucp::Order is itself an
-        # untyped Hash (see value_objects.rb), since the schema has no
-        # required inner fields.
+        # Builds the buyer-facing Fulfillment (schemas/shopping/order.json's
+        # `expectations`/`events`) from Shopify's fulfillmentOrders (what's
+        # expected to ship, and to where) and fulfillments (what actually
+        # shipped, with tracking).
         def fulfillment(node)
-          {
-            "expectations" => (node.dig("fulfillmentOrders", "nodes") || []).map { |n| expectation(n) },
-            "events" => (node["fulfillments"] || []).map { |n| fulfillment_event(n) }
-          }
+          Portage::Ucp::Fulfillment.new(
+            expectations: (node.dig("fulfillmentOrders", "nodes") || []).map { |n| expectation(n) },
+            events: (node["fulfillments"] || []).map { |n| fulfillment_event(n) }
+          )
         end
 
         def expectation(node)
-          h = {
-            "id" => node["id"],
-            "line_items" => (node.dig("lineItems", "nodes") || []).map { |n| order_line_ref(n, n["totalQuantity"]) },
-            "method_type" => DELIVERY_METHOD_TYPES.fetch(node.dig("deliveryMethod", "methodType"), "shipping"),
-            "destination" => postal_address(node["destination"])
-          }
-          h["fulfillable_on"] = node["fulfillAt"] if node["fulfillAt"]
-          h
+          Portage::Ucp::Expectation.new(
+            id: node["id"],
+            line_items: (node.dig("lineItems", "nodes") || []).map { |n| order_line_ref(n, n["totalQuantity"]) },
+            method_type: DELIVERY_METHOD_TYPES.fetch(node.dig("deliveryMethod", "methodType"), "shipping"),
+            destination: postal_address(node["destination"]),
+            fulfillable_on: node["fulfillAt"]
+          )
         end
 
         def postal_address(node)
@@ -181,20 +177,16 @@ module Portage
           line_items = (node.dig("fulfillmentLineItems", "nodes") || [])
                        .map { |n| order_line_ref(n, n["quantity"]) }
                        .select { |n| n["quantity"]&.positive? }
-          {
-            "id" => node["id"], "occurred_at" => node["createdAt"],
-            "type" => FULFILLMENT_EVENT_TYPES.fetch(node["displayStatus"], "processing"),
-            "line_items" => line_items
-          }.merge(tracking_fields(tracking))
+          Portage::Ucp::FulfillmentEvent.new(
+            id: node["id"], occurred_at: node["createdAt"],
+            type: FULFILLMENT_EVENT_TYPES.fetch(node["displayStatus"], "processing"),
+            line_items: line_items,
+            tracking_number: tracking["number"], tracking_url: tracking["url"], carrier: tracking["company"]
+          )
         end
 
         def order_line_ref(node, quantity)
           { "id" => node.dig("lineItem", "id"), "quantity" => quantity }
-        end
-
-        def tracking_fields(tracking)
-          { "tracking_number" => tracking["number"], "tracking_url" => tracking["url"],
-            "carrier" => tracking["company"] }.compact
         end
 
         # Builds the top-level totals array (exactly one subtotal + one total,
