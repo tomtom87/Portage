@@ -31,6 +31,10 @@ Metrics/ParameterLists:
     # explicitly or fall back to Portage::Ucp.configuration independently —
     # collapsing them into an options hash would lose that per-field default.
     - "lib/portage/ucp/manifest.rb"
+    # Checkout#initialize's 7th param (order:) mirrors the real schema's
+    # optional order_confirmation field — same one-keyword-per-wire-field
+    # rationale as manifest.rb above, not a sign the object needs splitting.
+    - "lib/portage/ucp/value_objects.rb"
 
 Style/HashSlice:
   Enabled: false
@@ -42,6 +46,10 @@ Style/HashSlice:
 Metrics/ClassLength:
   Exclude:
     - "lib/portage/ucp/resolver.rb"
+    # FakeAdapter now covers the full cart/checkout/order lifecycle
+    # (catalog/cart/checkout/order), one small method per action — breadth,
+    # not a class doing too many unrelated things.
+    - "spec/support/fake_adapter.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:

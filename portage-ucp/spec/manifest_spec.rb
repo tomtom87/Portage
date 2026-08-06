@@ -13,8 +13,9 @@ RSpec.describe Portage::Ucp::Manifest do
   it "includes only capabilities the adapter overrides" do
     names = manifest.to_h[:capabilities].map { |c| c[:name] }
 
-    expect(names).to include("dev.ucp.shopping.catalog", "dev.ucp.shopping.cart", "dev.ucp.shopping.checkout")
-    expect(names).not_to include("dev.ucp.shopping.order", "dev.ucp.shopping.identity")
+    expect(names).to include("dev.ucp.shopping.catalog", "dev.ucp.shopping.cart", "dev.ucp.shopping.checkout",
+                             "dev.ucp.shopping.order")
+    expect(names).not_to include("dev.ucp.shopping.identity")
   end
 
   it "passes through business info, payment handlers, and signing keys verbatim" do

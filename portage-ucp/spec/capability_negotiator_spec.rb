@@ -26,6 +26,6 @@ RSpec.describe Portage::Ucp::CapabilityNegotiator do
   it "only negotiates capabilities the adapter actually advertises" do
     result = negotiator.negotiate(adapter: adapter, platform_versions: {})
 
-    expect(result.keys).not_to include("dev.ucp.shopping.order", "dev.ucp.shopping.identity")
+    expect(result.keys).not_to include("dev.ucp.shopping.identity")
   end
 end

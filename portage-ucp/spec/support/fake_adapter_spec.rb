@@ -51,6 +51,16 @@ RSpec.describe Portage::Ucp::Support::FakeAdapter do
     expect(completed.status).to eq("completed")
   end
 
+  it "links a completed checkout to a fetchable order via Checkout#order" do
+    checkout = adapter.create_checkout(line_items: [{ product_id: "prod_1", quantity: 1 }], idempotency_key: "k10")
+    completed = adapter.complete_checkout(checkout_id: checkout.id, payment_token: "tok_test", idempotency_key: "k11")
+
+    expect(completed.order.id).not_to be_empty
+    order = adapter.get_order(order_id: completed.order.id)
+    expect(order.checkout_id).to eq(checkout.id)
+    expect(order.permalink_url).to eq(completed.order.permalink_url)
+  end
+
   it "cancels a checkout" do
     checkout = adapter.create_checkout(line_items: [{ product_id: "prod_1", quantity: 1 }], idempotency_key: "k8")
     canceled = adapter.cancel_checkout(checkout_id: checkout.id, idempotency_key: "k9")

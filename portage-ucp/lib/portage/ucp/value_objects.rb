@@ -59,14 +59,33 @@ module Portage
       end
     end
 
+    # schemas/shopping/types/order_confirmation.json — requires id/permalink_url.
+    # Carried on Checkout#order once complete_checkout actually produces an
+    # order; nil until then.
+    OrderConfirmation = Data.define(:id, :permalink_url, :label) do
+      def initialize(id:, permalink_url:, label: nil) = super
+
+      def to_wire_h
+        h = { "id" => id, "permalink_url" => permalink_url }
+        h["label"] = label if label
+        h
+      end
+    end
+
     # schemas/shopping/checkout.json — requires ucp/id/line_items/status/
     # currency/totals/links. `status` is the real enum (incomplete,
     # requires_escalation, ready_for_complete, complete_in_progress, completed,
-    # canceled) — not the old ad hoc "pending"/"completed" strings.
-    Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links) do
+    # canceled) — not the old ad hoc "pending"/"completed" strings. `order` is
+    # the schema's optional order_confirmation — set once complete_checkout
+    # actually produces an order, nil otherwise.
+    Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links, :order) do
+      def initialize(id:, status:, line_items:, currency:, totals:, links:, order: nil) = super
+
       def to_wire_h
-        { "id" => id, "status" => status, "line_items" => line_items.map(&:to_wire_h),
-          "currency" => currency, "totals" => totals.map(&:to_wire_h), "links" => links.map(&:to_wire_h) }
+        h = { "id" => id, "status" => status, "line_items" => line_items.map(&:to_wire_h),
+              "currency" => currency, "totals" => totals.map(&:to_wire_h), "links" => links.map(&:to_wire_h) }
+        h["order"] = order.to_wire_h if order
+        h
       end
     end
 

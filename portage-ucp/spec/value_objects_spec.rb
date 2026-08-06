@@ -76,6 +76,32 @@ RSpec.describe "Portage::Ucp value objects" do
       expect(checkout.status).to eq("incomplete")
       expect(checkout.to_wire_h["links"]).to eq([])
     end
+
+    it "omits order from the wire shape until a completion actually produces one" do
+      checkout = Portage::Ucp::Checkout.new(id: "chk_1", status: "incomplete", line_items: [], currency: "USD",
+                                            totals: [], links: [])
+      expect(checkout.to_wire_h).not_to have_key("order")
+    end
+
+    it "includes the order confirmation once set" do
+      order = Portage::Ucp::OrderConfirmation.new(id: "ord_1", permalink_url: "https://example.com/orders/1")
+      checkout = Portage::Ucp::Checkout.new(id: "chk_1", status: "completed", line_items: [], currency: "USD",
+                                            totals: [], links: [], order: order)
+      expect(checkout.to_wire_h["order"]).to eq({ "id" => "ord_1", "permalink_url" => "https://example.com/orders/1" })
+    end
+  end
+
+  describe Portage::Ucp::OrderConfirmation do
+    it "serializes id/permalink_url, omitting label when absent" do
+      confirmation = Portage::Ucp::OrderConfirmation.new(id: "ord_1", permalink_url: "https://example.com/orders/1")
+      expect(confirmation.to_wire_h).to eq({ "id" => "ord_1", "permalink_url" => "https://example.com/orders/1" })
+    end
+
+    it "includes label when present" do
+      confirmation = Portage::Ucp::OrderConfirmation.new(id: "ord_1", permalink_url: "https://example.com/orders/1",
+                                                         label: "#1001")
+      expect(confirmation.to_wire_h["label"]).to eq("#1001")
+    end
   end
 
   describe Portage::Ucp::OrderLineItem do

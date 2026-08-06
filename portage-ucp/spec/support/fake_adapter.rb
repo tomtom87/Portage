@@ -9,6 +9,7 @@ module Portage
           @products = {}
           @carts = {}
           @checkouts = {}
+          @orders = {}
           @idempotency_results = {}
           @next_id = 0
         end
@@ -67,7 +68,10 @@ module Portage
         def complete_checkout(checkout_id:, payment_token:, idempotency_key:)
           dedup(idempotency_key) do
             checkout = @checkouts.fetch(checkout_id)
-            @checkouts[checkout_id] = Portage::Ucp::Checkout.new(**checkout.to_h, status: "completed")
+            order = store_order(checkout)
+            confirmation = Portage::Ucp::OrderConfirmation.new(id: order.id, permalink_url: order.permalink_url)
+            @checkouts[checkout_id] = Portage::Ucp::Checkout.new(**checkout.to_h, status: "completed",
+                                                                                  order: confirmation)
           end
         end
 
@@ -78,7 +82,20 @@ module Portage
           end
         end
 
+        def get_order(order_id:)
+          @orders[order_id]
+        end
+
         private
+
+        def store_order(checkout)
+          id = next_id("ord")
+          order = Portage::Ucp::Order.new(
+            id: id, checkout_id: checkout.id, permalink_url: "https://example.com/orders/#{id}",
+            line_items: checkout.line_items, fulfillment: {}, currency: checkout.currency, totals: checkout.totals
+          )
+          @orders[id] = order
+        end
 
         def store_cart(id, requested_line_items)
           line_items = build_line_items(requested_line_items)
