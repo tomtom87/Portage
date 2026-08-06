@@ -221,19 +221,34 @@ module Portage
         def submit_checkout(checkout_id, payment_token)
           verify_checkout_configured!
           items, currency = cart_snapshot(checkout_id)
+          submit_shipping_information(checkout_id)
+          order_id = submit_payment_information(checkout_id, payment_token)
+          @checkout_status[checkout_id] = "completed"
+          @order_checkout_ids[order_id.to_s] = checkout_id
+          Mapper.checkout(items, id: checkout_id, currency: currency, status: "completed",
+                                 order: order_confirmation(order_id))
+        end
+
+        def submit_shipping_information(checkout_id)
           @client.guest_post("/guest-carts/#{checkout_id}/shipping-information",
                              { addressInformation: { shipping_address: @default_address,
                                                      billing_address: @default_address,
                                                      shipping_carrier_code: "flatrate",
                                                      shipping_method_code: "flatrate" } })
-          order_id = @client.guest_post("/guest-carts/#{checkout_id}/payment-information",
-                                        { email: @default_address[:email] || "guest@example.com",
-                                          paymentMethod: { method: @payment_method,
-                                                           additional_data: { @payment_data_key => payment_token } },
-                                          billingAddress: @default_address })
-          @checkout_status[checkout_id] = "completed"
-          @order_checkout_ids[order_id.to_s] = checkout_id
-          Mapper.checkout(items, id: checkout_id, currency: currency, status: "completed")
+        end
+
+        def submit_payment_information(checkout_id, payment_token)
+          @client.guest_post("/guest-carts/#{checkout_id}/payment-information",
+                             { email: @default_address[:email] || "guest@example.com",
+                               paymentMethod: { method: @payment_method,
+                                                additional_data: { @payment_data_key => payment_token } },
+                               billingAddress: @default_address })
+        end
+
+        # Same blank permalink_url posture as Mapper.order — Magento has no
+        # public order-status link to hand back here either.
+        def order_confirmation(order_id)
+          Portage::Ucp::OrderConfirmation.new(id: order_id.to_s, permalink_url: "")
         end
 
         def dedup(idempotency_key)

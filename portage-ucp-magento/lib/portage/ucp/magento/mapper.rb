@@ -100,14 +100,15 @@ module Portage
         # shipping-information/payment-information calls that act on the
         # same cart), so the Adapter tracks status itself and passes it in
         # here, same rationale as Shopify's Cart-as-Checkout.
-        def checkout(items, id:, currency:, status:)
+        def checkout(items, id:, currency:, status:, order: nil)
           Portage::Ucp::Checkout.new(
             id: id,
             status: status,
             line_items: items.map { |n| cart_line_item(n) },
             currency: currency,
             totals: totals(items),
-            links: []
+            links: [],
+            order: order
           )
         end
 

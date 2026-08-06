@@ -176,6 +176,7 @@ RSpec.describe Portage::Ucp::Magento::Adapter do
                                            idempotency_key: "chk1-complete")
 
       expect(checkout.status).to eq("completed")
+      expect(checkout.order).to eq(Portage::Ucp::OrderConfirmation.new(id: "99", permalink_url: ""))
       expect(shipping_stub).to have_been_requested
       expect(payment_stub).to have_been_requested
     end
