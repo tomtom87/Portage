@@ -9,3 +9,7 @@ pre-1.0, so APIs may still shift between minor versions.
 - Initial pre-release. Protocol-only core: `Adapter` contract, capability
   registry, manifest builder, MCP server wrapper, offline `SchemaValidator`,
   `portage-ucp-check` CLI.
+- `Portage::Ucp::Support`: shared building blocks the adapter gems mix in
+  (money conversion, totals shapes, idempotency dedup, checkout-state
+  tracking, `ApiError`, 404-to-nil reads, Net::HTTP JSON client, OAuth token
+  exchange). Not used by the core gem's own request path.
