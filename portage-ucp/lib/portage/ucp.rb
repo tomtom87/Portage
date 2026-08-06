@@ -4,6 +4,19 @@ require_relative "ucp/errors"
 require_relative "ucp/value_objects"
 require_relative "ucp/wire_envelope"
 require_relative "ucp/adapter"
+# Shared building blocks for adapter gems (Portage::Ucp::Support) — nothing in
+# the core gem's own request path uses them, they exist so the bundled
+# Shopify/Wix/WooCommerce/... gems don't each re-derive the same money
+# conversion, dedup table and HTTP plumbing.
+require_relative "ucp/support/amounts"
+require_relative "ucp/support/totals"
+require_relative "ucp/support/line_item_status"
+require_relative "ucp/support/idempotency"
+require_relative "ucp/support/checkout_state"
+require_relative "ucp/support/api_error"
+require_relative "ucp/support/not_found"
+require_relative "ucp/support/http_client"
+require_relative "ucp/support/token_exchange"
 require_relative "ucp/payment_token_guard"
 require_relative "ucp/authenticator"
 require_relative "ucp/rate_limiter"
