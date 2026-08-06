@@ -9,12 +9,12 @@ module Portage
       # (e.g. "line item not found") the same way — a non-2xx status with a
       # JSON error body — so one error class covers both.
       class ApiError < Error
-        attr_reader :status, :body
+        include Portage::Ucp::Support::ApiError
 
-        def initialize(status, body)
-          @status = status
-          @body = body
-          super("Wix API error (#{status}): #{body['message'] || body}")
+        private
+
+        def detail(body)
+          body["message"] || body
         end
       end
     end

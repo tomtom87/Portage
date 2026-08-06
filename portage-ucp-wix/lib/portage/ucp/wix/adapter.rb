@@ -35,20 +35,19 @@ module Portage
         # catalog `catalogItemId` belongs to.
         STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e".freeze
 
+        # Wix's cart/checkout REST endpoints don't take an idempotency key
+        # natively, so §9a dedup comes from Support::Idempotency's in-process
+        # table.
+        include Portage::Ucp::Support::Idempotency
+        # Wix Checkout has no confirmed native status field, so status is
+        # tracked adapter-side via Support::CheckoutState. Only the status
+        # half is used here: unlike Shopify and WooCommerce, a Wix Order
+        # carries its originating `checkoutId` natively (see #get_order).
+        include Portage::Ucp::Support::CheckoutState
+
         def initialize(client:)
           super()
           @client = client
-          # §9a: mutating Adapter methods must dedup by idempotency_key so an
-          # agent's retry on a dropped connection can't double-charge. Wix's
-          # cart/checkout REST endpoints don't take an idempotency key
-          # natively, so this adapter keeps its own in-process dedup table,
-          # same as Portage::Ucp::Shopify::Adapter.
-          @idempotency_results = {}
-          # Wix Checkout has no confirmed native status field, so status is
-          # tracked here across the create/update/complete/cancel lifecycle,
-          # keyed by checkout id — same rationale as Shopify's Cart-as-
-          # Checkout status tracking.
-          @checkout_status = {}
         end
 
         def search_catalog(query:, limit:)
@@ -93,21 +92,21 @@ module Portage
         def create_checkout(line_items:, idempotency_key:)
           dedup(idempotency_key) do
             node = create_checkout_node(line_items)
-            @checkout_status[node["id"]] = "incomplete"
+            record_checkout_status(node["id"], "incomplete")
             Mapper.checkout(node, status: "incomplete")
           end
         end
 
         def get_checkout(checkout_id:)
           node = fetch_checkout_node(checkout_id)
-          node && Mapper.checkout(node, status: @checkout_status.fetch(checkout_id, "incomplete"))
+          node && Mapper.checkout(node, status: checkout_status(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart.
         def update_checkout(checkout_id:, line_items:, idempotency_key:)
           dedup(idempotency_key) do
             node = @client.patch("/ecom/v1/checkouts/#{checkout_id}", { lineItems: cart_lines(line_items) })["checkout"]
-            @checkout_status[checkout_id] = "incomplete"
+            record_checkout_status(checkout_id, "incomplete")
             Mapper.checkout(node, status: "incomplete")
           end
         end
@@ -120,7 +119,7 @@ module Portage
 
         def cancel_checkout(checkout_id:, idempotency_key:)
           dedup(idempotency_key) do
-            @checkout_status[checkout_id] = "canceled"
+            record_checkout_status(checkout_id, "canceled")
             node = fetch_checkout_node(checkout_id)
             Mapper.checkout(node, status: "canceled")
           end
@@ -182,18 +181,12 @@ module Portage
           data = @client.post("/ecom/v1/checkouts/#{checkout_id}/create-order", {})
           order_id = data["orderId"]
           status = order_id ? "completed" : "complete_in_progress"
-          @checkout_status[checkout_id] = status
+          record_checkout_status(checkout_id, status)
           # Same "not information-complete but schema-valid" posture as
           # Mapper.order's own blank permalink_url — Wix's create-order
           # response has no storefront order-status link to hand back.
           order = order_id && Portage::Ucp::OrderConfirmation.new(id: order_id, permalink_url: "")
           Mapper.checkout(node, status: status, order: order)
-        end
-
-        def dedup(idempotency_key)
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
-
-          @idempotency_results[idempotency_key] = yield
         end
       end
     end

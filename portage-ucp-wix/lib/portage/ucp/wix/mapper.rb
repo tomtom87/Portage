@@ -1,5 +1,3 @@
-require "bigdecimal"
-
 module Portage
   module Ucp
     module Wix
@@ -16,13 +14,11 @@ module Portage
         module_function
 
         def money(amount, currency)
-          Portage::Ucp::Money.new(amount_minor: minor_units(amount), currency: currency)
+          Portage::Ucp::Support::Amounts.money(amount, currency)
         end
 
         def minor_units(amount)
-          return 0 unless amount
-
-          (BigDecimal(amount.to_s) * 100).to_i
+          Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
         def product(node)
@@ -95,19 +91,15 @@ module Portage
             item: Portage::Ucp::Item.new(id: node.dig("catalogReference", "catalogItemId"),
                                          title: node.dig("productName", "original"), price: unit_price),
             quantity: quantity,
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)]
+            totals: Portage::Ucp::Support::Totals.line(line_total)
           )
         end
 
-        # Builds the top-level totals array (exactly one subtotal + one
-        # total, plus an optional tax entry) from Wix's priceSummary.
+        # Builds the top-level totals array from Wix's priceSummary.
         def totals(summary)
-          entries = [Portage::Ucp::Total.new(type: "subtotal", amount: minor_units(summary.dig("subtotal", "amount")))]
-          tax = minor_units(summary.dig("tax", "amount"))
-          entries << Portage::Ucp::Total.new(type: "tax", amount: tax) if tax.positive?
-          entries << Portage::Ucp::Total.new(type: "total", amount: minor_units(summary.dig("total", "amount")))
-          entries
+          Portage::Ucp::Support::Totals.summary(subtotal: minor_units(summary.dig("subtotal", "amount")),
+                                                tax: minor_units(summary.dig("tax", "amount")),
+                                                total: minor_units(summary.dig("total", "amount")))
         end
 
         # Wix Order line items carry their own coarse fulfillmentStatus
@@ -135,8 +127,7 @@ module Portage
             line_items: (node["lineItems"] || []).map { |n| order_line_item(n) },
             fulfillment: Portage::Ucp::Fulfillment.new,
             currency: node["currency"],
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal_amount),
-                     Portage::Ucp::Total.new(type: "total", amount: total_amount)]
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal_amount, total: total_amount)
           )
         end
 
@@ -151,8 +142,7 @@ module Portage
             item: Portage::Ucp::Item.new(id: node.dig("catalogReference", "catalogItemId"),
                                          title: node.dig("productName", "original"), price: unit_price),
             quantity: { original: quantity, total: quantity, fulfilled: fulfilled },
-            totals: [Portage::Ucp::Total.new(type: "subtotal", amount: line_total),
-                     Portage::Ucp::Total.new(type: "total", amount: line_total)],
+            totals: Portage::Ucp::Support::Totals.line(line_total),
             status: status
           )
         end

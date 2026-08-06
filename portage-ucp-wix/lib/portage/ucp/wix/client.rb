@@ -18,6 +18,8 @@ module Portage
       # (see Portage::Ucp::Wix::AccessTokenFetcher), so there's nothing here
       # analogous to Shopify's per-call token selection.
       class Client
+        include Portage::Ucp::Support::HttpClient
+
         BASE_URL = "https://www.wixapis.com".freeze
 
         def initialize(access_token:)
@@ -43,18 +45,11 @@ module Portage
         private
 
         def request(http_method, path, body = nil)
-          uri = URI("#{BASE_URL}#{path}")
-          req = http_method.new(uri)
-          req["Authorization"] = @access_token
-          req["Content-Type"] = "application/json"
-          req.body = JSON.generate(body) if body
-
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
-          parsed = response.body.nil? || response.body.empty? ? {} : JSON.parse(response.body)
-          raise Portage::Ucp::Wix::ApiError.new(response.code.to_i, parsed) unless response.is_a?(Net::HTTPSuccess)
-
-          parsed
+          json_request(http_method, "#{BASE_URL}#{path}", body: body,
+                                                          headers: { "Authorization" => @access_token })
         end
+
+        def api_error_class = Portage::Ucp::Wix::ApiError
       end
     end
   end
