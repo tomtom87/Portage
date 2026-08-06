@@ -81,7 +81,7 @@ module Portage
         # cart *is* the checkout, same as Shopify's Cart-as-Checkout, so the
         # adapter tracks status itself and passes it in here, same rationale
         # as `id:` above.
-        def checkout(node, id:, status:)
+        def checkout(node, id:, status:, order: nil)
           currency = node.dig("totals", "currency_code")
           Portage::Ucp::Checkout.new(
             id: id,
@@ -89,7 +89,8 @@ module Portage
             line_items: (node["items"] || []).map { |n| cart_line_item(n, currency) },
             currency: currency,
             totals: totals(node["totals"] || {}),
-            links: []
+            links: [],
+            order: order
           )
         end
 

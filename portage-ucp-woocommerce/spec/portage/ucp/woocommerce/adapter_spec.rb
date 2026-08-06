@@ -157,12 +157,17 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
       stub = stub_request(:post, "https://shop.example.com/wp-json/wc/store/v1/checkout")
              .with(body: { payment_method: "stripe_cc",
                            payment_data: [{ key: "token", value: "tok_abc123" }] }.to_json)
-             .to_return(status: 200, body: cart_response.merge("order_id" => 99).to_json)
+             .to_return(status: 200, body: cart_response.merge("order_id" => 99, "order_key" => "wc_order_x").to_json)
 
       checkout = adapter.complete_checkout(checkout_id: "tok_1", payment_token: "tok_abc123",
                                            idempotency_key: "chk1-complete")
 
       expect(checkout.status).to eq("completed")
+      expect(checkout.order).to eq(
+        Portage::Ucp::OrderConfirmation.new(
+          id: "99", permalink_url: "https://shop.example.com/checkout/order-received/99/?key=wc_order_x"
+        )
+      )
       expect(stub).to have_been_requested
     end
 

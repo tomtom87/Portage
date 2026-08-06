@@ -176,8 +176,22 @@ module Portage
                                       payment_data: [{ key: @payment_data_key, value: payment_token }]
                                     })
           @checkout_status[checkout_id] = "completed"
-          @order_checkout_ids[data["order_id"].to_s] = checkout_id if data["order_id"]
-          Mapper.checkout(data, id: checkout_id, status: "completed")
+          order = build_order_confirmation(data, checkout_id)
+          Mapper.checkout(data, id: checkout_id, status: "completed", order: order)
+        end
+
+        # Same order-received URL pattern as Mapper.order's `permalink_url` —
+        # the Store API's checkout response hands back order_id/order_key
+        # directly, so there's no need for a second Admin fetch just to build
+        # this link.
+        def build_order_confirmation(data, checkout_id)
+          return unless data["order_id"]
+
+          @order_checkout_ids[data["order_id"].to_s] = checkout_id
+          Portage::Ucp::OrderConfirmation.new(
+            id: data["order_id"].to_s,
+            permalink_url: "#{@site_url}/checkout/order-received/#{data['order_id']}/?key=#{data['order_key']}"
+          )
         end
 
         def dedup(idempotency_key)
