@@ -180,9 +180,14 @@ module Portage
           raise Portage::Ucp::Wix::Error, "checkout #{checkout_id} not found" unless node
 
           data = @client.post("/ecom/v1/checkouts/#{checkout_id}/create-order", {})
-          status = data["orderId"] ? "completed" : "complete_in_progress"
+          order_id = data["orderId"]
+          status = order_id ? "completed" : "complete_in_progress"
           @checkout_status[checkout_id] = status
-          Mapper.checkout(node, status: status)
+          # Same "not information-complete but schema-valid" posture as
+          # Mapper.order's own blank permalink_url — Wix's create-order
+          # response has no storefront order-status link to hand back.
+          order = order_id && Portage::Ucp::OrderConfirmation.new(id: order_id, permalink_url: "")
+          Mapper.checkout(node, status: status, order: order)
         end
 
         def dedup(idempotency_key)

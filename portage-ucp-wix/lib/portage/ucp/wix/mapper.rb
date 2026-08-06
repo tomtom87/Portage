@@ -69,14 +69,15 @@ module Portage
         # a Shopify Cart/Checkout hybrid — the adapter tracks it itself
         # across the create/update/complete/cancel lifecycle and passes it
         # in here, same rationale as Shopify's Mapper.checkout.
-        def checkout(node, status:)
+        def checkout(node, status:, order: nil)
           Portage::Ucp::Checkout.new(
             id: node["id"],
             status: status,
             line_items: (node["lineItems"] || []).map { |n| line_item(n) },
             currency: node["currency"],
             totals: totals(node["priceSummary"] || {}),
-            links: []
+            links: [],
+            order: order
           )
         end
 

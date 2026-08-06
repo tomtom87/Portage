@@ -172,6 +172,7 @@ RSpec.describe Portage::Ucp::Wix::Adapter do
                                            idempotency_key: "chk1-complete")
 
       expect(checkout.status).to eq("completed")
+      expect(checkout.order).to eq(Portage::Ucp::OrderConfirmation.new(id: "order_1", permalink_url: ""))
     end
 
     it "raises when the checkout can't be found" do
