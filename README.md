@@ -6,65 +6,38 @@
 
 Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Model Context Protocol](https://modelcontextprotocol.io)) and **UCP** ([Universal Commerce Protocol](https://ucp.dev)) at once. Open-source, for any Ruby app on any e-commerce stack — not tied to any one merchant's business logic.
 
-> **Status**: pre-release, `0.1.0`, not yet published to RubyGems. APIs may still shift before `1.0` — see [`PLAN.md`](PLAN.md) for the design log. Pin a git ref, not a version constraint, until then.
-
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-Ten gems, mirroring how Faraday/Devise split core-vs-adapter:
-
-| Gem | Role |
-|---|---|
-| [`portage-ucp`](portage-ucp/) | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. Zero commerce-backend deps — works with any backend that implements `Adapter`, Shopify or otherwise. |
-| [`portage-ucp-client`](portage-ucp-client/) | Client-side SDK — the other direction from every gem below: connect to somebody else's manifest (or drive your own `Adapter` directly) and act as the shopper's agent. Loopback/stdio/HTTP transports behind one interface. |
-| [`portage-cli`](portage-cli/) | Ships the `portage` command — `portage buy <url>` tries native UCP discovery first, falls back to a platform adapter only when you already have that platform's own credentials, and says so plainly otherwise. |
-| [`portage-ucp-shopify`](portage-ucp-shopify/) | Shopify adapter — implements `Adapter` against Shopify's Admin + Storefront GraphQL APIs. One consumer of the core gem, not a dependency of it. |
-| [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
-| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
-| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | BigCommerce adapter — implements `Adapter` against a BigCommerce store's v3 Catalog/Carts/Checkouts APIs and v2 Orders API. |
-| [`portage-ucp-magento`](portage-ucp-magento/) | Magento/Adobe Commerce adapter — implements `Adapter` against a Magento site's REST v1 API (admin-token catalog/order, anonymous guest-cart cart/checkout). |
-| [`portage-ucp-etsy`](portage-ucp-etsy/) | Etsy adapter — real catalog/order against Etsy's Open API v3; checkout is redirect-link only (Etsy's public API has no cart/checkout endpoint). |
-| [`portage-ucp-instagram`](portage-ucp-instagram/) | Instagram/Facebook Shops adapter — real catalog against Meta's Graph API Commerce Catalog; checkout is redirect-link only, and order lookup only works for "checkout on Instagram/Facebook" merchants. |
-
-A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the adapters above are just the ones that exist today, used for the examples below because Shopify's is the most complete. Not every backend has a real cart/checkout API to back — Etsy and Instagram/Facebook Shops don't, so those two adapters only implement catalog/order for real and fall back to a redirect-link `Checkout` instead of a full transactional one (see their READMEs).
-
-**Already on Shopify and wondering why you'd need this at all** — Shopify ships its own native Universal Commerce Agent app that auto-serves `/.well-known/ucp` with checkout+order capabilities, no code required. This gem is for the gap that app leaves: `cart`/`catalog` capabilities it doesn't advertise, a signed manifest it can't produce, and a self-hosted setup for backends other than Shopify. Full comparison in [Why `/.well-known/ucp`?](#why-wellknownucp).
-
-**Who needs credentials here, and who doesn't:** the merchant sets this up *once*, using their own store's credentials (Shopify Admin token, WooCommerce consumer key, whatever). That's the only credentialed step in the whole system. After that manifest is live at `/.well-known/ucp`, **any shopper's AI agent — on any harness, with zero credentials of its own — can discover it and buy from it.** The shopper never sees a Shopify token or a WooCommerce key; they authenticate (if at all) with their own payment handler, not with your store. This is the same trust model as a merchant integrating hosted checkout today — one-time setup by the merchant, open-ended public use by anyone who finds it. See the [walkthrough](#detailed-walkthrough-an-agent-buys-a-snowboard) below for the full "shopper agent → your live manifest → bought" path, credential-free the whole way.
+> **Status**: pre-release, `0.1.0`, not yet published to RubyGems. APIs may still shift before `1.0` — see [`PLAN.md`](PLAN.md) for the design log. Pin a git ref, not a version constraint, until then.
 
 ## Contents
 
-- [Quickstart](#quickstart)
+- [Installation](#installation)
+- [Usage](#usage)
+- [The gems](#the-gems)
 - [Security hooks](#security-hooks--nothing-is-permissive-by-default)
-- [Detailed walkthrough: an agent buys a snowboard](#detailed-walkthrough-an-agent-buys-a-snowboard)
-- [Why `/.well-known/ucp`?](#why-wellknownucp)
-- [Checking any store](#checking-any-store)
 - [How the pieces fit together](#how-the-pieces-fit-together)
 - [Writing your own adapter](#writing-your-own-adapter)
+- [Checking any store](#checking-any-store)
 - [Spec conformance](#spec-conformance)
-- [Development](#development)
 - [Requirements](#requirements)
+- [Development](#development)
 - [Contributing](#contributing)
 - [License](#license)
 
-## Requirements
-
-- Ruby >= 3.2
-- `mcp` gem `~> 0.24` (pulled in by `portage-ucp`)
-- For `portage-ucp-shopify`: a Shopify Admin API access token, a Storefront API access token, or both — each capability family works independently if you only have one.
-- For `portage-ucp-wix`: a Wix app client_id/client_secret plus the target site's instance_id, exchanged for a site-scoped access token.
-- For `portage-ucp-woocommerce`: a WooCommerce Admin REST API consumer key/secret pair (static, generated in wp-admin) — no token exchange needed.
-- For `portage-ucp-bigcommerce`: a BigCommerce API account client_id/access_token pair (static, generated in the control panel) plus your store hash — no token exchange needed.
-- For `portage-ucp-magento`: a Magento admin bearer token, exchanged from username/password — plus a `default_address:` and payment method id if you'll call `complete_checkout` (see that gem's README for why).
-- For `portage-ucp-etsy`: an Etsy OAuth access_token (from shop-owner consent) plus your app's `x-api-key` — catalog/order only, checkout is redirect-link (see that gem's README for why).
-- For `portage-ucp-instagram`: a Meta Graph API long-lived access token plus your Commerce Catalog id — catalog only, checkout is redirect-link and order lookup only works for "checkout on Instagram/Facebook" merchants (see that gem's README for why).
-
-## Quickstart
+## Installation
 
 ```ruby
 # Gemfile
 gem "portage-ucp"
-gem "portage-ucp-shopify" # or your own Adapter subclass
+gem "portage-ucp-shopify" # or another adapter gem, or your own Adapter subclass
 ```
+
+```bash
+bundle install
+```
+
+## Usage
 
 ```ruby
 require "portage/ucp"
@@ -91,7 +64,7 @@ server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
 server.start # stdio, or mount as Streamable HTTP per the `mcp` gem's own docs
 ```
 
-That's a running MCP server, wired up inline. `portage-ucp-shopify` also ships an
+That's a running MCP server, wired up inline. Every adapter gem also ships an
 executable that does steps 1 and 3 for you, so you don't need a throwaway Ruby file
 just to point an MCP client (Claude Desktop, etc.) at a `command`:
 
@@ -112,16 +85,6 @@ PORTAGE_UCP_CONFIG=./config/portage_ucp.rb bundle exec portage-ucp-shopify
 
 Without it, the server still starts but rejects every mutating call — the
 `UnconfiguredAuthenticator` default from [Security hooks](#security-hooks--nothing-is-permissive-by-default) below.
-
-Every adapter gem ships the same executable, `examples/portage_ucp.rb` starting point, and `PORTAGE_UCP_CONFIG` hook — just point `bundle exec` at the one matching your backend and fill in its env vars:
-
-| Gem | Executable | Required env vars |
-|---|---|---|
-| `portage-ucp-shopify` | `portage-ucp-shopify` | `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ADMIN_ACCESS_TOKEN` and/or `SHOPIFY_STOREFRONT_ACCESS_TOKEN` |
-| `portage-ucp-wix` | `portage-ucp-wix` | `WIX_ACCESS_TOKEN` |
-| `portage-ucp-woocommerce` | `portage-ucp-woocommerce` | `WOOCOMMERCE_SITE_URL`, `WOOCOMMERCE_CONSUMER_KEY`, `WOOCOMMERCE_CONSUMER_SECRET`; optional `WOOCOMMERCE_CURRENCY` (default `USD`), `WOOCOMMERCE_PAYMENT_METHOD` (for `complete_checkout`) |
-| `portage-ucp-bigcommerce` | `portage-ucp-bigcommerce` | `BIGCOMMERCE_STORE_HASH`, `BIGCOMMERCE_CLIENT_ID`, `BIGCOMMERCE_ACCESS_TOKEN`, `BIGCOMMERCE_SITE_URL`; optional `BIGCOMMERCE_CURRENCY` (default `USD`), `BIGCOMMERCE_PAYMENT_GATEWAY_ID` (for `complete_checkout`) |
-| `portage-ucp-magento` | `portage-ucp-magento` | `MAGENTO_BASE_URL`, `MAGENTO_ADMIN_TOKEN`; optional `MAGENTO_CURRENCY` (default `USD`), `MAGENTO_SITE_URL`, `MAGENTO_PAYMENT_METHOD`/`MAGENTO_DEFAULT_ADDRESS` (a JSON object, for `complete_checkout`) |
 
 An agent connecting to it can now do this end to end — shown here as simplified `tools/call name { args }` shorthand, not the literal JSON-RPC envelope on the wire:
 
@@ -144,7 +107,32 @@ tools/call get_order { order_id: "gid://shopify/Order/9001" }
   → checkout_id: gid://shopify/Cart/abc, permalink_url: https://your-shop.example/orders/9001, totals: [...]
 ```
 
-Five tool calls, one snowboard bought. The [detailed walkthrough](#detailed-walkthrough-an-agent-buys-a-snowboard) below shows what's actually running behind each of those — auth checks, PAN rejection, idempotent retries — plus how to serve the discovery manifest and order webhooks.
+Five tool calls, one snowboard bought. [`docs/walkthrough.md`](docs/walkthrough.md) shows what's actually running behind each of those — auth checks, PAN rejection, idempotent retries — plus how to serve the discovery manifest and order webhooks, from the shopper agent's side.
+
+## The gems
+
+Ten gems, mirroring how Faraday/Devise split core-vs-adapter:
+
+| Gem | Role |
+|---|---|
+| [`portage-ucp`](portage-ucp/) | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. Zero commerce-backend deps — works with any backend that implements `Adapter`, Shopify or otherwise. |
+| [`portage-ucp-client`](portage-ucp-client/) | Client-side SDK — the other direction from every gem below: connect to somebody else's manifest (or drive your own `Adapter` directly) and act as the shopper's agent. Loopback/stdio/HTTP transports behind one interface. |
+| [`portage-cli`](portage-cli/) | Ships the `portage` command — `portage buy <url>` tries native UCP discovery first, falls back to a platform adapter only when you already have that platform's own credentials, and says so plainly otherwise. |
+| [`portage-ucp-shopify`](portage-ucp-shopify/) | Shopify adapter — implements `Adapter` against Shopify's Admin + Storefront GraphQL APIs. One consumer of the core gem, not a dependency of it. |
+| [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
+| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
+| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | BigCommerce adapter — implements `Adapter` against a BigCommerce store's v3 Catalog/Carts/Checkouts APIs and v2 Orders API. |
+| [`portage-ucp-magento`](portage-ucp-magento/) | Magento/Adobe Commerce adapter — implements `Adapter` against a Magento site's REST v1 API (admin-token catalog/order, anonymous guest-cart cart/checkout). |
+| [`portage-ucp-etsy`](portage-ucp-etsy/) | Etsy adapter — real catalog/order against Etsy's Open API v3; checkout is redirect-link only (Etsy's public API has no cart/checkout endpoint). |
+| [`portage-ucp-instagram`](portage-ucp-instagram/) | Instagram/Facebook Shops adapter — real catalog against Meta's Graph API Commerce Catalog; checkout is redirect-link only, and order lookup only works for "checkout on Instagram/Facebook" merchants. |
+
+A backend on some other stack (a hand-rolled Rails store, another platform entirely) writes its own thin `Adapter` subclass against `portage-ucp` directly — the adapters above are just the ones that exist today. Not every backend has a real cart/checkout API to back — Etsy and Instagram/Facebook Shops don't, so those two adapters only implement catalog/order for real and fall back to a redirect-link `Checkout` instead of a full transactional one (see their READMEs).
+
+Each adapter gem also ships the same `exe/` executable, `examples/portage_ucp.rb` starting point, and `PORTAGE_UCP_CONFIG` hook shown in [Usage](#usage) — see [Requirements](#requirements) for the env vars each one reads.
+
+**Already on Shopify and wondering why you'd need this at all** — Shopify ships its own native Universal Commerce Agent app that auto-serves `/.well-known/ucp` with checkout+order capabilities, no code required. This gem is for the gap that app leaves: `cart`/`catalog` capabilities it doesn't advertise, a signed manifest it can't produce, and a self-hosted setup for backends other than Shopify. Full comparison in [`docs/well-known-ucp.md`](docs/well-known-ucp.md).
+
+**Who needs credentials here, and who doesn't:** the merchant sets this up *once*, using their own store's credentials (Shopify Admin token, WooCommerce consumer key, whatever). That's the only credentialed step in the whole system. After that manifest is live at `/.well-known/ucp`, **any shopper's AI agent — on any harness, with zero credentials of its own — can discover it and buy from it.** The shopper never sees a Shopify token or a WooCommerce key; they authenticate (if at all) with their own payment handler, not with your store. This is the same trust model as a merchant integrating hosted checkout today — one-time setup by the merchant, open-ended public use by anyone who finds it. See [`docs/walkthrough.md`](docs/walkthrough.md) for the full "shopper agent → your live manifest → bought" path, credential-free the whole way.
 
 ## Security hooks — nothing is permissive by default
 
@@ -156,159 +144,6 @@ Read this before wiring a server up to anything real — every default here is d
 - **Idempotency**: every mutating capability action takes an `idempotency_key:` — your `Adapter` is responsible for deduping retries (see `portage-ucp-shopify`'s in-process dedup table for one approach).
 - **Observability**: `Portage::Ucp::Observability.log` emits structured JSON log events through a consumer-injected logger, redacting `payment_token`/`oauth_token`/`authorization` automatically.
 - **Manifest signing**: `Portage::Ucp::Manifest` never generates or stores keys — pass a `signer` (anything responding to `#kid` and `#sign(canonical_json)`) to produce a signed manifest; omit it to serve unsigned.
-
-## Detailed walkthrough: an agent buys a snowboard
-
-A shopper tells their AI agent: *"Find me a snowboard under $600 and buy it."* This shopper has no account with you, no API key, no relationship with your store beyond finding it — none of that is required on their end. Their agent discovered your store's manifest at `/.well-known/ucp`, saw `dev.ucp.shopping.catalog`/`cart`/`checkout` advertised, and connects over MCP using nothing but that public manifest.
-
-Below is that agent's side of the conversation — runnable today via `portage-ucp-client`'s loopback transport (`Client.for_adapter`), which drives your real `Adapter` in-process through the exact same `Authenticator`/`RateLimiter`/`Dispatcher` stack a real stdio/HTTP connection would, just without the wire hop. Swap `Client.for_adapter(adapter)` for `Client.discover("https://your-shop.example")` and this is unchanged for a real remote store — that's the point of one client interface across all three transports (§ `portage-ucp-client`).
-
-```ruby
-require "portage/ucp"
-require "portage/ucp/client"
-
-# In real life: session = Portage::Ucp::Client.discover("https://your-shop.example")
-# Here: driving your own Adapter directly, in-process, for a fully runnable example.
-session = Portage::Ucp::Client.for_adapter(adapter, authenticator: my_authenticator)
-
-# 1. Search the catalog
-products = session.search_catalog(query: "snowboard", limit: 5)
-# => [#<Portage::Ucp::Product id: "gid://shopify/Product/1", title: "Powder Chaser 158cm",
-#      price: #<Money amount_minor: 54900, currency: "USD">, available: true, ...>, ...]
-
-# 2. Pull full detail on the one that fits the budget
-product = session.get_product(product_id: products.first.id)
-# => variants: [{ id: "gid://shopify/ProductVariant/11", title: "158cm", available: true, price: ... }]
-
-# 3. Create a checkout for the variant picked — idempotency_key is generated for you
-checkout = session.create_checkout(line_items: [{ product_id: "gid://shopify/ProductVariant/11", quantity: 1 }])
-# => { "id" => "gid://shopify/Cart/abc", "status" => "incomplete", "totals" => [...], ... }
-
-# A real checkout can come back requires_escalation instead — that's normal data (a link
-# to follow), not a failure. Branch on it before assuming you can complete_checkout next.
-if checkout["status"] == "requires_escalation"
-  puts "Buyer must act first: #{checkout['links'].first['url']}"
-else
-  # 4. Complete checkout with a tokenized payment credential — never a raw card number.
-  # PaymentTokenGuard runs client-side automatically; a raw PAN raises RawPanRejectedError
-  # before it ever reaches the wire, let alone your Adapter.
-  completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: "spt_1a2b3c...")
-  # => { "id" => "gid://shopify/Cart/abc", "status" => "completed", ... }
-
-  # 5. Fetch the resulting order, if you have an order id to look up
-  order = session.get_order(order_id: "gid://shopify/Order/9001")
-  # => { "id" => ..., "checkout_id" => "gid://shopify/Cart/abc",
-  #      "permalink_url" => "https://your-shop.example/...",
-  #      "fulfillment" => { "expectations" => [...], "events" => [] }, "totals" => [...] }
-end
-```
-
-Reusing the same `idempotency_key` on a retry (dropped connection, agent double-submit) replays the cached result instead of charging twice — you don't have to think about this, `Session` generates one per mutating call unless you pass your own.
-
-On the server side, none of this changed: `Authenticator#call` and `RateLimiter#check!` still gate every mutating call before it reaches your `Adapter`, exactly as before — the loopback transport runs the real `Portage::Ucp::Mcp::Server` stack, it doesn't bypass it. Meanwhile `Portage::Ucp::Rack::WebhookEndpoint` receives Shopify's fulfillment updates independently and calls your `on_order_event` callback as tracking events land — the shopper's agent can poll `get_order` again later to answer "where's my snowboard?" without you building that plumbing yourself.
-
-### Serving the discovery manifest and webhooks
-
-The tool calls above only happen because the agent found your manifest first. Serve it (and inbound order webhooks) over Rack:
-
-```ruby
-# config.ru
-manifest = Portage::Ucp::Manifest.new(adapter: adapter)
-
-map "/.well-known/ucp" do
-  run Portage::Ucp::Rack::ManifestEndpoint.new(manifest: manifest)
-end
-
-map "/webhooks/ucp/orders" do
-  run Portage::Ucp::Rack::WebhookEndpoint.new(
-    secret: ENV.fetch("UCP_WEBHOOK_SECRET"),
-    on_order_event: ->(order) { MyOrderSync.call(order) }
-  )
-end
-```
-
-`ManifestEndpoint` refuses to serve payment-handler declarations over plaintext HTTP (set `allow_insecure: true` for local dev only). `WebhookEndpoint` verifies an HMAC-SHA256 signature against the raw body before parsing anything.
-
-## Why `/.well-known/ucp`?
-
-`/.well-known/<name>` is [RFC 8615](https://www.rfc-editor.org/rfc/rfc8615)'s standard location for site-wide metadata a client should be able to find without any prior coordination — no custom DNS record, no per-integration config, just a fixed, predictable path any crawler or agent already knows to check. It's the same slot `/.well-known/security.txt` and `/.well-known/openid-configuration` use. UCP reuses it for the same reason: an agent that has never talked to your store before can hit `https://your-shop.example/.well-known/ucp` cold and get back capabilities, payment handlers, and signing keys.
-
-It sits alongside, not in place of, [`llms.txt`](https://llmstxt.org) — a related-but-different convention some sites use to hand an LLM a curated, human-readable index of pages worth reading (docs, key content) in place of scraping raw HTML. `llms.txt` describes *content* for an LLM to read; `/.well-known/ucp` describes *capabilities* an agent can call. A store could reasonably serve both.
-
-`llms.txt` is normally its own plain file at the site root (`/llms.txt`, markdown):
-
-```markdown
-# Your Store
-
-> Online retailer of snowboards and winter gear.
-
-## Docs
-- [Shipping policy](/pages/shipping): rates, timelines, international.
-- [Size guide](/pages/size-guide): board length by rider weight/height.
-
-## Optional
-- [Blog](/blog): buying guides and gear reviews.
-```
-
-...but it doesn't have to live at that exact path — some sites instead point to it from HTML `<head>`, the same discovery pattern as `rel="sitemap"` or `rel="alternate"`:
-
-```html
-<link rel="llms.txt" href="/docs/llms.txt">
-```
-
-That lets an agent already parsing your page's `<head>` find the file without guessing the root path — useful if it lives somewhere other than `/llms.txt`, or you want it scoped per-section (e.g. `/blog/llms.txt` linked only from blog pages).
-
-Shopify stores get a default `/llms.txt` generated automatically for the storefront (product/collection/page links, no merchant config needed) — same "don't reimplement what the platform already ships" reasoning as its native Universal Commerce Agent app for `/.well-known/ucp` (see PLAN.md §1). This gem's Shopify adapter targets the gap: catalog/cart/checkout/order over UCP+MCP, which the default `llms.txt` doesn't cover.
-
-**What Shopify serves at those paths by default**, with no merchant config, once its Universal Commerce Agent app is installed:
-
-```
-GET https://your-shop.myshopify.com/llms.txt
-GET https://your-shop.myshopify.com/.well-known/ucp
-```
-
-```json
-// GET /.well-known/ucp — Shopify's native manifest
-{
-  "ucp_version": "2026-01-23",
-  "business": { "name": "Your Store" },
-  "capabilities": [
-    { "name": "dev.ucp.shopping.checkout", "version": "1" },
-    { "name": "dev.ucp.shopping.order", "version": "1" }
-  ],
-  "payment_handlers": [],
-  "signing_keys": []
-}
-```
-
-Two gaps this leaves, both of which `Portage::Ucp::Manifest` closes: `signing_keys` is always empty — Shopify's app doesn't generate or hold keys, so an agent that verifies manifest authenticity (Google's do) treats it as unverified — and its `ucp_version` trails the spec this gem targets (`2026-04-08`). `dev.ucp.shopping.cart` and `dev.ucp.shopping.catalog` aren't advertised at all — that's the gap `portage-ucp-shopify`'s `Adapter` fills, on top of the same `/.well-known/ucp` path, just self-hosted and signed.
-
-## Checking any store
-
-`portage-ucp-check` is a small CLI, shipped with the core gem, for the question this whole README has been building toward: "does this store need portage-ucp at all, and if so, which adapter?"
-
-```bash
-bundle exec portage-ucp-check your-shop.example
-```
-
-It tries the cheap answer first — `GET /.well-known/ucp` on the URL you gave it. If that's already there (a Shopify store with the native Universal Commerce Agent app, say), it prints the manifest as-is and stops; no adapter needed.
-
-If there's no native manifest, it looks at the homepage for platform tells (Shopify's `cdn.shopify.com`, WooCommerce's plugin path, BigCommerce's CDN host, etc.) and names the matching `portage-ucp-<adapter>` gem. When that adapter's env vars (the same ones its `exe/` reads — see the Requirements table above) are already set, it goes one step further: requires the gem, builds a real `Client`/`Adapter`, and calls `search_catalog` against the live store, so the recommendation is a confirmed-working adapter rather than a guess from string-matching.
-
-```json
-{
-  "url": "https://your-shop.example",
-  "native_ucp": null,
-  "platform": "WooCommerce",
-  "recommended_gem": "portage-ucp-woocommerce",
-  "live_probe": {
-    "status": "skipped",
-    "reason": "missing env vars: WOOCOMMERCE_SITE_URL, WOOCOMMERCE_CONSUMER_KEY, WOOCOMMERCE_CONSUMER_SECRET"
-  }
-}
-```
-
-`live_probe.status` is one of `ok` (adapter built and fetched a real product), `skipped` (env vars absent, or the adapter gem isn't installed), or `error` (adapter built but the live call failed — bad credentials, wrong store, etc.). Exits `0` when it found something usable — a native manifest or a working live probe — `1` otherwise, so it's scriptable in CI ("does this store already speak UCP, yes or no").
 
 ## How the pieces fit together
 
@@ -347,9 +182,53 @@ end
 
 See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkout, order, identity linking) and `portage-ucp-shopify`'s `Adapter` for a complete real implementation to model against.
 
+## Checking any store
+
+`portage-ucp-check` is a small CLI, shipped with the core gem, for the question this whole README has been building toward: "does this store need portage-ucp at all, and if so, which adapter?"
+
+```bash
+bundle exec portage-ucp-check your-shop.example
+```
+
+It tries the cheap answer first — `GET /.well-known/ucp` on the URL you gave it. If that's already there (a Shopify store with the native Universal Commerce Agent app, say), it prints the manifest as-is and stops; no adapter needed.
+
+If there's no native manifest, it looks at the homepage for platform tells (Shopify's `cdn.shopify.com`, WooCommerce's plugin path, BigCommerce's CDN host, etc.) and names the matching `portage-ucp-<adapter>` gem. When that adapter's env vars (the same ones its `exe/` reads — see [Requirements](#requirements) below) are already set, it goes one step further: requires the gem, builds a real `Client`/`Adapter`, and calls `search_catalog` against the live store, so the recommendation is a confirmed-working adapter rather than a guess from string-matching.
+
+```json
+{
+  "url": "https://your-shop.example",
+  "native_ucp": null,
+  "platform": "WooCommerce",
+  "recommended_gem": "portage-ucp-woocommerce",
+  "live_probe": {
+    "status": "skipped",
+    "reason": "missing env vars: WOOCOMMERCE_SITE_URL, WOOCOMMERCE_CONSUMER_KEY, WOOCOMMERCE_CONSUMER_SECRET"
+  }
+}
+```
+
+`live_probe.status` is one of `ok` (adapter built and fetched a real product), `skipped` (env vars absent, or the adapter gem isn't installed), or `error` (adapter built but the live call failed — bad credentials, wrong store, etc.). Exits `0` when it found something usable — a native manifest or a working live probe — `1` otherwise, so it's scriptable in CI ("does this store already speak UCP, yes or no").
+
 ## Spec conformance
 
 `Portage::Ucp::SchemaValidator` validates data against UCP's own vendored JSON Schemas/OpenRPC docs offline (no network calls, no reliance on ucpchecker.com as a CI gate) — useful in your own test suite if you want to assert your adapter's output is schema-conformant beyond what `to_wire_h` already guarantees.
+
+## Requirements
+
+- Ruby >= 3.2
+- `mcp` gem `~> 0.24` (pulled in by `portage-ucp`)
+
+Each adapter gem needs its backend's own credentials, read from env by its executable. Its README has the full detail on obtaining them and on any capability it can't back for real:
+
+| Gem | Executable | Required env vars |
+|---|---|---|
+| [`portage-ucp-shopify`](portage-ucp-shopify/) | `portage-ucp-shopify` | `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ADMIN_ACCESS_TOKEN` and/or `SHOPIFY_STOREFRONT_ACCESS_TOKEN` — each capability family works independently if you only have one |
+| [`portage-ucp-wix`](portage-ucp-wix/) | `portage-ucp-wix` | `WIX_ACCESS_TOKEN` (site-scoped, exchanged from an app client_id/client_secret plus the site's instance_id) |
+| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | `portage-ucp-woocommerce` | `WOOCOMMERCE_SITE_URL`, `WOOCOMMERCE_CONSUMER_KEY`, `WOOCOMMERCE_CONSUMER_SECRET`; optional `WOOCOMMERCE_CURRENCY` (default `USD`), `WOOCOMMERCE_PAYMENT_METHOD` (for `complete_checkout`) |
+| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | `portage-ucp-bigcommerce` | `BIGCOMMERCE_STORE_HASH`, `BIGCOMMERCE_CLIENT_ID`, `BIGCOMMERCE_ACCESS_TOKEN`, `BIGCOMMERCE_SITE_URL`; optional `BIGCOMMERCE_CURRENCY` (default `USD`), `BIGCOMMERCE_PAYMENT_GATEWAY_ID` (for `complete_checkout`) |
+| [`portage-ucp-magento`](portage-ucp-magento/) | `portage-ucp-magento` | `MAGENTO_BASE_URL`, `MAGENTO_ADMIN_TOKEN`; optional `MAGENTO_CURRENCY` (default `USD`), `MAGENTO_SITE_URL`, `MAGENTO_PAYMENT_METHOD`/`MAGENTO_DEFAULT_ADDRESS` (a JSON object, for `complete_checkout`) |
+| [`portage-ucp-etsy`](portage-ucp-etsy/) | `portage-ucp-etsy` | An Etsy OAuth access_token (shop-owner consent) plus your app's `x-api-key` — catalog/order only, checkout is redirect-link |
+| [`portage-ucp-instagram`](portage-ucp-instagram/) | `portage-ucp-instagram` | A Meta Graph API long-lived access token plus your Commerce Catalog id — catalog only, checkout is redirect-link |
 
 ## Development
 
@@ -357,13 +236,6 @@ Each gem manages its own tests/lint independently — its own `Gemfile`/`Gemfile
 
 ```bash
 cd portage-ucp && bundle exec rspec && bundle exec rubocop
-cd portage-ucp-shopify && bundle exec rspec && bundle exec rubocop
-cd portage-ucp-wix && bundle exec rspec && bundle exec rubocop
-cd portage-ucp-woocommerce && bundle exec rspec && bundle exec rubocop
-cd portage-ucp-bigcommerce && bundle exec rspec && bundle exec rubocop
-cd portage-ucp-magento && bundle exec rspec && bundle exec rubocop
-cd portage-ucp-etsy && bundle exec rspec && bundle exec rubocop
-cd portage-ucp-instagram && bundle exec rspec && bundle exec rubocop
 ```
 
 Or run the full suite across every gem in one command, via the root `Rakefile` — it just shells into each gem dir in turn and stops at the first failure, no root-level bundle or cross-gem dependency involved:
