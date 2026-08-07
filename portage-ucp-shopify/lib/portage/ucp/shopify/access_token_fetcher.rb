@@ -13,6 +13,8 @@ module Portage
       # Portage::Ucp::Shopify::Client must be fetched (and re-fetched once
       # expired) from POST /admin/oauth/access_token.
       class AccessTokenFetcher
+        include Portage::Ucp::Support::TokenExchange
+
         Result = Struct.new(:access_token, :expires_in, keyword_init: true)
 
         def initialize(shop_domain:, client_id:, client_secret:)
@@ -22,19 +24,10 @@ module Portage
         end
 
         def fetch
-          uri = URI("https://#{@shop_domain}/admin/oauth/access_token")
-          request = Net::HTTP::Post.new(uri)
-          request["Content-Type"] = "application/x-www-form-urlencoded"
-          request.body = URI.encode_www_form(
-            grant_type: "client_credentials",
-            client_id: @client_id,
-            client_secret: @client_secret
-          )
-
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
-          body = JSON.parse(response.body)
-          raise Portage::Ucp::Shopify::Error, "token exchange failed: #{body}" unless response.is_a?(Net::HTTPSuccess)
-
+          body = exchange("https://#{@shop_domain}/admin/oauth/access_token",
+                          { grant_type: "client_credentials", client_id: @client_id,
+                            client_secret: @client_secret },
+                          error_class: Portage::Ucp::Shopify::Error, form: true)
           Result.new(access_token: body["access_token"], expires_in: body["expires_in"])
         end
       end

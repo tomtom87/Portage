@@ -20,12 +20,16 @@ module Portage
 
         # @param error_class [Class] the gem's own Error
         # @param description [String] what failed, e.g. "token refresh failed"
+        # @param form [Boolean] send the grant as form-encoded rather than
+        #   JSON. OAuth 2.0 specifies form encoding for the token endpoint and
+        #   Shopify follows it to the letter; the others accept JSON, so JSON
+        #   stays the default rather than churn three working callers.
         # @return [Hash, String] the parsed response body
-        def exchange(endpoint, payload, error_class:, description: "token exchange failed")
+        def exchange(endpoint, payload, error_class:, description: "token exchange failed", form: false)
           uri = URI(endpoint)
           request = Net::HTTP::Post.new(uri)
-          request["Content-Type"] = "application/json"
-          request.body = JSON.generate(payload)
+          request["Content-Type"] = form ? "application/x-www-form-urlencoded" : "application/json"
+          request.body = form ? URI.encode_www_form(payload) : JSON.generate(payload)
 
           response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |http| http.request(request) }
           body = JSON.parse(response.body)

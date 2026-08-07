@@ -17,6 +17,11 @@ RSpec.describe Portage::Ucp::Support::TokenExchange do
         exchange("https://auth.example.test/token", { grant_type: "refresh_token" },
                  error_class: error_class, description: "token refresh failed")
       end
+
+      define_method(:fetch_form) do
+        exchange("https://auth.example.test/token", { grant_type: "client_credentials", client_id: "abc" },
+                 error_class: error_class, form: true)
+      end
     end.new
   end
 
@@ -26,6 +31,14 @@ RSpec.describe Portage::Ucp::Support::TokenExchange do
     expect(a_request(:post, "https://auth.example.test/token")
       .with(body: '{"grant_type":"client_credentials"}',
             headers: { "Content-Type" => "application/json" })).to have_been_made
+  end
+
+  it "form-encodes the payload when the token endpoint wants it — Shopify's does" do
+    stub_request(:post, "https://auth.example.test/token").to_return(body: '{"access_token":"tok"}')
+    expect(fetcher.fetch_form).to eq({ "access_token" => "tok" })
+    expect(a_request(:post, "https://auth.example.test/token")
+      .with(body: "grant_type=client_credentials&client_id=abc",
+            headers: { "Content-Type" => "application/x-www-form-urlencoded" })).to have_been_made
   end
 
   it "parses a bare scalar body — Magento answers with just the token string" do
