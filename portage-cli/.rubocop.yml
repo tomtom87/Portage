@@ -43,3 +43,24 @@ Gemspec/DevelopmentDependencies:
 
 Gemspec/RequireMFA:
   Enabled: false
+
+# `cx` is Google's own name for a Programmable Search engine id (GOOGLE_CSE_CX).
+# AllowedNames replaces the default list rather than extending it, so the
+# defaults are repeated here.
+Naming/MethodParameterName:
+  AllowedNames:
+    - "at"
+    - "by"
+    - "cc"
+    - "cx"
+    - "db"
+    - "id"
+    - "if"
+    - "in"
+    - "io"
+    - "ip"
+    - "of"
+    - "on"
+    - "os"
+    - "pp"
+    - "to"
