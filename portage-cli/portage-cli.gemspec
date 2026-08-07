@@ -8,7 +8,11 @@ Gem::Specification.new do |spec|
                      "(zero credentials, works on any store that's opted in), falls back to a portage-ucp-* " \
                      "platform adapter only when this process already has that platform's own credentials " \
                      "in env (i.e. it's your own store or one you're integrated with), and otherwise says so " \
-                     "plainly — never scrapes or session-hijacks as an anonymous shopper. Depends on " \
+                     "plainly — never scrapes or session-hijacks as an anonymous shopper. `portage find` " \
+                     "covers the no-URL case: ask an allowlist, DuckDuckGo, Brave, or a Google Programmable " \
+                     "Search engine which stores might sell something, keep the ones answering " \
+                     "/.well-known/ucp, and search their catalogs — documented APIs only, no SERP scraping. " \
+                     "Depends on " \
                      "portage-ucp (for platform detection via Resolver) and portage-ucp-client (for the " \
                      "actual buy calls); no single adapter gem is a hard dependency."
   spec.authors = ["Tom Whitbread"]

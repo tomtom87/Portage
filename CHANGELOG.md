@@ -18,6 +18,9 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   so it opens on how to install and run the thing.
 - A `## License` section in every adapter gem's README — all seven shipped a
   `LICENSE` file without pointing at it.
+- `docs/design-log.md` §15: how the CLI finds a store when the user has no URL,
+  and why the search step uses documented APIs rather than a scraped results
+  page. Ships alongside `portage find` in `portage-cli`.
 
 ### Changed
 

@@ -584,3 +584,50 @@ regardless, since it's already speced as feasible.
 
 ---
 
+
+## 15. Buying without a URL (added 2026-08-07)
+
+`portage buy <url>` assumes the shopper already knows the shop. The common case
+doesn't: "buy me a snowboard" names a product, not a merchant. `portage find`
+fills that gap, and URL-less `portage buy` runs it and then buys the picked
+offer.
+
+**Pipeline.** Search backends propose candidate URLs → collapse to origins, one
+per host → `GET /.well-known/ucp` on each → search the survivors' catalogs →
+merge and rank the offers (buyable stores first, then cheapest).
+
+**Search backends use documented APIs, never a results page.** Parsing
+`html.duckduckgo.com/html/?q=` or a Google SERP is the same class of ToS
+violation §9 already refuses to commit against a merchant, and being scrupulous
+about the shop while scraping the index would be incoherent. So: an allowlist
+(`~/.portage/stores.yml` / `PORTAGE_STORES`), DuckDuckGo's Instant Answer API,
+Brave's Search API, Google Programmable Search. Backends without credentials sit
+out.
+
+The cost of that rule is real and worth stating: the only keyless backend,
+DuckDuckGo's Instant Answer API, answers *entity* queries rather than web
+queries. `burton snowboards` resolves to burton.com; `snowboard` resolves to
+nothing. Open-ended shopping needs a Brave or Google key. That's the honest
+trade — narrow coverage by default rather than broad coverage by scraping.
+
+**Probing is rate-limited and cached.** One request per candidate host,
+throttled, capped at 12 candidates, with verdicts cached in
+`~/.portage/discovery-cache.json` — misses for a day (the answer that changes
+least and would be re-asked most), hits for six hours. A cached hit still
+reconnects, since the next step needs a live session; only misses save work.
+Without this, every search re-probes the same hosts and the CLI is a crawler.
+
+**`--yes` cannot complete a purchase from a search result.** With a URL, the
+shopper chose the merchant. Without one, a search ranker chose it, and blind-
+buying the top-ranked offer from an unvetted host is how you end up owning a
+counterfeit from a shop you've never heard of. So the merchant has to be named
+by a person: either `--store`, or an interactive pick from the listed offers. A
+piped or CI run with neither prints the offers and stops. This is the same
+instinct as §9's refusal to mutate anonymously — the gate is on who chose, not
+on what the flags say.
+
+**Picked offers are bought by id.** `Buy` gained `--product-id`, and a picked
+offer passes the product id straight through rather than re-running the catalog
+search and hoping the ranking is stable. If the id isn't in the store's results,
+nothing is bought — falling back to the top hit would buy something the shopper
+never chose.
