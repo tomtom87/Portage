@@ -21,7 +21,11 @@ module Portage
       CHECKOUT_CAP = "dev.ucp.shopping.checkout".freeze
       REDIRECT_LIMIT = 5
 
-      def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false)
+      # @param product_id [String, nil] buy exactly this product instead of
+      #   whatever the catalog search happens to rank first — how `portage
+      #   find` hands a picked offer over without the ranking being guessed
+      #   twice.
+      def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil)
         raw = url.to_s.strip
         raw = "https://#{raw}" unless raw =~ %r{\Ahttps?://}i
         @uri = URI.parse(raw)
@@ -30,6 +34,7 @@ module Portage
         @payment_token = payment_token
         @yes = yes
         @dry_run = dry_run
+        @product_id = product_id
       end
 
       def call
@@ -149,14 +154,29 @@ module Portage
 
       def full_buy(session, source:)
         products = safe_search(session)
-        product = products.first
+        product = select_product(products)
         unless product
           return build_report(source: source, browse: true, checkout: true, products: products,
-                              message: "No product matched \"#{@query}\".")
+                              message: no_match_message)
         end
 
         checkout = session.create_checkout(line_items: [{ product_id: product_id_of(product), quantity: @qty }])
         finish_checkout(session, source, products, checkout)
+      end
+
+      def no_match_message
+        return "No product matched \"#{@query}\"." unless @product_id
+
+        "Product #{@product_id} isn't in this store's results for \"#{@query}\"."
+      end
+
+      # With a --product-id, that exact product or nothing: falling back to the
+      # top search hit when the requested id isn't in the results would buy
+      # something the caller never chose.
+      def select_product(products)
+        return products.first unless @product_id
+
+        products.find { |product| product_id_of(product) == @product_id }
       end
 
       # search_catalog's results are raw Portage::Ucp::Product structs over
