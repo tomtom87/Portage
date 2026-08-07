@@ -34,5 +34,5 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 ## [0.1.0] - Unreleased
 
 - Initial pre-release: ten gems, none yet published to RubyGems. See each gem's
-  own `CHANGELOG.md` for what it ships, and [`PLAN.md`](PLAN.md) for the design
-  rationale behind the split.
+  own `CHANGELOG.md` for what it ships, and the [design log](docs/design-log.md)
+  for the rationale behind the split.

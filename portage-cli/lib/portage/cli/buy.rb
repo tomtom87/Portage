@@ -15,7 +15,7 @@ module Portage
     # (ToS violation, explicitly ruled out), and never falls back to an
     # adapter unless this process already has that platform's own env vars
     # set — i.e. it's your own store, or one you're integrated with, never a
-    # stranger's. See PLAN.md's 2026-08-04 handoff for the full algorithm.
+    # stranger's. See docs/design-log.md for the reasoning behind it.
     class Buy
       CART_CAP = "dev.ucp.shopping.cart".freeze
       CHECKOUT_CAP = "dev.ucp.shopping.checkout".freeze

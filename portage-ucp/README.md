@@ -89,7 +89,7 @@ bundle exec rspec
 bundle exec rubocop
 ```
 
-See [`PLAN.md`](https://github.com/tomtom87/Portage/blob/main/PLAN.md) for the
+See the [design log](https://github.com/tomtom87/Portage/blob/main/docs/design-log.md) for the
 design rationale and decision history behind this project.
 
 ## License

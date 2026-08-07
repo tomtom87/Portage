@@ -8,7 +8,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-> **Status**: pre-release, `0.1.0`, not yet published to RubyGems. APIs may still shift before `1.0` — see [`PLAN.md`](PLAN.md) for the design log. Pin a git ref, not a version constraint, until then.
+> **Status**: pre-release, `0.1.0`, not yet published to RubyGems. APIs may still shift before `1.0` — see the [design log](docs/design-log.md). Pin a git ref, not a version constraint, until then.
 
 ## Contents
 
@@ -244,11 +244,11 @@ Or run the full suite across every gem in one command, via the root `Rakefile` �
 rake spec   # == rake, spec is the default task
 ```
 
-See [`PLAN.md`](PLAN.md) for the design rationale and decision history behind this project.
+See the [design log](docs/design-log.md) for the rationale and decision history behind this project.
 
 ## Contributing
 
-Bug reports and pull requests welcome. Since this is pre-`1.0` and still spec-tracking (`PLAN.md` is the living design log), open an issue to discuss any change bigger than a bugfix before sending a PR — the capability/adapter contract is still settling.
+Bug reports and pull requests welcome. Since this is pre-`1.0` and still spec-tracking, open an issue to discuss any change bigger than a bugfix before sending a PR — the capability/adapter contract is still settling.
 
 ## License
 

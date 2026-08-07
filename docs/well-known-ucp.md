@@ -29,7 +29,7 @@ It sits alongside, not in place of, [`llms.txt`](https://llmstxt.org) — a rela
 
 That lets an agent already parsing your page's `<head>` find the file without guessing the root path — useful if it lives somewhere other than `/llms.txt`, or you want it scoped per-section (e.g. `/blog/llms.txt` linked only from blog pages).
 
-Shopify stores get a default `/llms.txt` generated automatically for the storefront (product/collection/page links, no merchant config needed) — same "don't reimplement what the platform already ships" reasoning as its native Universal Commerce Agent app for `/.well-known/ucp` (see [`PLAN.md`](../PLAN.md) §1). This gem's Shopify adapter targets the gap: catalog/cart/checkout/order over UCP+MCP, which the default `llms.txt` doesn't cover.
+Shopify stores get a default `/llms.txt` generated automatically for the storefront (product/collection/page links, no merchant config needed) — same "don't reimplement what the platform already ships" reasoning as its native Universal Commerce Agent app for `/.well-known/ucp` (see the [design log](design-log.md) §1). This gem's Shopify adapter targets the gap: catalog/cart/checkout/order over UCP+MCP, which the default `llms.txt` doesn't cover.
 
 ## What Shopify already serves, and what it leaves out
 
