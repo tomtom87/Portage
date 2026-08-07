@@ -143,7 +143,7 @@ module Portage
         # its line items, so the Adapter fetches and merges them in.
         def order(node, products:, site_url:, checkout_id: "")
           currency = node["currency_code"]
-          status = ORDER_STATUS.fetch(node["status_id"], "processing")
+          status = Portage::Ucp::Support::LineItemStatus.from_table(ORDER_STATUS, node["status_id"])
           Portage::Ucp::Order.new(
             id: node["id"].to_s,
             checkout_id: checkout_id,
@@ -158,7 +158,7 @@ module Portage
 
         def order_line_item(node, status)
           quantity = node["quantity"]
-          fulfilled = status == "fulfilled" ? quantity : 0
+          fulfilled = Portage::Ucp::Support::LineItemStatus.fulfilled_quantity(status, quantity)
           Portage::Ucp::OrderLineItem.new(
             id: node["id"].to_s,
             item: Portage::Ucp::Item.new(id: node["product_id"].to_s, title: node["name"],

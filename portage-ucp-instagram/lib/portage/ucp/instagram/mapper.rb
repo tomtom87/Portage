@@ -111,7 +111,7 @@ module Portage
         ORDER_STATUS = { "COMPLETED" => "fulfilled", "CANCELLED" => "removed" }.freeze
 
         def order(node)
-          status = ORDER_STATUS.fetch(node.dig("order_status", "state"), "processing")
+          status = Portage::Ucp::Support::LineItemStatus.from_table(ORDER_STATUS, node.dig("order_status", "state"))
           items = node.dig("items", "data") || []
           subtotal = money_from_parts(node.dig("estimated_payment_details", "subtotal", "amount"), nil).amount_minor
           total = money_from_parts(node.dig("estimated_payment_details", "total_amount", "amount"), nil).amount_minor
@@ -128,7 +128,7 @@ module Portage
 
         def order_line_item(node, status)
           quantity = node["quantity"]
-          fulfilled = status == "fulfilled" ? quantity : 0
+          fulfilled = Portage::Ucp::Support::LineItemStatus.fulfilled_quantity(status, quantity)
           unit_price = money_from_parts(node.dig("price_per_unit", "amount"), nil).amount_minor
           line_total = unit_price * quantity
           Portage::Ucp::OrderLineItem.new(

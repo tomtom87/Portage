@@ -153,7 +153,7 @@ module Portage
           currency = node["order_currency_code"]
           subtotal = minor_units(node["subtotal"])
           total = minor_units(node["grand_total"])
-          status = ORDER_LINE_ITEM_STATUS.fetch(node["status"], "processing")
+          status = Portage::Ucp::Support::LineItemStatus.from_table(ORDER_LINE_ITEM_STATUS, node["status"])
           Portage::Ucp::Order.new(
             id: node["entity_id"].to_s,
             checkout_id: checkout_id,
@@ -167,7 +167,7 @@ module Portage
 
         def order_line_item(node, status)
           quantity = node["qty_ordered"].to_i
-          fulfilled = status == "fulfilled" ? quantity : 0
+          fulfilled = Portage::Ucp::Support::LineItemStatus.fulfilled_quantity(status, quantity)
           line_total = minor_units(node["row_total"])
           Portage::Ucp::OrderLineItem.new(
             id: node["item_id"].to_s,

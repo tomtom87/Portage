@@ -130,7 +130,7 @@ module Portage
 
         def order_line_item(node, status)
           quantity = node["quantity"]
-          fulfilled = status == "fulfilled" ? quantity : 0
+          fulfilled = Portage::Ucp::Support::LineItemStatus.fulfilled_quantity(status, quantity)
           line_total = node.dig("price", "amount") * quantity
           Portage::Ucp::OrderLineItem.new(
             id: node["transaction_id"].to_s,
