@@ -29,10 +29,12 @@ Metrics/ParameterLists:
 # Buy implements the full discover -> homepage-fallback -> platform-detect ->
 # adapter-fallback algorithm end to end in one class on purpose (§ PLAN.md's
 # 2026-08-04 handoff) — that's breadth (one method per branch of one
-# documented algorithm), not a class doing too many unrelated things.
+# documented algorithm), not a class doing too many unrelated things. Find is
+# the same shape for the search -> probe -> catalog algorithm.
 Metrics/ClassLength:
   Exclude:
     - "lib/portage/cli/buy.rb"
+    - "lib/portage/cli/find.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:
