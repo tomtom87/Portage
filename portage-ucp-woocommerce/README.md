@@ -59,7 +59,7 @@ adapter = Portage::Ucp::WooCommerce::Adapter.new(
 )
 ```
 
-## Using the adapter directly
+## Usage
 
 ```ruby
 # Catalog
@@ -123,3 +123,7 @@ WOOCOMMERCE_SITE_URL=https://your-shop.example.com \
 WOOCOMMERCE_CONSUMER_KEY=... WOOCOMMERCE_CONSUMER_SECRET=... \
   bundle exec rake woocommerce_smoke_test
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Tom Whitbread.

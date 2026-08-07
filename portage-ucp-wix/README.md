@@ -61,7 +61,7 @@ result.access_token # => access_token to pass into Client.new
 result.expires_in    # => seconds until it needs refetching
 ```
 
-## Using the adapter directly
+## Usage
 
 ```ruby
 # Catalog
@@ -123,3 +123,7 @@ bundle exec rubocop  # lint
 WIX_CLIENT_ID=... WIX_CLIENT_SECRET=... WIX_INSTANCE_ID=... \
   bundle exec rake wix_access_token
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Tom Whitbread.

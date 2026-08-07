@@ -57,7 +57,7 @@ adapter = Portage::Ucp::BigCommerce::Adapter.new(
 )
 ```
 
-## Using the adapter directly
+## Usage
 
 ```ruby
 # Catalog
@@ -120,3 +120,7 @@ BIGCOMMERCE_STORE_HASH=abc123 \
 BIGCOMMERCE_CLIENT_ID=... BIGCOMMERCE_ACCESS_TOKEN=... \
   bundle exec rake bigcommerce_smoke_test
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Tom Whitbread.

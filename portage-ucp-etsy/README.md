@@ -60,7 +60,7 @@ result.refresh_token  # => save this — the old one is now invalid
 result.expires_in     # => seconds until it needs refreshing again
 ```
 
-## Using the adapter directly
+## Usage
 
 ```ruby
 # Catalog — product_id is Etsy's listing_id
@@ -108,3 +108,7 @@ bundle exec rubocop  # lint
 # refresh a real access_token for a connected shop
 ETSY_CLIENT_ID=... ETSY_REFRESH_TOKEN=... bundle exec rake etsy_access_token
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Tom Whitbread.

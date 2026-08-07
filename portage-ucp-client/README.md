@@ -31,7 +31,7 @@ gem "portage-ucp-client"
 bundle install
 ```
 
-## Quickstart
+## Usage
 
 ```ruby
 require "portage/ucp"
@@ -50,8 +50,8 @@ order = session.get_order(order_id: "gid://shopify/Order/9001")
 pass your own — retrying with the same key replays the cached result instead of
 double-charging.
 
-See the root README's
-[detailed walkthrough](https://github.com/tomtom87/Portage#detailed-walkthrough-an-agent-buys-a-snowboard)
+See the
+[detailed walkthrough](https://github.com/tomtom87/Portage/blob/main/docs/walkthrough.md)
 for the full runnable example (via the loopback transport) including
 `requires_escalation` handling and `RawPanRejectedError`, and
 [`portage-cli`](https://github.com/tomtom87/Portage/tree/main/portage-cli) for a

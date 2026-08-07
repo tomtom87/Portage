@@ -44,7 +44,7 @@ gem "portage-ucp"
 bundle install
 ```
 
-## Quickstart
+## Usage
 
 ```ruby
 require "portage/ucp"
@@ -66,8 +66,8 @@ server = Portage::Ucp::Mcp::Server.build(adapter: MyAdapter.new)
 server.start
 ```
 
-See the root README's [Quickstart](https://github.com/tomtom87/Portage#quickstart)
-and [Detailed walkthrough](https://github.com/tomtom87/Portage#detailed-walkthrough-an-agent-buys-a-snowboard)
+See the root README's [Usage](https://github.com/tomtom87/Portage#usage)
+and the [detailed walkthrough](https://github.com/tomtom87/Portage/blob/main/docs/walkthrough.md)
 for the full agent-side conversation, manifest/webhook Rack mounting, and a real
 adapter to model your own against.
 

@@ -75,7 +75,7 @@ result = fetcher.fetch
 result.access_token # => admin_token to pass into Client.new
 ```
 
-## Using the adapter directly
+## Usage
 
 ```ruby
 # Catalog — product_id is a sku, e.g. "cold-brew"
@@ -139,3 +139,7 @@ MAGENTO_BASE_URL=https://your-shop.example.com \
 MAGENTO_USERNAME=... MAGENTO_PASSWORD=... \
   bundle exec rake magento_access_token
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Tom Whitbread.

@@ -59,7 +59,7 @@ result.access_token # => admin_access_token to pass into Client.new
 result.expires_in    # => seconds until it needs refetching
 ```
 
-## Using the adapter directly
+## Usage
 
 ```ruby
 # Catalog
@@ -125,3 +125,7 @@ SHOPIFY_SHOP_DOMAIN=your-shop.myshopify.com \
 SHOPIFY_CLIENT_ID=... SHOPIFY_CLIENT_SECRET=... \
   bundle exec rake shopify_access_token
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Tom Whitbread.

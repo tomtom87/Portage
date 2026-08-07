@@ -57,7 +57,7 @@ result.access_token # => pass into Client.new
 result.expires_in    # => ~5,184,000 seconds (60 days) — re-run Business Login after that, no refresh grant exists
 ```
 
-## Using the adapter directly
+## Usage
 
 ```ruby
 # Catalog — product_id is the Graph API product node id
@@ -106,3 +106,7 @@ bundle exec rubocop  # lint
 INSTAGRAM_CLIENT_ID=... INSTAGRAM_CLIENT_SECRET=... INSTAGRAM_SHORT_LIVED_TOKEN=... \
   bundle exec rake instagram_access_token
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Tom Whitbread.
