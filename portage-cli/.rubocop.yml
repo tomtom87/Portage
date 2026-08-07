@@ -39,15 +39,12 @@ Metrics/ClassLength:
     - "lib/portage/cli/buy.rb"
     - "lib/portage/cli/find.rb"
 
-Lint/UnusedMethodArgument:
+# Cli is argument parsing, dispatch, and formatting for two subcommands; the
+# length is the flag surface, and splitting it would put `buy`'s parser and
+# `buy`'s formatter in different files for no reader's benefit.
+Metrics/ModuleLength:
   Exclude:
-    - "spec/**/*.rb"
-
-Gemspec/DevelopmentDependencies:
-  Enabled: false
-
-Gemspec/RequireMFA:
-  Enabled: false
+    - "lib/portage/cli.rb"
 
 # `cx` is Google's own name for a Programmable Search engine id (GOOGLE_CSE_CX).
 # AllowedNames replaces the default list rather than extending it, so the
@@ -69,3 +66,13 @@ Naming/MethodParameterName:
     - "os"
     - "pp"
     - "to"
+
+Lint/UnusedMethodArgument:
+  Exclude:
+    - "spec/**/*.rb"
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Gemspec/RequireMFA:
+  Enabled: false
