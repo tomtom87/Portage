@@ -67,6 +67,39 @@ RSpec.describe Portage::Cli::Find do
     expect(report[:candidates].map { |c| c[:origin] }).to eq(["http://shop.example"])
   end
 
+  it "ignores URLs that aren't http, whatever a backend hands back" do
+    report = find(backends: [backend("duckduckgo", ["mailto:sales@shop.example", "ftp://shop.example"])]).call
+
+    expect(report[:candidates]).to be_empty
+  end
+
+  it "caps probes at MAX_PROBES even when the caller asks for more" do
+    urls = Array.new(described_class::MAX_PROBES + 3) { |i| "https://shop#{i}.example" }
+    allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+    report = find(backends: [backend("duckduckgo", urls)], limit: 50).call
+
+    expect(report[:candidates].length).to eq(described_class::MAX_PROBES)
+  end
+
+  it "waits between probes, but not before the first one" do
+    finder = find(backends: [backend("duckduckgo", %w[https://a.example https://b.example])], throttle: 0.1)
+    allow(finder).to receive(:sleep)
+    allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+    finder.call
+
+    expect(finder).to have_received(:sleep).with(0.1).once
+  end
+
+  it "records a live store as a hit" do
+    allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+    find(backends: [backend("duckduckgo", ["https://shop.example"])]).call
+
+    expect(cache).to have_received(:record).with("https://shop.example", true)
+  end
+
   it "drops candidates that don't answer the manifest probe" do
     allow(Portage::Ucp::Client).to receive(:discover)
       .and_raise(Portage::Ucp::Client::DiscoveryError.new("nope"))
@@ -114,6 +147,24 @@ RSpec.describe Portage::Cli::Find do
 
     expect(report[:offers]).to be_empty
     expect(report[:message]).to include("none stock")
+  end
+
+  it "reads a bare integer price as minor units with no currency" do
+    bare = { "id" => "p4", "title" => "Cold Brew", "price" => 500 }
+    allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [bare]))
+
+    report = find(backends: [backend("duckduckgo", ["https://shop.example"])]).call
+
+    expect(report[:offers].first).to include(amount: 500, currency: nil)
+  end
+
+  it "keeps an unpriced offer under --max-price rather than assuming it's too dear" do
+    unpriced = { "id" => "p3", "title" => "Cold Brew" }
+    allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [unpriced]))
+
+    report = find(backends: [backend("duckduckgo", ["https://shop.example"])], max_price: 1).call
+
+    expect(report[:offers].map { |o| o[:product_id] }).to eq(["p3"])
   end
 
   it "ranks buyable stores above browse-only ones, then by price" do

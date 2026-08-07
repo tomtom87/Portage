@@ -40,6 +40,20 @@ RSpec.describe Portage::Cli::ProbeCache do
     expect(cache.fetch("https://shop.example")).to be_nil
   end
 
+  it "treats a cache file that parses but isn't an object as an empty one" do
+    FileUtils.mkdir_p(File.dirname(@path))
+    File.write(@path, JSON.generate(["https://shop.example"]))
+
+    expect(cache.fetch("https://shop.example")).to be_nil
+  end
+
+  it "ignores an entry that isn't a verdict object" do
+    FileUtils.mkdir_p(File.dirname(@path))
+    File.write(@path, JSON.generate({ "https://shop.example" => true }))
+
+    expect(cache.fetch("https://shop.example")).to be_nil
+  end
+
   it "keeps working when the cache can't be written" do
     allow(File).to receive(:write).and_raise(Errno::EACCES)
 

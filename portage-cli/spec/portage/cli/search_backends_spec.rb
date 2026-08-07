@@ -68,6 +68,24 @@ RSpec.describe Portage::Cli::SearchBackends do
       expect(described_class.new(api_key: "key_1").search("snowboard")).to eq(["https://shop.example"])
     end
 
+    it "drops non-store results, the same filter DuckDuckGo gets" do
+      stub_request(:get, /api\.search\.brave\.com/).to_return(
+        body: { "web" => { "results" => [{ "url" => "https://en.wikipedia.org/wiki/Snowboard" },
+                                         { "url" => "https://shop.example" }] } }.to_json,
+        status: 200
+      )
+
+      expect(described_class.new(api_key: "key_1").search("snowboard")).to eq(["https://shop.example"])
+    end
+
+    it "returns nothing rather than raising when the API rate-limits the run" do
+      stub_request(:get, /api\.search\.brave\.com/).to_return(
+        status: 429, body: { "type" => "ErrorResponse", "error" => { "code" => "RATE_LIMITED" } }.to_json
+      )
+
+      expect(described_class.new(api_key: "key_1").search("snowboard")).to eq([])
+    end
+
     it "is unavailable without a key" do
       expect(described_class.new(api_key: nil).available?).to be false
     end
@@ -86,6 +104,25 @@ RSpec.describe Portage::Cli::SearchBackends do
 
       expect(described_class.new(api_key: "k", cx: "cx").search("snowboard")).to eq(["https://shop.example/x"])
     end
+
+    it "drops non-store links" do
+      stub_request(:get, /customsearch/).to_return(
+        body: { "items" => [{ "link" => "https://en.wikipedia.org/wiki/Snowboard" },
+                            { "link" => "https://shop.example/x" }] }.to_json,
+        status: 200
+      )
+
+      expect(described_class.new(api_key: "k", cx: "cx").search("snowboard")).to eq(["https://shop.example/x"])
+    end
+
+    it "never asks for more than the ten results the API will return" do
+      stub = stub_request(:get, /customsearch/).with(query: hash_including("num" => "10"))
+                                               .to_return(body: { "items" => [] }.to_json, status: 200)
+
+      described_class.new(api_key: "k", cx: "cx").search("snowboard", limit: 25)
+
+      expect(stub).to have_been_requested
+    end
   end
 
   describe Portage::Cli::SearchBackends::Allowlist do
@@ -96,6 +133,23 @@ RSpec.describe Portage::Cli::SearchBackends do
       backend = described_class.new(path: "/tmp/stores.yml", env: "https://shop.example,")
 
       expect(backend.search("anything")).to eq(["https://shop.example", "https://other.example"])
+    end
+
+    it "keeps the env entries when the yaml file is malformed" do
+      allow(File).to receive(:readable?).with("/tmp/stores.yml").and_return(true)
+      allow(YAML).to receive(:safe_load_file).and_raise(Psych::SyntaxError.new("stores.yml", 1, 1, 0, nil, nil))
+
+      backend = described_class.new(path: "/tmp/stores.yml", env: "https://shop.example")
+
+      expect(backend.search("anything")).to eq(["https://shop.example"])
+    end
+
+    it "honours the caller's limit" do
+      allow(File).to receive(:readable?).and_return(false)
+
+      backend = described_class.new(path: "/nope.yml", env: "https://a.example,https://b.example")
+
+      expect(backend.search("anything", limit: 1)).to eq(["https://a.example"])
     end
 
     it "is unavailable when there is no file and no env" do
