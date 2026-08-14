@@ -631,3 +631,77 @@ offer passes the product id straight through rather than re-running the catalog
 search and hoping the ranking is stable. If the id isn't in the store's results,
 nothing is bought — falling back to the top hit would buy something the shopper
 never chose.
+
+---
+
+## 16. Post-purchase & shopper-agent backlog (added 2026-08-14)
+
+Everything through §15 covers discovery-through-purchase. The gap on the other
+side of `complete_checkout` — what the shopper's agent does *after* buying, and
+around buying — is unresearched, same status as §14's platform list: recorded
+as asked, not yet speced against real APIs. Grouped by where each lands in the
+existing architecture:
+
+**Order tracking & fulfillment**
+- Shipment status/tracking number on an existing order — extends `get_order`
+  (§3) rather than a new capability; Shopify/BigCommerce/WooCommerce all expose
+  fulfillment/tracking data in their order APIs, unresearched which fields map
+  cleanly.
+- Where a platform doesn't expose tracking via its commerce API at all, a
+  fallback path reading shipping-confirmation emails via an email MCP (e.g. the
+  Gmail connector already in reach here) instead of a store adapter — client-
+  side (`portage-ucp-client`) concern, not something a merchant's `Adapter`
+  can back.
+- Delivery-window notifications ("arriving soon" / "running late") need a poll
+  or push loop against tracking state — either `portage-ucp-client` polling
+  `get_order` on an interval, or wiring the carrier's own webhook into §11's
+  order-lifecycle webhook handling. Push is preferable but carrier support
+  varies; needs research per carrier before committing to either.
+- Contacting the store's support — no adapter today models "open a support
+  ticket" or "message the merchant." Would be a new capability
+  (`dev.ucp.shopping.support`, contact/create-ticket actions) rather than a
+  `get_order` extension; several platforms (Shopify, BigCommerce) don't expose
+  this via their commerce APIs at all and would need a helpdesk integration
+  (Zendesk/Gorgias) behind the adapter instead of the storefront API itself.
+
+**Pricing**
+- Discount/coupon codes at checkout — `create_checkout`/`create_cart` (§3)
+  gaining an `discount_code:` param, applied by the adapter against the
+  platform's own discount API (Shopify has one, WooCommerce/BigCommerce need
+  checking). Distinct from `portage-ucp-shopify`'s existing merchant-side
+  `create-discount` tool, which authors codes rather than redeeming them.
+- "Is this the best price available" — not a single-store capability at all;
+  it's `portage find`'s (§15) multi-store ranking applied to a product the
+  shopper already has, not one they're searching for. Needs a "find this same
+  item elsewhere" mode rather than new `Adapter` methods.
+
+**Reviews**
+- Leaving a product/order review post-purchase — no capability family for this
+  either; would need a `dev.ucp.shopping.review` family (submit/edit, scoped to
+  a completed order so an agent can't review something never bought). Shopify
+  has no first-party review API (relies on apps like Judge.me/Yotpo/Loox —
+  adapter would need to target one of those, unresearched which); WooCommerce
+  reviews are native (WP comments API), BigCommerce has a native Reviews API.
+  Per-platform feasibility unchecked, same as everything else in this section.
+
+**Subscriptions & payment**
+- Subscription listing/cancellation and billing-date tracking — no capability
+  family exists for recurring orders today; `Adapter`'s catalog/cart/checkout/
+  order/identity split (§3) has nowhere for this to live without a new
+  `dev.ucp.shopping.subscription` family. Shopify Subscriptions, Recharge, and
+  WooCommerce Subscriptions all model this differently — unresearched which
+  can back a common contract versus needing per-platform escape hatches.
+- Multiple payment methods per checkout — `complete_checkout`'s `payment_token`
+  (§9) is already handler-agnostic in principle (any AP2/UCP payment handler
+  token), so this may already be "just" a client-side UX question — letting
+  the shopper pick which tokenized handler to use — rather than a gem change.
+  Needs confirming against a real multi-handler flow before assuming so.
+- Crypto payment support — same boundary as above: `payment_token` doesn't
+  care what funded it, so a crypto-backed UCP/AP2 payment handler should flow
+  through unchanged *if* one exists and produces a compliant token. No such
+  handler has been checked; this is a "does the ecosystem have one" research
+  item, not a gem-side one.
+
+None of the above is scoped or estimated — recorded so it doesn't get lost, in
+the same spirit as §14's platform list, not as a commitment to build any of it
+next.
