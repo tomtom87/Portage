@@ -49,8 +49,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 - Every README names its how-to-run section `## Usage`, replacing the mix of
   `Quickstart` (core, client) and `Using the adapter directly` (adapters).
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-08-14
 
-- Initial pre-release: ten gems, none yet published to RubyGems. See each gem's
-  own `CHANGELOG.md` for what it ships, and the [design log](docs/design-log.md)
+- Initial release: ten gems, published to RubyGems. See each gem's own
+  `CHANGELOG.md` for what it ships, and the [design log](docs/design-log.md)
   for the rationale behind the split.

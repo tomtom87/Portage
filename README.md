@@ -1,6 +1,6 @@
 # Portage::Ucp
 
-![status: pre-release](https://img.shields.io/badge/status-pre--release%20(0.1.0)-orange)
+[![gem version](https://img.shields.io/gem/v/portage-ucp)](https://rubygems.org/gems/portage-ucp)
 ![ruby](https://img.shields.io/badge/ruby-%3E%3D%203.2-red)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
@@ -8,7 +8,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-> **Status**: pre-release, `0.1.0`, not yet published to RubyGems. APIs may still shift before `1.0` — see the [design log](docs/design-log.md). Pin a git ref, not a version constraint, until then.
+> **Status**: `0.1.0`, published to RubyGems. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
 ## Contents
 
