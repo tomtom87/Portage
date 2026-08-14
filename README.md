@@ -248,7 +248,11 @@ See the [design log](docs/design-log.md) for the rationale and decision history 
 
 ## Contributing
 
-Bug reports and pull requests welcome. Since this is pre-`1.0` and still spec-tracking, open an issue to discuss any change bigger than a bugfix before sending a PR — the capability/adapter contract is still settling.
+Bug reports and pull requests welcome at [tomtom87/Portage](https://github.com/tomtom87/Portage). Since this is pre-`1.0` and still spec-tracking, open an issue to discuss any change bigger than a bugfix before sending a PR — the capability/adapter contract is still settling.
+
+Run `rake spec` for the gem(s) you touched before opening a PR — CI is temporarily disabled while it gets set up properly, so this is the only check your PR gets right now.
+
+A new platform adapter is the most welcome kind of PR: subclass `Portage::Ucp::Adapter` in `portage-ucp` against the target platform's API, following the shape of an existing adapter gem (`portage-ucp-shopify` is the most complete reference), and add it to the gem table above.
 
 ## License
 
