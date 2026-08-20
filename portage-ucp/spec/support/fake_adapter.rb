@@ -86,7 +86,61 @@ module Portage
           @orders[order_id]
         end
 
+        def cancel_order(order_id:, idempotency_key:, reason: nil)
+          dedup(idempotency_key) do
+            add_adjustment(order_id, type: "cancellation", status: "completed", description: reason)
+          end
+        end
+
+        def request_return(order_id:, line_items:, idempotency_key:, reason: nil)
+          dedup(idempotency_key) do
+            add_adjustment(order_id, type: "return", status: "pending", line_items: line_items,
+                                     description: reason)
+          end
+        end
+
+        def refund_order(order_id:, line_items:, idempotency_key:, reason: nil)
+          dedup(idempotency_key) do
+            add_adjustment(order_id, type: "refund", status: "completed", line_items: line_items,
+                                     description: reason)
+          end
+        end
+
         private
+
+        # Shared by cancel_order/request_return/refund_order: appends a new
+        # Adjustment to the order's list and returns the updated order — same
+        # resource as get_order, per the design-log's "extension, not a new
+        # top-level family" call. `line_items:` (unsigned request shape) is
+        # negated into the adjustment's signed quantity/amount per
+        # types/adjustment.json's convention.
+        def add_adjustment(order_id, type:, status:, line_items: [], description: nil)
+          order = @orders.fetch(order_id)
+          adjustment = Portage::Ucp::Adjustment.new(
+            id: next_id("adj"), type: type, occurred_at: Time.now.utc.iso8601, status: status,
+            line_items: adjustment_line_items(order, line_items),
+            totals: adjustment_totals(order, line_items),
+            description: description
+          )
+          @orders[order_id] = Portage::Ucp::Order.new(**order.to_h, adjustments: order.adjustments + [adjustment])
+        end
+
+        def adjustment_line_items(_order, line_items)
+          return nil if line_items.empty?
+
+          line_items.map { |li| { "id" => li[:id], "quantity" => -li[:quantity] } }
+        end
+
+        def adjustment_totals(order, line_items)
+          return nil if line_items.empty?
+
+          amount = line_items.sum do |li|
+            order_line = order.line_items.find { |oli| oli.id == li[:id] }
+            unit_price = order_line.totals.find { |t| t.type == "total" }.amount / order_line.quantity
+            unit_price * li[:quantity]
+          end
+          [Portage::Ucp::Total.new(type: "total", amount: -amount)]
+        end
 
         def store_order(checkout)
           id = next_id("ord")

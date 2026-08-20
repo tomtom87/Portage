@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `Adapter#cancel_order`, `#request_return`, `#refund_order` — a gem-side
+  extension of `dev.ucp.shopping.order` (design-log §16 "Order changes"),
+  since the real UCP spec's order lifecycle is get-only. Each returns the
+  updated `Order`, with the change recorded as an appended
+  `Portage::Ucp::Adjustment`.
+
 ## [0.1.0] - Unreleased
 
 - Initial pre-release. Protocol-only core: `Adapter` contract, capability

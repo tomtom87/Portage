@@ -43,6 +43,21 @@ module Portage
       # --- Order (dev.ucp.shopping.order) ---
       # @return [Portage::Ucp::Order, nil]
       def get_order(order_id:) = not_implemented
+      # Cancels a placed order. `reason` is an optional human-readable note,
+      # not a closed enum — the platform-specific enum mapping (if any) is an
+      # adapter concern.
+      # @return [Portage::Ucp::Order]
+      def cancel_order(order_id:, idempotency_key:, reason: nil) = not_implemented
+      # Requests a return for one or more order line items. `line_items` is an
+      # array of request-shaped hashes (`{id:, quantity:}`, unsigned) — same
+      # request/response asymmetry as `create_cart`'s `line_items:`. A return
+      # is a request the merchant still has to process; it shows up as a
+      # `pending` `Portage::Ucp::Adjustment` until they do.
+      # @return [Portage::Ucp::Order]
+      def request_return(order_id:, line_items:, idempotency_key:, reason: nil) = not_implemented
+      # Refunds one or more order line items.
+      # @return [Portage::Ucp::Order]
+      def refund_order(order_id:, line_items:, idempotency_key:, reason: nil) = not_implemented
 
       # --- Identity Linking (dev.ucp.shopping.identity, OAuth 2.0) ---
       # @return [Portage::Ucp::Identity] linked profile for an exchanged OAuth token
