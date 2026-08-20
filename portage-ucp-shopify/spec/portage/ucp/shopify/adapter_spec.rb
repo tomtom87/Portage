@@ -247,6 +247,24 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
                                   idempotency_key: "chk1-complete")
       end.to raise_error(Portage::Ucp::Shopify::Error, /card declined/)
     end
+
+    it "raises Portage::Ucp::OutOfStockError when a SubmitFailed error code signals unavailable stock" do
+      stub_storefront({ data: { cart: cart_response } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
+      stub_storefront(
+        { data: { cartSubmitForCompletion: {
+          result: { errors: [{ code: "INVENTORY_RESERVATION_ERROR", message: "Cold Brew is no longer available" }] },
+          userErrors: []
+        } } }
+      ).with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
+
+      expect do
+        adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
+                                  idempotency_key: "chk1-oos")
+      end.to raise_error(Portage::Ucp::OutOfStockError, /no longer available/)
+    end
   end
 
   describe "#get_order" do
