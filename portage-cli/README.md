@@ -82,6 +82,31 @@ Exits `0` when a checkout completed (or a dry-run/browse/search resolved
 successfully), `1` otherwise — including the "no native manifest, no adapter
 credentials" dead-end case, so it's scriptable in CI.
 
+### Shipping address (own-store checkouts only)
+
+When buying against your own store (`portage buy`'s step 2 adapter-credentials
+fallback, described at the top of this file) and that adapter supports
+`dev.ucp.shopping.fulfillment`, set a default shipping address via env
+rather than a flag, same posture as adapter credentials:
+
+```bash
+export PORTAGE_SHIP_STREET="1 Main St"
+export PORTAGE_SHIP_CITY="Erie"
+export PORTAGE_SHIP_REGION="PA"          # optional
+export PORTAGE_SHIP_COUNTRY="US"
+export PORTAGE_SHIP_POSTAL_CODE="16501"
+export PORTAGE_SHIP_FIRST_NAME="Ada"     # optional
+export PORTAGE_SHIP_LAST_NAME="Lovelace" # optional
+export PORTAGE_SHIP_PHONE="+1..."        # optional
+```
+
+`street`/`city`/`country`/`postal_code` are required — a partial profile is
+treated as no profile at all. Once the merchant prices shipping options
+against that address, `portage buy` auto-picks the cheapest per fulfillment
+group; there's no interactive rate picker, since this drives one automated
+purchase. Native (non-adapter) UCP stores don't get this yet — see
+`portage-ucp`'s design log for why.
+
 ## Buying without a URL
 
 `portage find` and URL-less `portage buy` share one pipeline:
