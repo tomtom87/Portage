@@ -131,6 +131,48 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       expect(processing.status).to eq("processing")
       expect(removed.status).to eq("removed")
     end
+
+    it "maps cancellation/refund/return data into adjustments (§16)" do
+      with_adjustments = node.merge(
+        "cancelledAt" => "2026-08-20T12:00:00Z", "cancelReason" => "CUSTOMER",
+        "refunds" => [
+          { "id" => "gid://shopify/Refund/1", "createdAt" => "2026-08-19T00:00:00Z", "note" => "damaged",
+            "totalRefundedSet" => { "shopMoney" => { "amount" => "5.00", "currencyCode" => "USD" } },
+            "refundLineItems" => { "nodes" => [
+              { "quantity" => 1, "lineItem" => { "id" => "gid://shopify/LineItem/1" } }
+            ] } }
+        ],
+        "returns" => { "nodes" => [
+          { "id" => "gid://shopify/Return/1", "status" => "OPEN", "requestedAt" => "2026-08-18T00:00:00Z",
+            "returnLineItems" => { "nodes" => [
+              { "quantity" => 1, "returnReasonNote" => "wrong size",
+                "fulfillmentLineItem" => { "lineItem" => { "id" => "gid://shopify/LineItem/1" } } }
+            ] } }
+        ] }
+      )
+
+      order = described_class.order(with_adjustments)
+      cancellation, refund, ret = order.adjustments
+
+      expect(cancellation.type).to eq("cancellation")
+      expect(cancellation.status).to eq("completed")
+      expect(cancellation.description).to eq("CUSTOMER")
+
+      expect(refund.type).to eq("refund")
+      expect(refund.status).to eq("completed")
+      expect(refund.line_items).to eq([{ "id" => "gid://shopify/LineItem/1", "quantity" => -1 }])
+      expect(refund.totals).to eq([Portage::Ucp::Total.new(type: "total", amount: -500)])
+      expect(refund.description).to eq("damaged")
+
+      expect(ret.type).to eq("return")
+      expect(ret.status).to eq("pending")
+      expect(ret.line_items).to eq([{ "id" => "gid://shopify/LineItem/1", "quantity" => -1 }])
+      expect(ret.description).to eq("wrong size")
+    end
+
+    it "omits adjustments entirely for an order with no cancellation/refund/return activity" do
+      expect(described_class.order(node).adjustments).to eq([])
+    end
   end
 
   describe ".fulfillment" do

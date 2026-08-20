@@ -270,4 +270,119 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       expect(adapter.get_order(order_id: "gid://shopify/Order/nonexistent")).to be_nil
     end
   end
+
+  let(:order_node) do
+    { id: "gid://shopify/Order/1", statusPageUrl: "https://ucp-test.myshopify.com/orders/abc123",
+      currentTotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+      currentSubtotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+      lineItems: { nodes: [] } }
+  end
+
+  describe "#cancel_order" do
+    it "cancels via orderCancel, then re-fetches the order for current state (§16)" do
+      cancel_stub = stub_admin({ data: { orderCancel: { job: { id: "gid://shopify/Job/1", done: false },
+                                                        orderCancelUserErrors: [] } } })
+                    .with(body: hash_including("query" => a_string_matching(/mutation OrderCancel/)))
+      stub_admin({ data: { order: order_node.merge(cancelledAt: "2026-08-20T00:00:00Z", cancelReason: "CUSTOMER") } })
+        .with(body: hash_including("query" => a_string_matching(/query GetOrder/)))
+
+      order = adapter.cancel_order(order_id: "gid://shopify/Order/1", idempotency_key: "can1", reason: "changed mind")
+
+      expect(cancel_stub).to have_been_requested
+      expect(order.adjustments.map(&:type)).to eq(["cancellation"])
+    end
+
+    it "raises on an orderCancelUserErrors response" do
+      stub_admin({ data: { orderCancel: { job: nil,
+                                          orderCancelUserErrors: [{ field: ["orderId"], message: "not found" }] } } })
+
+      expect { adapter.cancel_order(order_id: "gid://shopify/Order/x", idempotency_key: "can2") }
+        .to raise_error(Portage::Ucp::Shopify::UserError, /not found/)
+    end
+
+    it "dedups a repeated idempotency_key without re-calling orderCancel" do
+      cancel_stub = stub_admin({ data: { orderCancel: { job: { id: "j1", done: false }, orderCancelUserErrors: [] } } })
+                    .with(body: hash_including("query" => a_string_matching(/mutation OrderCancel/)))
+      stub_admin({ data: { order: order_node } })
+        .with(body: hash_including("query" => a_string_matching(/query GetOrder/)))
+
+      2.times { adapter.cancel_order(order_id: "gid://shopify/Order/1", idempotency_key: "can-dedup") }
+
+      expect(cancel_stub).to have_been_requested.times(1)
+    end
+  end
+
+  describe "#refund_order" do
+    it "quotes a suggestedRefund, feeds its transactions into refundCreate, then re-fetches the order" do
+      stub_admin({ data: { order: { suggestedRefund: { transactions: [
+                   { orderId: "gid://shopify/Order/1", gateway: "bogus", kind: "REFUND",
+                     amountSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+                     parentTransaction: { id: "gid://shopify/OrderTransaction/1" } }
+                 ] } } } })
+        .with(body: hash_including("query" => a_string_matching(/query SuggestedRefund/)))
+      refund_stub = stub_admin(
+        { data: { refundCreate: { refund: { id: "gid://shopify/Refund/1" }, userErrors: [] } } }
+      ).with(body: hash_including("query" => a_string_matching(/mutation RefundCreate/)))
+      stub_admin({ data: { order: order_node.merge(
+        refunds: [{ id: "gid://shopify/Refund/1", createdAt: "2026-08-20T00:00:00Z", note: "damaged",
+                    totalRefundedSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+                    refundLineItems: { nodes: [{ quantity: 1, lineItem: { id: "gid://shopify/LineItem/1" } }] } }]
+      ) } }).with(body: hash_including("query" => a_string_matching(/query GetOrder/)))
+
+      order = adapter.refund_order(order_id: "gid://shopify/Order/1",
+                                   line_items: [{ id: "gid://shopify/LineItem/1", quantity: 1 }],
+                                   idempotency_key: "ref1", reason: "damaged")
+
+      expect(refund_stub).to have_been_requested
+      expect(order.adjustments.map(&:type)).to eq(["refund"])
+    end
+
+    it "raises on a refundCreate userErrors response" do
+      stub_admin({ data: { order: { suggestedRefund: { transactions: [] } } } })
+        .with(body: hash_including("query" => a_string_matching(/query SuggestedRefund/)))
+      stub_admin({ data: { refundCreate: { refund: nil,
+                                           userErrors: [{ field: ["quantity"], message: "too high" }] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation RefundCreate/)))
+
+      expect do
+        adapter.refund_order(order_id: "gid://shopify/Order/1",
+                             line_items: [{ id: "gid://shopify/LineItem/1", quantity: 99 }],
+                             idempotency_key: "ref2")
+      end.to raise_error(Portage::Ucp::Shopify::UserError, /too high/)
+    end
+  end
+
+  describe "#request_return" do
+    it "requests a return via returnCreate, then re-fetches the order" do
+      return_stub = stub_admin(
+        { data: { returnCreate: { return: { id: "gid://shopify/Return/1", status: "OPEN" }, userErrors: [] } } }
+      ).with(body: hash_including("query" => a_string_matching(/mutation ReturnCreate/)))
+      stub_admin({ data: { order: order_node.merge(
+        returns: { nodes: [{ id: "gid://shopify/Return/1", status: "OPEN", requestedAt: "2026-08-20T00:00:00Z",
+                             returnLineItems: { nodes: [
+                               { quantity: 1, returnReasonNote: "wrong size",
+                                 fulfillmentLineItem: { lineItem: { id: "gid://shopify/LineItem/1" } } }
+                             ] } }] }
+      ) } }).with(body: hash_including("query" => a_string_matching(/query GetOrder/)))
+
+      order = adapter.request_return(order_id: "gid://shopify/Order/1",
+                                     line_items: [{ id: "gid://shopify/FulfillmentLineItem/1", quantity: 1 }],
+                                     idempotency_key: "ret1", reason: "wrong size")
+
+      expect(return_stub).to have_been_requested
+      expect(order.adjustments.map(&:type)).to eq(["return"])
+      expect(order.adjustments.first.status).to eq("pending")
+    end
+
+    it "raises on a returnCreate userErrors response" do
+      stub_admin({ data: { returnCreate: { return: nil,
+                                           userErrors: [{ field: ["quantity"], message: "unfulfilled" }] } } })
+
+      expect do
+        adapter.request_return(order_id: "gid://shopify/Order/1",
+                               line_items: [{ id: "gid://shopify/FulfillmentLineItem/1", quantity: 1 }],
+                               idempotency_key: "ret2")
+      end.to raise_error(Portage::Ucp::Shopify::UserError, /unfulfilled/)
+    end
+  end
 end
