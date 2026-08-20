@@ -49,6 +49,127 @@ module Portage
       end
     end
 
+    # schemas/shopping/types/postal_address.json — every field optional, so a
+    # partial address (e.g. locality/region/country only, before a full
+    # street address is known) is still schema-conformant.
+    PostalAddress = Data.define(:extended_address, :street_address, :address_locality, :address_region,
+                                :address_country, :postal_code, :first_name, :last_name, :phone_number) do
+      def initialize(extended_address: nil, street_address: nil, address_locality: nil, address_region: nil,
+                     address_country: nil, postal_code: nil, first_name: nil, last_name: nil, phone_number: nil)
+        super
+      end
+
+      def to_wire_h
+        { "extended_address" => extended_address, "street_address" => street_address,
+          "address_locality" => address_locality, "address_region" => address_region,
+          "address_country" => address_country, "postal_code" => postal_code, "first_name" => first_name,
+          "last_name" => last_name, "phone_number" => phone_number }.compact
+      end
+    end
+
+    # schemas/shopping/types/shipping_destination.json — postal_address plus a
+    # destination id (one of fulfillment.json's two FulfillmentDestination
+    # shapes, alongside RetailLocation below).
+    ShippingDestination = Data.define(:id, :address) do
+      def to_wire_h = address.to_wire_h.merge("id" => id)
+    end
+
+    # schemas/shopping/types/retail_location.json — the pickup counterpart to
+    # ShippingDestination; only `address` is optional.
+    RetailLocation = Data.define(:id, :name, :address) do
+      def initialize(id:, name:, address: nil) = super
+
+      def to_wire_h
+        h = { "id" => id, "name" => name }
+        h["address"] = address.to_wire_h if address
+        h
+      end
+    end
+
+    # schemas/shopping/types/fulfillment_option.json — a single priced choice
+    # within a FulfillmentGroup (e.g. "Standard Shipping $5", "Express $15").
+    FulfillmentOption = Data.define(:id, :title, :totals, :description, :carrier, :earliest_fulfillment_time,
+                                    :latest_fulfillment_time) do
+      def initialize(id:, title:, totals:, description: nil, carrier: nil, earliest_fulfillment_time: nil,
+                     latest_fulfillment_time: nil)
+        super
+      end
+
+      def to_wire_h
+        h = { "id" => id, "title" => title, "totals" => totals.map(&:to_wire_h) }
+        h["description"] = description if description
+        h["carrier"] = carrier if carrier
+        h["earliest_fulfillment_time"] = earliest_fulfillment_time if earliest_fulfillment_time
+        h["latest_fulfillment_time"] = latest_fulfillment_time if latest_fulfillment_time
+        h
+      end
+    end
+
+    # schemas/shopping/types/fulfillment_group.json — a merchant-generated
+    # package of line items; the agent sets `selected_option_id` on update to
+    # choose a shipping/pickup rate for that package.
+    FulfillmentGroup = Data.define(:id, :line_item_ids, :options, :selected_option_id) do
+      def initialize(id:, line_item_ids:, options: [], selected_option_id: nil) = super
+
+      def to_wire_h
+        { "id" => id, "line_item_ids" => line_item_ids, "options" => options.map(&:to_wire_h),
+          "selected_option_id" => selected_option_id }
+      end
+    end
+
+    # schemas/shopping/types/fulfillment_method.json — shipping or pickup for
+    # a subset of line items. The agent submits `type`/`line_item_ids` on
+    # create; the merchant fills in `destinations`/`groups` for the agent to
+    # then select `selected_destination_id` and each group's
+    # `selected_option_id` on update.
+    FulfillmentMethod = Data.define(:id, :type, :line_item_ids, :destinations, :selected_destination_id, :groups) do
+      def initialize(id:, type:, line_item_ids:, destinations: [], selected_destination_id: nil, groups: [])
+        super
+      end
+
+      def to_wire_h
+        h = { "id" => id, "type" => type, "line_item_ids" => line_item_ids }
+        h["destinations"] = destinations.map(&:to_wire_h) unless destinations.empty?
+        h["selected_destination_id"] = selected_destination_id if selected_destination_id
+        h["groups"] = groups.map(&:to_wire_h) unless groups.empty?
+        h
+      end
+    end
+
+    # schemas/shopping/types/fulfillment_available_method.json — an inventory
+    # availability hint (preorder/pickup-today/etc.), independent of whether
+    # the buyer has actually chosen that method yet.
+    FulfillmentAvailableMethod = Data.define(:type, :line_item_ids, :fulfillable_on, :description) do
+      def initialize(type:, line_item_ids:, fulfillable_on: nil, description: nil) = super
+
+      def to_wire_h
+        h = { "type" => type, "line_item_ids" => line_item_ids }
+        h["fulfillable_on"] = fulfillable_on if fulfillable_on
+        h["description"] = description if description
+        h
+      end
+    end
+
+    # schemas/shopping/fulfillment.json#/$defs/dev.ucp.shopping.fulfillment —
+    # the Checkout-level container. Named CheckoutFulfillment (not
+    # `Fulfillment`, already taken by Order's post-purchase expectations/
+    # events container below) to keep the pre-purchase shipping-selection
+    # extension and the post-purchase delivery-tracking extension distinct.
+    # The member is `shipping_methods`, not the wire key `methods` — a bare
+    # `:methods` Data.define member would shadow Kernel#methods.
+    CheckoutFulfillment = Data.define(:shipping_methods, :available_methods) do
+      def initialize(shipping_methods: [], available_methods: []) = super
+
+      def empty? = shipping_methods.empty? && available_methods.empty?
+
+      def to_wire_h
+        h = {}
+        h["methods"] = shipping_methods.map(&:to_wire_h) unless shipping_methods.empty?
+        h["available_methods"] = available_methods.map(&:to_wire_h) unless available_methods.empty?
+        h
+      end
+    end
+
     # schemas/shopping/cart.json — requires ucp/id/line_items/currency/totals.
     # The "ucp" envelope is added centrally by Portage::Ucp::WireEnvelope, not stored
     # on the value object itself.
@@ -78,13 +199,20 @@ module Portage
     # canceled) — not the old ad hoc "pending"/"completed" strings. `order` is
     # the schema's optional order_confirmation — set once complete_checkout
     # actually produces an order, nil otherwise.
-    Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links, :order) do
-      def initialize(id:, status:, line_items:, currency:, totals:, links:, order: nil) = super
+    # `fulfillment` — the dev.ucp.shopping.fulfillment extension (optional,
+    # omitted from the wire payload when empty), same posture as
+    # Order#adjustments.
+    Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links, :order, :fulfillment) do
+      def initialize(id:, status:, line_items:, currency:, totals:, links:, order: nil,
+                     fulfillment: CheckoutFulfillment.new)
+        super
+      end
 
       def to_wire_h
         h = { "id" => id, "status" => status, "line_items" => line_items.map(&:to_wire_h),
               "currency" => currency, "totals" => totals.map(&:to_wire_h), "links" => links.map(&:to_wire_h) }
         h["order"] = order.to_wire_h if order
+        h["fulfillment"] = fulfillment.to_wire_h unless fulfillment.empty?
         h
       end
     end

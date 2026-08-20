@@ -25,14 +25,23 @@ module Portage
       def cancel_cart(cart_id:, idempotency_key:) = not_implemented
 
       # --- Checkout (dev.ucp.shopping.checkout) ---
+      # `fulfillment:` is the dev.ucp.shopping.fulfillment extension — nil
+      # (the default) means the request didn't touch fulfillment at all; an
+      # adapter that doesn't override #fulfillment_supported? never sees
+      # anything but nil here (see below). On create it carries the agent's
+      # desired methods (type + line_item_ids per shipping/pickup group —
+      # `Portage::Ucp::FulfillmentMethod#id`/`#destinations`/`#groups` are
+      # omitted since the merchant generates those); on update it carries the
+      # agent's `selected_destination_id`/`selected_option_id` choices against
+      # the methods/groups the merchant already returned.
       # @return [Portage::Ucp::Checkout]
-      def create_checkout(line_items:, idempotency_key:) = not_implemented
+      def create_checkout(line_items:, idempotency_key:, fulfillment: nil) = not_implemented
       # @return [Portage::Ucp::Checkout]
       def get_checkout(checkout_id:) = not_implemented
       # Full-replacement, same as update_cart — line_items is required on
       # checkout update per the real spec.
       # @return [Portage::Ucp::Checkout]
-      def update_checkout(checkout_id:, line_items:, idempotency_key:) = not_implemented
+      def update_checkout(checkout_id:, line_items:, idempotency_key:, fulfillment: nil) = not_implemented
       # @param payment_token [String] single-use token from a UCP payment handler / AP2
       #   exchange — NEVER a raw PAN.
       # @return [Portage::Ucp::Checkout]
@@ -58,6 +67,14 @@ module Portage
       # Refunds one or more order line items.
       # @return [Portage::Ucp::Order]
       def refund_order(order_id:, line_items:, idempotency_key:, reason: nil) = not_implemented
+
+      # --- Fulfillment (dev.ucp.shopping.fulfillment) ---
+      # Extends Checkout with the `fulfillment:` param above rather than
+      # adding actions of its own — Capability::FULFILLMENT advertises off
+      # this predicate instead of an overridden action method, same rationale
+      # as #discount_codes_supported? would be.
+      # @return [Boolean]
+      def fulfillment_supported? = false
 
       # --- Identity Linking (dev.ucp.shopping.identity, OAuth 2.0) ---
       # @return [Portage::Ucp::Identity] linked profile for an exchanged OAuth token

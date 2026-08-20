@@ -89,6 +89,22 @@ RSpec.describe "Portage::Ucp value objects" do
                                             totals: [], links: [], order: order)
       expect(checkout.to_wire_h["order"]).to eq({ "id" => "ord_1", "permalink_url" => "https://example.com/orders/1" })
     end
+
+    it "omits fulfillment from the wire shape when no methods were ever offered" do
+      checkout = Portage::Ucp::Checkout.new(id: "chk_1", status: "incomplete", line_items: [], currency: "USD",
+                                            totals: [], links: [])
+      expect(checkout.to_wire_h).not_to have_key("fulfillment")
+    end
+
+    it "includes fulfillment once a method exists" do
+      method = Portage::Ucp::FulfillmentMethod.new(id: "fm_1", type: "shipping", line_item_ids: ["li_1"])
+      fulfillment = Portage::Ucp::CheckoutFulfillment.new(shipping_methods: [method])
+      checkout = Portage::Ucp::Checkout.new(id: "chk_1", status: "incomplete", line_items: [], currency: "USD",
+                                            totals: [], links: [], fulfillment: fulfillment)
+      expect(checkout.to_wire_h["fulfillment"]).to eq(
+        "methods" => [{ "id" => "fm_1", "type" => "shipping", "line_item_ids" => ["li_1"] }]
+      )
+    end
   end
 
   describe Portage::Ucp::OrderConfirmation do
@@ -144,6 +160,94 @@ RSpec.describe "Portage::Ucp value objects" do
                                "method_type" => "shipping", "destination" => { "postal_code" => "10001" } }],
           "events" => [{ "id" => "evt_1", "occurred_at" => "2026-08-01T00:00:00Z", "type" => "shipped",
                          "line_items" => [{ "id" => "oli_1", "quantity" => 1 }], "tracking_number" => "1Z999" }] }
+      )
+    end
+  end
+
+  describe Portage::Ucp::PostalAddress do
+    it "serializes only the fields present" do
+      address = Portage::Ucp::PostalAddress.new(street_address: "1 Main St", address_locality: "Mountain View",
+                                                address_region: "CA", address_country: "US", postal_code: "94043")
+      expect(address.to_wire_h).to eq(
+        "street_address" => "1 Main St", "address_locality" => "Mountain View", "address_region" => "CA",
+        "address_country" => "US", "postal_code" => "94043"
+      )
+    end
+  end
+
+  describe Portage::Ucp::ShippingDestination do
+    it "merges the postal address with its own id" do
+      address = Portage::Ucp::PostalAddress.new(postal_code: "94043")
+      destination = Portage::Ucp::ShippingDestination.new(id: "dest_1", address: address)
+      expect(destination.to_wire_h).to eq("postal_code" => "94043", "id" => "dest_1")
+    end
+  end
+
+  describe Portage::Ucp::RetailLocation do
+    it "requires id/name, omitting address when absent" do
+      location = Portage::Ucp::RetailLocation.new(id: "loc_1", name: "Downtown Store")
+      expect(location.to_wire_h).to eq("id" => "loc_1", "name" => "Downtown Store")
+    end
+  end
+
+  describe Portage::Ucp::FulfillmentOption do
+    it "serializes id/title/totals, omitting optional fields when absent" do
+      totals = [Portage::Ucp::Total.new(type: "total", amount: 500)]
+      option = Portage::Ucp::FulfillmentOption.new(id: "opt_1", title: "Standard Shipping", totals: totals)
+      expect(option.to_wire_h).to eq(
+        "id" => "opt_1", "title" => "Standard Shipping", "totals" => [{ "type" => "total", "amount" => 500 }]
+      )
+    end
+  end
+
+  describe Portage::Ucp::FulfillmentGroup do
+    it "defaults to no options and no selection" do
+      group = Portage::Ucp::FulfillmentGroup.new(id: "grp_1", line_item_ids: ["li_1"])
+      expect(group.to_wire_h).to eq(
+        "id" => "grp_1", "line_item_ids" => ["li_1"], "options" => [], "selected_option_id" => nil
+      )
+    end
+
+    it "carries the agent's selected option id" do
+      option = Portage::Ucp::FulfillmentOption.new(id: "opt_1", title: "Express",
+                                                   totals: [Portage::Ucp::Total.new(type: "total", amount: 1500)])
+      group = Portage::Ucp::FulfillmentGroup.new(id: "grp_1", line_item_ids: ["li_1"], options: [option],
+                                                 selected_option_id: "opt_1")
+      expect(group.to_wire_h["selected_option_id"]).to eq("opt_1")
+    end
+  end
+
+  describe Portage::Ucp::FulfillmentMethod do
+    it "requires id/type/line_item_ids, omitting destinations/groups when absent" do
+      method = Portage::Ucp::FulfillmentMethod.new(id: "fm_1", type: "pickup", line_item_ids: ["li_1"])
+      expect(method.to_wire_h).to eq("id" => "fm_1", "type" => "pickup", "line_item_ids" => ["li_1"])
+    end
+
+    it "includes destinations/selected_destination_id/groups once present" do
+      destination = Portage::Ucp::ShippingDestination.new(id: "dest_1",
+                                                          address: Portage::Ucp::PostalAddress.new(postal_code: "1"))
+      group = Portage::Ucp::FulfillmentGroup.new(id: "grp_1", line_item_ids: ["li_1"])
+      method = Portage::Ucp::FulfillmentMethod.new(id: "fm_1", type: "shipping", line_item_ids: ["li_1"],
+                                                   destinations: [destination], selected_destination_id: "dest_1",
+                                                   groups: [group])
+      wire = method.to_wire_h
+      expect(wire["destinations"]).to eq([{ "postal_code" => "1", "id" => "dest_1" }])
+      expect(wire["selected_destination_id"]).to eq("dest_1")
+      expect(wire["groups"]).to eq([{ "id" => "grp_1", "line_item_ids" => ["li_1"], "options" => [],
+                                      "selected_option_id" => nil }])
+    end
+  end
+
+  describe Portage::Ucp::CheckoutFulfillment do
+    it "is empty with no methods and no available_methods" do
+      expect(Portage::Ucp::CheckoutFulfillment.new).to be_empty
+    end
+
+    it "serializes methods and available_methods, omitting whichever side is empty" do
+      method = Portage::Ucp::FulfillmentMethod.new(id: "fm_1", type: "shipping", line_item_ids: ["li_1"])
+      fulfillment = Portage::Ucp::CheckoutFulfillment.new(shipping_methods: [method])
+      expect(fulfillment.to_wire_h).to eq(
+        "methods" => [{ "id" => "fm_1", "type" => "shipping", "line_item_ids" => ["li_1"] }]
       )
     end
   end

@@ -32,6 +32,10 @@ RSpec.describe Portage::Ucp::Adapter do
     expect { adapter.link_identity(oauth_token: "t") }.to raise_error(Portage::Ucp::NotImplementedError)
   end
 
+  it "does not support fulfillment by default" do
+    expect(adapter.fulfillment_supported?).to eq(false)
+  end
+
   describe "capability advertisement (override detection)" do
     it "reports a method as NOT overridden on the base Adapter" do
       expect(described_class.instance_method(:search_catalog).owner).to eq(described_class)
