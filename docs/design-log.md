@@ -849,10 +849,17 @@ response); on update it's the agent's `selected_destination_id`/
 fulfillment extension point; shipping selection is checkout-only in the
 vendored spec, unlike discounts which apply to both.
 
-This is contract-and-value-objects only. No adapter implements
-`fulfillment_supported?` yet — Shopify's mapping (Storefront cart has no
-native "fulfillment group" concept; it would mean synthesizing groups from
-`availableShippingRates`/`deliveryGroups` and threading `selected_option_id`
-back into `cartSelectedDeliveryOptionsUpdate`) is real work, left for its own
-follow-up commit rather than bundled here, matching how discount codes'
-contract and Shopify-implementation landed as two separate commits.
+Shopify's mapping landed as its own follow-up commit, matching how discount
+codes' contract and Shopify-implementation split. Storefront's Cart has no
+"fulfillment method" concept above `deliveryGroups`, so the adapter
+synthesizes exactly one `FulfillmentMethod` per checkout and maps each
+Shopify deliveryGroup onto a `FulfillmentGroup` underneath it — a cart also
+only ever carries the one buyer-submitted address, so `destinations` is
+always `[]` or a single entry with a fixed id (`"current"`), never a real
+list to choose between. The agent's address goes out via
+`cartDeliveryAddressesAdd`, its `selected_option_id` choices via
+`cartSelectedDeliveryOptionsUpdate` — both mutations' exact input shapes are
+this pass's best-effort guess at Storefront API's current delivery-address
+input, flagged for confirmation against a real dev store the same way
+`cartPaymentUpdate`'s `paymentMethod` sub-shape already is (roadmap step 5
+covers both).
