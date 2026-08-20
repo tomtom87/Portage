@@ -48,6 +48,12 @@ module Portage
               }
             }
           }
+          discountCodes { code applicable }
+          discountAllocations {
+            discountedAmount { amount currencyCode }
+            ... on CartAutomaticDiscountAllocation { title }
+            ... on CartCodeDiscountAllocation { code }
+          }
         GRAPHQL
 
         GET_CART = <<~GRAPHQL.freeze
@@ -74,6 +80,17 @@ module Portage
         CART_LINES_REMOVE = <<~GRAPHQL.freeze
           mutation CartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
             cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
+              cart { #{CART_FIELDS} }
+              userErrors { field message }
+            }
+          }
+        GRAPHQL
+
+        # Full-replacement, matching dev.ucp.shopping.discount's `codes`
+        # semantics — an empty array clears whatever codes were on the cart.
+        CART_DISCOUNT_CODES_UPDATE = <<~GRAPHQL.freeze
+          mutation CartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]) {
+            cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
               cart { #{CART_FIELDS} }
               userErrors { field message }
             }

@@ -42,7 +42,30 @@ module Portage
             id: node["id"],
             line_items: node.dig("lines", "nodes").map { |n| cart_line_item(n) },
             currency: node.dig("cost", "subtotalAmount", "currencyCode"),
-            totals: totals(node)
+            totals: totals(node),
+            discounts: discounts(node)
+          )
+        end
+
+        # dev.ucp.shopping.discount — `codes` echoes every code Shopify has on
+        # record for the cart (applicable or not); `applied` only lists
+        # allocations that actually reduced the price, since that's all
+        # `discountAllocations` ever returns. Allocation-level breakdown
+        # (applied_discount's `allocations` field) isn't sourced here —
+        # per-line attribution needs a separate line-level query this adapter
+        # doesn't make yet.
+        def discounts(node)
+          codes = (node["discountCodes"] || []).map { |c| c["code"] }
+          applied = (node["discountAllocations"] || []).map { |a| applied_discount(a) }
+          Portage::Ucp::Discounts.new(codes: codes, applied: applied)
+        end
+
+        def applied_discount(node)
+          Portage::Ucp::AppliedDiscount.new(
+            title: node["title"] || node["code"],
+            amount: minor_units(node["discountedAmount"]),
+            code: node["code"],
+            automatic: !node["code"]
           )
         end
 
@@ -69,7 +92,8 @@ module Portage
             currency: node.dig("cost", "subtotalAmount", "currencyCode"),
             totals: totals(node),
             links: [],
-            order: order
+            order: order,
+            discounts: discounts(node)
           )
         end
 

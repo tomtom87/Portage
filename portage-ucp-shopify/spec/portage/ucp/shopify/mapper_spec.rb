@@ -77,6 +77,41 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       expect(checkout.links).to eq([])
       expect(checkout.totals.find { |t| t.type == "total" }.amount).to eq(1100)
     end
+
+    it "maps discountCodes/discountAllocations into a Portage::Ucp::Discounts" do
+      with_discounts = node.merge(
+        "discountCodes" => [{ "code" => "SAVE10", "applicable" => true }],
+        "discountAllocations" => [
+          { "code" => "SAVE10", "discountedAmount" => { "amount" => "1.00", "currencyCode" => "USD" } }
+        ]
+      )
+
+      cart = described_class.cart(with_discounts)
+
+      expect(cart.discounts.codes).to eq(["SAVE10"])
+      expect(cart.discounts.applied).to eq([
+                                             Portage::Ucp::AppliedDiscount.new(title: "SAVE10", amount: 100,
+                                                                               code: "SAVE10", automatic: false)
+                                           ])
+    end
+
+    it "treats an allocation with no code as automatic, titled from Shopify's title field" do
+      with_discounts = node.merge(
+        "discountAllocations" => [
+          { "title" => "Free Shipping", "discountedAmount" => { "amount" => "5.00", "currencyCode" => "USD" } }
+        ]
+      )
+
+      cart = described_class.cart(with_discounts)
+
+      expect(cart.discounts.applied.first.automatic).to eq(true)
+      expect(cart.discounts.applied.first.title).to eq("Free Shipping")
+    end
+
+    it "omits discounts from the wire shape when the cart has no codes or allocations" do
+      cart = described_class.cart(node)
+      expect(cart.to_wire_h).not_to have_key("discounts")
+    end
   end
 
   describe ".order" do
