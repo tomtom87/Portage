@@ -41,6 +41,14 @@ module Portage
               merchandise { ... on ProductVariant { id product { id title } price { amount currencyCode } } }
             }
           }
+          deliveryGroups {
+            id
+            cartLines(first: 100) { nodes { id } }
+            deliveryOptions { handle title description deliveryMethodType estimatedCost { amount currencyCode } }
+            selectedDeliveryOption { handle }
+            deliveryAddress { address1 address2 city provinceCode zip firstName lastName phone
+                              countryCode: countryCodeV2 }
+          }
         GRAPHQL
 
         GET_CART = <<~GRAPHQL.freeze
@@ -67,6 +75,32 @@ module Portage
         CART_LINES_REMOVE = <<~GRAPHQL.freeze
           mutation CartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
             cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
+              cart { #{CART_FIELDS} }
+              userErrors { field message }
+            }
+          }
+        GRAPHQL
+
+        # `CartSelectableAddressInput`'s exact nested shape (this is Storefront
+        # API's current replacement for the deprecated
+        # CartBuyerIdentityInput#deliveryAddressPreferences path) needs
+        # confirming against a real dev store, same caveat as
+        # CART_PAYMENT_UPDATE's paymentMethod sub-shape below (roadmap step
+        # 5) — this is the adapter's best-effort mapping of
+        # dev.ucp.shopping.fulfillment's ShippingDestination onto it.
+        CART_DELIVERY_ADDRESSES_ADD = <<~GRAPHQL.freeze
+          mutation CartDeliveryAddressesAdd($cartId: ID!, $addresses: [CartSelectableAddressInput!]!) {
+            cartDeliveryAddressesAdd(cartId: $cartId, addresses: $addresses) {
+              cart { #{CART_FIELDS} }
+              userErrors { field message }
+            }
+          }
+        GRAPHQL
+
+        CART_SELECTED_DELIVERY_OPTIONS_UPDATE = <<~GRAPHQL.freeze
+          mutation CartSelectedDeliveryOptionsUpdate($cartId: ID!,
+                                                      $selectedDeliveryOptions: [CartSelectedDeliveryOptionInput!]!) {
+            cartSelectedDeliveryOptionsUpdate(cartId: $cartId, selectedDeliveryOptions: $selectedDeliveryOptions) {
               cart { #{CART_FIELDS} }
               userErrors { field message }
             }

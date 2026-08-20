@@ -74,9 +74,10 @@ module Portage
           dedup(idempotency_key) { get_cart(cart_id: cart_id) }
         end
 
-        def create_checkout(line_items:, idempotency_key:)
+        def create_checkout(line_items:, idempotency_key:, fulfillment: nil)
           dedup(idempotency_key) do
             cart_node = create_cart_node(line_items)
+            cart_node = apply_fulfillment(cart_node["id"], fulfillment) if fulfillment
             record_checkout_status(cart_node["id"], "incomplete")
             Mapper.checkout(cart_node, status: "incomplete")
           end
@@ -89,13 +90,16 @@ module Portage
 
         # Full replacement, same rationale as #update_cart — Shopify checkout
         # *is* the cart object.
-        def update_checkout(checkout_id:, line_items:, idempotency_key:)
+        def update_checkout(checkout_id:, line_items:, idempotency_key:, fulfillment: nil)
           dedup(idempotency_key) do
             cart_node = replace_lines(checkout_id, line_items)
+            cart_node = apply_fulfillment(checkout_id, fulfillment) if fulfillment
             record_checkout_status(checkout_id, "incomplete")
             Mapper.checkout(cart_node, status: "incomplete")
           end
         end
+
+        def fulfillment_supported? = true
 
         # `payment_token` is the single-use tokenized credential from a UCP
         # payment handler (already validated as non-PAN by PaymentTokenGuard
@@ -181,6 +185,52 @@ module Portage
             { orderId: order_id, gateway: t["gateway"], kind: t["kind"],
               amount: t.dig("amountSet", "shopMoney", "amount"), parentId: t.dig("parentTransaction", "id") }
           end
+        end
+
+        # Applies the agent's fulfillment request onto the cart: submits a
+        # shipping address (if the agent supplied one on `destinations`, the
+        # only way Shopify's deliveryOptions get priced at all) and/or the
+        # agent's `selected_option_id` choices per group. Either half is
+        # optional and independent — an agent picking a rate on an
+        # already-addressed cart sends only the latter.
+        def apply_fulfillment(cart_id, fulfillment)
+          cart_node = fetch_cart_node(cart_id)
+
+          destination = fulfillment.shipping_methods.flat_map(&:destinations).first
+          cart_node = apply_delivery_address(cart_id, destination.address) if destination
+
+          selections = fulfillment.shipping_methods.flat_map(&:groups).filter_map { |g| delivery_selection(g) }
+          cart_node = apply_delivery_selections(cart_id, selections) unless selections.empty?
+
+          cart_node
+        end
+
+        def delivery_selection(group)
+          return nil unless group.selected_option_id
+
+          { deliveryGroupId: group.id, deliveryOptionHandle: group.selected_option_id }
+        end
+
+        def apply_delivery_address(cart_id, address)
+          data = @client.storefront_query(
+            Queries::CART_DELIVERY_ADDRESSES_ADD,
+            variables: { cartId: cart_id,
+                         addresses: [{ address: { deliveryAddress: delivery_address_input(address) },
+                                       selected: true }] }
+          )
+          unwrap!(data, "cartDeliveryAddressesAdd")
+        end
+
+        def delivery_address_input(address)
+          { address1: address.street_address, address2: address.extended_address, city: address.address_locality,
+            provinceCode: address.address_region, countryCode: address.address_country, zip: address.postal_code,
+            firstName: address.first_name, lastName: address.last_name, phone: address.phone_number }.compact
+        end
+
+        def apply_delivery_selections(cart_id, selections)
+          data = @client.storefront_query(Queries::CART_SELECTED_DELIVERY_OPTIONS_UPDATE,
+                                          variables: { cartId: cart_id, selectedDeliveryOptions: selections })
+          unwrap!(data, "cartSelectedDeliveryOptionsUpdate")
         end
 
         def fetch_cart_node(cart_id)
