@@ -2,6 +2,7 @@ require "optparse"
 require "json"
 
 require_relative "cli/version"
+require_relative "cli/shipping_profile"
 require_relative "cli/buy"
 require_relative "cli/find"
 

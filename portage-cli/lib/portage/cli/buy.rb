@@ -113,7 +113,7 @@ module Portage
 
         adapter = Portage::Ucp::Resolver.build_adapter(platform, env)
         if adapter_supports_checkout?(adapter)
-          full_buy(client_for(adapter), source: "adapter:#{platform.name}")
+          full_buy(client_for(adapter), source: "adapter:#{platform.name}", fulfillment_adapter: adapter)
         else
           catalog_only_adapter(adapter, platform)
         end
@@ -152,7 +152,13 @@ module Portage
 
       # --- The actual buy, shared by native and adapter-loopback sources ---
 
-      def full_buy(session, source:)
+      # `fulfillment_adapter:` is only ever set by #adapter_flow (the
+      # own-store loopback path) — #native_flow has no raw Adapter object to
+      # inspect for `fulfillment_supported?`, just a Session talking to a
+      # remote store, so shipping-address/rate selection stays loopback-only
+      # for now rather than guessing at a wire shape no real UCP server has
+      # confirmed (see docs/design-log.md).
+      def full_buy(session, source:, fulfillment_adapter: nil)
         products = safe_search(session)
         product = select_product(products)
         unless product
@@ -160,8 +166,66 @@ module Portage
                               message: no_match_message)
         end
 
-        checkout = session.create_checkout(line_items: [{ product_id: product_id_of(product), quantity: @qty }])
+        checkout = session.create_checkout(line_items: [{ product_id: product_id_of(product), quantity: @qty }],
+                                           fulfillment: requested_fulfillment(fulfillment_adapter))
+        checkout = select_cheapest_shipping(session, checkout) if fulfillment_adapter
         finish_checkout(session, source, products, checkout)
+      end
+
+      # Submits PORTAGE_SHIP_* (see Portage::Cli::ShippingProfile) as the
+      # checkout's shipping destination, but only when the adapter actually
+      # advertises dev.ucp.shopping.fulfillment — an adapter that doesn't
+      # override #fulfillment_supported? would just ignore the param anyway
+      # (Adapter#create_checkout's default), but there's no point building it
+      # at all in that case.
+      def requested_fulfillment(adapter)
+        return nil unless adapter && Portage::Ucp::Capabilities::FULFILLMENT.advertised_for?(adapter)
+
+        address = Portage::Cli::ShippingProfile.from_env
+        return nil unless address
+
+        Portage::Ucp::CheckoutFulfillment.new(
+          shipping_methods: [Portage::Ucp::FulfillmentMethod.new(
+            id: "requested", type: "shipping", line_item_ids: [],
+            destinations: [Portage::Ucp::ShippingDestination.new(id: "current", address: address)]
+          )]
+        )
+      end
+
+      # Once the merchant has priced options against the submitted address,
+      # auto-picks the cheapest unselected option per fulfillment group and
+      # submits it via #update_checkout — no interactive rate picker; a CLI
+      # driving a single automated purchase needs a deterministic default,
+      # not a prompt. A checkout with no fulfillment groups at all (no
+      # address was submitted, or the merchant hasn't priced anything yet)
+      # passes through unchanged.
+      def select_cheapest_shipping(session, checkout)
+        groups = checkout.dig("fulfillment", "methods", 0, "groups") || []
+        selections = groups.filter_map { |g| cheapest_option_selection(g) }
+        return checkout if selections.empty?
+
+        session.update_checkout(
+          checkout_id: checkout["id"], line_items: current_line_items(checkout),
+          fulfillment: Portage::Ucp::CheckoutFulfillment.new(
+            shipping_methods: [Portage::Ucp::FulfillmentMethod.new(id: "requested", type: "shipping",
+                                                                   line_item_ids: [], groups: selections)]
+          )
+        )
+      end
+
+      def cheapest_option_selection(group)
+        return nil if group["selected_option_id"] || (group["options"] || []).empty?
+
+        cheapest = group["options"].min_by { |o| o.dig("totals", 0, "amount") || 0 }
+        Portage::Ucp::FulfillmentGroup.new(id: group["id"], line_item_ids: group["line_item_ids"],
+                                           selected_option_id: cheapest["id"])
+      end
+
+      # Checkout's line_items are response-shaped ({item: {id, ...}, ...});
+      # #update_checkout takes request-shaped hashes, same asymmetry
+      # #product_id_of already handles for search results.
+      def current_line_items(checkout)
+        checkout["line_items"].map { |li| { product_id: li.dig("item", "id"), quantity: li["quantity"] } }
       end
 
       def no_match_message
