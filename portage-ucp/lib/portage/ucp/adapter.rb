@@ -17,22 +17,28 @@ module Portage
       # builds the response's Item/Total/LineItem itself.
       # @return [Portage::Ucp::Cart]
       def get_cart(cart_id:) = not_implemented
+      # `discount_codes:` is the dev.ucp.shopping.discount extension — nil
+      # (the default) means the request didn't touch discounts at all; an
+      # adapter that doesn't override #discount_codes_supported? never sees
+      # anything but nil here (see below). Full-replacement like line_items:
+      # once codes are involved, [] clears them, same as UCP's own
+      # discounts_object semantics.
       # @return [Portage::Ucp::Cart]
-      def create_cart(line_items:, idempotency_key:) = not_implemented
+      def create_cart(line_items:, idempotency_key:, discount_codes: nil) = not_implemented
       # @return [Portage::Ucp::Cart]
-      def update_cart(cart_id:, line_items:, idempotency_key:) = not_implemented
+      def update_cart(cart_id:, line_items:, idempotency_key:, discount_codes: nil) = not_implemented
       # @return [Portage::Ucp::Cart]
       def cancel_cart(cart_id:, idempotency_key:) = not_implemented
 
       # --- Checkout (dev.ucp.shopping.checkout) ---
       # @return [Portage::Ucp::Checkout]
-      def create_checkout(line_items:, idempotency_key:) = not_implemented
+      def create_checkout(line_items:, idempotency_key:, discount_codes: nil) = not_implemented
       # @return [Portage::Ucp::Checkout]
       def get_checkout(checkout_id:) = not_implemented
       # Full-replacement, same as update_cart — line_items is required on
       # checkout update per the real spec.
       # @return [Portage::Ucp::Checkout]
-      def update_checkout(checkout_id:, line_items:, idempotency_key:) = not_implemented
+      def update_checkout(checkout_id:, line_items:, idempotency_key:, discount_codes: nil) = not_implemented
       # @param payment_token [String] single-use token from a UCP payment handler / AP2
       #   exchange — NEVER a raw PAN.
       # @return [Portage::Ucp::Checkout]
@@ -58,6 +64,14 @@ module Portage
       # Refunds one or more order line items.
       # @return [Portage::Ucp::Order]
       def refund_order(order_id:, line_items:, idempotency_key:, reason: nil) = not_implemented
+
+      # --- Discount (dev.ucp.shopping.discount) ---
+      # Extends Cart/Checkout with the `discount_codes:` param above rather
+      # than adding actions of its own — Capability::DISCOUNT advertises off
+      # this predicate instead of an overridden action method, since there's
+      # no dedicated method for #advertised_for? to detect an override on.
+      # @return [Boolean]
+      def discount_codes_supported? = false
 
       # --- Identity Linking (dev.ucp.shopping.identity, OAuth 2.0) ---
       # @return [Portage::Ucp::Identity] linked profile for an exchanged OAuth token

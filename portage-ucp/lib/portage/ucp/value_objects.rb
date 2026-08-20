@@ -49,13 +49,62 @@ module Portage
       end
     end
 
+    # schemas/shopping/discount.json#/$defs/applied_discount — requires title/
+    # amount. `code` is omitted for automatic discounts; `allocations` (the
+    # per-target breakdown) is left empty rather than guessed at by adapters
+    # that can't source it from their platform.
+    # `allocation_method` maps to the wire key "method" — bare `:method` as a
+    # Data.define member would shadow Kernel#method.
+    AppliedDiscount = Data.define(:title, :amount, :code, :automatic, :allocation_method, :priority, :provisional,
+                                  :eligibility, :allocations) do
+      def initialize(title:, amount:, code: nil, automatic: false, allocation_method: nil, priority: nil,
+                     provisional: false, eligibility: nil, allocations: [])
+        super
+      end
+
+      def to_wire_h
+        h = { "title" => title, "amount" => amount }
+        { code: "code", automatic: "automatic", allocation_method: "method", priority: "priority",
+          provisional: "provisional", eligibility: "eligibility" }.each do |attr, key|
+          h[key] = public_send(attr) if public_send(attr)
+        end
+        h["allocations"] = allocations if allocations.any?
+        h
+      end
+    end
+
+    # schemas/shopping/discount.json#/$defs/discounts_object — `codes` is the
+    # request-side input (case-insensitive, full-replacement — send [] to
+    # clear); `applied` is the response-side result. Both optional, so a Cart/
+    # Checkout with no discount activity omits the whole field (see Cart/
+    # Checkout#to_wire_h below), same posture as Order#adjustments.
+    Discounts = Data.define(:codes, :applied) do
+      def initialize(codes: [], applied: []) = super
+
+      def empty? = codes.empty? && applied.empty?
+
+      def to_wire_h
+        h = {}
+        h["codes"] = codes unless codes.empty?
+        h["applied"] = applied.map(&:to_wire_h) unless applied.empty?
+        h
+      end
+    end
+
     # schemas/shopping/cart.json — requires ucp/id/line_items/currency/totals.
     # The "ucp" envelope is added centrally by Portage::Ucp::WireEnvelope, not stored
     # on the value object itself.
-    Cart = Data.define(:id, :line_items, :currency, :totals) do
+    # `discounts` is the dev.ucp.shopping.discount extension (optional on both
+    # cart.json and its own schema) — omitted from the wire payload when empty,
+    # same as Order#adjustments.
+    Cart = Data.define(:id, :line_items, :currency, :totals, :discounts) do
+      def initialize(id:, line_items:, currency:, totals:, discounts: Discounts.new) = super
+
       def to_wire_h
-        { "id" => id, "line_items" => line_items.map(&:to_wire_h), "currency" => currency,
-          "totals" => totals.map(&:to_wire_h) }
+        h = { "id" => id, "line_items" => line_items.map(&:to_wire_h), "currency" => currency,
+              "totals" => totals.map(&:to_wire_h) }
+        h["discounts"] = discounts.to_wire_h unless discounts.empty?
+        h
       end
     end
 
@@ -78,13 +127,17 @@ module Portage
     # canceled) — not the old ad hoc "pending"/"completed" strings. `order` is
     # the schema's optional order_confirmation — set once complete_checkout
     # actually produces an order, nil otherwise.
-    Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links, :order) do
-      def initialize(id:, status:, line_items:, currency:, totals:, links:, order: nil) = super
+    # `discounts` — same dev.ucp.shopping.discount extension as Cart, above.
+    Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links, :order, :discounts) do
+      def initialize(id:, status:, line_items:, currency:, totals:, links:, order: nil, discounts: Discounts.new)
+        super
+      end
 
       def to_wire_h
         h = { "id" => id, "status" => status, "line_items" => line_items.map(&:to_wire_h),
               "currency" => currency, "totals" => totals.map(&:to_wire_h), "links" => links.map(&:to_wire_h) }
         h["order"] = order.to_wire_h if order
+        h["discounts"] = discounts.to_wire_h unless discounts.empty?
         h
       end
     end
