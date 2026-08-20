@@ -97,7 +97,7 @@ module Portage
               result {
                 ... on SubmitSuccess { attemptId }
                 ... on SubmitAlreadyAccepted { attemptId }
-                ... on SubmitFailed { checkoutUrl errors { message } }
+                ... on SubmitFailed { checkoutUrl errors { code message } }
                 ... on SubmitThrottled { pollAfter }
               }
               userErrors { field message }
