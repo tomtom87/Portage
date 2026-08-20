@@ -664,6 +664,31 @@ existing architecture:
   this via their commerce APIs at all and would need a helpdesk integration
   (Zendesk/Gorgias) behind the adapter instead of the storefront API itself.
 
+**Order changes**
+- Cancelling an order and requesting a return/refund — the single biggest gap
+  in this whole list. §11's order lifecycle only runs forward
+  (`create → complete → fulfilled`); there's no `cancel_order`,
+  `request_return`, or `refund` action anywhere in the `Adapter` contract.
+  Every platform here (Shopify, BigCommerce, WooCommerce, Magento) has a real
+  cancel/refund API; this isn't a feasibility question like reviews, it's a
+  straightforward omission. Wants a `dev.ucp.shopping.order` extension
+  (cancel/return/refund actions alongside the existing get) rather than a new
+  top-level family, since it's the same resource as `get_order`.
+- Stock/availability going stale between browsing and buying — `search_catalog`
+  and `get_product` (§3) don't promise live inventory, and nothing re-checks
+  stock right before `complete_checkout`. An adapter can complete a checkout
+  for an item that sold out in between. Whether this is a new
+  `check_availability` action or a required re-check inside `complete_checkout`
+  itself is unresolved — leaning toward the latter, since a stale-stock
+  failure belongs at the point of committing money, not as an extra call
+  agents can forget to make.
+- Digital goods delivery — `get_order` (§3) returns a `permalink_url`; nothing
+  models handing back a download link or license key for non-physical
+  products. The Etsy/Instagram adapters already surface a narrower version of
+  this problem ("checkout is redirect-link only," §14) — full digital delivery
+  is the same shape of gap, just unaddressed for platforms that do support a
+  real checkout.
+
 **Pricing**
 - Discount/coupon codes at checkout — `create_checkout`/`create_cart` (§3)
   gaining an `discount_code:` param, applied by the adapter against the
@@ -674,6 +699,11 @@ existing architecture:
   it's `portage find`'s (§15) multi-store ranking applied to a product the
   shopper already has, not one they're searching for. Needs a "find this same
   item elsewhere" mode rather than new `Adapter` methods.
+- Gift cards / store credit — adjacent to discount codes but a distinct
+  payment-adjacent primitive (a balance that partially funds a checkout,
+  rather than a code that adjusts a price), so it likely wants its own
+  `gift_card_balance:`/apply param on checkout rather than being folded into
+  `discount_code:`.
 
 **Reviews**
 - Leaving a product/order review post-purchase — no capability family for this
@@ -701,7 +731,73 @@ existing architecture:
   through unchanged *if* one exists and produces a compliant token. No such
   handler has been checked; this is a "does the ecosystem have one" research
   item, not a gem-side one.
+- Saving a payment method for reuse — this is the one item here that directly
+  presses on §9's boundary rather than sitting comfortably inside it.
+  `payment_token` is documented as **single-use**; "save it and reuse it"
+  either means something different (a PSP-issued *reference* — Stripe's saved
+  PaymentMethod id, a card-network token vault id — that gets exchanged for a
+  fresh single-use `payment_token` at each `complete_checkout`) or it means
+  reusing the same token twice, which §9 already forbids and no adapter should
+  be made to do. The gem stores only the opaque reference, never the
+  underlying credential — same posture as manifest signing (§7/§9: "never
+  generates/stores keys implicitly"), extended to payment references. This
+  only works at all if the shopper has a persistent identity to hang the
+  reference off of, which is what `Adapter`'s existing identity-linking
+  methods (§3) are for — OAuth here means linking the shopper's identity with
+  the merchant/PSP once, not re-authenticating per purchase. Concretely this
+  wants a `dev.ucp.shopping.payment_method` family (list/save/delete a
+  reference, scoped to a linked identity) plus a hard rule that
+  `save_payment_method` never accepts anything that looks like raw card data —
+  the existing `PaymentTokenGuard` Luhn/format check (§9) should run here too,
+  not just on `complete_checkout`. Deletion/revocation needs to be a first-
+  class action, not an afterthought — a saved reference is a standing liability
+  the single-use token never was, and rate limiting on lookups against it
+  matters more here than anywhere else in the gem.
+- Saving a shipping address for reuse — same shape as the payment-method item
+  directly above (opaque reference, scoped to a linked identity, deletion as
+  a first-class action), and the two should ship together or not at all: a
+  reusable payment reference with no reusable address just re-prompts for
+  address every time, which defeats half the point of "save for reuse." No
+  PCI-style boundary here, but it's still PII at rest, so the same never-
+  generates/stores-secrets-implicitly posture applies to whatever encrypts it.
+
+**Privacy & data lifecycle**
+- Once the gem persists *anything* tied to a shopper — the payment-method and
+  address references above, plus the identity-linking `Adapter` methods (§3)
+  that already exist — it takes on a GDPR/CCPA right-to-erasure obligation it
+  didn't have while everything in scope was a single-use token. There is
+  currently no `delete_shopper_data` capability to discharge that obligation.
+  This should land in the same roadmap step as saved payment methods/addresses
+  (§8 revised ordering: security is foundation, not retrofit) rather than
+  after — shipping persistence without a deletion path is the mistake to
+  avoid, not a follow-up to fix later.
 
 None of the above is scoped or estimated — recorded so it doesn't get lost, in
 the same spirit as §14's platform list, not as a commitment to build any of it
 next.
+
+---
+
+## 17. Adapter conformance kit (added 2026-08-20)
+
+Every item in §16 is a shopper-facing capability gap. This one isn't — it's a
+process gap, and arguably a more urgent one given who this gem is actually
+for. The README says the real audience is third-party adapter authors, not
+the shipped adapters; §7's adapter-contract-evolution decision (default-raise,
+advertise-if-overridden) makes it *easy* for a third-party `Adapter` subclass
+to compile and run while silently satisfying the contract wrong — a capability
+that's advertised but returns malformed data, breaks idempotency, or leaks a
+`payment_token` into a log line the subclass author wrote, not the gem.
+
+Nothing currently checks a third-party `Adapter` against the contract before
+its capability shows up in a manifest. `Portage::Ucp::SchemaValidator` (see
+README, "Spec conformance") validates *wire output* against UCP's schemas, but
+that's necessary, not sufficient — schema-valid output can still violate §9
+(idempotency not actually deduped, a PAN slipping past a hand-rolled guard
+that isn't the shared `PaymentTokenGuard`) or lie about what it fulfilled. A
+conformance kit — a shared rspec/shared-examples suite an adapter author runs
+against their own `Adapter` instance, covering the contract's behavioral
+guarantees (not just its JSON Schema shape) — is the missing piece that turns
+"any backend that implements `Adapter`" from a README claim into something
+checked. Unscoped; noted here because it's easy to miss when every other gap
+in this log is a capability, not a test suite.
