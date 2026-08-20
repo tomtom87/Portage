@@ -35,6 +35,14 @@ module Portage
       def update_checkout(checkout_id:, line_items:, idempotency_key:) = not_implemented
       # @param payment_token [String] single-use token from a UCP payment handler / AP2
       #   exchange — NEVER a raw PAN.
+      # Re-checks stock at the point of committing money, since search_catalog/
+      # get_product (dev.ucp.shopping.catalog) don't promise live inventory and
+      # nothing else re-checks between browsing and buying. An adapter whose
+      # platform rejects completion because a line item is out of stock or
+      # otherwise unavailable should raise Portage::Ucp::OutOfStockError rather
+      # than a generic/platform error, so callers can distinguish a stale-stock
+      # failure from e.g. a declined payment.
+      # @raise [Portage::Ucp::OutOfStockError] if a line item is no longer available
       # @return [Portage::Ucp::Checkout]
       def complete_checkout(checkout_id:, payment_token:, idempotency_key:) = not_implemented
       # @return [Portage::Ucp::Checkout]
