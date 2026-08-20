@@ -801,3 +801,58 @@ guarantees (not just its JSON Schema shape) — is the missing piece that turns
 "any backend that implements `Adapter`" from a README claim into something
 checked. Unscoped; noted here because it's easy to miss when every other gap
 in this log is a capability, not a test suite.
+
+---
+
+## 18. Discount codes (added 2026-08-20)
+
+Next §16 item picked up after order cancel/return/refund and the checkout
+stock re-check: "Discount/coupon codes at checkout." Digital goods delivery
+(the item listed just above it in §16) was considered first and rejected —
+checked every vendored schema type a line item or order could plausibly carry
+one on (`order_line_item.json`, `item.json`, `order_confirmation.json`) and
+none has a download-link/license-key field or an `additionalProperties`
+opening for one. Shopify itself has no native field either (digital delivery
+there is entirely app-mediated). Building it now would mean inventing
+non-spec wire data, which cuts against the whole point of vendoring UCP's own
+schemas (§1) — that item stays parked in §16 until UCP's spec actually grows
+a field for it.
+
+Discount codes, by contrast, already have a full vendored extension schema —
+`schemas/shopping/discount.json`, `dev.ucp.shopping.discount` — that extends
+Cart and Checkout with a `discounts: {codes, applied}` field rather than
+adding new top-level actions. That's a shape this gem hadn't needed before:
+every existing capability (`capabilities/*.rb`) is a flat action-name → method
+map, and `Capability#advertised_for?` only knows how to ask "is at least one
+of these backing methods overridden?" A capability with no actions of its own
+would never advertise under that check (`actions.values.any?` on an empty
+hash is always `false`).
+
+Rather than build out real `extends`/manifest-nesting machinery — the
+capability model doesn't have one yet, manifest.rb doesn't even emit spec/
+schema URLs for the capabilities that already exist, and inventing that
+infrastructure for one capability is exactly the kind of speculative
+generality this project tries to avoid — `Capability` gained a minimal
+`predicate:` option: an extension capability can name an adapter method
+(`Adapter#discount_codes_supported?`, default `false`) that `advertised_for?`
+asks directly instead of inspecting `actions`. `dev.ucp.shopping.discount`
+carries `actions: {}` and `predicate: :discount_codes_supported?`. This is the
+smallest change that makes a field-only extension capability negotiable at
+all; a real "extends" concept (spec/schema URLs, nested nesting in the
+manifest) is still not built and should be designed properly if a second
+field-only extension ever needs one, not extrapolated from this one example.
+
+`create_cart`/`update_cart`/`create_checkout`/`update_checkout` all gained an
+optional `discount_codes:` param, defaulting to `nil` — deliberately not `[]`,
+so "the request didn't mention discounts" and "the request wants discounts
+cleared" stay distinguishable at the Ruby layer the same way the wire schema
+distinguishes "omitted" from "explicit empty array." Only the Shopify adapter
+implements it (Storefront `CartInput.discountCodes` on create,
+`cartDiscountCodesUpdate` on update, same full-replacement posture as
+`update_cart`'s existing line-item handling) — BigCommerce/WooCommerce/
+Magento/Wix/Etsy/Instagram are untouched, same incremental-by-adapter pattern
+order cancel/refund already established. `AppliedDiscount#allocations` (the
+per-target JSONPath breakdown) is left unpopulated by the Shopify mapper —
+Storefront's `discountAllocations` doesn't cleanly resolve to a specific line
+item index without a second per-line query this pass didn't add; noted here
+rather than guessed at.
