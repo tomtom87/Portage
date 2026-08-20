@@ -801,3 +801,58 @@ guarantees (not just its JSON Schema shape) — is the missing piece that turns
 "any backend that implements `Adapter`" from a README claim into something
 checked. Unscoped; noted here because it's easy to miss when every other gap
 in this log is a capability, not a test suite.
+
+---
+
+## 18. Fulfillment / shipping-option selection (added 2026-08-20)
+
+Next capability gap picked up after order cancel/return/refund: letting an
+agent pick a shipping rate or pickup location during checkout. Same shape of
+problem discount codes solved — `schemas/shopping/fulfillment.json`
+(`dev.ucp.shopping.fulfillment`) is a full vendored extension schema that
+extends Checkout with a `fulfillment` field rather than new top-level
+actions, so it reuses `Capability`'s `predicate:` option
+(`Adapter#fulfillment_supported?`, default `false`) the same way
+`dev.ucp.shopping.discount` does.
+
+The extension is more structurally involved than discount codes, though:
+`fulfillment.methods[]` covers both shipping and pickup, each method can
+carry multiple merchant-generated destinations (addresses/retail locations)
+and groups (packages), and each group carries its own list of priced
+`FulfillmentOption`s the agent chooses from via `selected_option_id`. That
+required five new value objects beyond the container itself
+(`PostalAddress`, `ShippingDestination`, `RetailLocation`,
+`FulfillmentOption`, `FulfillmentGroup`, `FulfillmentMethod`) — this gem had
+no address type at all before this, despite `types/postal_address.json`
+existing in the vendored schemas since day one; nothing had needed it yet.
+
+Naming collision to flag: the extension's container type is called
+`fulfillment` in the schema, same as `Order#fulfillment` (the *post-purchase*
+delivery-tracking container — expectations/events, already modeled as
+`Portage::Ucp::Fulfillment`). These are genuinely different things at
+different points in the lifecycle — one is "which shipping method do you
+want," the other is "here's what shipped and when" — so the new container is
+`Portage::Ucp::CheckoutFulfillment`, not a second `Fulfillment`. Its
+`methods` field is `shipping_methods` internally (a bare `:methods`
+Data.define member shadows `Kernel#methods`); `to_wire_h` maps it back to the
+spec's `"methods"` key, same “internal name diverges from wire key” pattern
+`AppliedDiscount#allocation_method` → `"method"` already established.
+
+`create_checkout`/`update_checkout` both gained an optional `fulfillment:`
+param, `nil` by default — same omitted-vs-explicit distinction the
+`discount_codes:` param made, though what a non-nil value *means* differs by
+direction: on create it's the agent's requested method types plus which line
+items go where (the merchant fills in destinations/groups/options in the
+response); on update it's the agent's `selected_destination_id`/
+`selected_option_id` choices against what the merchant already offered.
+`create_cart`/`update_cart` did **not** gain the param — Cart's schema has no
+fulfillment extension point; shipping selection is checkout-only in the
+vendored spec, unlike discounts which apply to both.
+
+This is contract-and-value-objects only. No adapter implements
+`fulfillment_supported?` yet — Shopify's mapping (Storefront cart has no
+native "fulfillment group" concept; it would mean synthesizing groups from
+`availableShippingRates`/`deliveryGroups` and threading `selected_option_id`
+back into `cartSelectedDeliveryOptionsUpdate`) is real work, left for its own
+follow-up commit rather than bundled here, matching how discount codes'
+contract and Shopify-implementation landed as two separate commits.
