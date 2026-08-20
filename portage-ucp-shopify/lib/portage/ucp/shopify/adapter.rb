@@ -123,7 +123,65 @@ module Portage
           node && Mapper.order(node, checkout_id: checkout_id_for(order_id))
         end
 
+        # orderCancel returns only a (possibly still-pending) job — the
+        # updated cancellation state is read back via #get_order, same
+        # "trust a fresh read over the mutation payload" posture as
+        # #cancel_checkout.
+        def cancel_order(order_id:, idempotency_key:, reason: nil)
+          dedup(idempotency_key) do
+            data = @client.admin_query(Queries::ORDER_CANCEL, variables: { orderId: order_id, staffNote: reason })
+            raise_on_errors!(data, "orderCancel", "orderCancelUserErrors")
+            get_order(order_id: order_id)
+          end
+        end
+
+        # `line_items:` here are order line items ({id:, quantity:}) — the
+        # same ids GET_ORDER's line_items carry — since refundLineItems keys
+        # off the plain LineItem id, unlike request_return's
+        # fulfillmentLineItemId below.
+        def refund_order(order_id:, line_items:, idempotency_key:, reason: nil)
+          dedup(idempotency_key) do
+            refund_line_items = line_items.map { |li| { lineItemId: li[:id], quantity: li[:quantity] } }
+            transactions = suggested_refund_transactions(order_id, refund_line_items)
+            data = @client.admin_query(
+              Queries::REFUND_CREATE,
+              variables: { input: { orderId: order_id, note: reason, refundLineItems: refund_line_items,
+                                    transactions: transactions } }
+            )
+            raise_on_errors!(data, "refundCreate", "userErrors")
+            get_order(order_id: order_id)
+          end
+        end
+
+        def request_return(order_id:, line_items:, idempotency_key:, reason: nil)
+          dedup(idempotency_key) do
+            return_line_items = line_items.map do |li|
+              { fulfillmentLineItemId: li[:id], quantity: li[:quantity], returnReason: "OTHER",
+                returnReasonNote: reason }
+            end
+            data = @client.admin_query(Queries::RETURN_CREATE,
+                                       variables: { returnInput: { orderId: order_id,
+                                                                   returnLineItems: return_line_items } })
+            raise_on_errors!(data, "returnCreate", "userErrors")
+            get_order(order_id: order_id)
+          end
+        end
+
         private
+
+        def raise_on_errors!(data, field, errors_key)
+          errors = data.dig(field, errors_key)
+          raise Portage::Ucp::Shopify::UserError.new(field, errors) if errors && !errors.empty?
+        end
+
+        def suggested_refund_transactions(order_id, refund_line_items)
+          data = @client.admin_query(Queries::SUGGESTED_REFUND,
+                                     variables: { orderId: order_id, refundLineItems: refund_line_items })
+          (data.dig("order", "suggestedRefund", "transactions") || []).map do |t|
+            { orderId: order_id, gateway: t["gateway"], kind: t["kind"],
+              amount: t.dig("amountSet", "shopMoney", "amount"), parentId: t.dig("parentTransaction", "id") }
+          end
+        end
 
         def fetch_cart_node(cart_id)
           @client.storefront_query(Queries::GET_CART, variables: { id: cart_id })["cart"]

@@ -110,6 +110,8 @@ module Portage
             order(id: $id) {
               id
               statusPageUrl
+              cancelledAt
+              cancelReason
               currentTotalPriceSet { shopMoney { amount currencyCode } }
               currentSubtotalPriceSet { shopMoney { amount currencyCode } }
               lineItems(first: 100) {
@@ -139,6 +141,96 @@ module Portage
                   nodes { quantity lineItem { id } }
                 }
               }
+              refunds(first: 25) {
+                id
+                createdAt
+                note
+                totalRefundedSet { shopMoney { amount currencyCode } }
+                refundLineItems(first: 100) {
+                  nodes { quantity lineItem { id } }
+                }
+              }
+              returns(first: 25) {
+                nodes {
+                  id
+                  status
+                  requestedAt
+                  returnLineItems(first: 100) {
+                    nodes {
+                      quantity
+                      returnReasonNote
+                      fulfillmentLineItem { lineItem { id } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        GRAPHQL
+
+        # orderCancel is async (returns a job, not the updated Order) — the
+        # adapter re-fetches via GET_ORDER afterwards for the current state,
+        # same posture as #cancel_checkout not trusting a mutation payload
+        # over a fresh read. `reason` is fixed to OTHER: UCP's cancel_order
+        # only carries a free-text note (`staffNote`), it doesn't expose
+        # Shopify's closed OrderCancelReason enum.
+        ORDER_CANCEL = <<~GRAPHQL.freeze
+          mutation OrderCancel($orderId: ID!, $staffNote: String) {
+            orderCancel(orderId: $orderId, reason: OTHER, refund: false, restock: false, staffNote: $staffNote) {
+              job { id done }
+              orderCancelUserErrors { field message code }
+            }
+          }
+        GRAPHQL
+
+        # refundCreate requires explicit `transactions:` (which gateway
+        # transaction to refund against, and how much) — suggestedRefund is
+        # Shopify's documented way to compute that breakdown instead of the
+        # adapter guessing at payment-gateway specifics. #refund_order runs
+        # this first, then feeds its `transactions` straight into
+        # REFUND_CREATE's input.
+        SUGGESTED_REFUND = <<~GRAPHQL.freeze
+          query SuggestedRefund($orderId: ID!, $refundLineItems: [RefundLineItemInput!]!) {
+            order(id: $orderId) {
+              suggestedRefund(refundLineItems: $refundLineItems) {
+                transactions {
+                  orderId
+                  gateway
+                  kind
+                  amountSet { shopMoney { amount currencyCode } }
+                  parentTransaction { id }
+                }
+              }
+            }
+          }
+        GRAPHQL
+
+        REFUND_CREATE = <<~GRAPHQL.freeze
+          mutation RefundCreate($input: RefundInput!) {
+            refundCreate(input: $input) {
+              refund {
+                id
+                createdAt
+                note
+                totalRefundedSet { shopMoney { amount currencyCode } }
+                refundLineItems(first: 100) { nodes { quantity lineItem { id } } }
+              }
+              userErrors { field message }
+            }
+          }
+        GRAPHQL
+
+        # returnCreate's returnLineItems key off `fulfillmentLineItemId`, not
+        # the plain order-line-item id REFUND_CREATE's refundLineItems use —
+        # a real return targets what was actually fulfilled. `request_return`
+        # callers pass fulfillment line item ids in `line_items:` for this
+        # action specifically; needs confirming against a live store, same
+        # caveat as #complete_checkout's payment sub-shape.
+        RETURN_CREATE = <<~GRAPHQL.freeze
+          mutation ReturnCreate($returnInput: ReturnInput!) {
+            returnCreate(returnInput: $returnInput) {
+              return { id status }
+              userErrors { field message }
             }
           }
         GRAPHQL

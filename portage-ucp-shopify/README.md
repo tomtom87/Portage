@@ -9,12 +9,14 @@ Shopify adapter for [`portage-ucp`](../portage-ucp). Implements `Portage::Ucp::A
 | `dev.ucp.shopping.catalog` | Admin | `search_catalog`, `get_product` |
 | `dev.ucp.shopping.cart` | Storefront (Cart) | `get_cart`, `create_cart`, `update_cart`, `cancel_cart` |
 | `dev.ucp.shopping.checkout` | Storefront (same Cart object) | `create_checkout`, `get_checkout`, `update_checkout`, `complete_checkout`, `cancel_checkout` |
-| `dev.ucp.shopping.order` | Admin | `get_order` |
+| `dev.ucp.shopping.order` | Admin | `get_order`, `cancel_order`, `refund_order`, `request_return` (gem-side extension beyond the real UCP spec — see below) |
 | `dev.ucp.shopping.identity` | — | not implemented; Shopify's OAuth identity story lives in the separate Customer Account API, out of scope here |
 
 Shopify has no separate "Checkout" object — Storefront's `Cart` **is** the checkout. The adapter tracks checkout status (`incomplete` / `completed` / `canceled` / `complete_in_progress`) itself, keyed by cart id, and resolves `Order#checkout_id` after completion via a `cart_token:` order search.
 
 Update/replace operations (`update_cart`, `update_checkout`) are full-replacement: Storefront has no atomic "replace all lines" mutation, so the adapter removes every current line then re-adds the desired ones. Mutating methods dedup by `idempotency_key` in-process so a dropped-connection retry can't double-charge.
+
+`cancel_order`, `refund_order`, and `request_return` cancel via `orderCancel`, refund via `suggestedRefund` + `refundCreate`, and request a return via `returnCreate`, respectively — each re-fetches the order afterwards rather than trusting the mutation's own payload, and the result shows up as an appended `Portage::Ucp::Adjustment` on `Order#adjustments` (type `cancellation`/`refund`/`return`). These three aren't in the real UCP spec's order lifecycle (get-only today) — they're a deliberate extension of the existing `dev.ucp.shopping.order` capability rather than a new top-level family, since it's the same resource as `get_order`.
 
 ## Installation
 

@@ -88,7 +88,60 @@ module Portage
             line_items: node.dig("lineItems", "nodes").map { |n| order_line_item(n) },
             fulfillment: fulfillment(node),
             currency: node.dig("currentTotalPriceSet", "shopMoney", "currencyCode"),
-            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal_amount, total: total_amount)
+            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal_amount, total: total_amount),
+            adjustments: adjustments(node)
+          )
+        end
+
+        # cancel_order/refund_order/request_return (design-log §16) don't map
+        # to a dedicated Shopify response shape each — they all resolve back
+        # to a fresh GET_ORDER read, so the order's cancellation/refund/return
+        # state is read straight off the Order node here rather than
+        # synthesized ad hoc per adapter method.
+        def adjustments(node)
+          [
+            *(node["cancelledAt"] ? [cancellation_adjustment(node)] : []),
+            *(node["refunds"] || []).map { |n| refund_adjustment(n) },
+            *(node.dig("returns", "nodes") || []).map { |n| return_adjustment(n) }
+          ]
+        end
+
+        def cancellation_adjustment(node)
+          Portage::Ucp::Adjustment.new(
+            id: "#{node['id']}-cancellation", type: "cancellation", occurred_at: node["cancelledAt"],
+            status: "completed", description: node["cancelReason"]
+          )
+        end
+
+        def refund_adjustment(node)
+          line_items = (node.dig("refundLineItems", "nodes") || []).map { |n| order_line_ref(n, -n["quantity"]) }
+          Portage::Ucp::Adjustment.new(
+            id: node["id"], type: "refund", occurred_at: node["createdAt"], status: "completed",
+            line_items: line_items.empty? ? nil : line_items,
+            totals: [Portage::Ucp::Total.new(type: "total", amount: -minor_units(node.dig("totalRefundedSet",
+                                                                                          "shopMoney")))],
+            description: node["note"]
+          )
+        end
+
+        # Shopify's ReturnStatus enum (OPEN/REQUESTED/CLOSED/DECLINED/
+        # CANCELED/...); unmapped values fall back to "pending", same
+        # unmapped-enum posture as DELIVERY_METHOD_TYPES/
+        # FULFILLMENT_EVENT_TYPES below.
+        RETURN_STATUSES = {
+          "OPEN" => "pending", "REQUESTED" => "pending", "CLOSED" => "completed",
+          "DECLINED" => "failed", "CANCELED" => "failed"
+        }.freeze
+
+        def return_adjustment(node)
+          line_items = (node.dig("returnLineItems", "nodes") || []).map do |n|
+            { "id" => n.dig("fulfillmentLineItem", "lineItem", "id"), "quantity" => -n["quantity"] }
+          end
+          description = node.dig("returnLineItems", "nodes")&.first&.fetch("returnReasonNote", nil)
+          Portage::Ucp::Adjustment.new(
+            id: node["id"], type: "return", occurred_at: node["requestedAt"],
+            status: RETURN_STATUSES.fetch(node["status"], "pending"),
+            line_items: line_items.empty? ? nil : line_items, description: description
           )
         end
 
