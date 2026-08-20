@@ -47,6 +47,36 @@ RSpec.describe Portage::Ucp::Dispatcher do
     end.to raise_error(Portage::Ucp::RawPanRejectedError)
   end
 
+  it "routes cancel_order/request_return/refund_order through as dev.ucp.shopping.order actions (§16)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 2 }],
+                                            idempotency_key: "chk-oc" })[:structuredContent]
+    confirmation = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                                   arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                                idempotency_key: "chk-oc-complete" })[:structuredContent]["order"]
+    order_id = confirmation["id"]
+    line_item_id = dispatcher.call(capability: "dev.ucp.shopping.order", action: "get_order",
+                                   arguments: { order_id: order_id })[:structuredContent]["line_items"][0]["id"]
+
+    refunded = dispatcher.call(capability: "dev.ucp.shopping.order", action: "refund_order",
+                               arguments: { order_id: order_id,
+                                            line_items: [{ id: line_item_id, quantity: 1 }],
+                                            idempotency_key: "ref1" })[:structuredContent]
+    expect(refunded["adjustments"].size).to eq(1)
+    expect(refunded["adjustments"][0]["type"]).to eq("refund")
+
+    returned = dispatcher.call(capability: "dev.ucp.shopping.order", action: "request_return",
+                               arguments: { order_id: order_id,
+                                            line_items: [{ id: line_item_id, quantity: 1 }],
+                                            idempotency_key: "ret1", reason: "wrong size" })[:structuredContent]
+    expect(returned["adjustments"].map { |a| a["type"] }).to eq(%w[refund return])
+    expect(returned["adjustments"][1]["status"]).to eq("pending")
+
+    canceled = dispatcher.call(capability: "dev.ucp.shopping.order", action: "cancel_order",
+                               arguments: { order_id: order_id, idempotency_key: "can1" })[:structuredContent]
+    expect(canceled["adjustments"].last["type"]).to eq("cancellation")
+  end
+
   it "raises UnknownCapabilityError for a capability name that isn't registered" do
     expect { dispatcher.call(capability: "dev.ucp.shopping.nonexistent", action: "whatever", arguments: {}) }
       .to raise_error(Portage::Ucp::UnknownCapabilityError, /dev\.ucp\.shopping\.nonexistent/)

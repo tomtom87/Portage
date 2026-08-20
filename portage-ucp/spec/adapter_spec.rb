@@ -23,6 +23,12 @@ RSpec.describe Portage::Ucp::Adapter do
     expect { adapter.cancel_checkout(checkout_id: "c", idempotency_key: "k") }
       .to raise_error(Portage::Ucp::NotImplementedError)
     expect { adapter.get_order(order_id: "o") }.to raise_error(Portage::Ucp::NotImplementedError)
+    expect { adapter.cancel_order(order_id: "o", idempotency_key: "k") }
+      .to raise_error(Portage::Ucp::NotImplementedError)
+    expect { adapter.request_return(order_id: "o", line_items: [], idempotency_key: "k") }
+      .to raise_error(Portage::Ucp::NotImplementedError)
+    expect { adapter.refund_order(order_id: "o", line_items: [], idempotency_key: "k") }
+      .to raise_error(Portage::Ucp::NotImplementedError)
     expect { adapter.link_identity(oauth_token: "t") }.to raise_error(Portage::Ucp::NotImplementedError)
   end
 

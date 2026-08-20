@@ -64,6 +64,22 @@ RSpec.describe Portage::Ucp::SchemaValidator do
     expect(validator.errors_for("schemas/shopping/order.json", valid_order_payload)).to eq([])
   end
 
+  # Proves the adjustments array cancel_order/request_return/refund_order
+  # append (design-log §16) is itself schema-conformant, not just the base
+  # Order shape.
+  it "validates an Order payload carrying a refund Adjustment against the vendored schema" do
+    refund = Portage::Ucp::Adjustment.new(
+      id: "adj_1", type: "refund", occurred_at: "2026-08-20T00:00:00Z", status: "completed",
+      line_items: [{ "id" => "oli_1", "quantity" => -1 }],
+      totals: [Portage::Ucp::Total.new(type: "total", amount: -500)]
+    )
+    payload = Portage::Ucp::WireEnvelope.wrap("dev.ucp.shopping.order", valid_order_payload.merge(
+                                                                          "adjustments" => [refund.to_wire_h]
+                                                                        ))
+
+    expect(validator.errors_for("schemas/shopping/order.json", payload)).to eq([])
+  end
+
   describe "method_names" do
     it "lists the method names declared by the vendored UCP shopping MCP OpenRPC document" do
       names = validator.method_names("services/shopping/mcp.openrpc.json")
@@ -73,12 +89,32 @@ RSpec.describe Portage::Ucp::SchemaValidator do
   end
 
   describe "capability/spec conformance" do
-    it "has all Catalog and Order actions present in the real UCP method list" do
+    it "has all Catalog actions present in the real UCP method list" do
       real_methods = validator.method_names("services/shopping/mcp.openrpc.json")
 
-      catalog_and_order_actions = (Portage::Ucp::Capabilities::CATALOG.actions.keys + Portage::Ucp::Capabilities::ORDER.actions.keys)
+      expect(Portage::Ucp::Capabilities::CATALOG.actions.keys - real_methods).to eq([])
+    end
 
-      expect(catalog_and_order_actions - real_methods).to eq([])
+    # cancel_order/request_return/refund_order are a deliberate gem-side
+    # extension of dev.ucp.shopping.order (design-log §16 "Order changes") —
+    # the real UCP spec's order lifecycle is get-only. Naming them here keeps
+    # these tests meaningful: any *other* drift from the real method list
+    # still fails them, while these three stay an intentional, tracked
+    # exception rather than a silent gap.
+    let(:order_extension_actions) { %w[cancel_order request_return refund_order] }
+
+    it "has all real (non-extension) Order actions present in the real UCP method list" do
+      real_methods = validator.method_names("services/shopping/mcp.openrpc.json")
+      spec_backed_actions = Portage::Ucp::Capabilities::ORDER.actions.keys - order_extension_actions
+
+      expect(spec_backed_actions - real_methods).to eq([])
+    end
+
+    it "only ships the known, deliberate extension actions beyond the real UCP order method list" do
+      real_methods = validator.method_names("services/shopping/mcp.openrpc.json")
+      extension_actions = Portage::Ucp::Capabilities::ORDER.actions.keys - real_methods
+
+      expect(extension_actions.sort).to eq(order_extension_actions.sort)
     end
 
     it "has all Checkout actions present in the real UCP method list" do
