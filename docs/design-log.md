@@ -858,8 +858,11 @@ only ever carries the one buyer-submitted address, so `destinations` is
 always `[]` or a single entry with a fixed id (`"current"`), never a real
 list to choose between. The agent's address goes out via
 `cartDeliveryAddressesAdd`, its `selected_option_id` choices via
-`cartSelectedDeliveryOptionsUpdate` — both mutations' exact input shapes are
-this pass's best-effort guess at Storefront API's current delivery-address
-input, flagged for confirmation against a real dev store the same way
-`cartPaymentUpdate`'s `paymentMethod` sub-shape already is (roadmap step 5
-covers both).
+`cartSelectedDeliveryOptionsUpdate` — both mutations' input shapes were
+confirmed live against a real dev store (`ucp-test-bc2vif1p.myshopify.com`,
+2026-08-21): cart created, address submitted via
+`{ address: { deliveryAddress: {...} }, selected: true }`, delivery groups
+came back populated with priced options, and the selection round-tripped via
+`{ deliveryGroupId:, deliveryOptionHandle: }` with `selectedDeliveryOption`
+reflecting the chosen handle. No shape changes needed. `cartPaymentUpdate`'s
+`paymentMethod` sub-shape is still unconfirmed (roadmap step 5).

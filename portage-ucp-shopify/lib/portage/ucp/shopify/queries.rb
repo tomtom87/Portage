@@ -81,13 +81,13 @@ module Portage
           }
         GRAPHQL
 
-        # `CartSelectableAddressInput`'s exact nested shape (this is Storefront
-        # API's current replacement for the deprecated
-        # CartBuyerIdentityInput#deliveryAddressPreferences path) needs
-        # confirming against a real dev store, same caveat as
-        # CART_PAYMENT_UPDATE's paymentMethod sub-shape below (roadmap step
-        # 5) — this is the adapter's best-effort mapping of
-        # dev.ucp.shopping.fulfillment's ShippingDestination onto it.
+        # `CartSelectableAddressInput`'s nested shape (Storefront API's
+        # current replacement for the deprecated
+        # CartBuyerIdentityInput#deliveryAddressPreferences path) is the
+        # adapter's mapping of dev.ucp.shopping.fulfillment's
+        # ShippingDestination onto it. Confirmed live against a real dev
+        # store 2026-08-21 — see design-log.md #18. CART_PAYMENT_UPDATE's
+        # paymentMethod sub-shape below is still unconfirmed (roadmap step 5).
         CART_DELIVERY_ADDRESSES_ADD = <<~GRAPHQL.freeze
           mutation CartDeliveryAddressesAdd($cartId: ID!, $addresses: [CartSelectableAddressInput!]!) {
             cartDeliveryAddressesAdd(cartId: $cartId, addresses: $addresses) {
