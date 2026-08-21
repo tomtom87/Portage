@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.1.0)
+    portage-ucp (0.2.0)
       base64 (~> 0.2)
       json_schemer (~> 2.5)
       mcp (~> 0.24)
@@ -10,9 +10,9 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-client (0.1.0)
+    portage-ucp-client (0.2.0)
       mcp (~> 0.24)
-      portage-ucp (~> 0.1)
+      portage-ucp (~> 0.2)
 
 GEM
   remote: https://rubygems.org/
