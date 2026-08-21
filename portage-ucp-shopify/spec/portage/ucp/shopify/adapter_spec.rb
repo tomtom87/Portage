@@ -18,12 +18,18 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
         { "id" => "gid://shopify/CartLine/1", "quantity" => 1,
           "cost" => { "totalAmount" => { "amount" => "5.00", "currencyCode" => "USD" } },
           "merchandise" => { "id" => "gid://shopify/ProductVariant/1", "product" => { "title" => "Cold Brew" },
-                             "price" => { "amount" => "5.00", "currencyCode" => "USD" } } }
+                             "price" => { "amount" => "5.00", "currencyCode" => "USD" }, "availableForSale" => true } }
       ] }
     }
   end
 
   let(:empty_cart_response) { cart_response.merge("lines" => { "nodes" => [] }) }
+
+  let(:out_of_stock_cart_response) do
+    line = cart_response["lines"]["nodes"][0]
+    unavailable = line["merchandise"].merge("availableForSale" => false)
+    cart_response.merge("lines" => { "nodes" => [line.merge("merchandise" => unavailable)] })
+  end
 
   def stub_storefront(response_body)
     stub_request(:post, "https://test-shop.myshopify.com/api/2026-04/graphql.json")
@@ -248,22 +254,19 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       end.to raise_error(Portage::Ucp::Shopify::Error, /card declined/)
     end
 
-    it "raises Portage::Ucp::OutOfStockError when a SubmitFailed error code signals unavailable stock" do
-      stub_storefront({ data: { cart: cart_response } })
+    it "raises Portage::Ucp::OutOfStockError when a cart line is no longer available for sale, " \
+       "before attempting payment" do
+      stub_storefront({ data: { cart: out_of_stock_cart_response } })
         .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
-      stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
+      payment_stub =
+        stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
         .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
-      stub_storefront(
-        { data: { cartSubmitForCompletion: {
-          result: { errors: [{ code: "INVENTORY_RESERVATION_ERROR", message: "Cold Brew is no longer available" }] },
-          userErrors: []
-        } } }
-      ).with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
 
       expect do
         adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
                                   idempotency_key: "chk1-oos")
-      end.to raise_error(Portage::Ucp::OutOfStockError, /no longer available/)
+      end.to raise_error(Portage::Ucp::OutOfStockError, /Cold Brew/)
+      expect(payment_stub).not_to have_been_requested
     end
   end
 

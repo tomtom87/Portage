@@ -38,7 +38,14 @@ module Portage
             nodes {
               id quantity
               cost { totalAmount { amount currencyCode } }
-              merchandise { ... on ProductVariant { id product { id title } price { amount currencyCode } } }
+              merchandise {
+                ... on ProductVariant {
+                  id
+                  product { id title }
+                  price { amount currencyCode }
+                  availableForSale
+                }
+              }
             }
           }
         GRAPHQL
@@ -97,7 +104,7 @@ module Portage
               result {
                 ... on SubmitSuccess { attemptId }
                 ... on SubmitAlreadyAccepted { attemptId }
-                ... on SubmitFailed { checkoutUrl errors { code message } }
+                ... on SubmitFailed { checkoutUrl errors { message } }
                 ... on SubmitThrottled { pollAfter }
               }
               userErrors { field message }

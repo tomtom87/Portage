@@ -217,6 +217,8 @@ module Portage
           cart_node = fetch_cart_node(checkout_id)
           raise Portage::Ucp::Shopify::Error, "cart #{checkout_id} not found" unless cart_node
 
+          raise_if_any_line_unavailable!(cart_node)
+
           pay_for_cart(checkout_id, cart_node.dig("cost", "totalAmount"), payment_token)
 
           submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
@@ -267,13 +269,22 @@ module Portage
           payload.fetch("cart")
         end
 
-        # Out-of-stock detection here is a code-substring match rather than an
-        # exact SubmissionErrorCode enum comparison, same "needs confirming
-        # against a live store" posture as #complete_checkout's payment
-        # sub-shape — Shopify's SubmitFailed error codes for a sold-out line
-        # item aren't pinned down without a real dev-store reproduction.
-        OUT_OF_STOCK_CODE_PATTERN = /STOCK|INVENTORY|UNAVAILABLE/
-        private_constant :OUT_OF_STOCK_CODE_PATTERN
+        # Checked against a live dev store: a sold-out line doesn't get its
+        # own SubmissionErrorCode on cartSubmitForCompletion — Shopify raises
+        # the same NO_DELIVERY_GROUP_SELECTED code it uses for an ordinary
+        # incomplete checkout that simply hasn't picked a delivery option yet,
+        # so a code-substring match on that mutation's errors can't tell stale
+        # stock apart from a normal in-progress checkout. availableForSale on
+        # each line's merchandise is the one field that actually flips when a
+        # variant goes out of stock, so the check happens here instead, before
+        # a payment is even attempted.
+        def raise_if_any_line_unavailable!(cart_node)
+          unavailable = cart_node.dig("lines", "nodes").reject { |n| n.dig("merchandise", "availableForSale") }
+          return if unavailable.empty?
+
+          titles = unavailable.map { |n| n.dig("merchandise", "product", "title") }.join(", ")
+          raise Portage::Ucp::OutOfStockError, "no longer available: #{titles}"
+        end
 
         def unwrap_submit!(data)
           payload = data.fetch("cartSubmitForCompletion")
@@ -281,18 +292,9 @@ module Portage
           raise Portage::Ucp::Shopify::UserError.new("cartSubmitForCompletion", errors) if errors && !errors.empty?
 
           result = payload["result"]
-          raise_on_submit_failed!(result["errors"]) if result["errors"]
+          raise Portage::Ucp::Shopify::Error, result.dig("errors", 0, "message") if result["errors"]
 
           result.key?("pollAfter") ? "complete_in_progress" : "completed"
-        end
-
-        def raise_on_submit_failed!(errors)
-          message = errors.first["message"]
-          if errors.any? { |e| e["code"].to_s.match?(OUT_OF_STOCK_CODE_PATTERN) }
-            raise Portage::Ucp::OutOfStockError, message
-          end
-
-          raise Portage::Ucp::Shopify::Error, message
         end
       end
     end

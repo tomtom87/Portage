@@ -7,13 +7,16 @@ pre-1.0, so APIs may still shift between minor versions.
 ## [Unreleased]
 
 - `#complete_checkout` now raises `Portage::Ucp::OutOfStockError` (design-log
-  §16 "Stock/availability going stale") when `cartSubmitForCompletion`'s
-  `SubmitFailed` result carries an error code that looks stock-related,
-  instead of the generic `Portage::Ucp::Shopify::Error` every other
-  submission failure raises. The exact `SubmissionErrorCode` values Shopify
-  uses for a sold-out line item aren't pinned down without a live dev-store
-  reproduction, so detection is a code-substring match rather than an exact
-  enum comparison — same caveat as this method's payment sub-shape.
+  §16 "Stock/availability going stale") when a cart line is no longer
+  available for sale, instead of the generic `Portage::Ucp::Shopify::Error`
+  every other submission failure raises. Checked against a live dev store:
+  `cartSubmitForCompletion`'s `SubmitFailed` result doesn't give a sold-out
+  line its own error code — Shopify raises the same
+  `NO_DELIVERY_GROUP_SELECTED` it uses for an ordinary in-progress checkout
+  that hasn't picked a delivery option yet, so that mutation's errors can't
+  tell stale stock apart from an ordinary incomplete checkout. Detection
+  instead reads each line's `merchandise.availableForSale` off the cart
+  itself, before a payment is attempted.
 - `#cancel_order` (`orderCancel`), `#refund_order` (`suggestedRefund` +
   `refundCreate`), `#request_return` (`returnCreate`) — implements the core
   gem's new `dev.ucp.shopping.order` cancel/return/refund extension. Each
