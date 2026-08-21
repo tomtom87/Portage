@@ -89,7 +89,7 @@ module Portage
         # Full-replacement, matching dev.ucp.shopping.discount's `codes`
         # semantics — an empty array clears whatever codes were on the cart.
         CART_DISCOUNT_CODES_UPDATE = <<~GRAPHQL.freeze
-          mutation CartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]) {
+          mutation CartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!) {
             cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
               cart { #{CART_FIELDS} }
               userErrors { field message }
