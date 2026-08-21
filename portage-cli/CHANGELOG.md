@@ -4,7 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [0.1.0] - Unreleased
+## [0.2.0] - 2026-08-21
+
+- `PORTAGE_SHIP_*` env vars (`Portage::Cli::ShippingProfile`) — configure a
+  default shipping address for `portage buy`'s own-store adapter-loopback
+  path, the same way adapter credentials already live in env. `portage buy`
+  auto-picks the cheapest priced option per fulfillment group once an address
+  is submitted; there's no interactive rate picker, since the CLI drives one
+  automated purchase rather than a conversation. The native UCP session path
+  (a third-party store over stdio/HTTP) isn't wired yet — no real UCP server
+  to verify a `fulfillment` wire shape against.
+
+## [0.1.0] - 2026-08-14
 
 - Initial pre-release. `portage buy <url>` — native UCP discovery first,
   adapter fallback only when this process already has that platform's own
