@@ -18,7 +18,7 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
         { "id" => "gid://shopify/CartLine/1", "quantity" => 1,
           "cost" => { "totalAmount" => { "amount" => "5.00", "currencyCode" => "USD" } },
           "merchandise" => { "id" => "gid://shopify/ProductVariant/1", "product" => { "title" => "Cold Brew" },
-                             "price" => { "amount" => "5.00", "currencyCode" => "USD" } } }
+                             "price" => { "amount" => "5.00", "currencyCode" => "USD" }, "availableForSale" => true } }
       ] }
     }
   end
@@ -55,6 +55,12 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
         )
       ]
     )
+  end
+
+  let(:out_of_stock_cart_response) do
+    line = cart_response["lines"]["nodes"][0]
+    unavailable = line["merchandise"].merge("availableForSale" => false)
+    cart_response.merge("lines" => { "nodes" => [line.merge("merchandise" => unavailable)] })
   end
 
   def stub_storefront(response_body)
@@ -140,6 +146,30 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       expect(second).to equal(first)
       expect(stub).to have_been_requested.once
     end
+
+    it "passes discount_codes through to cartCreate's input when given" do
+      stub = stub_storefront({ data: { cartCreate: { cart: cart_response, userErrors: [] } } })
+             .with(body: hash_including("variables" => hash_including(
+               "input" => hash_including("discountCodes" => ["SAVE10"])
+             )))
+
+      adapter.create_cart(line_items: [{ product_id: "gid://shopify/ProductVariant/1", quantity: 1 }],
+                          idempotency_key: "k2", discount_codes: ["SAVE10"])
+
+      expect(stub).to have_been_requested
+    end
+
+    it "omits discountCodes from cartCreate's input when not given" do
+      stub = stub_storefront({ data: { cartCreate: { cart: cart_response, userErrors: [] } } })
+             .with(body: hash_including("variables" => hash_including(
+               "input" => { "lines" => [{ "merchandiseId" => "gid://shopify/ProductVariant/1", "quantity" => 1 }] }
+             )))
+
+      adapter.create_cart(line_items: [{ product_id: "gid://shopify/ProductVariant/1", quantity: 1 }],
+                          idempotency_key: "k3")
+
+      expect(stub).to have_been_requested
+    end
   end
 
   describe "#update_cart" do
@@ -158,6 +188,47 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       expect(cart).to be_a(Portage::Ucp::Cart)
       expect(remove_stub).to have_been_requested
       expect(add_stub).to have_been_requested
+    end
+
+    it "does not touch discounts when discount_codes is omitted (nil means untouched, not clear)" do
+      stub_storefront({ data: { cart: cart_response } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_storefront({ data: { cartLinesRemove: { cart: empty_cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartLinesRemove/)))
+      stub_storefront({ data: { cartLinesAdd: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartLinesAdd/)))
+      discount_stub = stub_storefront({ data: { cartDiscountCodesUpdate: { cart: cart_response, userErrors: [] } } })
+                      .with(body: hash_including("query" => a_string_matching(/mutation CartDiscountCodesUpdate/)))
+
+      adapter.update_cart(cart_id: "gid://shopify/Cart/1",
+                          line_items: [{ product_id: "gid://shopify/ProductVariant/1", quantity: 1 }],
+                          idempotency_key: "k4")
+
+      expect(discount_stub).not_to have_been_requested
+    end
+
+    it "replaces discount codes, sending an empty array to clear them" do
+      stub_storefront({ data: { cart: cart_response } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_storefront({ data: { cartLinesRemove: { cart: empty_cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartLinesRemove/)))
+      stub_storefront({ data: { cartLinesAdd: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartLinesAdd/)))
+      discount_stub = stub_storefront({ data: { cartDiscountCodesUpdate: { cart: cart_response, userErrors: [] } } })
+                      .with(body: hash_including("variables" => hash_including("discountCodes" => [])))
+
+      adapter.update_cart(cart_id: "gid://shopify/Cart/1",
+                          line_items: [{ product_id: "gid://shopify/ProductVariant/1", quantity: 1 }],
+                          idempotency_key: "k5", discount_codes: [])
+
+      expect(discount_stub).to have_been_requested
+    end
+  end
+
+  describe "#discount_codes_supported?" do
+    it "advertises dev.ucp.shopping.discount" do
+      registry = Portage::Ucp::CapabilityRegistry.default
+      expect(registry.advertised(adapter).map(&:name)).to include("dev.ucp.shopping.discount")
     end
   end
 
@@ -345,6 +416,21 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
         adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
                                   idempotency_key: "chk1-complete")
       end.to raise_error(Portage::Ucp::Shopify::Error, /card declined/)
+    end
+
+    it "raises Portage::Ucp::OutOfStockError when a cart line is no longer available for sale, " \
+       "before attempting payment" do
+      stub_storefront({ data: { cart: out_of_stock_cart_response } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      payment_stub =
+        stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
+
+      expect do
+        adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
+                                  idempotency_key: "chk1-oos")
+      end.to raise_error(Portage::Ucp::OutOfStockError, /Cold Brew/)
+      expect(payment_stub).not_to have_been_requested
     end
   end
 

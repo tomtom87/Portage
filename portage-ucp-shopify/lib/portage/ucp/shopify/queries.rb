@@ -38,7 +38,14 @@ module Portage
             nodes {
               id quantity
               cost { totalAmount { amount currencyCode } }
-              merchandise { ... on ProductVariant { id product { id title } price { amount currencyCode } } }
+              merchandise {
+                ... on ProductVariant {
+                  id
+                  product { id title }
+                  price { amount currencyCode }
+                  availableForSale
+                }
+              }
             }
           }
           deliveryGroups {
@@ -48,6 +55,12 @@ module Portage
             selectedDeliveryOption { handle }
             deliveryAddress { address1 address2 city provinceCode zip firstName lastName phone
                               countryCode: countryCodeV2 }
+          }
+          discountCodes { code applicable }
+          discountAllocations {
+            discountedAmount { amount currencyCode }
+            ... on CartAutomaticDiscountAllocation { title }
+            ... on CartCodeDiscountAllocation { code }
           }
         GRAPHQL
 
@@ -101,6 +114,17 @@ module Portage
           mutation CartSelectedDeliveryOptionsUpdate($cartId: ID!,
                                                       $selectedDeliveryOptions: [CartSelectedDeliveryOptionInput!]!) {
             cartSelectedDeliveryOptionsUpdate(cartId: $cartId, selectedDeliveryOptions: $selectedDeliveryOptions) {
+              cart { #{CART_FIELDS} }
+              userErrors { field message }
+            }
+          }
+        GRAPHQL
+
+        # Full-replacement, matching dev.ucp.shopping.discount's `codes`
+        # semantics — an empty array clears whatever codes were on the cart.
+        CART_DISCOUNT_CODES_UPDATE = <<~GRAPHQL.freeze
+          mutation CartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!) {
+            cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
               cart { #{CART_FIELDS} }
               userErrors { field message }
             }

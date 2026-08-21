@@ -67,6 +67,17 @@ RSpec.describe "Portage::Ucp value objects" do
       expect(cart.line_items).to eq([])
       expect(cart.to_wire_h).not_to have_key("ucp")
     end
+
+    it "omits discounts from the wire shape when nothing was ever submitted or applied" do
+      cart = Portage::Ucp::Cart.new(id: "cart_1", line_items: [], currency: "USD", totals: [])
+      expect(cart.to_wire_h).not_to have_key("discounts")
+    end
+
+    it "includes discounts once codes or applied discounts exist" do
+      discounts = Portage::Ucp::Discounts.new(codes: ["SAVE10"])
+      cart = Portage::Ucp::Cart.new(id: "cart_1", line_items: [], currency: "USD", totals: [], discounts: discounts)
+      expect(cart.to_wire_h["discounts"]).to eq({ "codes" => ["SAVE10"] })
+    end
   end
 
   describe Portage::Ucp::Checkout do
@@ -104,6 +115,37 @@ RSpec.describe "Portage::Ucp value objects" do
       expect(checkout.to_wire_h["fulfillment"]).to eq(
         "methods" => [{ "id" => "fm_1", "type" => "shipping", "line_item_ids" => ["li_1"] }]
       )
+    end
+
+    it "includes discounts once codes or applied discounts exist" do
+      discounts = Portage::Ucp::Discounts.new(codes: [], applied: [
+                                                Portage::Ucp::AppliedDiscount.new(title: "10% Off", amount: 100)
+                                              ])
+      checkout = Portage::Ucp::Checkout.new(id: "chk_1", status: "incomplete", line_items: [], currency: "USD",
+                                            totals: [], links: [], discounts: discounts)
+      expect(checkout.to_wire_h["discounts"]).to eq("applied" => [{ "title" => "10% Off", "amount" => 100 }])
+    end
+  end
+
+  describe Portage::Ucp::Discounts do
+    it "is empty with no codes and no applied discounts" do
+      expect(Portage::Ucp::Discounts.new).to be_empty
+    end
+
+    it "serializes codes and applied discounts, omitting whichever side is empty" do
+      applied = Portage::Ucp::AppliedDiscount.new(title: "Summer Sale 20% Off", amount: 500, code: "SUMMER20")
+      discounts = Portage::Ucp::Discounts.new(codes: ["summer20"], applied: [applied])
+      expect(discounts.to_wire_h).to eq(
+        "codes" => ["summer20"],
+        "applied" => [{ "title" => "Summer Sale 20% Off", "amount" => 500, "code" => "SUMMER20" }]
+      )
+    end
+  end
+
+  describe Portage::Ucp::AppliedDiscount do
+    it "requires only title/amount, omitting optional fields when unset" do
+      discount = Portage::Ucp::AppliedDiscount.new(title: "Free Shipping", amount: 0)
+      expect(discount.to_wire_h).to eq("title" => "Free Shipping", "amount" => 0)
     end
   end
 

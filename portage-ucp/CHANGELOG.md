@@ -6,6 +6,11 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `Portage::Ucp::OutOfStockError` — the contract for `#complete_checkout`
+  (design-log §16 "Stock/availability going stale") now documents that
+  adapters should raise it when the platform rejects completion over a
+  no-longer-available line item, instead of re-checking with a separate call
+  agents could forget to make.
 - `Adapter#cancel_order`, `#request_return`, `#refund_order` — a gem-side
   extension of `dev.ucp.shopping.order` (design-log §16 "Order changes"),
   since the real UCP spec's order lifecycle is get-only. Each returns the

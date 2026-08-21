@@ -56,15 +56,15 @@ module Portage
           cart_node && Mapper.cart(cart_node)
         end
 
-        def create_cart(line_items:, idempotency_key:)
-          dedup(idempotency_key) { Mapper.cart(create_cart_node(line_items)) }
+        def create_cart(line_items:, idempotency_key:, discount_codes: nil)
+          dedup(idempotency_key) { Mapper.cart(create_cart_node(line_items, discount_codes)) }
         end
 
         # Full replacement, matching UCP's real cart semantics: Storefront has
         # no atomic "replace all lines" mutation, so this removes every current
         # line then adds the desired ones back (two Storefront calls).
-        def update_cart(cart_id:, line_items:, idempotency_key:)
-          dedup(idempotency_key) { Mapper.cart(replace_lines(cart_id, line_items)) }
+        def update_cart(cart_id:, line_items:, idempotency_key:, discount_codes: nil)
+          dedup(idempotency_key) { Mapper.cart(replace_lines(cart_id, line_items, discount_codes)) }
         end
 
         # Shopify has no cart-cancellation mutation — carts simply expire.
@@ -74,9 +74,9 @@ module Portage
           dedup(idempotency_key) { get_cart(cart_id: cart_id) }
         end
 
-        def create_checkout(line_items:, idempotency_key:, fulfillment: nil)
+        def create_checkout(line_items:, idempotency_key:, discount_codes: nil, fulfillment: nil)
           dedup(idempotency_key) do
-            cart_node = create_cart_node(line_items)
+            cart_node = create_cart_node(line_items, discount_codes)
             cart_node = apply_fulfillment(cart_node["id"], fulfillment) if fulfillment
             record_checkout_status(cart_node["id"], "incomplete")
             Mapper.checkout(cart_node, status: "incomplete")
@@ -90,15 +90,16 @@ module Portage
 
         # Full replacement, same rationale as #update_cart — Shopify checkout
         # *is* the cart object.
-        def update_checkout(checkout_id:, line_items:, idempotency_key:, fulfillment: nil)
+        def update_checkout(checkout_id:, line_items:, idempotency_key:, discount_codes: nil, fulfillment: nil)
           dedup(idempotency_key) do
-            cart_node = replace_lines(checkout_id, line_items)
+            cart_node = replace_lines(checkout_id, line_items, discount_codes)
             cart_node = apply_fulfillment(checkout_id, fulfillment) if fulfillment
             record_checkout_status(checkout_id, "incomplete")
             Mapper.checkout(cart_node, status: "incomplete")
           end
         end
 
+        def discount_codes_supported? = true
         def fulfillment_supported? = true
 
         # `payment_token` is the single-use tokenized credential from a UCP
@@ -241,23 +242,37 @@ module Portage
           line_items.map { |li| { merchandiseId: li[:product_id], quantity: li[:quantity] } }
         end
 
-        def create_cart_node(line_items)
-          data = @client.storefront_query(Queries::CART_CREATE, variables: { input: { lines: cart_lines(line_items) } })
+        def create_cart_node(line_items, discount_codes)
+          input = { lines: cart_lines(line_items) }
+          input[:discountCodes] = discount_codes if discount_codes
+          data = @client.storefront_query(Queries::CART_CREATE, variables: { input: input })
           unwrap!(data, "cartCreate")
         end
 
-        def replace_lines(cart_id, line_items)
+        def replace_lines(cart_id, line_items, discount_codes)
           current_line_ids = fetch_cart_node(cart_id).dig("lines", "nodes").map { |n| n["id"] }
           unless current_line_ids.empty?
             removed = @client.storefront_query(Queries::CART_LINES_REMOVE,
                                                variables: { cartId: cart_id, lineIds: current_line_ids })
             unwrap!(removed, "cartLinesRemove")
           end
-          return fetch_cart_node(cart_id) if line_items.empty?
 
-          added = @client.storefront_query(Queries::CART_LINES_ADD,
-                                           variables: { cartId: cart_id, lines: cart_lines(line_items) })
-          unwrap!(added, "cartLinesAdd")
+          cart_node = if line_items.empty?
+                        fetch_cart_node(cart_id)
+                      else
+                        added = @client.storefront_query(Queries::CART_LINES_ADD,
+                                                         variables: { cartId: cart_id, lines: cart_lines(line_items) })
+                        unwrap!(added, "cartLinesAdd")
+                      end
+          return cart_node if discount_codes.nil?
+
+          apply_discount_codes(cart_id, discount_codes)
+        end
+
+        def apply_discount_codes(cart_id, discount_codes)
+          data = @client.storefront_query(Queries::CART_DISCOUNT_CODES_UPDATE,
+                                          variables: { cartId: cart_id, discountCodes: discount_codes })
+          unwrap!(data, "cartDiscountCodesUpdate")
         end
 
         # Reuses idempotency_key as cartSubmitForCompletion's own attemptId too
@@ -266,6 +281,8 @@ module Portage
         def submit_payment(checkout_id, payment_token, idempotency_key)
           cart_node = fetch_cart_node(checkout_id)
           raise Portage::Ucp::Shopify::Error, "cart #{checkout_id} not found" unless cart_node
+
+          raise_if_any_line_unavailable!(cart_node)
 
           pay_for_cart(checkout_id, cart_node.dig("cost", "totalAmount"), payment_token)
 
@@ -315,6 +332,23 @@ module Portage
           raise Portage::Ucp::Shopify::UserError.new(field, errors) if errors && !errors.empty?
 
           payload.fetch("cart")
+        end
+
+        # Checked against a live dev store: a sold-out line doesn't get its
+        # own SubmissionErrorCode on cartSubmitForCompletion — Shopify raises
+        # the same NO_DELIVERY_GROUP_SELECTED code it uses for an ordinary
+        # incomplete checkout that simply hasn't picked a delivery option yet,
+        # so a code-substring match on that mutation's errors can't tell stale
+        # stock apart from a normal in-progress checkout. availableForSale on
+        # each line's merchandise is the one field that actually flips when a
+        # variant goes out of stock, so the check happens here instead, before
+        # a payment is even attempted.
+        def raise_if_any_line_unavailable!(cart_node)
+          unavailable = cart_node.dig("lines", "nodes").reject { |n| n.dig("merchandise", "availableForSale") }
+          return if unavailable.empty?
+
+          titles = unavailable.map { |n| n.dig("merchandise", "product", "title") }.join(", ")
+          raise Portage::Ucp::OutOfStockError, "no longer available: #{titles}"
         end
 
         def unwrap_submit!(data)

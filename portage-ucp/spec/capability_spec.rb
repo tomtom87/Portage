@@ -30,8 +30,8 @@ RSpec.describe Portage::Ucp::Capability do
 
   describe "predicate-based advertisement (extension capabilities with no actions of their own)" do
     let(:predicated) do
-      described_class.new(name: "dev.ucp.shopping.fulfillment", version: "1", actions: {},
-                          predicate: :fulfillment_supported?)
+      described_class.new(name: "dev.ucp.shopping.discount", version: "1", actions: {},
+                          predicate: :discount_codes_supported?)
     end
 
     it "is not advertised when the adapter's predicate returns false" do
@@ -40,7 +40,7 @@ RSpec.describe Portage::Ucp::Capability do
 
     it "is advertised when the adapter's predicate returns true" do
       supported = Class.new(Portage::Ucp::Adapter) do
-        def fulfillment_supported? = true
+        def discount_codes_supported? = true
       end.new
       expect(predicated.advertised_for?(supported)).to eq(true)
     end
