@@ -93,8 +93,70 @@ module Portage
             totals: totals(node),
             links: [],
             order: order,
-            discounts: discounts(node)
+            discounts: discounts(node),
+            fulfillment: checkout_fulfillment(node)
           )
+        end
+
+        # dev.ucp.shopping.fulfillment (pre-purchase shipping-option
+        # selection) built from Cart#deliveryGroups — read straight off
+        # CART_FIELDS, no separate query. Shopify has no "fulfillment method"
+        # grouping above deliveryGroups, and a cart only ever carries the one
+        # buyer-submitted address (split-shipment-to-multiple-addresses isn't
+        # modeled here), so every deliveryGroup collapses into a single
+        # synthesized FulfillmentMethod rather than one per Shopify group.
+        def checkout_fulfillment(node)
+          groups_nodes = node["deliveryGroups"] || []
+          return Portage::Ucp::CheckoutFulfillment.new if groups_nodes.empty?
+
+          groups = groups_nodes.map { |g| fulfillment_group(g) }
+          destination = shipping_destination(groups_nodes.first["deliveryAddress"])
+          method = Portage::Ucp::FulfillmentMethod.new(
+            id: "fm_#{node['id']}",
+            type: DELIVERY_METHOD_TYPES.fetch(groups_nodes.first.dig("deliveryOptions", 0, "deliveryMethodType"),
+                                              "shipping"),
+            line_item_ids: groups.flat_map(&:line_item_ids),
+            destinations: destination ? [destination] : [],
+            selected_destination_id: destination&.id,
+            groups: groups
+          )
+          Portage::Ucp::CheckoutFulfillment.new(shipping_methods: [method])
+        end
+
+        def fulfillment_group(node)
+          Portage::Ucp::FulfillmentGroup.new(
+            id: node["id"],
+            line_item_ids: (node.dig("cartLines", "nodes") || []).map { |n| n["id"] },
+            options: (node["deliveryOptions"] || []).map { |o| fulfillment_option(o) },
+            selected_option_id: node.dig("selectedDeliveryOption", "handle")
+          )
+        end
+
+        def fulfillment_option(node)
+          Portage::Ucp::FulfillmentOption.new(
+            id: node["handle"], title: node["title"] || node["handle"],
+            totals: [Portage::Ucp::Total.new(type: "total", amount: minor_units(node["estimatedCost"]))],
+            description: node["description"]
+          )
+        end
+
+        # Shopify's CartDeliveryGroup#deliveryAddress is a bare MailingAddress
+        # with no id of its own (unlike a saved address-book entry) — since a
+        # cart only ever carries the one buyer-submitted address (see
+        # #checkout_fulfillment), this always exposes it as the single
+        # destination "current" rather than fabricating a hash-based id that
+        # would drift for no real change.
+        def shipping_destination(address_node)
+          return nil unless address_node
+
+          Portage::Ucp::ShippingDestination.new(id: "current",
+                                                address: Portage::Ucp::PostalAddress.new(**fulfillment_address(address_node)))
+        end
+
+        def fulfillment_address(node)
+          { street_address: node["address1"], extended_address: node["address2"], address_locality: node["city"],
+            address_region: node["provinceCode"], address_country: node["countryCode"], postal_code: node["zip"],
+            first_name: node["firstName"], last_name: node["lastName"], phone_number: node["phone"] }.compact
         end
 
         # `checkout_id` isn't a Shopify Order field — nothing on Order links

@@ -55,14 +55,22 @@ module Portage
           call("cancel_cart", cart_id: cart_id, idempotency_key: idempotency_key)
         end
 
-        def create_checkout(line_items:, idempotency_key: nil)
-          call("create_checkout", line_items: line_items, idempotency_key: idempotency_key)
+        # `fulfillment:` (dev.ucp.shopping.fulfillment) is only exercised over
+        # the loopback transport today (Portage::Cli::Buy's own-store adapter
+        # path) — passed straight through as whatever value the caller built
+        # (a Portage::Ucp::CheckoutFulfillment for loopback). Over stdio/HTTP
+        # it would need a JSON wire shape this gem doesn't build yet, so
+        # callers on those transports should leave it nil.
+        def create_checkout(line_items:, idempotency_key: nil, fulfillment: nil)
+          call("create_checkout", line_items: line_items, idempotency_key: idempotency_key,
+                                  **(fulfillment ? { fulfillment: fulfillment } : {}))
         end
 
         def get_checkout(checkout_id:) = call("get_checkout", checkout_id: checkout_id)
 
-        def update_checkout(checkout_id:, line_items:, idempotency_key: nil)
-          call("update_checkout", checkout_id: checkout_id, line_items: line_items, idempotency_key: idempotency_key)
+        def update_checkout(checkout_id:, line_items:, idempotency_key: nil, fulfillment: nil)
+          call("update_checkout", checkout_id: checkout_id, line_items: line_items, idempotency_key: idempotency_key,
+                                  **(fulfillment ? { fulfillment: fulfillment } : {}))
         end
 
         def complete_checkout(checkout_id:, payment_token:, idempotency_key: nil)

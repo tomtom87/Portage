@@ -25,6 +25,38 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
 
   let(:empty_cart_response) { cart_response.merge("lines" => { "nodes" => [] }) }
 
+  let(:cart_with_delivery_groups) do
+    cart_response.merge("deliveryGroups" => [
+                          { "id" => "gid://shopify/CartDeliveryGroup/1",
+                            "cartLines" => { "nodes" => [{ "id" => "gid://shopify/CartLine/1" }] },
+                            "deliveryOptions" => [
+                              { "handle" => "standard", "title" => "Standard", "description" => nil,
+                                "deliveryMethodType" => "SHIPPING",
+                                "estimatedCost" => { "amount" => "5.00", "currencyCode" => "USD" } }
+                            ],
+                            "selectedDeliveryOption" => nil,
+                            "deliveryAddress" => { "address1" => "1 Main St", "address2" => nil, "city" => "Erie",
+                                                   "provinceCode" => "PA", "zip" => "16501", "firstName" => "A",
+                                                   "lastName" => "B", "phone" => nil, "countryCode" => "US" } }
+                        ])
+  end
+
+  let(:fulfillment_request) do
+    Portage::Ucp::CheckoutFulfillment.new(
+      shipping_methods: [
+        Portage::Ucp::FulfillmentMethod.new(
+          id: "fm_1", type: "shipping", line_item_ids: ["gid://shopify/CartLine/1"],
+          destinations: [Portage::Ucp::ShippingDestination.new(
+            id: "current", address: Portage::Ucp::PostalAddress.new(street_address: "1 Main St",
+                                                                    address_locality: "Erie",
+                                                                    address_region: "PA", postal_code: "16501",
+                                                                    address_country: "US")
+          )]
+        )
+      ]
+    )
+  end
+
   let(:out_of_stock_cart_response) do
     line = cart_response["lines"]["nodes"][0]
     unavailable = line["merchandise"].merge("availableForSale" => false)
@@ -47,7 +79,8 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       advertised_names = registry.advertised(adapter).map(&:name)
 
       expect(advertised_names).to include("dev.ucp.shopping.catalog", "dev.ucp.shopping.cart",
-                                          "dev.ucp.shopping.checkout", "dev.ucp.shopping.order")
+                                          "dev.ucp.shopping.checkout", "dev.ucp.shopping.order",
+                                          "dev.ucp.shopping.fulfillment")
       expect(advertised_names).not_to include("dev.ucp.shopping.identity")
     end
   end
@@ -220,6 +253,30 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       expect(checkout.status).to eq("incomplete")
       expect(checkout.id).to eq("gid://shopify/Cart/1")
     end
+
+    it "submits the agent's shipping destination via cartDeliveryAddressesAdd when fulfillment is requested" do
+      stub_storefront({ data: { cartCreate: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartCreate/)))
+      stub_storefront({ data: { cart: cart_response } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      address_stub = stub_storefront(
+        { data: { cartDeliveryAddressesAdd: { cart: cart_with_delivery_groups, userErrors: [] } } }
+      ).with(body: hash_including(
+        "query" => a_string_matching(/mutation CartDeliveryAddressesAdd/),
+        "variables" => hash_including(
+          "addresses" => [{ "address" => { "deliveryAddress" => { "address1" => "1 Main St", "city" => "Erie",
+                                                                  "provinceCode" => "PA", "zip" => "16501",
+                                                                  "countryCode" => "US" } },
+                            "selected" => true }]
+        )
+      ))
+
+      checkout = adapter.create_checkout(line_items: [{ product_id: "gid://shopify/ProductVariant/1", quantity: 1 }],
+                                         idempotency_key: "chk2", fulfillment: fulfillment_request)
+
+      expect(address_stub).to have_been_requested
+      expect(checkout.to_wire_h.dig("fulfillment", "methods", 0, "type")).to eq("shipping")
+    end
   end
 
   describe "#get_checkout" do
@@ -232,6 +289,48 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       checkout = adapter.get_checkout(checkout_id: "gid://shopify/Cart/1")
 
       expect(checkout.status).to eq("incomplete")
+    end
+  end
+
+  describe "#update_checkout" do
+    it "submits the agent's selected_option_id via cartSelectedDeliveryOptionsUpdate" do
+      stub_storefront({ data: { cart: cart_with_delivery_groups } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_storefront({ data: { cartLinesRemove: { cart: empty_cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartLinesRemove/)))
+      stub_storefront({ data: { cartLinesAdd: { cart: cart_with_delivery_groups, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartLinesAdd/)))
+      cart_with_selection = cart_with_delivery_groups.tap do |c|
+        c["deliveryGroups"][0]["selectedDeliveryOption"] = { "handle" => "standard" }
+      end
+      selection_stub = stub_storefront(
+        { data: { cartSelectedDeliveryOptionsUpdate: { cart: cart_with_selection, userErrors: [] } } }
+      ).with(body: hash_including(
+        "query" => a_string_matching(/mutation CartSelectedDeliveryOptionsUpdate/),
+        "variables" => hash_including(
+          "selectedDeliveryOptions" => [{ "deliveryGroupId" => "gid://shopify/CartDeliveryGroup/1",
+                                          "deliveryOptionHandle" => "standard" }]
+        )
+      ))
+
+      fulfillment = Portage::Ucp::CheckoutFulfillment.new(
+        shipping_methods: [
+          Portage::Ucp::FulfillmentMethod.new(
+            id: "fm_1", type: "shipping", line_item_ids: ["gid://shopify/CartLine/1"],
+            groups: [Portage::Ucp::FulfillmentGroup.new(id: "gid://shopify/CartDeliveryGroup/1",
+                                                        line_item_ids: ["gid://shopify/CartLine/1"],
+                                                        selected_option_id: "standard")]
+          )
+        ]
+      )
+
+      checkout = adapter.update_checkout(checkout_id: "gid://shopify/Cart/1",
+                                         line_items: [{ product_id: "gid://shopify/ProductVariant/1", quantity: 1 }],
+                                         idempotency_key: "chk3", fulfillment: fulfillment)
+
+      expect(selection_stub).to have_been_requested
+      expect(checkout.to_wire_h.dig("fulfillment", "methods", 0, "groups", 0, "selected_option_id"))
+        .to eq("standard")
     end
   end
 

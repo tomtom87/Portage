@@ -5,11 +5,12 @@ module Portage
     class Capability
       attr_reader :name, :version, :actions
 
-      # `predicate:` is for extension capabilities like dev.ucp.shopping.discount
-      # that add a param to an existing action rather than an action of their
-      # own — there's no dedicated method whose override signals support, so
-      # the adapter exposes a boolean method instead and the capability asks
-      # it directly rather than inspecting `actions`.
+      # `predicate:` is for extension capabilities like
+      # dev.ucp.shopping.discount and dev.ucp.shopping.fulfillment that add a
+      # param to an existing action rather than an action of their own —
+      # there's no dedicated method whose override signals support, so the
+      # adapter exposes a boolean method instead and the capability asks it
+      # directly rather than inspecting `actions`.
       def initialize(name:, version:, actions:, predicate: nil)
         @name = name
         @version = version

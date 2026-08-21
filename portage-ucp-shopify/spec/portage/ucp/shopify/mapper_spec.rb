@@ -112,6 +112,65 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       cart = described_class.cart(node)
       expect(cart.to_wire_h).not_to have_key("discounts")
     end
+
+    it "omits fulfillment when the cart has no deliveryGroups" do
+      checkout = described_class.checkout(node, status: "incomplete")
+
+      expect(checkout.to_wire_h).not_to have_key("fulfillment")
+    end
+  end
+
+  describe ".checkout_fulfillment" do
+    let(:node) do
+      {
+        "id" => "gid://shopify/Cart/1",
+        "deliveryGroups" => [
+          { "id" => "gid://shopify/CartDeliveryGroup/1",
+            "cartLines" => { "nodes" => [{ "id" => "gid://shopify/CartLine/1" }] },
+            "deliveryOptions" => [
+              { "handle" => "standard", "title" => "Standard Shipping", "description" => "5-7 days",
+                "deliveryMethodType" => "SHIPPING",
+                "estimatedCost" => { "amount" => "5.00", "currencyCode" => "USD" } },
+              { "handle" => "express", "title" => "Express", "description" => "1-2 days",
+                "deliveryMethodType" => "SHIPPING",
+                "estimatedCost" => { "amount" => "15.00", "currencyCode" => "USD" } }
+            ],
+            "selectedDeliveryOption" => { "handle" => "standard" },
+            "deliveryAddress" => { "address1" => "1 Main St", "address2" => nil, "city" => "Erie",
+                                   "provinceCode" => "PA", "zip" => "16501", "firstName" => "A", "lastName" => "B",
+                                   "phone" => nil, "countryCode" => "US" } }
+        ]
+      }
+    end
+
+    it "collapses Shopify's deliveryGroups into a single synthesized shipping method" do
+      fulfillment = described_class.checkout_fulfillment(node)
+
+      expect(fulfillment.shipping_methods.size).to eq(1)
+      method = fulfillment.shipping_methods.first
+      expect(method.type).to eq("shipping")
+      expect(method.line_item_ids).to eq(["gid://shopify/CartLine/1"])
+    end
+
+    it "maps each Shopify deliveryGroup to a FulfillmentGroup with its priced options" do
+      group = described_class.checkout_fulfillment(node).shipping_methods.first.groups.first
+
+      expect(group.id).to eq("gid://shopify/CartDeliveryGroup/1")
+      expect(group.selected_option_id).to eq("standard")
+      expect(group.options.map(&:id)).to eq(%w[standard express])
+      expect(group.options.first.totals).to eq([Portage::Ucp::Total.new(type: "total", amount: 500)])
+    end
+
+    it "exposes the cart's one buyer-submitted address as the single destination \"current\"" do
+      method = described_class.checkout_fulfillment(node).shipping_methods.first
+
+      expect(method.selected_destination_id).to eq("current")
+      expect(method.destinations.first.address.address_locality).to eq("Erie")
+    end
+
+    it "is empty when the cart has no deliveryGroups" do
+      expect(described_class.checkout_fulfillment("id" => "gid://shopify/Cart/1")).to be_empty
+    end
   end
 
   describe ".order" do

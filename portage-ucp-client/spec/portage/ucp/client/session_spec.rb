@@ -65,6 +65,27 @@ RSpec.describe Portage::Ucp::Client::Session do
     end
   end
 
+  describe "#create_checkout / #update_checkout fulfillment:" do
+    it "omits the fulfillment argument entirely when none is given" do
+      expect(transport).to receive(:call_tool) do |name:, arguments:|
+        expect(name).to eq("create_checkout")
+        expect(arguments).not_to have_key(:fulfillment)
+      end
+
+      session.create_checkout(line_items: [])
+    end
+
+    it "forwards whatever fulfillment value the caller built" do
+      fulfillment = double("fulfillment")
+      expect(transport).to receive(:call_tool).with(
+        name: "update_checkout",
+        arguments: { checkout_id: "chk_1", line_items: [], idempotency_key: "k1", fulfillment: fulfillment }
+      )
+
+      session.update_checkout(checkout_id: "chk_1", line_items: [], idempotency_key: "k1", fulfillment: fulfillment)
+    end
+  end
+
   describe "#advertises?" do
     it "returns nil when capabilities weren't known upfront" do
       expect(session.advertises?("dev.ucp.shopping.checkout")).to be_nil

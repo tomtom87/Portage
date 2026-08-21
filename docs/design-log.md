@@ -856,3 +856,68 @@ per-target JSONPath breakdown) is left unpopulated by the Shopify mapper —
 Storefront's `discountAllocations` doesn't cleanly resolve to a specific line
 item index without a second per-line query this pass didn't add; noted here
 rather than guessed at.
+
+---
+
+## 19. Fulfillment / shipping-option selection (added 2026-08-20)
+
+Next capability gap picked up after order cancel/return/refund: letting an
+agent pick a shipping rate or pickup location during checkout. Same shape of
+problem discount codes solved — `schemas/shopping/fulfillment.json`
+(`dev.ucp.shopping.fulfillment`) is a full vendored extension schema that
+extends Checkout with a `fulfillment` field rather than new top-level
+actions, so it reuses `Capability`'s `predicate:` option
+(`Adapter#fulfillment_supported?`, default `false`) the same way
+`dev.ucp.shopping.discount` does.
+
+The extension is more structurally involved than discount codes, though:
+`fulfillment.methods[]` covers both shipping and pickup, each method can
+carry multiple merchant-generated destinations (addresses/retail locations)
+and groups (packages), and each group carries its own list of priced
+`FulfillmentOption`s the agent chooses from via `selected_option_id`. That
+required five new value objects beyond the container itself
+(`PostalAddress`, `ShippingDestination`, `RetailLocation`,
+`FulfillmentOption`, `FulfillmentGroup`, `FulfillmentMethod`) — this gem had
+no address type at all before this, despite `types/postal_address.json`
+existing in the vendored schemas since day one; nothing had needed it yet.
+
+Naming collision to flag: the extension's container type is called
+`fulfillment` in the schema, same as `Order#fulfillment` (the *post-purchase*
+delivery-tracking container — expectations/events, already modeled as
+`Portage::Ucp::Fulfillment`). These are genuinely different things at
+different points in the lifecycle — one is "which shipping method do you
+want," the other is "here's what shipped and when" — so the new container is
+`Portage::Ucp::CheckoutFulfillment`, not a second `Fulfillment`. Its
+`methods` field is `shipping_methods` internally (a bare `:methods`
+Data.define member shadows `Kernel#methods`); `to_wire_h` maps it back to the
+spec's `"methods"` key, same “internal name diverges from wire key” pattern
+`AppliedDiscount#allocation_method` → `"method"` already established.
+
+`create_checkout`/`update_checkout` both gained an optional `fulfillment:`
+param, `nil` by default — same omitted-vs-explicit distinction the
+`discount_codes:` param made, though what a non-nil value *means* differs by
+direction: on create it's the agent's requested method types plus which line
+items go where (the merchant fills in destinations/groups/options in the
+response); on update it's the agent's `selected_destination_id`/
+`selected_option_id` choices against what the merchant already offered.
+`create_cart`/`update_cart` did **not** gain the param — Cart's schema has no
+fulfillment extension point; shipping selection is checkout-only in the
+vendored spec, unlike discounts which apply to both.
+
+Shopify's mapping landed as its own follow-up commit, matching how discount
+codes' contract and Shopify-implementation split. Storefront's Cart has no
+"fulfillment method" concept above `deliveryGroups`, so the adapter
+synthesizes exactly one `FulfillmentMethod` per checkout and maps each
+Shopify deliveryGroup onto a `FulfillmentGroup` underneath it — a cart also
+only ever carries the one buyer-submitted address, so `destinations` is
+always `[]` or a single entry with a fixed id (`"current"`), never a real
+list to choose between. The agent's address goes out via
+`cartDeliveryAddressesAdd`, its `selected_option_id` choices via
+`cartSelectedDeliveryOptionsUpdate` — both mutations' input shapes were
+confirmed live against a real dev store (`ucp-test-bc2vif1p.myshopify.com`,
+2026-08-21): cart created, address submitted via
+`{ address: { deliveryAddress: {...} }, selected: true }`, delivery groups
+came back populated with priced options, and the selection round-tripped via
+`{ deliveryGroupId:, deliveryOptionHandle: }` with `selectedDeliveryOption`
+reflecting the chosen handle. No shape changes needed. `cartPaymentUpdate`'s
+`paymentMethod` sub-shape is still unconfirmed (roadmap step 5).

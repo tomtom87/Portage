@@ -153,6 +153,7 @@ RSpec.describe Portage::Cli::Buy do
       allow(Portage::Ucp::Resolver).to receive(:build_adapter).and_return(adapter)
       allow(Portage::Ucp::Capabilities::CART).to receive(:advertised_for?).with(adapter).and_return(true)
       allow(Portage::Ucp::Capabilities::CHECKOUT).to receive(:advertised_for?).with(adapter).and_return(true)
+      allow(Portage::Ucp::Capabilities::FULFILLMENT).to receive(:advertised_for?).with(adapter).and_return(false)
 
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
       allow(Portage::Ucp::Client).to receive(:for_adapter).with(adapter, anything).and_return(session)
@@ -161,6 +162,52 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:source]).to eq("adapter:Shopify")
       expect(report[:checkout]).to be true
+    end
+
+    it "submits PORTAGE_SHIP_* as the checkout destination and auto-picks the cheapest option" do
+      with_env(
+        "PORTAGE_SHIP_STREET" => "1 Main St", "PORTAGE_SHIP_CITY" => "Erie", "PORTAGE_SHIP_COUNTRY" => "US",
+        "PORTAGE_SHIP_POSTAL_CODE" => "16501"
+      ) do
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
+        stub_request(:get, "https://shop.example/")
+          .to_return(status: 200, body: '<script src="https://cdn.shopify.com/x.js"></script>')
+
+        platform = Portage::Ucp::Resolver::PLATFORMS.find { |p| p.name == "Shopify" }
+        allow(Portage::Ucp::Resolver).to receive_messages(detect_platform: platform,
+                                                          env_for: { shop_domain: "shop.example" }, missing_env: [])
+        adapter = double("adapter")
+        allow(Portage::Ucp::Resolver).to receive(:build_adapter).and_return(adapter)
+        allow(Portage::Ucp::Capabilities::CART).to receive(:advertised_for?).with(adapter).and_return(true)
+        allow(Portage::Ucp::Capabilities::CHECKOUT).to receive(:advertised_for?).with(adapter).and_return(true)
+        allow(Portage::Ucp::Capabilities::FULFILLMENT).to receive(:advertised_for?).with(adapter).and_return(true)
+
+        priced_checkout = incomplete_checkout.merge(
+          "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 1 }],
+          "fulfillment" => { "methods" => [{ "groups" => [
+            { "id" => "grp_1", "line_item_ids" => ["li_1"], "selected_option_id" => nil,
+              "options" => [{ "id" => "express", "totals" => [{ "amount" => 1500 }] },
+                            { "id" => "standard", "totals" => [{ "amount" => 500 }] }] }
+          ] }] }
+        )
+        session = instance_double(
+          Portage::Ucp::Client::Session, advertises?: true, search_catalog: [product],
+                                         create_checkout: priced_checkout, update_checkout: completed_checkout
+        )
+        allow(Portage::Ucp::Client).to receive(:for_adapter).with(adapter, anything).and_return(session)
+
+        described_class.new(url: "shop.example", query: "cold").call
+
+        expect(session).to have_received(:create_checkout) do |**kwargs|
+          destination = kwargs[:fulfillment].shipping_methods.first.destinations.first
+          expect(destination.address.address_locality).to eq("Erie")
+        end
+        expect(session).to have_received(:update_checkout) do |**kwargs|
+          expect(kwargs[:line_items]).to eq([{ product_id: "p1", quantity: 1 }])
+          selected_group = kwargs[:fulfillment].shipping_methods.first.groups.first
+          expect(selected_group.selected_option_id).to eq("standard")
+        end
+      end
     end
   end
 end
