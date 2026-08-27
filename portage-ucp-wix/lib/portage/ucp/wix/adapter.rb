@@ -44,6 +44,13 @@ module Portage
         # half is used here: unlike Shopify and WooCommerce, a Wix Order
         # carries its originating `checkoutId` natively (see #get_order).
         include Portage::Ucp::Support::CheckoutState
+        # #replace_cart_lines, #update_checkout and #submit_order are each a
+        # multi-call REST sequence with no atomic equivalent upstream — two
+        # concurrent calls against the same cart/checkout id can interleave
+        # and drop each other's writes, not just race on the same eventual
+        # value (§21). Support::SessionLock serializes by id so the second
+        # call waits instead of interleaving.
+        include Portage::Ucp::Support::SessionLock
 
         def initialize(client:)
           super()
@@ -105,9 +112,12 @@ module Portage
         # Full replacement, same rationale as #update_cart.
         def update_checkout(checkout_id:, line_items:, idempotency_key:)
           dedup(idempotency_key) do
-            node = @client.patch("/ecom/v1/checkouts/#{checkout_id}", { lineItems: cart_lines(line_items) })["checkout"]
-            record_checkout_status(checkout_id, "incomplete")
-            Mapper.checkout(node, status: "incomplete")
+            synchronize(checkout_id) do
+              node = @client.patch("/ecom/v1/checkouts/#{checkout_id}",
+                                   { lineItems: cart_lines(line_items) })["checkout"]
+              record_checkout_status(checkout_id, "incomplete")
+              Mapper.checkout(node, status: "incomplete")
+            end
           end
         end
 
@@ -160,13 +170,15 @@ module Portage
         end
 
         def replace_cart_lines(cart_id, line_items)
-          current_ids = fetch_cart_node(cart_id)["lineItems"].map { |n| n["id"] }
-          unless current_ids.empty?
-            @client.post("/ecom/v1/carts/#{cart_id}/remove-line-items", { lineItemIds: current_ids })
-          end
-          return fetch_cart_node(cart_id) if line_items.empty?
+          synchronize(cart_id) do
+            current_ids = fetch_cart_node(cart_id)["lineItems"].map { |n| n["id"] }
+            unless current_ids.empty?
+              @client.post("/ecom/v1/carts/#{cart_id}/remove-line-items", { lineItemIds: current_ids })
+            end
+            next fetch_cart_node(cart_id) if line_items.empty?
 
-          @client.post("/ecom/v1/carts/#{cart_id}/add-line-items", { lineItems: cart_lines(line_items) })["cart"]
+            @client.post("/ecom/v1/carts/#{cart_id}/add-line-items", { lineItems: cart_lines(line_items) })["cart"]
+          end
         end
 
         # `payment_token` is deliberately not sent anywhere yet — see the
@@ -175,18 +187,20 @@ module Portage
         # be rejected by Wix itself here, surfacing as an ApiError rather
         # than silently succeeding.
         def submit_order(checkout_id, _payment_token)
-          node = fetch_checkout_node(checkout_id)
-          raise Portage::Ucp::Wix::Error, "checkout #{checkout_id} not found" unless node
+          synchronize(checkout_id) do
+            node = fetch_checkout_node(checkout_id)
+            raise Portage::Ucp::Wix::Error, "checkout #{checkout_id} not found" unless node
 
-          data = @client.post("/ecom/v1/checkouts/#{checkout_id}/create-order", {})
-          order_id = data["orderId"]
-          status = order_id ? "completed" : "complete_in_progress"
-          record_checkout_status(checkout_id, status)
-          # Same "not information-complete but schema-valid" posture as
-          # Mapper.order's own blank permalink_url — Wix's create-order
-          # response has no storefront order-status link to hand back.
-          order = order_id && Portage::Ucp::OrderConfirmation.new(id: order_id, permalink_url: "")
-          Mapper.checkout(node, status: status, order: order)
+            data = @client.post("/ecom/v1/checkouts/#{checkout_id}/create-order", {})
+            order_id = data["orderId"]
+            status = order_id ? "completed" : "complete_in_progress"
+            record_checkout_status(checkout_id, status)
+            # Same "not information-complete but schema-valid" posture as
+            # Mapper.order's own blank permalink_url — Wix's create-order
+            # response has no storefront order-status link to hand back.
+            order = order_id && Portage::Ucp::OrderConfirmation.new(id: order_id, permalink_url: "")
+            Mapper.checkout(node, status: status, order: order)
+          end
         end
       end
     end

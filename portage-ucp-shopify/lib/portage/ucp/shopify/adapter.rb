@@ -34,6 +34,13 @@ module Portage
         # back to the cart that produced it — both are tracked adapter-side
         # via Support::CheckoutState.
         include Portage::Ucp::Support::CheckoutState
+        # #replace_lines, #apply_fulfillment and #submit_payment are each a
+        # read-modify-write across multiple Storefront calls with no atomic
+        # equivalent upstream — two concurrent calls against the same
+        # cart/checkout id can interleave and drop each other's writes, not
+        # just race on the same eventual value (§21). Support::SessionLock
+        # serializes by id so the second call waits instead of interleaving.
+        include Portage::Ucp::Support::SessionLock
 
         def initialize(client:)
           super()
@@ -195,15 +202,17 @@ module Portage
         # optional and independent — an agent picking a rate on an
         # already-addressed cart sends only the latter.
         def apply_fulfillment(cart_id, fulfillment)
-          cart_node = fetch_cart_node(cart_id)
+          synchronize(cart_id) do
+            cart_node = fetch_cart_node(cart_id)
 
-          destination = fulfillment.shipping_methods.flat_map(&:destinations).first
-          cart_node = apply_delivery_address(cart_id, destination.address) if destination
+            destination = fulfillment.shipping_methods.flat_map(&:destinations).first
+            cart_node = apply_delivery_address(cart_id, destination.address) if destination
 
-          selections = fulfillment.shipping_methods.flat_map(&:groups).filter_map { |g| delivery_selection(g) }
-          cart_node = apply_delivery_selections(cart_id, selections) unless selections.empty?
+            selections = fulfillment.shipping_methods.flat_map(&:groups).filter_map { |g| delivery_selection(g) }
+            cart_node = apply_delivery_selections(cart_id, selections) unless selections.empty?
 
-          cart_node
+            cart_node
+          end
         end
 
         def delivery_selection(group)
@@ -250,23 +259,27 @@ module Portage
         end
 
         def replace_lines(cart_id, line_items, discount_codes)
-          current_line_ids = fetch_cart_node(cart_id).dig("lines", "nodes").map { |n| n["id"] }
-          unless current_line_ids.empty?
-            removed = @client.storefront_query(Queries::CART_LINES_REMOVE,
-                                               variables: { cartId: cart_id, lineIds: current_line_ids })
-            unwrap!(removed, "cartLinesRemove")
+          synchronize(cart_id) do
+            current_line_ids = fetch_cart_node(cart_id).dig("lines", "nodes").map { |n| n["id"] }
+            unless current_line_ids.empty?
+              removed = @client.storefront_query(Queries::CART_LINES_REMOVE,
+                                                 variables: { cartId: cart_id, lineIds: current_line_ids })
+              unwrap!(removed, "cartLinesRemove")
+            end
+
+            cart_node = if line_items.empty?
+                          fetch_cart_node(cart_id)
+                        else
+                          added = @client.storefront_query(
+                            Queries::CART_LINES_ADD,
+                            variables: { cartId: cart_id, lines: cart_lines(line_items) }
+                          )
+                          unwrap!(added, "cartLinesAdd")
+                        end
+            next cart_node if discount_codes.nil?
+
+            apply_discount_codes(cart_id, discount_codes)
           end
-
-          cart_node = if line_items.empty?
-                        fetch_cart_node(cart_id)
-                      else
-                        added = @client.storefront_query(Queries::CART_LINES_ADD,
-                                                         variables: { cartId: cart_id, lines: cart_lines(line_items) })
-                        unwrap!(added, "cartLinesAdd")
-                      end
-          return cart_node if discount_codes.nil?
-
-          apply_discount_codes(cart_id, discount_codes)
         end
 
         def apply_discount_codes(cart_id, discount_codes)
@@ -279,19 +292,21 @@ module Portage
         # — Shopify natively dedups that one call via SubmitAlreadyAccepted, on
         # top of #complete_checkout's own dedup wrapper.
         def submit_payment(checkout_id, payment_token, idempotency_key)
-          cart_node = fetch_cart_node(checkout_id)
-          raise Portage::Ucp::Shopify::Error, "cart #{checkout_id} not found" unless cart_node
+          synchronize(checkout_id) do
+            cart_node = fetch_cart_node(checkout_id)
+            raise Portage::Ucp::Shopify::Error, "cart #{checkout_id} not found" unless cart_node
 
-          raise_if_any_line_unavailable!(cart_node)
+            raise_if_any_line_unavailable!(cart_node)
 
-          pay_for_cart(checkout_id, cart_node.dig("cost", "totalAmount"), payment_token)
+            pay_for_cart(checkout_id, cart_node.dig("cost", "totalAmount"), payment_token)
 
-          submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
-                                                 variables: { cartId: checkout_id, attemptToken: idempotency_key })
-          status = unwrap_submit!(submit_data)
-          record_checkout_status(checkout_id, status)
-          order = link_cart_to_order(checkout_id) if status == "completed"
-          Mapper.checkout(cart_node, status: status, order: order)
+            submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
+                                                   variables: { cartId: checkout_id, attemptToken: idempotency_key })
+            status = unwrap_submit!(submit_data)
+            record_checkout_status(checkout_id, status)
+            order = link_cart_to_order(checkout_id) if status == "completed"
+            Mapper.checkout(cart_node, status: status, order: order)
+          end
         end
 
         def pay_for_cart(checkout_id, total, payment_token)
