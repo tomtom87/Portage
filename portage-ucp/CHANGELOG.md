@@ -29,6 +29,13 @@ pre-1.0, so APIs may still shift between minor versions.
   `capability_negotiated` event yet: `CapabilityNegotiator#negotiate` has no
   call site anywhere in the gem outside its own spec, so there's nowhere to
   emit it from without building that call site first (design-log §23).
+- `Observability::REDACTED_KEYS` grows past the three credential keys to
+  cover the PII that actually flows through logged events — `email`
+  (`Identity`, §3) and `first_name`/`last_name`/`phone_number`/
+  `street_address`/`extended_address`/`address_locality`/`address_region`/
+  `address_country`/`postal_code` (`PostalAddress`, fulfillment
+  destinations). §12's "Money-adjacent PII" named no real key — `Money`/
+  `Total` carry only amounts and currency codes (design-log §23 step 4).
 
 ## [0.3.0] - 2026-08-27
 

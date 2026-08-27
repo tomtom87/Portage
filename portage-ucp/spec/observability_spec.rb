@@ -32,6 +32,17 @@ RSpec.describe Portage::Ucp::Observability do
     expect(logged["items"]).to eq([{ "oauth_token" => "[REDACTED]" }, { "safe" => "b" }])
   end
 
+  it "redacts identity and address PII (§23 step 4) alongside the credential keys" do
+    described_class.log(logger, "tool_called",
+                        arguments: { email: "shopper@example.com", first_name: "A", last_name: "B",
+                                     phone_number: "+1", street_address: "1 Main St", extended_address: "Apt 2",
+                                     address_locality: "Springfield", address_region: "IL",
+                                     address_country: "US", postal_code: "62704" })
+
+    logged = JSON.parse(io.string.lines.last)
+    logged["arguments"].each_value { |v| expect(v).to eq("[REDACTED]") }
+  end
+
   it "leaves non-sensitive fields untouched" do
     described_class.log(logger, "tool_called", capability: "dev.ucp.shopping.cart", quantity: 2)
 
