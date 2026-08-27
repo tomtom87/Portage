@@ -42,8 +42,45 @@ module Portage
             options: (node["options"] || []).map { |o| product_option(o) },
             media: product_media(node.dig("featuredMedia", "nodes", 0)),
             tags: node["tags"] || [],
-            url: node["onlineStoreUrl"]
+            url: node["onlineStoreUrl"],
+            metadata: metafields_metadata(node["metafields"], :product)
           )
+        end
+
+        # Shopify's `type` tags a metafield with one of ~20 encodings
+        # (design-log §20 handoff). Only the ones where passing the raw
+        # string through would be actively wrong for an agent to consume get
+        # parsed here — `json`, `dimension`/`measurement` (both
+        # `{"value":..,"unit":..}`-shaped JSON strings), and any `list.*`
+        # (a JSON array of the scalar type). Everything else (plain text,
+        # numbers, dates, refs, ...) passes through as Shopify sent it.
+        METAFIELD_JSON_TYPES = %w[json dimension measurement].freeze
+
+        def parse_metafield_value(value, type)
+          return JSON.parse(value) if METAFIELD_JSON_TYPES.include?(type) || type&.start_with?("list.")
+
+          value
+        end
+
+        # `metafields` is nil when nothing's configured for `scope` (the
+        # fragment itself was omitted from the query — see
+        # Queries.metafields_fragment) — that's the common case and returns
+        # nil rather than {}, matching Product/Variant#metadata's own
+        # nil-by-default. Otherwise it's Shopify's `metafields(identifiers:)`
+        # array, positional against the same
+        # `Portage::Ucp::Shopify.configuration.fields_for(scope)` list the
+        # query was built from, with a nil entry wherever that metafield
+        # isn't set on this product/variant.
+        def metafields_metadata(metafields, scope)
+          return nil if metafields.nil?
+
+          fields = Portage::Ucp::Shopify.configuration.fields_for(scope)
+          metadata = fields.zip(metafields).each_with_object({}) do |(field, metafield), acc|
+            next unless field && metafield && metafield["value"]
+
+            acc[field[:key]] = parse_metafield_value(metafield["value"], metafield["type"])
+          end
+          metadata.empty? ? nil : metadata
         end
 
         def description(node)
@@ -107,9 +144,6 @@ module Portage
         end
 
         def variant(node, product_description, currency)
-          options = (node["selectedOptions"] || []).map do |o|
-            Portage::Ucp::SelectedOption.new(name: o["name"], label: o["value"])
-          end
           Portage::Ucp::Variant.new(
             id: node["id"],
             title: node["title"],
@@ -119,9 +153,14 @@ module Portage
             barcodes: barcodes(node["barcode"]),
             list_price: node["compareAtPrice"] && scalar_price(node["compareAtPrice"], currency),
             availability: { "available" => node["availableForSale"] },
-            options: options,
-            media: variant_media(node["image"])
+            options: selected_options(node["selectedOptions"]),
+            media: variant_media(node["image"]),
+            metadata: metafields_metadata(node["metafields"], :variant)
           )
+        end
+
+        def selected_options(nodes)
+          (nodes || []).map { |o| Portage::Ucp::SelectedOption.new(name: o["name"], label: o["value"]) }
         end
 
         def variant_media(image)
