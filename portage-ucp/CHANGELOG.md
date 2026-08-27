@@ -6,6 +6,13 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Conformance kit: the repeated-idempotency-key example no longer passes on
+  output equality alone. An adapter wired to a fixed-response test double
+  returns identical output whether or not it deduped, so the example now also
+  asserts the key reached `Support::Idempotency`'s dedup table when the
+  adapter includes that module, and `warn`s (rather than silently passing)
+  when it doesn't.
+
 - `Portage::Ucp::ReferenceAdapter` (`lib/portage/ucp/reference_adapter.rb`) —
   the in-memory `Adapter` roadmap §8 step 1 called for and design-log §17
   flagged as missing outside `spec/support/fake_adapter.rb`, ships with the
