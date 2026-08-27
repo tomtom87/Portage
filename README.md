@@ -8,7 +8,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-> **Status**: `0.2.0`, published to RubyGems. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
+> **Status**: `0.3.0`, published to RubyGems. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
 ## Contents
 
@@ -117,7 +117,7 @@ Ten gems, mirroring how Faraday/Devise split core-vs-adapter:
 |---|---|
 | [`portage-ucp`](portage-ucp/) | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. Zero commerce-backend deps — works with any backend that implements `Adapter`, Shopify or otherwise. |
 | [`portage-ucp-client`](portage-ucp-client/) | Client-side SDK — the other direction from every gem below: connect to somebody else's manifest (or drive your own `Adapter` directly) and act as the shopper's agent. Loopback/stdio/HTTP transports behind one interface. |
-| [`portage-cli`](portage-cli/) | Ships the `portage` command — `portage buy <url>` tries native UCP discovery first, falls back to a platform adapter only when you already have that platform's own credentials, and says so plainly otherwise. `portage find --query "..."` covers the no-URL case: search backends propose stores, `/.well-known/ucp` filters them, their catalogs answer. |
+| [`portage-cli`](portage-cli/) | Ships the `portage` command — `portage buy <url>` tries native UCP discovery first, falls back to a platform adapter only when you already have that platform's own credentials, and says so plainly otherwise. `portage find --query "..."` covers the no-URL case: search backends propose stores, `/.well-known/ucp` filters them, their catalogs answer. `portage history` browses the local log of past purchases and searches. |
 | [`portage-ucp-shopify`](portage-ucp-shopify/) | Shopify adapter — implements `Adapter` against Shopify's Admin + Storefront GraphQL APIs. One consumer of the core gem, not a dependency of it. |
 | [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
 | [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | WooCommerce adapter — implements `Adapter` against a WooCommerce site's Admin REST API and Store API. |
@@ -180,7 +180,9 @@ class MyAdapter < Portage::Ucp::Adapter
 end
 ```
 
-See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkout, order, identity linking), `Portage::Ucp::ReferenceAdapter` (ships with the core gem, `lib/portage/ucp/reference_adapter.rb`) for a complete in-memory implementation of every capability including discount/fulfillment/identity, and `portage-ucp-shopify`'s `Adapter` for a real one against a live commerce API.
+See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkout, order, identity linking, reorder), `Portage::Ucp::ReferenceAdapter` (ships with the core gem, `lib/portage/ucp/reference_adapter.rb`) for a complete in-memory implementation of every capability including discount/fulfillment/identity/reorder, and `portage-ucp-shopify`'s `Adapter` for a real one against a live commerce API.
+
+`reorder` (`app.portage-ucp.reorder`) is a Portage-owned extension, not part of the UCP spec: it hydrates a `Cart` from a past order's line items, re-checking each item's current availability rather than replaying historical prices, and reports anything no longer purchasable via `ReorderResult#unavailable_items` instead of failing outright.
 
 ### Checking your adapter against the contract
 
