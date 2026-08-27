@@ -60,6 +60,8 @@ portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id 
                                 [--yes] [--dry-run] [--json]
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
+portage history [list] [--purchases|--searches] [--limit N] [--json]
+portage history clear [--purchases|--searches]
 ```
 
 - `--query` — search term. Against the store's catalog when you name a store,
@@ -81,6 +83,24 @@ portage find --query "..." [--max-price N] [--limit N] [--json]
 Exits `0` when a checkout completed (or a dry-run/browse/search resolved
 successfully), `1` otherwise — including the "no native manifest, no adapter
 credentials" dead-end case, so it's scriptable in CI.
+
+### History
+
+Every `find` (and `buy`, once it reaches a search) and every `buy` that
+reaches checkout is logged locally to `~/.portage/history.json` — most recent
+200 entries each, purchases and searches kept separately. Browse-only `buy`
+reports (no checkout reached) aren't logged as purchases.
+
+```bash
+portage history                       # both lists, most recent last
+portage history list --purchases      # just purchases
+portage history list --searches --limit 20
+portage history clear                 # wipe both
+portage history clear --purchases     # wipe just one
+```
+
+This is a local convenience cache, not an audit log — `portage history clear`
+deletes it outright, and there's no server-side record.
 
 ### Shipping address (own-store checkouts only)
 

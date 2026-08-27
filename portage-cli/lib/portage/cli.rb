@@ -5,6 +5,7 @@ require_relative "cli/version"
 require_relative "cli/shipping_profile"
 require_relative "cli/buy"
 require_relative "cli/find"
+require_relative "cli/history"
 
 module Portage
   # `portage` — the single command-line entrypoint for acting as a shopper's
@@ -17,6 +18,8 @@ module Portage
                                 [--product-id ID] [--yes] [--dry-run] [--json]
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
+             portage history [list] [--purchases|--searches] [--limit N] [--json]
+             portage history clear [--purchases|--searches]
     USAGE
 
     # @param argv [Array<String>]
@@ -26,6 +29,7 @@ module Portage
       case command
       when "buy" then run_buy(rest)
       when "find" then run_find(rest)
+      when "history" then run_history(rest)
       else
         warn USAGE
         1
@@ -40,6 +44,8 @@ module Portage
 
       json = options.delete(:json)
       report = Find.new(**options).call
+      History.new.record_search(query: report[:query], offer_count: report[:offers].length,
+                                message: report[:message])
       puts json ? JSON.pretty_generate(report) : format_find(report)
       report[:offers].any? ? 0 : 1
     end
@@ -122,10 +128,22 @@ module Portage
       options = parsed[:buy].merge(url: url)
       options[:product_id] ||= product_id
       report = Buy.new(**options).call
+      record_purchase(report, options[:query]) if report[:checkout]
       puts parsed[:json] ? JSON.pretty_generate(report) : format_report(report)
       report[:checkout] || report[:browse] ? 0 : 1
     end
     private_class_method :execute_buy
+
+    # Only checkout attempts land here — a browse-only report never reached a
+    # checkout, so it belongs to search history, not purchase history.
+    def self.record_purchase(report, query)
+      History.new.record_purchase(
+        url: report[:url], query: query, checkout: report[:checkout],
+        checkout_status: report[:checkout_status], message: report[:message],
+        products: report[:products].map { |p| product_line(p) }
+      )
+    end
+    private_class_method :record_purchase
 
     def self.parse_buy_options(argv)
       url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
@@ -163,6 +181,73 @@ module Portage
       parser.on("--max-price N", Float) { |v| parsed[:find][:max_price] = to_minor_units(v) }
     end
     private_class_method :add_search_options
+
+    # --- history ---
+
+    def self.run_history(argv)
+      sub = argv.first && !argv.first.start_with?("-") ? argv.shift : "list"
+      case sub
+      when "list" then run_history_list(argv)
+      when "clear" then run_history_clear(argv)
+      else
+        warn USAGE
+        1
+      end
+    end
+    private_class_method :run_history
+
+    def self.run_history_list(argv)
+      opts = { limit: History::MAX_ENTRIES }
+      history_option_parser(opts).parse!(argv)
+      json = opts.delete(:json)
+      kind = opts.delete(:kind)
+      history = History.new
+      result = { purchases: kind == "searches" ? [] : history.purchases(limit: opts[:limit]),
+                 searches: kind == "purchases" ? [] : history.searches(limit: opts[:limit]) }
+      puts json ? JSON.pretty_generate(result) : format_history(result)
+      0
+    end
+    private_class_method :run_history_list
+
+    def self.run_history_clear(argv)
+      opts = {}
+      history_option_parser(opts).parse!(argv)
+      History.new.clear(kind: opts[:kind])
+      puts "Cleared #{opts[:kind] || 'purchase and search'} history."
+      0
+    end
+    private_class_method :run_history_clear
+
+    def self.history_option_parser(opts)
+      OptionParser.new do |parser|
+        parser.on("--purchases") { opts[:kind] = "purchases" }
+        parser.on("--searches") { opts[:kind] = "searches" }
+        parser.on("--limit N", Integer) { |v| opts[:limit] = v }
+        parser.on("--json") { opts[:json] = true }
+      end
+    end
+    private_class_method :history_option_parser
+
+    def self.format_history(result)
+      lines = ["Purchases:"]
+      result[:purchases].each { |p| lines << "  #{history_purchase_line(p)}" }
+      lines << "(none)" if result[:purchases].empty?
+      lines << "Searches:"
+      result[:searches].each { |s| lines << "  #{history_search_line(s)}" }
+      lines << "(none)" if result[:searches].empty?
+      lines.join("\n")
+    end
+    private_class_method :format_history
+
+    def self.history_purchase_line(entry)
+      "#{Time.at(entry['at'])} — #{entry['url']} (#{entry['query']}) — #{entry['checkout_status'] || entry['message']}"
+    end
+    private_class_method :history_purchase_line
+
+    def self.history_search_line(entry)
+      "#{Time.at(entry['at'])} — \"#{entry['query']}\" — #{entry['offer_count']} offer(s)"
+    end
+    private_class_method :history_search_line
 
     # --- output ---
 
