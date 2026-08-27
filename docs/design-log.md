@@ -1518,3 +1518,114 @@ inside core would break that, so these want their own gems.
    single-use token §9 forbids.
 8. **The find-it-elsewhere mode** last, since it needs an offer-identity
    decision that nothing else on this list depends on.
+
+---
+
+## 23. Handoff — reconciling §12 with the code (added 2026-08-27)
+
+§22 step 3, worked up against the code before touching it. The drift is
+wider than "the correlation id is missing," the obvious fix for the
+correlation id is wrong, and the audit turned up an ordering bug in
+`Mcp::Server.call_tool` that matters more than either.
+
+**Only one of §12's three event types exists.** §12 promises "tool called,
+capability negotiated, checkout state transition." The single
+`Observability.log` call site in the whole gem is `tool_called` in
+`Mcp::Server.call_tool`. `CapabilityNegotiator` (§10) never touches
+`Observability`; checkout transitions happen in
+`Support::CheckoutState#record_checkout_status`, which is adapter-side
+bookkeeping with no logger in reach. Emitting the other two means giving
+`Dispatcher` (which today takes only `adapter:`/`registry:`) and the
+`CheckoutState` mixin a logger and a correlation id — i.e. the missing
+events are a plumbing change through the whole call path, not two more log
+lines next to the first.
+
+**Arguments are logged before authorization runs.** In `call_tool`, the
+`tool_called` event — including `arguments: kwargs` — is emitted *above*
+the `authorize`/`rate_limit` pair, so a caller that fails authentication
+and a caller that passes both write to the log identically. Any unauthorized
+peer that can reach the endpoint can therefore put attacker-chosen content
+into the operator's logs (and, once §22's console exists, onto an operator's
+screen) at whatever volume the rate limiter would otherwise have refused,
+since the limiter runs after the write too. Fix by emitting a minimal
+pre-auth event (capability, action, correlation id — no arguments) and
+logging the full argument hash only after `authorize` and `rate_limit` have
+both passed. This is the item to do first in this section: it needs no
+design decisions, and every event-fan-out feature below makes it worse.
+
+**The obvious correlation-id fix is wrong.** `Mcp::Server::Context` is
+built once inside `Server.build`, which is once per process, not once per
+session. `mcp` 0.25.0's Streamable HTTP transport is explicitly stateful and
+multi-session (`max_sessions`, `session_idle_timeout`,
+`session_request_validator`), so one `MCP::Server` object serves many
+sessions; memoizing an id onto `Context` would stamp every session in the
+process with the same value. That is worse than having none — it reads like
+a session trace and isn't. Under stdio the same code would look correct,
+which is how it would survive review.
+
+**Take the id from `_meta`, don't invent one.** `mcp` 0.25.0 ships
+`MCP::TraceContext`: the MCP spec reserves the un-prefixed `_meta` keys
+`traceparent`/`tracestate`/`baggage` for W3C Trace Context (SEP-414), the
+SDK guarantees they pass through incoming request `_meta` untouched, and
+handlers read them from `server_context[:_meta]`. So the correlation id
+should prefer an inbound `traceparent` and generate one only when absent,
+rather than portage defining a competing field — an agent that already
+traces its own calls then gets one trace across both sides, which is the
+whole point of the id. Note `MCP::ServerContext` has no `session_id`
+accessor: it exposes `related_request_id` and forwards `method_missing` to
+the consumer-supplied context hash. Per-*request* correlation is therefore
+available today; per-*session* is only available if the consumer put
+something in that hash or the transport's session id is threaded in
+deliberately. Decide which §12 is actually promising — per-request plus
+inbound `traceparent` is honest and buildable now, and if per-session stays
+the goal it needs a documented consumer duty rather than a claim the gem
+can't keep on stdio.
+
+**The event sink needs a reason to exist next to `mcp`'s hooks.** `mcp`
+already offers `configuration.around_request`, `instrumentation_callback`
+(soft-deprecated), `exception_reporter`, and
+`ServerContext#notify_log_message` (MCP's own spec-level logging
+notifications). A new `config.event_sink` is only justified because
+`Observability` events also fire outside an MCP request —
+`Rack::WebhookEndpoint` (§11), and the adapter-side checkout transitions
+above — which none of `mcp`'s per-request hooks can see. Say that in the
+code comment when adding it, or skip the interface and document "wire
+`around_request`" instead. Don't ship both seams without a stated
+boundary.
+
+**"`Money`-adjacent PII" isn't a real category — resolve the phrase.**
+`REDACTED_KEYS` is `payment_token`/`oauth_token`/`authorization`, redacted
+recursively through hashes and arrays (specced). `Money`/`Total` carry
+amounts and currency codes, no PII. The PII that actually flows through
+these events lives on the identity-linking result (§3) and on fulfillment
+destinations — names, addresses, contact details. So either extend
+`REDACTED_KEYS` to those keys or delete the phrase from §12; leaving it
+vague is what puts an address on a console screen later (§22). Deciding
+this before the journal and console land is cheaper than retrofitting
+redaction into a store that already holds unredacted rows.
+
+**Steps:**
+
+1. Move the full-argument log below `authorize`/`rate_limit` in
+   `Mcp::Server.call_tool`, keeping a minimal pre-auth event. Spec both:
+   an unauthenticated call emits no `arguments`, an authorized one does.
+2. Decide per-request vs per-session correlation, then implement it reading
+   `server_context[:_meta]`'s `traceparent` first and generating a fallback
+   id only when absent. Spec the generated-fallback path and the
+   pass-through path separately, and spec that two sessions in one process
+   don't share an id (the `Context`-memoization trap above).
+3. Thread logger + correlation id into `Dispatcher` and the `CheckoutState`
+   mixin, then emit `capability_negotiated` and the checkout-transition
+   event §12 already promises. If either turns out not to be worth the
+   plumbing, remove it from §12 rather than leaving it promised.
+4. Resolve the PII phrasing: extend `REDACTED_KEYS` with the identity/
+   destination keys, or narrow §12. Either way §12 and
+   `Observability::REDACTED_KEYS` must say the same thing when this lands.
+5. Add the event sink only with the outside-an-MCP-request justification
+   written down, and wire `Rack::WebhookEndpoint` through it — a sink whose
+   only producer is the one path `mcp`'s own hooks already cover has no
+   reason to exist.
+6. Rewrite §12 last, describing what the code does, and note in it that
+   §12 was aspirational from §0 until this section — the next person
+   reading it should be able to tell which parts of this log are decisions
+   and which are shipped behavior.
