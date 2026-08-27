@@ -7,13 +7,20 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.3.0] - 2026-08-27
 
 - All seven adapter gems now run the core gem's conformance kit against their
   real `Adapter` through a real `Dispatcher`
   (`spec/portage/ucp/<platform>/conformance_spec.rb`), closing the follow-up
   design-log §17 left open when the kit shipped. No adapter needed
   body-matching stubs: the kit's reachable surface stops at `create_checkout`.
+- Core gem's `~> 0.2` dependency pin widened to `~> 0.3` in every adapter,
+  `portage-cli`, and `portage-ucp-client` gemspec.
+- `portage-ucp` and `portage-ucp-shopify` both bump to 0.3.0 — see each
+  gem's own `CHANGELOG.md` for `Support::Retry`, `Support::SessionLock`, the
+  Shopify metadata_field config DSL, and the Shopify GraphQL shape fixes
+  driving the bump. `portage-cli` and `portage-ucp-client` are unchanged and
+  stay at 0.2.0.
 
 ## [0.2.0] - 2026-08-21
 
