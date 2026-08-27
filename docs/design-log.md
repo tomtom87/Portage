@@ -1312,3 +1312,209 @@ Confirmed end to end with an adapter-level spec that calls
 consumer's `config/initializers` timing, per handoff step 3's own worry) and
 asserts the sent GraphQL body contains the configured identifier — not just
 that a hand-built fixture maps correctly.
+
+---
+
+## 22. Roadmap review: what 1.0 still needs (added 2026-08-27)
+
+`0.3.0` shipped (root `CHANGELOG.md`), and §8's original six roadmap steps
+are all done, so this section is the re-plan: a proposed next-step list
+checked against the code rather than against this log's own claims. Two of
+the four items on it were already built and misstated; two are real. The
+check also turned up two places where §9/§12 document behavior the gem
+doesn't have, which matters more than any of the new features — a security
+posture that's only true in the design log is worse than one that's
+honestly absent.
+
+**§12 has drifted from the code.** §12 says the gem "stamps a correlation
+id per MCP session and includes it on every event." It does not — there is
+no `correlation` anywhere in any `.rb` file, and `Observability`
+(`portage-ucp/lib/portage/ucp/observability.rb`, 31 lines) is referenced by
+exactly one non-spec file (`mcp/server.rb`). §12 also claims redaction of
+"any `Money`-adjacent PII"; `REDACTED_KEYS` is three keys
+(`payment_token`/`oauth_token`/`authorization`) and nothing handles PII.
+Both need resolving in the same pass — either build them or narrow §12 —
+and the correlation id in particular is a prerequisite for anything that
+wants to group events into "one buy attempt" (see the console below), not a
+nicety.
+
+**`Checkout#links` is required by the schema and populated by nobody.**
+`Link` (`value_objects.rb`) is defined against
+`schemas/shopping/types/link.json` and has zero `Link.new` call sites in the
+repo; `Mapper` returns `links: []`. Meanwhile Shopify's own query already
+fetches `checkoutUrl` (`queries.rb`), *including* on the
+`SubmitFailed { checkoutUrl errors { message } }` branch — which is exactly
+the case where an agent hits a wall (3D-Secure, identity verification,
+loyalty redemption) and the human has to finish in a browser. The data is
+already in hand and thrown away one line later.
+
+This is the whole of what a "handoff" feature needs, and it deliberately is
+not a new `Portage::Ucp::Handoff` middleware or a `#to_handoff_url` that
+mints a temporary signed URL of the gem's own. §9's never-generates-or-
+stores-keys-implicitly rule applies: a gem that wraps a platform session
+token in a URL it signs itself has become a credential issuer, with key
+management, expiry, and revocation to own. Pass the platform's own URL
+through as a `Link` instead. One unresolved detail: link.json's well-known
+`type` values are `privacy_policy`/`terms_of_service`/`refund_policy`/
+`shipping_policy`/`faq` — there is no "resume this checkout" type. The
+schema permits unknown values (consumers "SHOULD handle unknown values
+gracefully"), so this means picking a type string, documenting it, and
+raising it with UCP rather than assuming a spec-blessed one exists.
+
+**Idempotency exists; the gap is that it's in-process.**
+`Support::Idempotency` already dedups per key under a per-key mutex, is
+mixed into every adapter, and every mutating `Adapter` method already takes
+`idempotency_key:` (§9a, §13's dedup spec). So "an agent retry could
+double-charge" is not the current state for a single-process server. What
+*is* true is the module's own top-of-file caveat: in-process only, so a
+multi-worker deploy doesn't dedup across workers. The fix is to extract a
+configurable `idempotency_provider` on `Configuration`, shaped like
+`rate_limiter` — an interface plus today's in-memory implementation as the
+default, and no bundled Redis, since §9 is explicit that the gem makes no
+storage assumption. Worth doing before a scheduler (below) rather than
+after: a scheduled purchase runs in a *different process* from the one that
+scheduled it, which is precisely where the in-process table is worth
+nothing.
+
+**Inbound request signature verification is the one genuine security
+hole.** Three signing/verification stories exist and none of them is this
+one: `Manifest` signs the outbound `/.well-known/ucp` payload with a
+consumer-provided `signer` and a current+next `signing_keys` set;
+`Rack::WebhookEndpoint` verifies inbound backend webhooks by HMAC,
+verify-first-parse-second; and `Authenticator` authenticates the *caller*
+of a `tools/call`. What no code covers is verifying that an inbound agent
+request carries cryptographic proof of user consent — the AP2/UCP
+authorization story. `Authenticator` returning a truthy auth context proves
+who is calling, not that a human agreed to the purchase, and no
+`Authenticator` implementation can be made to prove the latter without
+parsing signature headers this gem doesn't model.
+
+So: a `Portage::Ucp::Security::Signature` class plus generic Rack
+middleware that intercepts, verifies, and parses UCP request signature
+headers. Two hard constraints, both already established elsewhere in the
+gem and not to be re-litigated: verify before parsing the body (match
+`WebhookEndpoint`'s posture exactly — an unverified body is untrusted
+input, and parsing it first is the bug that posture exists to prevent), and
+reuse the current+next key-set shape `Manifest` already defines rather than
+introducing a second, differently-shaped key config on `Configuration`.
+Unresearched, and to be pinned before writing code: which signature scheme
+and header names UCP actually specifies today, and whether the vendored
+`schemas/2026-04-08/` snapshot documents them at all — everything above is
+the shape of the hole, not a claim about the wire format that fills it.
+
+**Adapter growth is a confidence problem, not a count problem.** Seven
+adapter gems exist (Shopify, Wix, WooCommerce, BigCommerce, Magento, Etsy,
+Instagram), all researched in §14 — "broaden beyond Shopify and Wix" is
+already done. The real state is §17's leftover: only Shopify has a live
+test store, and the other six run the conformance kit against webmock stubs
+with the passes-for-the-wrong-reason risk §17 flagged and resolved for
+Shopify alone. When Shopify got a real store, the kit immediately caught
+four real bugs plus a fifth structural gap (the `Product` vs
+`ProductVariant` GID split). Assume the other six are hiding comparable
+bugs. The ecosystem work worth doing is sandbox credentials for the six
+already written, not an eighth adapter — adding one grows the surface that
+*looks* tested without growing what is.
+
+### New scope, not covered by §16
+
+§16 catalogued post-purchase and shopper-agent gaps per order. Four asks
+sit outside it, and two of them §16 has effectively already decided:
+
+- **Buyer-side purchase journal** — genuinely new. Nothing records that a
+  purchase happened: `Buy` (`portage-cli/lib/portage/cli/buy.rb`) builds a
+  report hash and prints it, `complete_checkout` has no journal hook, and
+  `dev.ucp.shopping.order` has `get_order` but no list/enumerate action, so
+  a buyer can only re-fetch order ids it already kept. Wants an append-only
+  record written at the `complete_checkout` boundary (not in the CLI's print
+  path) carrying store origin, `source` (`native_ucp` vs
+  `adapter:<platform>`), product id, quantity, amount in **minor units plus
+  currency** via `Support::Amounts` (never a float), order id, idempotency
+  key, timestamp.
+- **An admin/console panel** — also new, and blocked on the §12 drift
+  above rather than on any UI work. Today's events are
+  `logger.info(JSON)`, fire-and-forget, with no sink interface, no event
+  store, and no correlation id, so a panel built now would be a log
+  scraper. Two security constraints, stated here so they aren't discovered
+  later: every field rendered must go through `Observability.redact` (a
+  panel is a new place for `payment_token`/`oauth_token`/`Authorization` to
+  escape, including into a browser's devtools payload), and the panel needs
+  its own session auth — `Authenticator` guards MCP calls, not a web UI,
+  and the process holding the panel also holds live platform admin
+  credentials in its env. Localhost-bound by default; remote exposure an
+  explicit opt-in.
+- **Scheduled purchases** — the blocker is already named in §16's
+  saved-payment-method entry, and its answer already decided there:
+  `payment_token` is single-use and `PaymentTokenGuard` rejects anything
+  PAN-shaped, so there is no way to stash a token and spend it later. An
+  unattended purchase needs an opaque PSP-issued *reference* exchanged for
+  a fresh single-use token at each `complete_checkout`, hung off a linked
+  identity — i.e. the `dev.ucp.shopping.payment_method` family, which §16
+  also says must ship together with saved addresses and with
+  `delete_shopper_data`. Scheduling is therefore not a small feature; it is
+  downstream of that whole persistence-and-erasure step. The scheduler
+  itself then needs the cross-process `idempotency_provider` above, plus a
+  decided policy for price/stock drift between schedule time and run time
+  (max-price guard, `OutOfStockError` handling, and an explicit
+  skip/notify/proceed rule). No daemon or runner exists anywhere in the
+  repo today — every gem is a library plus a stdio exe.
+- **Switching between suppliers** — §16 already ruled on this under "is
+  this the best price available": not an `Adapter` concern at all, but
+  §15's `portage find` multi-store ranking pointed at an item the shopper
+  already has, as a "find this same item elsewhere" mode. What that mode
+  still needs, and what neither §15 nor §16 resolved: an offer-identity key
+  (nothing today can say two products from two stores are the same thing),
+  and a policy for comparison cost, since landed price including shipping
+  and tax is only known after `create_checkout` — comparing N suppliers
+  properly means N speculative checkouts, i.e. rate-limit pressure and
+  abandoned carts visible to real merchants. A catalog-price-only ranking
+  that only checks out the top two is the obvious compromise, unvalidated.
+
+**Persistence is the common dependency.** Three of those four need durable
+state and the repo has none: the only thing written to disk anywhere is
+`portage-cli`'s `~/.portage/` pair (`ProbeCache`'s `discovery-cache.json`
+and the hand-curated `stores.yml`), both ad-hoc JSON/YAML, and
+`Support::Idempotency`/`Support::CheckoutState` are both in-process hashes.
+One injectable store abstraction, consumer-swappable in the
+`rate_limiter`/`authenticator` mold, decided once — otherwise the journal,
+the console, and the scheduler each grow their own incompatible one. None
+of it belongs in core `portage-ucp`, which stays a dependency-light
+adapter-agnostic library (§2): a console shipping Rack and a database
+inside core would break that, so these want their own gems.
+
+### Handoff — the order to build in (do this next)
+
+1. **Populate `Checkout#links`** from each platform's native checkout URL,
+   starting with Shopify's already-fetched `checkoutUrl` (both the success
+   and `SubmitFailed` branches — the failure branch is the handoff case
+   that matters). Decide and document the `type` string first per the
+   link.json note above. Smallest commit on this list and unblocked by
+   everything else.
+2. **Extract `idempotency_provider`** onto `Configuration` with today's
+   in-memory `Support::Idempotency` as the default implementation. No new
+   runtime dependency. Spec that two providers are interchangeable under
+   §13's existing same-key-twice test.
+3. **Reconcile §12 with the code**: add the per-session correlation id and
+   an event-sink interface on `Observability` (so a consumer can receive
+   events rather than only log them), or narrow §12's claims to what
+   exists. Do not leave the log claiming an unbuilt security-adjacent
+   behavior either way. Same pass: decide what "`Money`-adjacent PII"
+   redaction actually means and either implement or drop it.
+4. **Research, then build, `Portage::Ucp::Security::Signature`**: pin
+   UCP's actual signature scheme and header names against the vendored
+   schemas (or the live spec, dated in this log per §1's convention) before
+   writing code. Verify-before-parse; reuse `Manifest`'s current+next key
+   set. This is the 1.0 blocker of the four.
+5. **Sandbox credentials for the six webmock-only adapters**, one at a
+   time, running the §17 kit against each. Expect bugs of the same class
+   Shopify's real store surfaced. Prefer this over an eighth adapter.
+6. **The storage abstraction**, then the purchase journal on top of it.
+   Journal first, console second — the console reads the store, never the
+   logs.
+7. **`dev.ucp.shopping.payment_method` + saved addresses +
+   `delete_shopper_data` as one step** (§16's own instruction: shipping
+   persistence without a deletion path is the mistake to avoid), and only
+   then a scheduler. Anything that automates spending money without that
+   step in place is either storing a credential it shouldn't or reusing a
+   single-use token §9 forbids.
+8. **The find-it-elsewhere mode** last, since it needs an offer-identity
+   decision that nothing else on this list depends on.
