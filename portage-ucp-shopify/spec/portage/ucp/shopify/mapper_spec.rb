@@ -25,7 +25,7 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
         "variants" => { "nodes" => [
           { "id" => "gid://shopify/ProductVariant/1", "title" => "Default", "availableForSale" => true,
             "sku" => "CB-12", "barcode" => "012345678905",
-            "price" => { "amount" => "5.00", "currencyCode" => "USD" }, "compareAtPrice" => nil,
+            "price" => "5.00", "compareAtPrice" => nil,
             "selectedOptions" => [{ "name" => "Size", "value" => "12oz" }], "image" => nil }
         ] }
       }
@@ -100,6 +100,14 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
                                     ])
     end
 
+    it "treats a null totalTaxAmount (tax not yet computed) as zero rather than raising" do
+      untaxed_node = node.merge("cost" => node["cost"].merge("totalTaxAmount" => nil))
+
+      cart = described_class.cart(untaxed_node)
+
+      expect(cart.totals.map(&:type)).not_to include("tax")
+    end
+
     it "sets Checkout status from the caller rather than any Shopify field, and includes required links" do
       checkout = described_class.checkout(node, status: "completed")
 
@@ -154,7 +162,7 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
     let(:node) do
       {
         "id" => "gid://shopify/Cart/1",
-        "deliveryGroups" => [
+        "deliveryGroups" => { "nodes" => [
           { "id" => "gid://shopify/CartDeliveryGroup/1",
             "cartLines" => { "nodes" => [{ "id" => "gid://shopify/CartLine/1" }] },
             "deliveryOptions" => [
@@ -169,7 +177,7 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
             "deliveryAddress" => { "address1" => "1 Main St", "address2" => nil, "city" => "Erie",
                                    "provinceCode" => "PA", "zip" => "16501", "firstName" => "A", "lastName" => "B",
                                    "phone" => nil, "countryCode" => "US" } }
-        ]
+        ] }
       }
     end
 
