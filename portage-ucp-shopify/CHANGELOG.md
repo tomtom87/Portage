@@ -4,6 +4,36 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.3.0] - 2026-08-27
+
+- `metadata_field` config DSL (`Configuration`) — lets a merchant map their
+  own Shopify metafields onto UCP catalog attributes without a code change,
+  instead of every merchant-specific field needing a fork of `mapper.rb`.
+- Four catalog/cart GraphQL shape fixes against the real Admin/Storefront
+  API, none catchable by `adapter_spec.rb`'s hand-rolled webmock stubs since
+  those fabricate response shapes by hand:
+  - `ProductVariant#price`/`#compareAtPrice` are the bare `Money` scalar (a
+    decimal string), not a `MoneyV2` object — the live Admin API 2026-04
+    schema rejects `{ amount currencyCode }` sub-selections on them.
+  - `ProductCompareAtPriceRange`'s fields are `minVariantCompareAtPrice`/
+    `maxVariantCompareAtPrice`, not `minVariantPrice`/`maxVariantPrice`
+    (those belong to `ProductPriceRangeV2` and were copy-pasted onto the
+    compare-at query and mapper).
+  - Cart `deliveryGroups` is a connection (`.nodes`), not a bare array.
+  - Cart `totalTaxAmount` is nullable — a fresh cart genuinely has no tax
+    amount yet rather than a zero one, until Shopify has enough context
+    (shipping address, tax-registered market) to compute it.
+- Bounded retry with backoff and normalized conflict/throttle errors on
+  requests to Shopify, via the core gem's new `Support::Retry`.
+- Per-cart/checkout mutations against Shopify are now serialized per session
+  (core gem's new `Support::SessionLock`), so two concurrent requests against
+  the same cart can't race each other.
+- `existing_variant_id` support in the adapter conformance kit — Shopify
+  needs a Product GID for catalog lookups and a separate ProductVariant GID
+  for cart line items, which `existing_product_id` alone can't express.
+- Adapter now runs the core gem's conformance kit against a real `Adapter`
+  through a real `Dispatcher` (`spec/portage/ucp/shopify/conformance_spec.rb`).
+
 ## [0.2.0] - 2026-08-21
 
 - `CartInput.discountCodes` on create, `cartDiscountCodesUpdate` on update —
