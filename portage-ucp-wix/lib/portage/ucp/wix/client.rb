@@ -19,6 +19,11 @@ module Portage
       # analogous to Shopify's per-call token selection.
       class Client
         include Portage::Ucp::Support::HttpClient
+        # Retries a bare HTTP 429/5xx from Wix's REST APIs — safe here
+        # because #request backs every Adapter mutation, which is always
+        # reached through Support::Idempotency#dedup, and every read is
+        # naturally idempotent (see Support::Retry's own doc comment).
+        include Portage::Ucp::Support::Retry
 
         BASE_URL = "https://www.wixapis.com".freeze
 
@@ -45,8 +50,10 @@ module Portage
         private
 
         def request(http_method, path, body = nil)
-          json_request(http_method, "#{BASE_URL}#{path}", body: body,
-                                                          headers: { "Authorization" => @access_token })
+          with_retry do
+            json_request(http_method, "#{BASE_URL}#{path}", body: body,
+                                                            headers: { "Authorization" => @access_token })
+          end
         end
 
         def api_error_class = Portage::Ucp::Wix::ApiError
