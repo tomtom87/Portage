@@ -1786,3 +1786,30 @@ clean on the touched files.
 **Before starting**, rebase/merge `handoff-23-observability-correlation-id`
 onto whatever `main` has moved to, and re-run the full spec suite —
 steps 1–2 haven't been reviewed or merged yet.
+
+## 25. §23/§24 reconciled, `capability_negotiated` still cut (2026-08-27)
+
+PR #14 (branch `handoff-23-observability-correlation-id`) merged. §23 steps
+1–6 all shipped: pre-auth/post-auth event split, per-request correlation id
+via `_meta`'s `traceparent`, `Dispatcher`/`CheckoutState` logger threading,
+`REDACTED_KEYS` extended for identity/destination PII, the event sink
+question resolved by skipping the interface (§24's step 5 note above), and
+§12 rewritten to describe shipped behavior instead of aspiration.
+
+One promise stayed cut: `capability_negotiated`. Investigating it for this
+branch found the reason is structural, not just unbuilt work. `mcp`
+0.25.0 gives `MCP::Server#init` no way to see `clientInfo`/`_meta` at
+initialize time (`lib/mcp/server.rb:608` never reads `_meta` or calls
+`add_instrumentation_data`, unlike `call_tool`), and
+`StreamableHTTPTransport#handle_initialization`
+(`lib/mcp/server/transports/streamable_http_transport.rb:812`) drops every
+header but `Origin` before handing the request to `ServerSession#handle_json`
+— so a `UCP-Agent` header never reaches the server. Emitting the event for
+real means monkeypatching both, which trades a documented gap for a
+silent coupling to `mcp` internals that could break on any `mcp` upgrade.
+Per the escape hatch §23 already used for the event sink, this is
+documented rather than built — see the extended comment on
+`CapabilityNegotiator#negotiate`
+(`portage-ucp/lib/portage/ucp/capability_negotiator.rb`). Revisiting this
+needs either an upstream `mcp` hook at initialize time or a deliberate
+decision to accept the monkeypatch coupling.
