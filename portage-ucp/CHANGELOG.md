@@ -16,19 +16,31 @@ pre-1.0, so APIs may still shift between minor versions.
 - `Mcp::Server.correlation_id_for` stamps both events with a correlation id
   read from the inbound W3C `traceparent` in `server_context[:_meta]`
   (SEP-414, `MCP::TraceContext`), falling back to `SecureRandom.uuid` when
-  absent. Deliberately per-request, not per-session — `Server::Context` is
-  built once per process in `.build`, and `mcp` 0.25.0's Streamable HTTP
-  transport is stateful and multi-session, so memoizing an id there would
-  stamp every session in the process with the same value (design-log §23).
-- `Dispatcher` now threads its logger and each call's correlation id onto the
-  adapter (`Support::CheckoutState#ucp_observability=`) so a
+  absent or malformed. Deliberately per-request, not per-session —
+  `Server::Context` is built once per process in `.build`, and `mcp`
+  0.25.0's Streamable HTTP transport is stateful and multi-session, so
+  memoizing an id there would stamp every session in the process with the
+  same value (design-log §23). Because `traceparent` is unauthenticated
+  input read before `authorize`/`rate_limit` run, it's validated against
+  the W3C Trace Context format before use rather than accepted as-is — a
+  malformed or oversized value falls back to a generated id instead of
+  reaching the pre-auth log or `Dispatcher`/`CheckoutState` unchecked.
+- `Dispatcher` now threads its logger and each call's correlation id to the
+  adapter for the duration of that one call
+  (`Support::CheckoutState.with_observability`) so a
   `checkout_state_transition` event (§12) fires from `record_checkout_status`
   carrying the same correlation id as the `tool_called` event that triggered
   it — without adding a `correlation_id:` kwarg to any checkout method, which
-  would have been a breaking change to the `Adapter` contract. No
-  `capability_negotiated` event yet: `CapabilityNegotiator#negotiate` has no
-  call site anywhere in the gem outside its own spec, so there's nowhere to
-  emit it from without building that call site first (design-log §23).
+  would have been a breaking change to the `Adapter` contract. Storage is
+  `Thread.current`, keyed per adapter object and restored on exit, rather
+  than an instance variable on the adapter: `Mcp::Server.build` constructs
+  one adapter per process, shared across every concurrent session, so an
+  instance variable would let two in-flight requests clobber each other's
+  correlation id — the same per-process-state trap §23 diagnosed for the
+  correlation id generator itself, one layer down. No `capability_negotiated`
+  event yet: `CapabilityNegotiator#negotiate` has no call site anywhere in
+  the gem outside its own spec, so there's nowhere to emit it from without
+  building that call site first (design-log §23).
 - `Observability::REDACTED_KEYS` grows past the three credential keys to
   cover the PII that actually flows through logged events — `email`
   (`Identity`, §3) and `first_name`/`last_name`/`phone_number`/
