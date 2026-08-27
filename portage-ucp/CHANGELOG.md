@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `Portage::Ucp::ReferenceAdapter` (`lib/portage/ucp/reference_adapter.rb`) —
+  the in-memory `Adapter` roadmap §8 step 1 called for and design-log §17
+  flagged as missing outside `spec/support/fake_adapter.rb`, ships with the
+  gem now. Implements every capability including
+  `discount_codes_supported?`/`fulfillment_supported?`/`link_identity` — the
+  first adapter in this repo to back identity linking at all.
+- `Portage::Ucp::RSpec`/`portage/ucp/rspec.rb` — the adapter conformance kit
+  design-log §17 called "the missing piece that turns 'any backend that
+  implements Adapter' from a README claim into something checked": an
+  `it_behaves_like "a portage adapter"` shared-examples suite checking the
+  contract's behavioral guarantees (idempotency dedup, the PAN guard,
+  schema-conformant wire output, `OutOfStockError` on a stale-stock line) —
+  not loaded by `require "portage/ucp"`, opt-in via `require
+  "portage/ucp/rspec"` since it pulls in RSpec itself. Exercised against
+  `ReferenceAdapter` in this gem's own suite
+  (`spec/reference_adapter_conformance_spec.rb`); wiring it into each adapter
+  gem's own spec suite is follow-up, not done here.
+
 ## [0.2.0] - 2026-08-21
 
 - `Portage::Ucp::OutOfStockError` — the contract for `#complete_checkout`
