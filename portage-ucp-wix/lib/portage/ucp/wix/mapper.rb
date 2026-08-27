@@ -21,17 +21,61 @@ module Portage
           Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
+        # dev.ucp.shopping.catalog's Price (types/price.json) — the
+        # wire-shape counterpart to #money above, used everywhere a Product/
+        # Variant field carries currency directly rather than through the
+        # arithmetic-only Money type.
+        def price(amount, currency)
+          Portage::Ucp::Price.new(amount: minor_units(amount), currency: currency)
+        end
+
+        def description(node)
+          Portage::Ucp::Description.new(plain: node["description"])
+        end
+
         def product(node)
           currency = node.dig("priceData", "currency")
           Portage::Ucp::Product.new(
             id: node["id"],
             title: node["name"],
-            description: node["description"],
-            price: money(node.dig("priceData", "price"), currency),
-            available: node.dig("stock", "inStock") != false,
-            variants: (node["variants"] || []).map { |v| variant(v, node["name"], currency) },
+            description: description(node),
+            price_range: price_range(node, currency),
+            variants: product_variants(node, currency),
+            options: (node["productOptions"] || []).map { |o| product_option(o) },
+            media: product_media(node.dig("media", "mainMedia")),
             url: product_url(node["productPageUrl"])
           )
+        end
+
+        # A single-SKU product (no size/color options) has no `variants`
+        # array in V1 Catalog at all — types/product.json requires variants
+        # (minItems: 1), so this synthesizes one straight from the
+        # product-level fields rather than leaving it empty.
+        def product_variants(node, currency)
+          variant_nodes = node["variants"] || []
+          return [default_variant(node, currency)] if variant_nodes.empty?
+
+          variant_nodes.map { |v| variant(v, node, currency) }
+        end
+
+        def price_range(node, currency)
+          p = price(node.dig("priceData", "price"), currency)
+          Portage::Ucp::PriceRange.new(min: p, max: p)
+        end
+
+        # V1's `productOptions[].choices` are `{value:, description:}` pairs
+        # (no separate id) — OptionValue's `id` stays nil, matching Shopify's
+        # posture on option values with no platform-assigned id.
+        def product_option(node)
+          values = (node["choices"] || []).map { |c| Portage::Ucp::OptionValue.new(label: c["value"]) }
+          Portage::Ucp::ProductOption.new(name: node["name"], values: values)
+        end
+
+        def product_media(main_media)
+          url = main_media&.dig("image", "url")
+          return [] unless url
+
+          [Portage::Ucp::Media.new(type: "image", url: url)]
         end
 
         def product_url(page)
@@ -40,16 +84,34 @@ module Portage
           "#{page['base']}#{page['path']}"
         end
 
+        # Used only when the product has no `variants` array at all (see
+        # #product) — this is the featured/only purchasable line, priced and
+        # stocked straight off the product-level fields.
+        def default_variant(node, currency)
+          Portage::Ucp::Variant.new(
+            id: node["id"], title: node["name"], description: description(node),
+            price: price(node.dig("priceData", "price"), currency), sku: node["sku"],
+            availability: { "available" => node.dig("stock", "inStock") != false },
+            media: product_media(node.dig("media", "mainMedia"))
+          )
+        end
+
         # A V1 variant's own identity is its `choices` (e.g. {"Size"=>"Large"})
         # — there's no separate variant title field, so one is built from the
         # choice values, falling back to the parent product's title for a
         # single-variant (no options) product.
-        def variant(node, product_title, currency)
+        def variant(node, product_node, currency)
           choices = node["choices"] || {}
           title = choices.values.join(" / ")
-          title = product_title if title.empty?
-          { id: node["id"], title: title, available: node.dig("stock", "inStock") != false,
-            price: money(node.dig("variant", "priceData", "price"), currency) }
+          title = product_node["name"] if title.empty?
+          options = choices.map { |name, value| Portage::Ucp::SelectedOption.new(name: name, label: value) }
+          Portage::Ucp::Variant.new(
+            id: node["id"], title: title, description: description(product_node),
+            price: price(node.dig("variant", "priceData", "price"), currency),
+            sku: node.dig("variant", "sku"),
+            availability: { "available" => node.dig("stock", "inStock") != false },
+            options: options
+          )
         end
 
         def cart(node)

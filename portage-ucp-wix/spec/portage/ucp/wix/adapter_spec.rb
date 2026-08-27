@@ -29,17 +29,18 @@ RSpec.describe Portage::Ucp::Wix::Adapter do
   end
 
   describe "#search_catalog" do
-    it "queries the Stores catalog and maps results to Portage::Ucp::Product" do
+    it "queries the Stores catalog and maps results to a Portage::Ucp::CatalogSearchResult" do
       stub_request(:post, "https://www.wixapis.com/stores/v1/products/query")
         .to_return(status: 200, body: { products: [
           { id: "prod_1", name: "Cold Brew", description: "desc",
             priceData: { price: 5.0, currency: "USD" }, stock: { inStock: true }, variants: [] }
         ] }.to_json)
 
-      products = adapter.search_catalog(query: "brew", limit: 10)
+      result = adapter.search_catalog(query: "brew", limit: 10)
 
-      expect(products.first).to be_a(Portage::Ucp::Product)
-      expect(products.first.title).to eq("Cold Brew")
+      expect(result).to be_a(Portage::Ucp::CatalogSearchResult)
+      expect(result.products.first).to be_a(Portage::Ucp::Product)
+      expect(result.products.first.title).to eq("Cold Brew")
     end
   end
 
