@@ -876,6 +876,51 @@ parity. Also unbuilt: enabling the opt-in `out_of_stock_product_id` example
 per adapter — that one *does* reach `complete_checkout`, so it's the case
 that genuinely needs stubs matching on request body.
 
+**Handoff update (2026-08-27) — a live test store is now available, step 3's
+decision changed:**
+
+A real Shopify dev store (`ucp-test-bc2vif1p.myshopify.com`) is set up with
+working credentials in the repo-root `.env` (`SHOPIFY_SHOP_DOMAIN`,
+`SHOPIFY_ADMIN_ACCESS_TOKEN`, `SHOPIFY_STOREFRONT_ACCESS_TOKEN`,
+`SHOPIFY_CLIENT_ID`/`SHOPIFY_CLIENT_SECRET`), verified live against the Admin
+API. This makes step 3's stub-vs-fake-client choice moot for a first pass:
+point `conformance_spec.rb`'s `Client.new(...)` at the real store via `ENV`
+instead of webmock, and the three sequential GraphQL mutations
+(`cartCreate` → `cartPaymentUpdate` → `cartSubmitForCompletion`) just get real
+responses in order — no body-matching stubs or fake in-order client needed.
+`existing_product_id: "gid://shopify/Product/8379425259567"` ("The Minimal
+Snowboard", 50 in stock, `availableForSale: true`) is a known-good candidate
+already confirmed via a live Admin API query.
+
+Caveats for whoever picks this up:
+
+- `spec_helper.rb` currently has `WebMock.disable_net_connect!` — a live-store
+  conformance spec needs that host allowed (`WebMock.disable_net_connect!
+  (allow: "ucp-test-bc2vif1p.myshopify.com")`) or the live spec split into its
+  own helper/tag so the rest of the suite stays hermetic. Decide which before
+  writing the spec — same "decide before, not mid-write" rule as step 3
+  originally called out.
+- The Admin token is **not static** — it's fetched via
+  `Portage::Ucp::Shopify::AccessTokenFetcher` (OAuth `client_credentials`
+  grant against `client_id`/`client_secret`; see README "Fetching an Admin
+  token from a custom app's client credentials") and expires in ~24h
+  (`rake shopify_access_token` regenerates it). A CI run of a live-store spec
+  needs either a fresh token fetched at run time or this to stay a
+  local/manual-only spec — don't assume the current `.env` token is still
+  valid by the time this is picked up.
+- Local toolchain note, not store-related: this repo's `.mise.toml` pins
+  ruby 3.4.9, and `bundle install` under it failed two different ways before
+  it worked — (1) json 2.21.1/2.21.2 doesn't compile against ruby 3.4's
+  headers (`rb_hash_bulk_insert`/`rb_str_to_interned_str` redeclared static);
+  fixed by pinning `gem "json", "2.18.1"` in `portage-ucp-shopify/Gemfile`.
+  (2) the mise-installed ruby 3.4.9 had resolved to an x86_64 (Rosetta) build
+  on an arm64 Mac, cross-contaminating native exts with the arm64 ruby on
+  PATH (`bigdecimal.bundle ... incompatible architecture`); fixed by
+  `mise uninstall ruby@3.4.9 && mise install ruby@3.4.9` to get a native arm64
+  build, then a fresh `bundle install`. If `bundle exec rspec` throws a
+  LoadError mentioning architecture, check `mise exec -- ruby -v`'s platform
+  suffix before chasing anything gem-level.
+
 ---
 
 ## 18. Discount codes (added 2026-08-20)
@@ -1081,3 +1126,77 @@ not core-`Configuration`, per `mapper.rb`'s "nothing Shopify-shaped leaks
 past this file") telling the query which metafields to ask for and how to
 parse each one's `type` (string/json/dimension/measurement/...). Follow-up,
 not blocked by anything above.
+
+**Handoff — the metadata_field config DSL (do this next):**
+
+1. New `Portage::Ucp::Shopify::Configuration` + `Portage::Ucp::Shopify.configure`/
+   `.configuration` singleton (`portage-ucp-shopify/lib/portage/ucp/shopify/
+   configuration.rb`, required from `shopify.rb` after `require_relative
+   "shopify/version"`), mirroring core's own `Portage::Ucp::Configuration`
+   pattern (`portage-ucp/lib/portage/ucp/configuration.rb`) exactly — a
+   `@configuration ||= Configuration.new` memo, `configure { |c| yield }`.
+   Don't touch core `Configuration` itself for this — it's already documented
+   as adapter-agnostic (`registry`/`authenticator`/`rate_limiter`/...), and
+   `Portage::Ucp::Shopify.configuration.metadata_fields` living on the
+   Shopify-specific singleton is what keeps `mapper.rb`'s "nothing
+   Shopify-shaped leaks past this file" posture intact — a Wix/WooCommerce
+   consumer configuring their own adapter shouldn't see Shopify's config
+   surface at all.
+2. `metadata_field(key, metafield:)` appends `{key: key, namespace:,
+   key: <metafield-part>}` (split `"custom.color_code"` on the first `.`) to
+   an array on `Configuration`. Product-level and variant-level metafields
+   need to be distinguishable — Shopify's Admin API exposes
+   `metafields(identifiers:)` on both `Product` and `ProductVariant` as
+   *separate* fields with separate cost, and a real catalog (this design-log's
+   own examples — `color_hex` naturally varies per variant, `fabric_content`
+   is usually product-wide) needs both. Decide the DSL shape for that split
+   before writing code — e.g. `c.metadata_field :color_hex, from_variant_metafield:
+   "custom.color_code"` vs a shared `metadata_field` with a `scope:` kwarg —
+   don't discover it mid-implementation.
+3. **The hard part:** `PRODUCT_FIELDS` (`portage-ucp-shopify/lib/portage/ucp/
+   shopify/queries.rb`) is a `.freeze`'d constant built once at load time —
+   `SEARCH_CATALOG`/`GET_PRODUCT` interpolate it the same way. Configured
+   metafield identifiers aren't known until `Portage::Ucp::Shopify.configure`
+   runs, which happens after the gem loads, so the metafields fragment
+   (`metafields(identifiers: [{namespace: "custom", key: "color_code"}, ...])
+   { key value type }`) can't live in the frozen constant — it has to be
+   built per-call from `Portage::Ucp::Shopify.configuration.metadata_fields`
+   and spliced into the query string (or built as a separate query fragment
+   method `Queries.metafields_fragment(scope:)` that `Mapper`/`Client` compose
+   at call time). Get this wrong and metafields configured after the first
+   query silently never show up — worth a spec that configures
+   `metadata_field` *after* requiring the gem (matching how a real consumer's
+   own `config/initializers` would run) and asserts the sent GraphQL body
+   actually contains the identifier, not just that the mapped output looks
+   right against a hand-built fixture.
+4. Shopify's `metafields(identifiers:)` response node is `{key, namespace,
+   value, type}` — `type` is one of Shopify's ~20 metafield types
+   (`single_line_text_field`, `json`, `dimension`, `measurement`,
+   `number_decimal`, `list.single_line_text_field`, ...), each with a
+   different value encoding (JSON needs `JSON.parse`; `dimension`/
+   `measurement` are `{"value":..,"unit":..}` JSON strings; list types are
+   JSON arrays of the scalar type). Decide up front how much of that table to
+   actually parse vs. pass the raw string through — parsing every type is a
+   real chunk of work on its own and probably isn't worth blocking the first
+   version of this feature on. A reasonable first cut: parse `json`/
+   `list.*`/`dimension`/`measurement` (the four where "raw string" would be
+   actively wrong for an agent to consume), pass every other type through as
+   the bare string.
+5. Cost budget: each `identifiers:` entry adds to the query's GraphQL cost:
+   Shopify caps `metafields(identifiers:)` at 250 identifiers per call.
+   Nothing in this gem enforces that today (no configured metafields exist
+   yet) — add a guard (raise, or truncate-and-warn) in
+   `Portage::Ucp::Shopify::Configuration#metadata_field` or at query-build
+   time once #3 lands, so a merchant with a long attribute list gets a clear
+   error instead of a confusing GraphQL cost-limit rejection from Shopify
+   itself.
+6. Once product-level metafields work end to end (config -> query -> parsed
+   value -> `Product#metadata`), repeat for variant-level onto
+   `Variant#metadata` — same mechanism, different GraphQL field
+   (`ProductVariant.metafields`), and confirm both can be configured
+   independently per the DSL decision in step 2.
+7. Not scoped here at all: Wix. V1 Catalog's REST product/variant shape has
+   no documented metafields-equivalent extension point (Wix's closest analog
+   is "custom fields" on V3, unresearched) — leave `Portage::Ucp::Shopify.configure`
+   Shopify-only for now rather than trying to generalize the DSL across
+   adapters before a second real backend proves out the shape.
