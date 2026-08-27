@@ -60,12 +60,13 @@ module Portage
         def search_catalog(query:, limit:)
           body = { query: { filter: JSON.generate({ name: { "$contains" => query } }), paging: { limit: limit } } }
           data = @client.post("/stores/v1/products/query", body)
-          (data["products"] || []).map { |node| Mapper.product(node) }
+          products = (data["products"] || []).map { |node| Mapper.product(node) }
+          Portage::Ucp::CatalogSearchResult.new(products: products)
         end
 
         def get_product(product_id:)
           node = @client.get("/stores/v1/products/#{product_id}")["product"]
-          node && Mapper.product(node)
+          node && Portage::Ucp::ProductDetail.new(product: Mapper.product(node))
         end
 
         def get_cart(cart_id:)

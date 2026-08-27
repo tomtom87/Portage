@@ -27,16 +27,32 @@ RSpec.describe Portage::Ucp::Wix::Mapper do
       product = described_class.product(node)
 
       expect(product.id).to eq("prod_1")
-      expect(product.price).to eq(Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"))
+      expect(product.price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 500, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 500, currency: "USD"))
+      )
       expect(product.url).to eq("https://site.wixsite.com/store/product-page/cold-brew")
-      expect(product.variants).to eq([{ id: "var_1", title: "Large", available: true,
-                                        price: Portage::Ucp::Money.new(amount_minor: 600, currency: "USD") }])
+
+      variant = product.variants.first
+      expect(variant.id).to eq("var_1")
+      expect(variant.title).to eq("Large")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 600, currency: "USD"))
     end
 
     it "falls back to the product title when a variant has no choices" do
       node["variants"].first["choices"] = {}
 
-      expect(described_class.product(node).variants.first[:title]).to eq("Cold Brew")
+      expect(described_class.product(node).variants.first.title).to eq("Cold Brew")
+    end
+
+    it "synthesizes a single variant from product-level fields when the product has no variants array" do
+      node["variants"] = []
+
+      product = described_class.product(node)
+
+      expect(product.variants.size).to eq(1)
+      expect(product.variants.first.price).to eq(Portage::Ucp::Price.new(amount: 500, currency: "USD"))
     end
   end
 
