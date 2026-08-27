@@ -75,10 +75,20 @@ module Portage
         # untouched (SEP-414, see `MCP::TraceContext`) so a caller that already
         # traces its own calls gets one trace across both sides; generates a
         # fallback only when absent.
+        #
+        # `traceparent` is unauthenticated input — reachable before
+        # `authorize`/`rate_limit` run, same as the pre-auth event this
+        # correlation id feeds. Validated against W3C Trace Context's own
+        # format before use, which is spec-correct behavior (a malformed
+        # traceparent MUST be treated as absent, restarting the trace), and
+        # incidentally closes off unbounded-length log writes and non-String
+        # values reaching Dispatcher/CheckoutState as a "correlation_id".
+        TRACEPARENT_FORMAT = /\A[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/
+
         def self.correlation_id_for(server_context)
           meta = server_context[:_meta] if server_context.respond_to?(:[])
           traceparent = meta && (meta[:traceparent] || meta["traceparent"])
-          traceparent || SecureRandom.uuid
+          traceparent.is_a?(String) && TRACEPARENT_FORMAT.match?(traceparent) ? traceparent : SecureRandom.uuid
         end
 
         def self.authorize(authenticator, server_context, mutating:)

@@ -199,4 +199,41 @@ RSpec.describe Portage::Ucp::Mcp::Server do
     second_id, = io.string.lines.last(2).map { |line| JSON.parse(line)["correlation_id"] }
     expect(first_id).not_to eq(second_id)
   end
+
+  it "falls back to a generated id when the inbound traceparent doesn't match the W3C format" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 16, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" },
+                                     _meta: { traceparent: "not-a-real-traceparent" } }
+                         })
+
+    received = JSON.parse(io.string.lines.first)
+    expect(received["correlation_id"]).not_to eq("not-a-real-traceparent")
+    expect(received["correlation_id"]).to match(/\A[0-9a-f-]{36}\z/)
+  end
+
+  it "never writes an unauthenticated caller's malformed traceparent into the pre-auth log" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+    attacker_traceparent = "ATTACKER-#{'x' * 200}"
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 17, method: "tools/call",
+                           params: { name: "create_checkout",
+                                     arguments: { line_items: [], idempotency_key: "unauth-1" },
+                                     _meta: { traceparent: attacker_traceparent } }
+                         })
+
+    received = JSON.parse(io.string.lines.first)
+    expect(received["event"]).to eq("tool_call_received")
+    expect(received["correlation_id"]).not_to eq(attacker_traceparent)
+    expect(received["correlation_id"].length).to be < 40
+  end
 end
