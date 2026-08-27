@@ -3,3 +3,8 @@ source "https://rubygems.org"
 gemspec
 
 gem "portage-ucp", path: "../portage-ucp"
+
+# json 2.21.x fails to compile on ruby 3.4's headers (rb_hash_bulk_insert /
+# rb_str_to_interned_str redeclared static) — pin to a version already
+# shipped with ruby 3.4.9, no native build needed.
+gem "json", "2.18.1"
