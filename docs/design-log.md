@@ -1629,3 +1629,79 @@ redaction into a store that already holds unredacted rows.
    §12 was aspirational from §0 until this section — the next person
    reading it should be able to tell which parts of this log are decisions
    and which are shipped behavior.
+
+## 24. Handoff — §23 steps 3–6 (added 2026-08-27)
+
+Steps 1 and 2 are done, on branch `handoff-23-observability-correlation-id`
+(off `main`, two commits, not yet merged). Steps 3–6 remain.
+
+**What's landed.** `Mcp::Server.call_tool`
+(`portage-ucp/lib/portage/ucp/mcp/server.rb`) now emits a pre-auth
+`tool_call_received` event (capability, action, correlation_id — no
+arguments) before `authorize`/`rate_limit` run, and the full `tool_called`
+event with `arguments` only after both pass. A new
+`Server.correlation_id_for(server_context)` reads `server_context[:_meta]`'s
+`traceparent` (SEP-414, `MCP::TraceContext`) and falls back to
+`SecureRandom.uuid` when absent; both events carry the same
+`correlation_id` for one call. This is deliberately per-*request*, not
+per-*session* — see §23's "obvious fix is wrong" note on why memoizing an
+id onto `Server::Context` (built once per process in `.build`) breaks under
+`mcp` 0.25.0's multi-session Streamable HTTP transport. Four new specs in
+`portage-ucp/spec/mcp/server_spec.rb` cover: no-arguments-when-unauthorized
+(from step 1, already existing before this branch — verify it's still
+there), fallback generation, traceparent pass-through, and two requests in
+one process never sharing a generated id. Full suite (230 examples) and
+rubocop both green on this branch as of the last commit.
+
+**Step 3 is the big one — thread logger + correlation id into `Dispatcher`
+and `CheckoutState`.** Right now `Dispatcher.new` takes only
+`adapter:`/`registry:` (see `portage-ucp/lib/portage/ucp/dispatcher.rb`),
+and `CapabilityNegotiator` (§10) never touches `Observability` at all —
+so `capability_negotiated` has no call site to add a log line to yet;
+find where negotiation actually happens (search for where
+`CapabilityNegotiator` is invoked, not just defined) before assuming
+`Dispatcher` is the only collaborator that needs the plumbing.
+`Support::CheckoutState#record_checkout_status` is adapter-side and has no
+logger in reach today, so this needs to decide: does the logger travel with
+the adapter instance (constructor arg, mirroring how `Context` already
+threads `authenticator`/`rate_limiter`), or does `Dispatcher` wrap adapter
+calls and log around them instead of the adapter logging itself? The
+correlation id has a harder problem: `Dispatcher.call` and
+`CheckoutState#record_checkout_status` are both already-existing method
+signatures called from multiple places — check every call site before
+adding a `correlation_id:` parameter, since a required kwarg there is a
+breaking change for any code that calls the adapter/dispatcher directly
+outside `Mcp::Server`. If step 3 turns out not to be worth the plumbing for
+either event, §23 already says to cut it from §12 rather than ship it
+half-built — don't force both events in if only one turns out clean to
+wire.
+
+**Step 4 — resolve the PII phrasing before the journal/console (§22)
+land.** Decide identity-linking result (§3) and fulfillment-destination
+keys (name, address, contact fields — check `Support::` value objects for
+the actual field names) get added to
+`Observability::REDACTED_KEYS`, or narrow what §12 promises about
+"Money-adjacent PII" instead. Whichever way, `REDACTED_KEYS` in
+`portage-ucp/lib/portage/ucp/observability.rb` and §12's prose must end up
+saying the same thing — grep for "PII" and "Money-adjacent" in §12 after
+deciding to make sure the wording actually changed, not just the code.
+
+**Step 5 — the event sink, only with the write-up done first.** Don't add
+`config.event_sink` without writing the outside-an-MCP-request
+justification into the code (a comment next to the config option, not just
+this log) — the point of the sink is that `Rack::WebhookEndpoint` (§11)
+and the adapter-side checkout transitions from step 3 can't reach any of
+`mcp`'s own `around_request`/`instrumentation_callback`/
+`notify_log_message` hooks. If step 3 ends up not giving `CheckoutState`
+a logger, re-check whether the sink is still justified before building it
+— a sink whose only producer is the one path `mcp`'s hooks already cover
+has no reason to exist, per §23.
+
+**Step 6 — rewrite §12 last.** Do this only after 3–5 land or are
+deliberately cut, and say in §12 itself that it was aspirational from §0
+until §23 reconciled it, so the next reader can tell decisions from shipped
+behavior.
+
+**Before starting**, rebase/merge `handoff-23-observability-correlation-id`
+onto whatever `main` has moved to, and re-run the full spec suite —
+steps 1–2 haven't been reviewed or merged yet.
