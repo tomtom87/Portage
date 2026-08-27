@@ -13,7 +13,14 @@ module Portage
         # dev.ucp.shopping.catalog structured-attribute gap (design-log
         # §20): GS1 identifiers and Size/Color axes as real fields instead
         # of chaotic HTML the agent has to parse itself.
-        PRODUCT_FIELDS = <<~GRAPHQL.freeze
+        # `%<product_metafields>s`/`%<variant_metafields>s` carry whatever
+        # Portage::Ucp::Shopify.configuration.metadata_field entries a
+        # consumer has registered (design-log §20's metadata_field DSL).
+        # Kept as a template rather than the frozen constant the rest of this
+        # file uses: configured metafield identifiers aren't known until
+        # `Shopify.configure` runs, which happens after this file loads, so
+        # the fragment has to be built per call — see .product_fields below.
+        PRODUCT_FIELDS_TEMPLATE = <<~GRAPHQL.freeze
           id
           handle
           title
@@ -28,6 +35,7 @@ module Portage
           }
           featuredMedia: media(first: 1) { nodes { ... on MediaImage { image { url altText width height } } } }
           options(first: 10) { name optionValues { id name } }
+          %<product_metafields>s
           variants(first: 25) {
             nodes {
               id title availableForSale sku barcode
@@ -35,21 +43,45 @@ module Portage
               compareAtPrice
               selectedOptions { name value }
               image { url altText width height }
+              %<variant_metafields>s
             }
           }
         GRAPHQL
 
-        SEARCH_CATALOG = <<~GRAPHQL.freeze
-          query SearchCatalog($query: String!, $first: Int!) {
-            products(query: $query, first: $first) { nodes { #{PRODUCT_FIELDS} } }
-          }
-        GRAPHQL
+        # Product-level and variant-level metafields are separate GraphQL
+        # fields with separate cost on Shopify's Admin API (Product#metafields
+        # vs. ProductVariant#metafields) — `scope` picks which configured list
+        # to build the identifiers from. Empty when nothing's configured for
+        # that scope, so an unconfigured consumer's query is byte-identical to
+        # before this fragment existed.
+        def self.metafields_fragment(scope)
+          fields = Portage::Ucp::Shopify.configuration.fields_for(scope)
+          return "" if fields.empty?
 
-        GET_PRODUCT = <<~GRAPHQL.freeze
-          query GetProduct($id: ID!) {
-            product(id: $id) { #{PRODUCT_FIELDS} }
-          }
-        GRAPHQL
+          identifiers = fields.map { |f| %({namespace: "#{f[:namespace]}", key: "#{f[:metafield_key]}"}) }.join(", ")
+          "metafields(identifiers: [#{identifiers}]) { key namespace value type }"
+        end
+
+        def self.product_fields
+          format(PRODUCT_FIELDS_TEMPLATE, product_metafields: metafields_fragment(:product),
+                                          variant_metafields: metafields_fragment(:variant))
+        end
+
+        def self.search_catalog_query
+          <<~GRAPHQL
+            query SearchCatalog($query: String!, $first: Int!) {
+              products(query: $query, first: $first) { nodes { #{product_fields} } }
+            }
+          GRAPHQL
+        end
+
+        def self.product_by_id_query
+          <<~GRAPHQL
+            query GetProduct($id: ID!) {
+              product(id: $id) { #{product_fields} }
+            }
+          GRAPHQL
+        end
 
         CART_FIELDS = <<~GRAPHQL.freeze
           id
