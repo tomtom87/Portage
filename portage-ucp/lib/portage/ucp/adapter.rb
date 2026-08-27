@@ -90,6 +90,19 @@ module Portage
       # @return [Portage::Ucp::Order]
       def refund_order(order_id:, line_items:, idempotency_key:, reason: nil) = not_implemented
 
+      # --- Reorder (app.portage-ucp.reorder — Portage extension, not part of
+      # the UCP spec: dev.ucp.dev has no reorder/cart-hydration capability as
+      # of the 2026-04-08 spec) ---
+      # Hydrates a cart from a previous order's line items so a caller doesn't
+      # have to re-walk get_order + create_cart itself. Re-checks each item's
+      # current price/availability rather than replaying the order's snapshot
+      # totals — order_line_item.json's totals are historical, not live, same
+      # posture as complete_checkout's stock re-check above — and drops
+      # anything no longer purchasable instead of failing the whole call,
+      # reporting what got dropped via ReorderResult#unavailable_items.
+      # @return [Portage::Ucp::ReorderResult, nil] nil if the order isn't found.
+      def reorder(order_id:, idempotency_key:) = not_implemented
+
       # --- Discount (dev.ucp.shopping.discount) ---
       # Extends Cart/Checkout with the `discount_codes:` param above rather
       # than adding actions of its own — Capability::DISCOUNT advertises off

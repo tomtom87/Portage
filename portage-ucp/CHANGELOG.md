@@ -6,6 +6,13 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Added `Adapter#reorder(order_id:, idempotency_key:)`, advertised as a new
+  `app.portage-ucp.reorder` capability — a Portage extension, not part of the
+  UCP spec. Hydrates a `Cart` from a previous order's line items, re-checking
+  each item's current price/availability rather than replaying the order's
+  historical totals, and reports anything no longer purchasable via the new
+  `ReorderResult#unavailable_items` rather than failing the whole call.
+  Implemented in `ReferenceAdapter` as a worked example.
 - `Mcp::Server.call_tool` now emits a minimal pre-auth `tool_call_received`
   event (capability, action, correlation id — no arguments) before
   `authorize`/`rate_limit` run, moving the full `tool_called` event
