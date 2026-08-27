@@ -1,5 +1,6 @@
 require "spec_helper"
 require "support/fake_adapter"
+require "support/product_factory"
 
 RSpec.describe Portage::Ucp do
   after do
@@ -30,11 +31,7 @@ RSpec.describe Portage::Ucp do
     described_class.configure { |c| c.authenticator = authenticator }
 
     adapter = Portage::Ucp::Support::FakeAdapter.new
-    adapter.seed_product(
-      Portage::Ucp::Product.new(id: "p1", title: "x", description: "d",
-                                price: Portage::Ucp::Money.new(amount_minor: 100, currency: "USD"),
-                                available: true, variants: [], url: "u")
-    )
+    adapter.seed_product(ProductFactory.build(id: "p1", title: "x", price_minor: 100))
     server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
 
     response = server.handle({

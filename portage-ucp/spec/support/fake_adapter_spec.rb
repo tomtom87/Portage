@@ -1,13 +1,10 @@
 require "spec_helper"
 require "support/fake_adapter"
+require "support/product_factory"
 
 RSpec.describe Portage::Ucp::Support::FakeAdapter do
   subject(:adapter) { described_class.new }
-  let(:product) do
-    Portage::Ucp::Product.new(id: "prod_1", title: "Cold Brew", description: "desc",
-                              price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"),
-                              available: true, variants: [], url: "https://example.com/prod_1")
-  end
+  let(:product) { ProductFactory.build(id: "prod_1", title: "Cold Brew", price_minor: 500) }
 
   before { adapter.seed_product(product) }
 
@@ -39,7 +36,7 @@ RSpec.describe Portage::Ucp::Support::FakeAdapter do
 
   it "searches the catalog by title" do
     results = adapter.search_catalog(query: "brew", limit: 10)
-    expect(results).to eq([product])
+    expect(results.products).to eq([product])
   end
 
   it "creates, gets, and completes a checkout" do

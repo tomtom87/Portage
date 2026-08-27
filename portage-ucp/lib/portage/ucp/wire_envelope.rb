@@ -11,7 +11,11 @@ module Portage
       ENVELOPES = {
         "dev.ucp.shopping.cart" => -> { { "version" => SPEC_VERSION } },
         "dev.ucp.shopping.checkout" => -> { { "version" => SPEC_VERSION, "payment_handlers" => {} } },
-        "dev.ucp.shopping.order" => -> { { "version" => SPEC_VERSION } }
+        "dev.ucp.shopping.order" => -> { { "version" => SPEC_VERSION } },
+        # response_catalog_schema (catalog_search.json's search_response and
+        # catalog_lookup.json's get_product_response both require it) — same
+        # minimal shape as cart/order, no capability-specific extra field.
+        "dev.ucp.shopping.catalog" => -> { { "version" => SPEC_VERSION } }
       }.freeze
 
       def self.wrap(capability_name, payload_hash)

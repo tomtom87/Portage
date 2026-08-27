@@ -1,9 +1,169 @@
 module Portage
   module Ucp
     # Internal arithmetic helper only — never appears in a wire shape directly.
+    # Cart/Checkout/Order totals are bare minor-unit integers (Total#amount)
+    # once they reach a value object; Money exists so Support::Amounts has
+    # somewhere to hand back both the minor-unit amount and its currency
+    # together mid-conversion. Product/Variant carry currency-bearing wire
+    # fields directly (Price, below) rather than through Money.
     Money = Data.define(:amount_minor, :currency)
 
-    Product = Data.define(:id, :title, :description, :price, :available, :variants, :url)
+    # schemas/shopping/types/price.json — the wire-shape counterpart to Money
+    # above: an integer minor-unit amount paired with its currency, appearing
+    # directly in Product/Variant payloads.
+    Price = Data.define(:amount, :currency) do
+      def to_wire_h = { "amount" => amount, "currency" => currency }
+    end
+
+    # schemas/shopping/types/price_range.json
+    PriceRange = Data.define(:min, :max) do
+      def to_wire_h = { "min" => min.to_wire_h, "max" => max.to_wire_h }
+    end
+
+    # schemas/shopping/types/description.json — the spec requires at least
+    # one of plain/html/markdown; that's a request-time authoring concern
+    # this value object doesn't enforce, same posture as PostalAddress
+    # leaving every field optional.
+    Description = Data.define(:plain, :html, :markdown) do
+      def initialize(plain: nil, html: nil, markdown: nil) = super
+
+      def to_wire_h = { "plain" => plain, "html" => html, "markdown" => markdown }.compact
+    end
+
+    # schemas/shopping/types/category.json
+    Category = Data.define(:value, :taxonomy) do
+      def initialize(value:, taxonomy: nil) = super
+
+      def to_wire_h = { "value" => value, "taxonomy" => taxonomy }.compact
+    end
+
+    # schemas/shopping/types/media.json
+    Media = Data.define(:type, :url, :alt_text, :width, :height) do
+      def initialize(type:, url:, alt_text: nil, width: nil, height: nil) = super
+
+      def to_wire_h
+        { "type" => type, "url" => url, "alt_text" => alt_text, "width" => width, "height" => height }.compact
+      end
+    end
+
+    # schemas/shopping/types/option_value.json — a selectable value for a
+    # ProductOption (e.g. "Blue" under "Color").
+    OptionValue = Data.define(:id, :label) do
+      def initialize(label:, id: nil) = super
+
+      def to_wire_h = { "id" => id, "label" => label }.compact
+    end
+
+    # schemas/shopping/types/product_option.json
+    ProductOption = Data.define(:name, :values) do
+      def to_wire_h = { "name" => name, "values" => values.map(&:to_wire_h) }
+    end
+
+    # schemas/shopping/types/selected_option.json — which OptionValue a
+    # Variant actually carries for a given option (e.g. Size: Large).
+    SelectedOption = Data.define(:name, :id, :label) do
+      def initialize(name:, label:, id: nil) = super
+
+      def to_wire_h = { "name" => name, "id" => id, "label" => label }.compact
+    end
+
+    # schemas/shopping/types/rating.json
+    Rating = Data.define(:value, :scale_max, :scale_min, :count) do
+      def initialize(value:, scale_max:, scale_min: 1, count: nil) = super
+
+      def to_wire_h
+        { "value" => value, "scale_min" => scale_min, "scale_max" => scale_max, "count" => count }.compact
+      end
+    end
+
+    # schemas/shopping/types/variant.json — a purchasable variant of a
+    # Product. `id` is what LineItem#item.id actually references at
+    # checkout, not Product#id.
+    # `barcodes` and `availability` are left as plain wire-shaped hashes
+    # (`{"type" =>, "value" =>}` / `{"available" =>, "status" =>}`) rather
+    # than their own Data types — both are simple, spec doesn't name them as
+    # standalone $refs, and the parent's `to_wire_h` needs them exactly as
+    # given, same posture as Adjustment#line_items' inline hashes.
+    Variant = Data.define(:id, :title, :description, :price, :sku, :barcodes, :list_price, :availability, :options,
+                          :media, :tags, :metadata) do
+      def initialize(id:, title:, description:, price:, sku: nil, barcodes: [], list_price: nil, availability: nil,
+                     options: [], media: [], tags: [], metadata: nil)
+        super
+      end
+
+      def to_wire_h
+        { "id" => id, "title" => title, "description" => description.to_wire_h,
+          "price" => price.to_wire_h }.merge(optional_wire_h)
+      end
+
+      private
+
+      def optional_wire_h
+        h = { "sku" => sku, "list_price" => list_price&.to_wire_h, "availability" => availability }.compact
+        h["barcodes"] = barcodes unless barcodes.empty?
+        h["options"] = options.map(&:to_wire_h) unless options.empty?
+        h["media"] = media.map(&:to_wire_h) unless media.empty?
+        h["tags"] = tags unless tags.empty?
+        h["metadata"] = metadata if metadata
+        h
+      end
+    end
+
+    # schemas/shopping/types/product.json — requires id/title/description/
+    # price_range/variants (variants minItems: 1). `metadata` is the spec's
+    # own sanctioned extension point for business-defined custom data
+    # (Shopify/Wix metafields etc.) — see Portage::Ucp::Shopify.configure's
+    # metadata_field.
+    Product = Data.define(:id, :title, :description, :price_range, :variants, :handle, :url, :categories,
+                          :list_price_range, :media, :options, :tags, :metadata, :rating) do
+      def initialize(id:, title:, description:, price_range:, variants:, handle: nil, url: nil, categories: [],
+                     list_price_range: nil, media: [], options: [], tags: [], metadata: nil, rating: nil)
+        super
+      end
+
+      def to_wire_h
+        { "id" => id, "title" => title, "description" => description.to_wire_h,
+          "price_range" => price_range.to_wire_h, "variants" => variants.map(&:to_wire_h) }.merge(optional_wire_h)
+      end
+
+      private
+
+      def optional_wire_h
+        h = { "handle" => handle, "url" => url, "list_price_range" => list_price_range&.to_wire_h,
+              "metadata" => metadata, "rating" => rating&.to_wire_h }.compact
+        h["categories"] = categories.map(&:to_wire_h) unless categories.empty?
+        h["media"] = media.map(&:to_wire_h) unless media.empty?
+        h["options"] = options.map(&:to_wire_h) unless options.empty?
+        h["tags"] = tags unless tags.empty?
+        h
+      end
+    end
+
+    # schemas/shopping/catalog_search.json#/$defs/search_response — the
+    # container Adapter#search_catalog actually returns; `products` alone
+    # isn't schema-conformant (search_response requires `ucp` + `products` at
+    # the top level, not a bare array). `messages` entries are left as plain
+    # wire-shaped hashes, same rationale as Variant#barcodes above.
+    CatalogSearchResult = Data.define(:products, :messages) do
+      def initialize(products:, messages: []) = super
+
+      def to_wire_h
+        h = { "products" => products.map(&:to_wire_h) }
+        h["messages"] = messages unless messages.empty?
+        h
+      end
+    end
+
+    # schemas/shopping/catalog_lookup.json#/$defs/get_product_response — the
+    # container Adapter#get_product returns when the product is found (nil
+    # otherwise, same not-found posture as get_cart/get_checkout/get_order).
+    # Doesn't model detail_product's `selected`/`options` availability-signal
+    # extension (interactive variant narrowing) — Adapter#get_product's
+    # signature has no `selected:`/`preferences:` params to source it from
+    # yet; unresearched, same status as design-log §16's other backlog items.
+    ProductDetail = Data.define(:product) do
+      def to_wire_h = { "product" => product.to_wire_h }
+    end
 
     # One cost-breakdown entry (schemas/shopping/types/total.json). `amount` is a
     # signed integer in the parent object's currency's minor units.

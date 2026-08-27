@@ -19,11 +19,13 @@ module Portage
         end
 
         def search_catalog(query:, limit:)
-          @products.values.select { |p| p.title.downcase.include?(query.downcase) }.first(limit)
+          matches = @products.values.select { |p| p.title.downcase.include?(query.downcase) }.first(limit)
+          Portage::Ucp::CatalogSearchResult.new(products: matches)
         end
 
         def get_product(product_id:)
-          @products[product_id]
+          product = @products[product_id]
+          product && Portage::Ucp::ProductDetail.new(product: product)
         end
 
         def get_cart(cart_id:)
@@ -166,10 +168,11 @@ module Portage
         def build_line_items(requested)
           requested.map do |req|
             product = @products.fetch(req[:product_id])
-            total = product.price.amount_minor * req[:quantity]
+            variant = product.variants.first
+            total = variant.price.amount * req[:quantity]
             Portage::Ucp::LineItem.new(
               id: next_id("li"),
-              item: Portage::Ucp::Item.new(id: product.id, title: product.title, price: product.price.amount_minor),
+              item: Portage::Ucp::Item.new(id: variant.id, title: product.title, price: variant.price.amount),
               quantity: req[:quantity],
               totals: [Portage::Ucp::Total.new(type: "subtotal", amount: total),
                        Portage::Ucp::Total.new(type: "total", amount: total)]
