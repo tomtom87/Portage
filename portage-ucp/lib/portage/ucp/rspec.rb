@@ -69,6 +69,15 @@ RSpec.shared_examples "a portage adapter" do
     expect(errors).to eq([]), "create_checkout's response doesn't validate: #{errors.join('; ')}"
   end
 
+  # The core gem's own dedup table, when the adapter uses it (every bundled
+  # adapter includes `Support::Idempotency`). nil for an adapter that dedupes
+  # some other way — see the example below for why that costs it a check.
+  def conformance_dedup_table
+    return nil unless adapter.is_a?(Portage::Ucp::Support::Idempotency)
+
+    adapter.instance_variable_get(:@idempotency_results)
+  end
+
   it "dedupes a repeated idempotency_key on create_checkout rather than re-running the mutation (§9a)" do
     skip "adapter does not advertise dev.ucp.shopping.checkout" unless checkout_capability_advertised?
 
@@ -78,6 +87,26 @@ RSpec.shared_examples "a portage adapter" do
     expect(second[:structuredContent]).to eq(first[:structuredContent]),
                                           "a repeated idempotency_key produced a different result — " \
                                           "the adapter isn't deduping mutating calls per §9a"
+
+    # Equal output is necessary but nowhere near sufficient, and this is the
+    # trap §17 named: an adapter wired to webmock/VCR stubs that answer every
+    # request with one fixed response returns identical output whether or not
+    # it deduped anything, so the assertion above passes for the wrong reason
+    # on exactly the test setup an adapter author is most likely to write.
+    # When the adapter uses `Support::Idempotency`, check the table itself —
+    # an adapter that never deduped has no entry under the key at all.
+    table = conformance_dedup_table
+    if table.nil?
+      warn "[portage conformance] #{adapter.class} doesn't include " \
+           "Portage::Ucp::Support::Idempotency, so dedup was only checked by output equality — " \
+           "which a fixed-response test double satisfies without deduping. Assert the dedup " \
+           "yourself (e.g. `expect(stub).to have_been_requested.once`) in your own spec."
+    else
+      expect(table).to include(conformance_idempotency_key),
+                       "create_checkout returned equal output for a repeated idempotency_key but recorded " \
+                       "nothing in the dedup table — the second call re-ran the mutation and only looked " \
+                       "deduped because the backend double answers every request identically (§9a)"
+    end
   end
 
   it "never lets a raw, Luhn-valid PAN reach the adapter's complete_checkout (§9's PCI boundary)" do
