@@ -22,14 +22,17 @@ module Portage
           onlineStoreUrl
           tags
           priceRange { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
-          compareAtPriceRange { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
+          compareAtPriceRange {
+            minVariantCompareAtPrice { amount currencyCode }
+            maxVariantCompareAtPrice { amount currencyCode }
+          }
           featuredMedia: media(first: 1) { nodes { ... on MediaImage { image { url altText width height } } } }
           options(first: 10) { name optionValues { id name } }
           variants(first: 25) {
             nodes {
               id title availableForSale sku barcode
-              price { amount currencyCode }
-              compareAtPrice { amount currencyCode }
+              price
+              compareAtPrice
               selectedOptions { name value }
               image { url altText width height }
             }
@@ -67,13 +70,15 @@ module Portage
               }
             }
           }
-          deliveryGroups {
-            id
-            cartLines(first: 100) { nodes { id } }
-            deliveryOptions { handle title description deliveryMethodType estimatedCost { amount currencyCode } }
-            selectedDeliveryOption { handle }
-            deliveryAddress { address1 address2 city provinceCode zip firstName lastName phone
-                              countryCode: countryCodeV2 }
+          deliveryGroups(first: 10) {
+            nodes {
+              id
+              cartLines(first: 100) { nodes { id } }
+              deliveryOptions { handle title description deliveryMethodType estimatedCost { amount currencyCode } }
+              selectedDeliveryOption { handle }
+              deliveryAddress { address1 address2 city provinceCode zip firstName lastName phone
+                                countryCode: countryCodeV2 }
+            }
           }
           discountCodes { code applicable }
           discountAllocations {

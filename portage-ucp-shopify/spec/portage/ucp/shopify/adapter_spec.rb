@@ -26,7 +26,7 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
   let(:empty_cart_response) { cart_response.merge("lines" => { "nodes" => [] }) }
 
   let(:cart_with_delivery_groups) do
-    cart_response.merge("deliveryGroups" => [
+    cart_response.merge("deliveryGroups" => { "nodes" => [
                           { "id" => "gid://shopify/CartDeliveryGroup/1",
                             "cartLines" => { "nodes" => [{ "id" => "gid://shopify/CartLine/1" }] },
                             "deliveryOptions" => [
@@ -38,7 +38,7 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
                             "deliveryAddress" => { "address1" => "1 Main St", "address2" => nil, "city" => "Erie",
                                                    "provinceCode" => "PA", "zip" => "16501", "firstName" => "A",
                                                    "lastName" => "B", "phone" => nil, "countryCode" => "US" } }
-                        ])
+                        ] })
   end
 
   let(:fulfillment_request) do
@@ -97,7 +97,7 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
                                    maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
                      variants: { nodes: [
                        { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
-                         price: { amount: "5.00", currencyCode: "USD" } }
+                         price: "5.00" }
                      ] } }
                  ] } } })
 
@@ -309,7 +309,7 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       stub_storefront({ data: { cartLinesAdd: { cart: cart_with_delivery_groups, userErrors: [] } } })
         .with(body: hash_including("query" => a_string_matching(/mutation CartLinesAdd/)))
       cart_with_selection = cart_with_delivery_groups.tap do |c|
-        c["deliveryGroups"][0]["selectedDeliveryOption"] = { "handle" => "standard" }
+        c["deliveryGroups"]["nodes"][0]["selectedDeliveryOption"] = { "handle" => "standard" }
       end
       selection_stub = stub_storefront(
         { data: { cartSelectedDeliveryOptionsUpdate: { cart: cart_with_selection, userErrors: [] } } }

@@ -30,6 +30,7 @@ module Portage
         end
 
         def product(node)
+          currency = node.dig("priceRange", "minVariantPrice", "currencyCode")
           Portage::Ucp::Product.new(
             id: node["id"],
             handle: node["handle"],
@@ -37,7 +38,7 @@ module Portage
             description: description(node),
             price_range: price_range(node["priceRange"]),
             list_price_range: compare_at_price_range(node["compareAtPriceRange"]),
-            variants: node.dig("variants", "nodes").map { |v| variant(v, description(node)) },
+            variants: node.dig("variants", "nodes").map { |v| variant(v, description(node), currency) },
             options: (node["options"] || []).map { |o| product_option(o) },
             media: product_media(node.dig("featuredMedia", "nodes", 0)),
             tags: node["tags"] || [],
@@ -60,7 +61,8 @@ module Portage
         def compare_at_price_range(node)
           return nil unless node
 
-          price_range(node)
+          Portage::Ucp::PriceRange.new(min: price(node["minVariantCompareAtPrice"]),
+                                       max: price(node["maxVariantCompareAtPrice"]))
         end
 
         def product_option(node)
@@ -95,7 +97,16 @@ module Portage
         # types/variant.json requires one, so this reuses the product's, same
         # posture as Wix's variant title falling back to its product's (see
         # Portage::Ucp::Wix::Mapper#variant).
-        def variant(node, product_description)
+        # `price`/`compareAtPrice` come back as the bare `Money` scalar (a
+        # decimal string, no currency of its own) rather than a MoneyV2
+        # object — confirmed against the live Admin API 2026-04 schema, which
+        # rejects `{ amount currencyCode }` sub-selections on them. `currency`
+        # is the product's own (from priceRange), which every variant shares.
+        def scalar_price(amount, currency)
+          Portage::Ucp::Price.new(amount: Portage::Ucp::Support::Amounts.decimal_to_minor(amount), currency: currency)
+        end
+
+        def variant(node, product_description, currency)
           options = (node["selectedOptions"] || []).map do |o|
             Portage::Ucp::SelectedOption.new(name: o["name"], label: o["value"])
           end
@@ -103,10 +114,10 @@ module Portage
             id: node["id"],
             title: node["title"],
             description: product_description,
-            price: price(node["price"]),
+            price: scalar_price(node["price"], currency),
             sku: node["sku"],
             barcodes: barcodes(node["barcode"]),
-            list_price: node["compareAtPrice"] && price(node["compareAtPrice"]),
+            list_price: node["compareAtPrice"] && scalar_price(node["compareAtPrice"], currency),
             availability: { "available" => node["availableForSale"] },
             options: options,
             media: variant_media(node["image"])
@@ -189,7 +200,7 @@ module Portage
         # modeled here), so every deliveryGroup collapses into a single
         # synthesized FulfillmentMethod rather than one per Shopify group.
         def checkout_fulfillment(node)
-          groups_nodes = node["deliveryGroups"] || []
+          groups_nodes = node.dig("deliveryGroups", "nodes") || []
           return Portage::Ucp::CheckoutFulfillment.new if groups_nodes.empty?
 
           groups = groups_nodes.map { |g| fulfillment_group(g) }
@@ -400,10 +411,16 @@ module Portage
         end
 
         # Builds the top-level totals array from Shopify's cost breakdown.
+        # `totalTaxAmount` is nullable on a real cart — Shopify doesn't
+        # compute tax until it has enough context (a shipping address, a
+        # tax-registered market), so a fresh cart genuinely has no tax
+        # amount yet rather than a zero one. Confirmed live against
+        # ucp-test-bc2vif1p.myshopify.com (design-log §17).
         def totals(node)
           cost = node["cost"]
+          tax = cost["totalTaxAmount"]
           Portage::Ucp::Support::Totals.summary(subtotal: minor_units(cost["subtotalAmount"]),
-                                                tax: minor_units(cost["totalTaxAmount"]),
+                                                tax: tax ? minor_units(tax) : 0,
                                                 total: minor_units(cost["totalAmount"]))
         end
       end
