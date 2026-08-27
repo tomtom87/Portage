@@ -7,7 +7,7 @@ module Portage
         actions: { "link_identity" => :link_identity }
       )
 
-      ALL = [CATALOG, CART, CHECKOUT, ORDER, IDENTITY_LINKING, DISCOUNT, FULFILLMENT].freeze
+      ALL = [CATALOG, CART, CHECKOUT, ORDER, IDENTITY_LINKING, DISCOUNT, FULFILLMENT, REORDER].freeze
     end
   end
 end

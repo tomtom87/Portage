@@ -28,6 +28,50 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
                                   "dev.ucp.shopping.identity")
   end
 
+  describe "#reorder" do
+    def place_order(product_id:, quantity: 1)
+      checkout = adapter.create_checkout(line_items: [{ product_id: product_id, quantity: quantity }],
+                                         idempotency_key: "chk-#{product_id}-#{rand(1_000_000)}")
+      completed = adapter.complete_checkout(checkout_id: checkout.id, payment_token: "tok",
+                                            idempotency_key: "cmp-#{product_id}-#{rand(1_000_000)}")
+      completed.order.id
+    end
+
+    it "returns nil for an unknown order id" do
+      expect(adapter.reorder(order_id: "ord_nonexistent", idempotency_key: "k1")).to be_nil
+    end
+
+    it "hydrates a cart from a still-purchasable order" do
+      order_id = place_order(product_id: existing_product_id, quantity: 2)
+
+      result = adapter.reorder(order_id: order_id, idempotency_key: "reorder-1")
+
+      expect(result.unavailable_items).to eq([])
+      expect(result.cart.line_items.map { |li| [li.item.title, li.quantity] }).to eq([["Cold Brew", 2]])
+    end
+
+    it "drops a line item whose product was discontinued since purchase, reporting why" do
+      adapter.seed_product(ProductFactory.build(id: "prod_2", title: "Espresso", price_minor: 300))
+      order_id = place_order(product_id: "prod_2")
+      adapter.instance_variable_get(:@products).delete("prod_2")
+
+      result = adapter.reorder(order_id: order_id, idempotency_key: "reorder-2")
+
+      expect(result.cart.line_items).to eq([])
+      expect(result.unavailable_items.map(&:title)).to eq(["Espresso"])
+      expect(result.unavailable_items.first.reason).to eq("discontinued")
+    end
+
+    it "dedupes a repeated idempotency_key rather than hydrating a second cart" do
+      order_id = place_order(product_id: existing_product_id)
+
+      first = adapter.reorder(order_id: order_id, idempotency_key: "reorder-3")
+      second = adapter.reorder(order_id: order_id, idempotency_key: "reorder-3")
+
+      expect(second.cart.id).to eq(first.cart.id)
+    end
+  end
+
   it "links an oauth token to a stable identity" do
     first = adapter.link_identity(oauth_token: "tok_abc")
     second = adapter.link_identity(oauth_token: "tok_abc")

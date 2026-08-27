@@ -521,6 +521,28 @@ module Portage
       end
     end
 
+    # Portage extension (see Adapter#reorder / Capabilities::REORDER) — no
+    # schemas/ counterpart to cite, since it isn't part of the UCP spec.
+    # `reason` is a short adapter-chosen string (e.g. "out_of_stock",
+    # "discontinued"), not a closed enum — same posture as Adapter#cancel_order's
+    # `reason:`.
+    UnavailableReorderItem = Data.define(:item_id, :title, :reason) do
+      def to_wire_h = { "item_id" => item_id, "title" => title, "reason" => reason }
+    end
+
+    # Portage extension — the hydrated Cart plus what got dropped along the
+    # way, so a caller can tell the buyer what to expect before checkout
+    # rather than silently under-filling the cart.
+    ReorderResult = Data.define(:cart, :unavailable_items) do
+      def initialize(cart:, unavailable_items: []) = super
+
+      def to_wire_h
+        h = { "cart" => cart.to_wire_h }
+        h["unavailable_items"] = unavailable_items.map(&:to_wire_h) unless unavailable_items.empty?
+        h
+      end
+    end
+
     Identity = Data.define(:subject, :email, :linked_at)
   end
 end

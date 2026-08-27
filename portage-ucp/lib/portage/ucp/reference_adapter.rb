@@ -145,6 +145,21 @@ module Portage
         end
       end
 
+      # Not memoized against @carts' own id sequence namespace collision:
+      # next_id("cart") is shared with create_cart/update_cart, same as every
+      # other *_id prefix here.
+      def reorder(order_id:, idempotency_key:)
+        dedup(idempotency_key) do
+          order = @orders[order_id]
+          next nil unless order
+
+          available, unavailable = partition_reorderable(order.line_items)
+          cart = build_cart(next_id("cart"), available, nil)
+          @carts[cart.id] = cart
+          Portage::Ucp::ReorderResult.new(cart: cart, unavailable_items: unavailable)
+        end
+      end
+
       def discount_codes_supported? = true
       def fulfillment_supported? = true
 
@@ -264,6 +279,42 @@ module Portage
 
       def zero_totals
         [Portage::Ucp::Total.new(type: "subtotal", amount: 0), Portage::Ucp::Total.new(type: "total", amount: 0)]
+      end
+
+      # order.line_items here are the checkout's own response-shaped LineItem
+      # objects (see #store_order) — item.id is a variant id, not the
+      # product id build_cart's request-shaped hashes need (build_line_items'
+      # note), so this re-derives product_id by scanning @products the same
+      # way a real adapter would hit its platform's variant lookup.
+      def partition_reorderable(line_items)
+        available = []
+        unavailable = []
+
+        line_items.each do |line_item|
+          product_id = product_id_for_variant(line_item.item.id)
+
+          if product_id.nil?
+            unavailable << unavailable_reorder_item(line_item, "discontinued")
+          elsif line_item.item.id.start_with?(OUT_OF_STOCK_PREFIX)
+            unavailable << unavailable_reorder_item(line_item, "out_of_stock")
+          else
+            available << { product_id: product_id, quantity: line_item.quantity }
+          end
+        end
+
+        [available, unavailable]
+      end
+
+      def unavailable_reorder_item(line_item, reason)
+        Portage::Ucp::UnavailableReorderItem.new(item_id: line_item.item.id, title: line_item.item.title,
+                                                 reason: reason)
+      end
+
+      def product_id_for_variant(variant_id)
+        @products.each_value do |product|
+          return product.id if product.variants.any? { |variant| variant.id == variant_id }
+        end
+        nil
       end
 
       def raise_if_any_line_out_of_stock!(checkout)
