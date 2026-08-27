@@ -12,13 +12,32 @@ module Portage
       # workers needs a shared store, which is a consumer concern the same
       # way RateLimiter is.
       module Idempotency
+        # Guards lazy init of each instance's lock table below — brief and
+        # only touched once per instance, not on the hot dedup path.
+        INIT_MUTEX = Mutex.new
+
         private
 
         def dedup(idempotency_key)
-          @idempotency_results ||= {}
-          return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
+          init_idempotency_locks!
 
-          @idempotency_results[idempotency_key] = yield
+          key_lock = @idempotency_mutex.synchronize { @idempotency_locks[idempotency_key] ||= Mutex.new }
+
+          key_lock.synchronize do
+            return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
+
+            @idempotency_results[idempotency_key] = yield
+          end
+        end
+
+        def init_idempotency_locks!
+          return if @idempotency_mutex
+
+          INIT_MUTEX.synchronize do
+            @idempotency_mutex ||= Mutex.new
+            @idempotency_results ||= {}
+            @idempotency_locks ||= {}
+          end
         end
       end
     end

@@ -52,4 +52,36 @@ RSpec.describe Portage::Ucp::Support::Idempotency do
   it "is private — dedup is adapter-internal, not part of the Adapter contract" do
     expect(mutator).not_to respond_to(:dedup)
   end
+
+  it "runs the block once when two threads race on the same key" do
+    ready = Queue.new
+    release = Queue.new
+
+    racer = Class.new do
+      include Portage::Ucp::Support::Idempotency
+
+      attr_reader :calls
+
+      def initialize = @calls = 0
+
+      def charge(idempotency_key, ready, release)
+        dedup(idempotency_key) do
+          @calls += 1
+          ready << true
+          release.pop
+          "order-#{@calls}"
+        end
+      end
+    end.new
+
+    threads = Array.new(2) { Thread.new { racer.charge("key-1", ready, release) } }
+
+    ready.pop
+    release << true
+    release << true
+    results = threads.map(&:value)
+
+    expect(racer.calls).to eq(1)
+    expect(results).to eq(["order-1", "order-1"])
+  end
 end
