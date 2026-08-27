@@ -841,6 +841,42 @@ the kit's generic `Dispatcher` calls trigger, and getting that wrong would
 produce a conformance spec that passes for the wrong reason — worse than not
 having one. Left as the next piece of this section, not attempted here.
 
+**Handoff — wiring the kit into `portage-ucp-shopify` (do this one first):**
+
+1. Add `require "portage/ucp/rspec"` to `portage-ucp-shopify/spec/spec_helper.rb`
+   (core gem is already a dependency; RSpec/webmock are already dev deps there).
+2. New `portage-ucp-shopify/spec/portage/ucp/shopify/conformance_spec.rb`,
+   `it_behaves_like "a portage adapter"` with `let(:adapter)` built the same
+   way `adapter_spec.rb` already does (`Client.new(...)`, real
+   `Portage::Ucp::Shopify::Adapter`).
+3. The hard part: `existing_product_id`. The kit's `create_conformance_checkout`
+   calls `create_checkout` then, in the PAN/dedup examples, `complete_checkout`
+   on the resulting id — each of those is a *different* Storefront GraphQL
+   mutation (`cartCreate` → `cartPaymentUpdate` → `cartSubmitForCompletion`,
+   see `Adapter#submit_payment`), and `adapter_spec.rb`'s existing
+   `stub_storefront`/`stub_admin` helpers answer *every* POST to that URL with
+   one fixed body regardless of which mutation was sent — fine for a single-
+   mutation test, not fine here where the same conformance example fires three
+   mutations in sequence and expects three different response shapes back.
+   Either stub on request body (`stub_request(...).with(body:
+   hash_including(...))`, matching on the GraphQL operation name) the way none
+   of the existing specs currently do, or give the kit's `dispatcher` an
+   adapter wrapped around a small in-order-response fake client instead of
+   real webmock — decide which before writing the spec, don't discover it
+   mid-write.
+4. `bundle exec rspec` — the kit's `schema_validator.errors_for(...)` example
+   will be the most likely to catch something real: `Mapper.checkout`'s output
+   has to validate against `schemas/shopping/checkout.json`, which nothing in
+   `mapper_spec.rb` today asserts directly (it checks individual field
+   mappings, not schema conformance of the whole object).
+5. Once Shopify's wired and green, repeat for Wix/WooCommerce/BigCommerce/
+   Magento (cart+checkout+order only, no discount/fulfillment/identity —
+   those examples self-skip via the kit's capability-advertisement checks) and
+   Etsy/Instagram (checkout capability isn't advertised at all for these two,
+   per their redirect-link-only design — confirm the kit's `skip` branches
+   actually fire rather than silently passing on an unadvertised capability
+   before trusting a green run there).
+
 ---
 
 ## 18. Discount codes (added 2026-08-20)
