@@ -46,12 +46,15 @@ module Portage
 
         def self.call_tool(context:, capability:, action_name:, mutating:, kwargs:)
           server_context = kwargs.delete(:server_context)
-          Portage::Ucp::Observability.log(context.logger, "tool_called", capability: capability.name,
-                                                                         action: action_name, arguments: kwargs)
+          Portage::Ucp::Observability.log(context.logger, "tool_call_received", capability: capability.name,
+                                                                                action: action_name)
 
           rejection = authorize(context.authenticator, server_context, mutating: mutating) ||
                       rate_limit(context.rate_limiter, server_context, capability.name, mutating: mutating)
           return rejection if rejection
+
+          Portage::Ucp::Observability.log(context.logger, "tool_called", capability: capability.name,
+                                                                         action: action_name, arguments: kwargs)
 
           result = context.dispatcher.call(capability: capability.name, action: action_name, arguments: kwargs)
           ::MCP::Tool::Response.new(result[:content], structured_content: result[:structuredContent])
