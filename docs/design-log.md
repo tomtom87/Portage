@@ -1813,3 +1813,88 @@ documented rather than built — see the extended comment on
 (`portage-ucp/lib/portage/ucp/capability_negotiator.rb`). Revisiting this
 needs either an upstream `mcp` hook at initialize time or a deliberate
 decision to accept the monkeypatch coupling.
+
+## 26. Multi-vendor sourcing — scoping, not building (2026-08-27)
+
+A request came in for B2B "alternative purchase options": one product
+(matched by GTIN/UPC) sourced from multiple vendors with independent
+price/stock/delivery, ranked by pluggable routing algorithms (lowest-cost,
+fastest-fulfillment), with automatic order-splitting when one vendor can't
+cover the full quantity. Scoped against the current code before writing
+any of it, because the shape doesn't fit today's model and §21/§22 already
+half-decided the adjacent problem.
+
+**This is §22's "switching between suppliers" item, escalated.** §22
+(line 1521 above) scoped shopper-initiated cross-store price comparison —
+"find this item elsewhere" — and left it last on the handoff list because
+it needs an offer-identity key nothing today provides. The request here is
+a superset: not shopper-initiated comparison but automatic routing *and*
+splitting a single order across vendors within one checkout. Same missing
+prerequisite (offer identity), plus new ones §22 didn't need.
+
+**Why it doesn't fit the current model.** `Cart` (`value_objects.rb:381`)
+and `LineItem` (`value_objects.rb:194`) are one-`Item`-per-line, one
+`currency` per cart, and every `Cart` is built and hydrated by exactly one
+`Adapter` instance — there is no multi-adapter container anywhere in
+`portage-ucp` or `portage-ucp-client`. A `LineItem` pointing at a vendor
+*array* instead of a single `Item`, and a checkout that resolves to N
+child checkouts against N different adapters, is a different object model,
+not an additive field. Confirmed by grep: no "vendor," "supplier,"
+"sourcing," or "fulfillment policy" concept exists in any `portage-ucp*`
+gem today. ("Inventory" exists once, in `portage-ucp-etsy`, as that
+platform's own per-listing stock field — not a cross-adapter concept.)
+
+**What real support would need, in dependency order:**
+
+1. **Offer-identity key** — §22's same unresolved prerequisite. Nothing
+   today can say two `Item`s from two adapters are the same product.
+   GTIN/UPC is the obvious key but no adapter surfaces it as a first-class
+   field yet; would need to land in `value_objects.rb`'s `Item`/`Variant`
+   before anything downstream can compare offers at all.
+2. **A `VendorOffer` value object** (price, stock, delivery estimate,
+   adapter/store reference) and a way for a `LineItem` to hold a set of
+   them instead of one `Item` — a `Cart`/`LineItem` schema change, which is
+   a UCP-protocol-shape change, not a Portage-only extension the way §21's
+   reorder capability was (that added new adapter methods; it didn't touch
+   what a `Cart` *is*).
+3. **A multi-adapter orchestrator** — does not exist anywhere in the repo.
+   Every call path today assumes one `Adapter` per `Dispatcher`/session.
+   Ranking vendors by real landed price (not just catalog price) means
+   speculative `create_checkout` calls against multiple adapters
+   concurrently, which is the same rate-limit/abandoned-cart cost §22
+   flagged for its two-candidate comparison — multiplied by however many
+   vendors a split touches.
+4. **Split-order execution** — the new part §22 didn't cover. One
+   accepted order becomes N child checkouts against N adapters, each with
+   its own success/failure, and a caller-facing result that has to report
+   partial fulfillment (e.g. 5 of 10 units from vendor C succeeded, 5 from
+   vendor A failed) rather than UCP's current single pass/fail
+   `CheckoutResult`. No such partial-result shape exists today
+   (`ReorderResult`/`UnavailableReorderItem`, `value_objects.rb:524-544`,
+   is the closest precedent but models unavailable *reorder* items, not a
+   split purchase in flight).
+5. **Routing algorithms themselves** — lowest-cost and fastest-fulfillment
+   are pure sort functions over a `VendorOffer` array and are the cheapest
+   part of this list once 1–4 exist to feed them real data. Split-order
+   bin-packing (fill from cheapest vendor first, spill remainder to next)
+   is a few more sort/reduce passes on the same array — not a design risk
+   on its own.
+6. **Per-adapter vendor/stock signals** — none of the six platform
+   adapters (`portage-ucp-shopify`, `-etsy`, `-wix`, `-woocommerce`,
+   `-bigcommerce`, `-magento`) currently surface a vendor identity or
+   real-time stock count in a shape `VendorOffer` could consume; each would
+   need auditing individually, the same "one at a time, sandbox
+   credentials" approach §22's handoff list already prescribes for other
+   gaps (line 1568).
+
+**Not building this now.** Per §22 (line 1541-1543): core `portage-ucp`
+stays a dependency-light adapter-agnostic library: an orchestrator plus
+persisted routing/split state (item 3-4 above) is exactly the kind of
+statefulness §22 pushed out of core into consumer gems. This item also structurally depends on the still-undecided §22
+offer-identity key, so it can't honestly be scoped further, let alone
+built, before that lands. It slots into §22's handoff list as item 8's
+successor: **do the "find-it-elsewhere" comparison mode first** (§22 item
+8) since it forces the offer-identity decision this needs anyway, then
+revisit split-order routing as its own gem once that key exists —
+matching the "these want their own gems" call already made for the
+journal/console/scheduler at line 1543.
