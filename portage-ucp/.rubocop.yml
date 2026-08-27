@@ -16,6 +16,10 @@ Metrics/BlockLength:
   Exclude:
     - "spec/**/*.rb"
     - "*.gemspec"
+    # shared_examples is spec content shipped from lib/ (an adapter author's
+    # own spec suite runs it), not application code — same rationale as the
+    # spec/**/*.rb exclude above.
+    - "lib/portage/ucp/rspec.rb"
 
 Metrics/MethodLength:
   Max: 15
@@ -57,10 +61,15 @@ Metrics/ClassLength:
     # (catalog/cart/checkout/order), one small method per action — breadth,
     # not a class doing too many unrelated things.
     - "spec/support/fake_adapter.rb"
+    # ReferenceAdapter covers the same full lifecycle as FakeAdapter above,
+    # plus discount/fulfillment/identity — same breadth-not-complexity
+    # rationale, wider surface since it's the shipped conformance fixture.
+    - "lib/portage/ucp/reference_adapter.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:
     - "lib/portage/ucp/adapter.rb"
+    - "lib/portage/ucp/reference_adapter.rb"
     - "spec/**/*.rb"
 
 Lint/MissingSuper:

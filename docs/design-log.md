@@ -802,6 +802,45 @@ guarantees (not just its JSON Schema shape) — is the missing piece that turns
 checked. Unscoped; noted here because it's easy to miss when every other gap
 in this log is a capability, not a test suite.
 
+**Built (2026-08-27):** `Portage::Ucp::RSpec` (`lib/portage/ucp/rspec.rb`) —
+an `it_behaves_like "a portage adapter"` shared-examples suite covering
+exactly the three failure modes named above: idempotency dedup (repeat
+`create_checkout` with the same key, assert identical output), the PAN guard
+(assert a Luhn-valid raw card number never reaches the adapter's
+`complete_checkout` — this is a `Dispatcher`-level guarantee, not an
+`Adapter`-level one, so the kit routes every call through a real `Dispatcher`
+rather than calling the adapter directly, the same as a real MCP client
+would), and wire conformance (validate `create_checkout`'s output against
+`schemas/shopping/checkout.json` via the existing `SchemaValidator`). An
+`OutOfStockError` example is opt-in (`let(:out_of_stock_product_id)`) since
+not every adapter's test double can represent a sold-out line on demand.
+
+Ships alongside `Portage::Ucp::ReferenceAdapter` (`lib/portage/ucp/
+reference_adapter.rb`) — the in-memory adapter roadmap §8 step 1 called for
+and this section's own first paragraph didn't have: `spec/support/
+fake_adapter.rb` proved the protocol layer in the core gem's own specs since
+early on, but stayed test-only and catalog/cart/checkout/order only.
+`ReferenceAdapter` is the shipped, documented version — every capability
+including `discount_codes_supported?`/`fulfillment_supported?`/
+`link_identity` (the first adapter in this repo to back identity linking at
+all) — and doubles as the kit's own fixture
+(`spec/reference_adapter_conformance_spec.rb` runs the kit against it, so the
+kit is exercised by CI, not just documented). `spec/support/fake_adapter.rb`
+is left as-is rather than merged into it — narrower, purpose-built for the
+core gem's own specs' existing expectations, and touching seven spec files'
+worth of assumptions to de-duplicate two similar-shaped adapters wasn't this
+pass's job.
+
+**Not built:** wiring the kit into any of the seven adapter gems' own spec
+suites. That's the step that would have actually caught the parity gap this
+whole log's roadmap keeps re-discovering (discount/fulfillment landed
+Shopify-only, §18/§19) — running the kit against `portage-ucp-shopify`'s real
+`Adapter` needs webmock stubs precise enough to answer `create_checkout` +
+`complete_checkout` + a repeat call with the same GraphQL mutation responses
+the kit's generic `Dispatcher` calls trigger, and getting that wrong would
+produce a conformance spec that passes for the wrong reason — worse than not
+having one. Left as the next piece of this section, not attempted here.
+
 ---
 
 ## 18. Discount codes (added 2026-08-20)

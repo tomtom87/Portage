@@ -180,7 +180,28 @@ class MyAdapter < Portage::Ucp::Adapter
 end
 ```
 
-See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkout, order, identity linking) and `portage-ucp-shopify`'s `Adapter` for a complete real implementation to model against.
+See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkout, order, identity linking), `Portage::Ucp::ReferenceAdapter` (ships with the core gem, `lib/portage/ucp/reference_adapter.rb`) for a complete in-memory implementation of every capability including discount/fulfillment/identity, and `portage-ucp-shopify`'s `Adapter` for a real one against a live commerce API.
+
+### Checking your adapter against the contract
+
+`Portage::Ucp::SchemaValidator` (see [Spec conformance](#spec-conformance) below) checks that your `Adapter`'s output matches UCP's wire schemas, but schema-valid output can still violate the contract's behavioral guarantees — an idempotency key that isn't actually deduped, a raw PAN reaching your adapter, a capability that's advertised but doesn't round-trip through its own schema. The core gem ships a conformance kit, an RSpec shared-examples suite, for that:
+
+```ruby
+# spec/spec_helper.rb
+require "portage/ucp/rspec"
+
+# spec/my_adapter_spec.rb
+RSpec.describe MyAdapter do
+  it_behaves_like "a portage adapter" do
+    let(:adapter) { MyAdapter.new(client: my_test_client) }
+    let(:existing_product_id) { "known-good-product-id" } # real/stubbed, in-stock, purchasable
+    # optional — enables the out-of-stock example:
+    # let(:out_of_stock_product_id) { "known-sold-out-product-id" }
+  end
+end
+```
+
+Not loaded by `require "portage/ucp"` — it pulls in RSpec, which the core gem otherwise has zero runtime dependency on. Every example skips itself when your adapter doesn't advertise the capability it needs, so a catalog/cart-only adapter (Etsy/Instagram's shape) still runs it cleanly. `spec/reference_adapter_conformance_spec.rb` in this gem runs the kit against `ReferenceAdapter` itself, so it's exercised by CI on every push, not just documented.
 
 ## Checking any store
 
@@ -250,7 +271,7 @@ See the [design log](docs/design-log.md) for the rationale and decision history 
 
 Bug reports and pull requests welcome at [tomtom87/Portage](https://github.com/tomtom87/Portage). Since this is pre-`1.0` and still spec-tracking, open an issue to discuss any change bigger than a bugfix before sending a PR — the capability/adapter contract is still settling.
 
-Run `rake spec` for the gem(s) you touched before opening a PR — CI is temporarily disabled while it gets set up properly, so this is the only check your PR gets right now.
+Run `rake spec` for the gem(s) you touched before opening a PR — CI (`.github/workflows/ci.yml`) runs `rspec`/`rubocop` for every gem on push and PR too, but running it locally first is faster than waiting on the matrix.
 
 A new platform adapter is the most welcome kind of PR: subclass `Portage::Ucp::Adapter` in `portage-ucp` against the target platform's API, following the shape of an existing adapter gem (`portage-ucp-shopify` is the most complete reference), and add it to the gem table above.
 
