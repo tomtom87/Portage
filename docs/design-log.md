@@ -831,51 +831,50 @@ core gem's own specs' existing expectations, and touching seven spec files'
 worth of assumptions to de-duplicate two similar-shaped adapters wasn't this
 pass's job.
 
-**Not built:** wiring the kit into any of the seven adapter gems' own spec
-suites. That's the step that would have actually caught the parity gap this
-whole log's roadmap keeps re-discovering (discount/fulfillment landed
-Shopify-only, §18/§19) — running the kit against `portage-ucp-shopify`'s real
-`Adapter` needs webmock stubs precise enough to answer `create_checkout` +
-`complete_checkout` + a repeat call with the same GraphQL mutation responses
-the kit's generic `Dispatcher` calls trigger, and getting that wrong would
-produce a conformance spec that passes for the wrong reason — worse than not
-having one. Left as the next piece of this section, not attempted here.
+**Wired (2026-08-27):** all seven adapter gems now run the kit against their
+real `Adapter` through a real `Dispatcher` —
+`spec/portage/ucp/<platform>/conformance_spec.rb` in each. Every one is
+green, and the fixture each needs turned out to be one canned response (two
+for BigCommerce/WooCommerce/Magento, whose `create_checkout` reads back what
+it wrote), because the kit's reachable surface is narrower than the handoff
+note in this section's previous revision assumed: the repeat-call example is answered from
+`Support::Idempotency`'s in-process table without a second HTTP call, and the
+PAN example is rejected by `PaymentTokenGuard` inside `Dispatcher` before
+`complete_checkout` runs at all. So no `cartPaymentUpdate`/
+`cartSubmitForCompletion` sequence is ever fired, and no body-matching stubs
+were needed. The handoff's step 3 was solving a problem the kit doesn't have.
 
-**Handoff — wiring the kit into `portage-ucp-shopify` (do this one first):**
+What it *did* have was the failure mode step 3 was worried about, one level
+up: the dedup example compared the two calls' output for equality, and a
+fixed-response test double returns identical output whether or not the
+adapter deduped anything — so the example would have passed for the wrong
+reason on exactly the webmock setup every adapter author writes. Fixed in the
+kit rather than worked around in each spec: when the adapter includes
+`Support::Idempotency` (all seven do, and so does `ReferenceAdapter`), the
+example now also asserts the key landed in the dedup table, which an adapter
+that never deduped has no entry in. Verified against a deliberately
+non-deduping `ReferenceAdapter` subclass that returns a constant checkout —
+red on the table assertion, green before the fix. An adapter that dedupes
+some other way gets a `warn` telling it to assert dedup itself, not a silent
+pass.
 
-1. Add `require "portage/ucp/rspec"` to `portage-ucp-shopify/spec/spec_helper.rb`
-   (core gem is already a dependency; RSpec/webmock are already dev deps there).
-2. New `portage-ucp-shopify/spec/portage/ucp/shopify/conformance_spec.rb`,
-   `it_behaves_like "a portage adapter"` with `let(:adapter)` built the same
-   way `adapter_spec.rb` already does (`Client.new(...)`, real
-   `Portage::Ucp::Shopify::Adapter`).
-3. The hard part: `existing_product_id`. The kit's `create_conformance_checkout`
-   calls `create_checkout` then, in the PAN/dedup examples, `complete_checkout`
-   on the resulting id — each of those is a *different* Storefront GraphQL
-   mutation (`cartCreate` → `cartPaymentUpdate` → `cartSubmitForCompletion`,
-   see `Adapter#submit_payment`), and `adapter_spec.rb`'s existing
-   `stub_storefront`/`stub_admin` helpers answer *every* POST to that URL with
-   one fixed body regardless of which mutation was sent — fine for a single-
-   mutation test, not fine here where the same conformance example fires three
-   mutations in sequence and expects three different response shapes back.
-   Either stub on request body (`stub_request(...).with(body:
-   hash_including(...))`, matching on the GraphQL operation name) the way none
-   of the existing specs currently do, or give the kit's `dispatcher` an
-   adapter wrapped around a small in-order-response fake client instead of
-   real webmock — decide which before writing the spec, don't discover it
-   mid-write.
-4. `bundle exec rspec` — the kit's `schema_validator.errors_for(...)` example
-   will be the most likely to catch something real: `Mapper.checkout`'s output
-   has to validate against `schemas/shopping/checkout.json`, which nothing in
-   `mapper_spec.rb` today asserts directly (it checks individual field
-   mappings, not schema conformance of the whole object).
-5. Once Shopify's wired and green, repeat for Wix/WooCommerce/BigCommerce/
-   Magento (cart+checkout+order only, no discount/fulfillment/identity —
-   those examples self-skip via the kit's capability-advertisement checks) and
-   Etsy/Instagram (checkout capability isn't advertised at all for these two,
-   per their redirect-link-only design — confirm the kit's `skip` branches
-   actually fire rather than silently passing on an unadvertised capability
-   before trusting a green run there).
+Etsy and Instagram are worth calling out: they advertise checkout (both
+override `create_checkout`/`get_checkout`) even though their checkout is a
+redirect link, so the kit's checkout examples *run* there rather than
+skipping — including the PAN example, which passes because the guard rejects
+the token, not because their `complete_checkout` raises
+`NotImplementedError`. That was the thing step 5 said to confirm rather than
+trust.
+
+**Still not built:** the kit has no discount or fulfillment examples, so
+wiring it did *not* make the §18/§19 Shopify-only parity gap fail anywhere —
+capability advertisement is checked, capability *behavior* isn't. Two
+examples gated on `discount_codes_supported?`/`fulfillment_supported?` (they
+would self-skip on the other six and run on Shopify + `ReferenceAdapter`) are
+the next piece, and the honest version of the claim that this kit enforces
+parity. Also unbuilt: enabling the opt-in `out_of_stock_product_id` example
+per adapter — that one *does* reach `complete_checkout`, so it's the case
+that genuinely needs stubs matching on request body.
 
 ---
 

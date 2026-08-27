@@ -201,7 +201,9 @@ RSpec.describe MyAdapter do
 end
 ```
 
-Not loaded by `require "portage/ucp"` — it pulls in RSpec, which the core gem otherwise has zero runtime dependency on. Every example skips itself when your adapter doesn't advertise the capability it needs, so a catalog/cart-only adapter (Etsy/Instagram's shape) still runs it cleanly. `spec/reference_adapter_conformance_spec.rb` in this gem runs the kit against `ReferenceAdapter` itself, so it's exercised by CI on every push, not just documented.
+Not loaded by `require "portage/ucp"` — it pulls in RSpec, which the core gem otherwise has zero runtime dependency on. Every example skips itself when your adapter doesn't advertise the capability it needs, so an adapter that only does catalog and checkout still runs it cleanly.
+
+All seven bundled adapter gems run it against their real `Adapter` (`spec/portage/ucp/<platform>/conformance_spec.rb` in each), and `spec/reference_adapter_conformance_spec.rb` in the core gem runs it against `ReferenceAdapter` — so it's exercised by CI on every push, not just documented. One canned backend response per call the kit makes is enough for a stubbed adapter: the repeat-key example is answered from the in-process dedup table without a second HTTP call, and the PAN example is rejected inside `Dispatcher` before `complete_checkout` runs. Include `Portage::Ucp::Support::Idempotency` in your adapter (as every bundled one does) and the dedup example checks the table itself rather than just comparing the two calls' output — output equality alone is satisfied by any fixed-response test double, deduped or not.
 
 ## Checking any store
 
