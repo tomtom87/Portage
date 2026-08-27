@@ -21,20 +21,103 @@ module Portage
           Portage::Ucp::Support::Amounts.decimal_to_minor(price["amount"])
         end
 
+        # dev.ucp.shopping.catalog's Price (types/price.json) — the
+        # wire-shape counterpart to #money above, used everywhere a Product/
+        # Variant field carries currency directly rather than through the
+        # arithmetic-only Money type.
+        def price(node)
+          Portage::Ucp::Price.new(amount: minor_units(node), currency: node["currencyCode"])
+        end
+
         def product(node)
           Portage::Ucp::Product.new(
             id: node["id"],
+            handle: node["handle"],
             title: node["title"],
-            description: node["description"],
-            price: money(node.dig("priceRange", "minVariantPrice")),
-            available: node["availableForSale"],
-            variants: node.dig("variants", "nodes").map { |v| variant(v) },
+            description: description(node),
+            price_range: price_range(node["priceRange"]),
+            list_price_range: compare_at_price_range(node["compareAtPriceRange"]),
+            variants: node.dig("variants", "nodes").map { |v| variant(v, description(node)) },
+            options: (node["options"] || []).map { |o| product_option(o) },
+            media: product_media(node.dig("featuredMedia", "nodes", 0)),
+            tags: node["tags"] || [],
             url: node["onlineStoreUrl"]
           )
         end
 
-        def variant(node)
-          { id: node["id"], title: node["title"], available: node["availableForSale"], price: money(node["price"]) }
+        def description(node)
+          Portage::Ucp::Description.new(plain: node["description"], html: node["descriptionHtml"])
+        end
+
+        def price_range(node)
+          Portage::Ucp::PriceRange.new(min: price(node["minVariantPrice"]), max: price(node["maxVariantPrice"]))
+        end
+
+        # nil when Shopify's compareAtPriceRange itself is nil (no variant
+        # has a compare-at price set) rather than a zeroed-out range —
+        # Product#list_price_range is optional, so "no strikethrough price"
+        # should mean the field is absent, not present-and-zero.
+        def compare_at_price_range(node)
+          return nil unless node
+
+          price_range(node)
+        end
+
+        def product_option(node)
+          values = (node["optionValues"] || []).map { |v| Portage::Ucp::OptionValue.new(id: v["id"], label: v["name"]) }
+          Portage::Ucp::ProductOption.new(name: node["name"], values: values)
+        end
+
+        def product_media(node)
+          image = node && node["image"]
+          return [] unless image
+
+          [Portage::Ucp::Media.new(type: "image", url: image["url"], alt_text: image["altText"],
+                                   width: image["width"], height: image["height"])]
+        end
+
+        # `barcode` is a single untyped Shopify string with no declared
+        # standard — inferred from length rather than asserted, since
+        # Shopify doesn't tag which GS1 standard (UPC-A/EAN-13/EAN-8) a
+        # given value follows. Anything else (an internal SKU-shaped
+        # barcode, a non-numeric value) is passed through as bare "GTIN"
+        # rather than dropped, so the field still reaches the agent.
+        BARCODE_TYPES = { 8 => "EAN", 12 => "UPC", 13 => "EAN" }.freeze
+
+        def barcodes(value)
+          return [] if value.nil? || value.empty?
+
+          [{ "type" => BARCODE_TYPES.fetch(value.length, "GTIN"), "value" => value }]
+        end
+
+        # `product_description` is the parent Product's own Description —
+        # Shopify's ProductVariant has no description field of its own, and
+        # types/variant.json requires one, so this reuses the product's, same
+        # posture as Wix's variant title falling back to its product's (see
+        # Portage::Ucp::Wix::Mapper#variant).
+        def variant(node, product_description)
+          options = (node["selectedOptions"] || []).map do |o|
+            Portage::Ucp::SelectedOption.new(name: o["name"], label: o["value"])
+          end
+          Portage::Ucp::Variant.new(
+            id: node["id"],
+            title: node["title"],
+            description: product_description,
+            price: price(node["price"]),
+            sku: node["sku"],
+            barcodes: barcodes(node["barcode"]),
+            list_price: node["compareAtPrice"] && price(node["compareAtPrice"]),
+            availability: { "available" => node["availableForSale"] },
+            options: options,
+            media: variant_media(node["image"])
+          )
+        end
+
+        def variant_media(image)
+          return [] unless image
+
+          [Portage::Ucp::Media.new(type: "image", url: image["url"], alt_text: image["altText"],
+                                   width: image["width"], height: image["height"])]
         end
 
         def cart(node)
