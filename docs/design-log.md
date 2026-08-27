@@ -1266,3 +1266,49 @@ not blocked by anything above.
    is "custom fields" on V3, unresearched) — leave `Portage::Ucp::Shopify.configure`
    Shopify-only for now rather than trying to generalize the DSL across
    adapters before a second real backend proves out the shape.
+
+## 21. The metadata_field config DSL, built (2026-08-27)
+
+Did the §20 handoff, steps 1-6 (step 7, Wix, stays out of scope).
+
+`Portage::Ucp::Shopify::Configuration` (`portage-ucp-shopify/lib/portage/ucp/
+shopify/configuration.rb`) mirrors core's `Configuration` singleton pattern —
+`Shopify.configure { |c| ... }` / `Shopify.configuration`, required from
+`shopify.rb` right after `shopify/version`. `metadata_field(key, metafield:,
+scope: :product)` splits `"custom.color_code"` on the first `.` and files the
+entry onto a product- or variant-scoped array (`scope:` defaults to
+`:product`) — the DSL-shape question from handoff step 2 resolved as a kwarg
+rather than two separate method names (`from_variant_metafield:` etc.), since
+both scopes share every other bit of validation (namespace-split, the
+250-identifier cap) and a kwarg keeps that one code path. Raises
+`InvalidMetadataField` past Shopify's 250-identifier `metafields(identifiers:)`
+cap (handoff step 5) or an unrecognized `scope:`.
+
+The frozen-constant problem (handoff step 3, "the hard part"): `PRODUCT_FIELDS`
+became `PRODUCT_FIELDS_TEMPLATE`, still frozen, but now carries
+`%<product_metafields>s`/`%<variant_metafields>s` placeholders that
+`Queries.product_fields` fills via `format` on every call by reading
+`Shopify.configuration.fields_for(scope)` fresh each time — so a query built
+before `configure` runs and one built after differ, which is exactly what a
+config-DSL surface needs (specced directly: `search_catalog_query` called
+before and after `configure`, asserting the fragment only appears in the
+second). `SEARCH_CATALOG`/`GET_PRODUCT` constants became
+`Queries.search_catalog_query`/`.product_by_id_query` methods for the same
+reason (`get_product_query` renamed to dodge `Naming/AccessorMethodName`) —
+`Adapter#search_catalog`/`#get_product` call sites updated to match.
+
+`Mapper#metafields_metadata` zips `Shopify.configuration.fields_for(scope)`
+against Shopify's `metafields(identifiers:)` response array positionally
+(same order the query requested them in) to build `Product#metadata`/
+`Variant#metadata`, keyed by the DSL's `key:`, not Shopify's namespace/key —
+nil when the fragment wasn't requested at all (the common, unconfigured
+case), skipping any entry with no value set on that product. Value parsing
+(handoff step 4) landed the "reasonable first cut" named in the handoff:
+`json`/`dimension`/`measurement`/`list.*` get `JSON.parse`'d, everything else
+(plain text, numbers, dates, refs) passes through as Shopify sent it.
+
+Confirmed end to end with an adapter-level spec that calls
+`Shopify.configure` *after* the gem's already required (matching a real
+consumer's `config/initializers` timing, per handoff step 3's own worry) and
+asserts the sent GraphQL body contains the configured identifier — not just
+that a hand-built fixture maps correctly.
