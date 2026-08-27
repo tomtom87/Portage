@@ -21,6 +21,12 @@ module Portage
     #     it_behaves_like "a portage adapter" do
     #       let(:adapter) { MyAdapter.new(client: my_test_client) }
     #       let(:existing_product_id) { "known-good-product-id" }
+    #       # optional — only needed when a purchasable line item is a
+    #       # *different* id than the catalog product id (Shopify: a
+    #       # ProductVariant GID vs. the parent Product GID). Defaults to
+    #       # existing_product_id, which is correct for any backend where
+    #       # "the product" and "the thing you add to a cart" share one id.
+    #       # let(:existing_variant_id) { "known-good-purchasable-id" }
     #       # optional — enables the out-of-stock example:
     #       # let(:out_of_stock_product_id) { "known-sold-out-product-id" }
     #     end
@@ -47,6 +53,7 @@ RSpec.shared_examples "a portage adapter" do
   let(:dispatcher) { Portage::Ucp::Dispatcher.new(adapter: adapter) }
   let(:schema_validator) { Portage::Ucp::SchemaValidator.new }
   let(:conformance_idempotency_key) { "conformance-#{object_id}-#{rand(1_000_000)}" }
+  let(:existing_variant_id) { existing_product_id }
 
   def checkout_capability_advertised?
     Portage::Ucp::RSpec.advertised?(adapter, "dev.ucp.shopping.checkout")
@@ -59,7 +66,7 @@ RSpec.shared_examples "a portage adapter" do
   def create_conformance_checkout(idempotency_key: conformance_idempotency_key)
     dispatcher.call(
       capability: "dev.ucp.shopping.checkout", action: "create_checkout",
-      arguments: { line_items: [{ product_id: existing_product_id, quantity: 1 }],
+      arguments: { line_items: [{ product_id: existing_variant_id, quantity: 1 }],
                    idempotency_key: idempotency_key }
     )
   end
