@@ -37,10 +37,11 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
   end
 
   # §23 step 3: Dispatcher threads its logger and a per-call correlation_id
-  # onto the adapter (Support::CheckoutState#ucp_observability=) so a
-  # checkout_state_transition event carries the same id as the tool_called
-  # event that triggered it, without checkout methods taking a
-  # correlation_id: kwarg (a breaking change to the Adapter contract).
+  # onto the adapter (Support::CheckoutState.with_observability, scoped to
+  # this call only) so a checkout_state_transition event carries the same id
+  # as the tool_called event that triggered it, without checkout methods
+  # taking a correlation_id: kwarg (a breaking change to the Adapter
+  # contract).
   it "emits a checkout_state_transition event through the correlation id Dispatcher was given (§12, §23)" do
     io = StringIO.new
     logger = Logger.new(io).tap { |l| l.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" } }

@@ -11,12 +11,13 @@ module Portage
       end
 
       # @param correlation_id [String, nil] threaded through to the adapter
-      #   (via Support::CheckoutState#ucp_observability=) so a
-      #   checkout_state_transition event (§12) it emits during this call
-      #   carries the same id as the tool_called event that triggered it.
-      #   Optional, not correlation_id: required, since Dispatcher.call is
-      #   also the conformance kit's (lib/portage/ucp/rspec.rb) and specs'
-      #   direct entry point, outside any MCP request (§23).
+      #   (via Support::CheckoutState.with_observability, scoped to this call
+      #   only) so a checkout_state_transition event (§12) it emits during
+      #   this call carries the same id as the tool_called event that
+      #   triggered it. Optional, not correlation_id: required, since
+      #   Dispatcher.call is also the conformance kit's
+      #   (lib/portage/ucp/rspec.rb) and specs' direct entry point, outside
+      #   any MCP request (§23).
       def call(capability:, action:, arguments: {}, correlation_id: nil)
         capability_definition = @registry.find(capability)
         raise UnknownCapabilityError, capability if capability_definition.nil?
@@ -28,12 +29,21 @@ module Portage
 
         Portage::Ucp::PaymentTokenGuard.validate!(arguments[:payment_token]) if arguments.key?(:payment_token)
 
-        @adapter.ucp_observability = [@logger, correlation_id] if @adapter.respond_to?(:ucp_observability=)
-        result = @adapter.public_send(method_name, **arguments)
+        result = call_adapter(method_name, arguments, correlation_id)
         wrap(capability, result)
       end
 
       private
+
+      def call_adapter(method_name, arguments, correlation_id)
+        unless @adapter.is_a?(Portage::Ucp::Support::CheckoutState)
+          return @adapter.public_send(method_name, **arguments)
+        end
+
+        Portage::Ucp::Support::CheckoutState.with_observability(@adapter, @logger, correlation_id) do
+          @adapter.public_send(method_name, **arguments)
+        end
+      end
 
       def wrap(capability_name, result)
         unless result.respond_to?(:to_wire_h)
