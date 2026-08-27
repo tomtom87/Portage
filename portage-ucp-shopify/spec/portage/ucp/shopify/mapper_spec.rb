@@ -12,13 +12,21 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
   describe ".product" do
     let(:node) do
       {
-        "id" => "gid://shopify/Product/1", "title" => "Cold Brew", "description" => "desc",
+        "id" => "gid://shopify/Product/1", "handle" => "cold-brew", "title" => "Cold Brew", "description" => "desc",
+        "descriptionHtml" => "<p>desc</p>",
         "onlineStoreUrl" => "https://test-shop.myshopify.com/products/cold-brew",
-        "availableForSale" => true,
-        "priceRange" => { "minVariantPrice" => { "amount" => "5.00", "currencyCode" => "USD" } },
+        "tags" => ["coffee"],
+        "priceRange" => { "minVariantPrice" => { "amount" => "5.00", "currencyCode" => "USD" },
+                          "maxVariantPrice" => { "amount" => "5.00", "currencyCode" => "USD" } },
+        "compareAtPriceRange" => nil,
+        "featuredMedia" => { "nodes" => [{ "image" => { "url" => "https://cdn.example/1.jpg", "altText" => "Cold Brew",
+                                                        "width" => 800, "height" => 800 } }] },
+        "options" => [{ "name" => "Size", "optionValues" => [{ "id" => "opt_1", "name" => "12oz" }] }],
         "variants" => { "nodes" => [
           { "id" => "gid://shopify/ProductVariant/1", "title" => "Default", "availableForSale" => true,
-            "price" => { "amount" => "5.00", "currencyCode" => "USD" } }
+            "sku" => "CB-12", "barcode" => "012345678905",
+            "price" => { "amount" => "5.00", "currencyCode" => "USD" }, "compareAtPrice" => nil,
+            "selectedOptions" => [{ "name" => "Size", "value" => "12oz" }], "image" => nil }
         ] }
       }
     end
@@ -27,9 +35,31 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       product = described_class.product(node)
 
       expect(product.id).to eq("gid://shopify/Product/1")
-      expect(product.price).to eq(Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"))
-      expect(product.variants).to eq([{ id: "gid://shopify/ProductVariant/1", title: "Default", available: true,
-                                        price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD") }])
+      expect(product.price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 500, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 500, currency: "USD"))
+      )
+      expect(product.variants.size).to eq(1)
+
+      variant = product.variants.first
+      expect(variant.id).to eq("gid://shopify/ProductVariant/1")
+      expect(variant.sku).to eq("CB-12")
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 500, currency: "USD"))
+      expect(variant.availability).to eq({ "available" => true })
+    end
+
+    it "maps a UPC-length barcode to a UPC-tagged GTIN" do
+      variant = described_class.product(node).variants.first
+      expect(variant.barcodes).to eq([{ "type" => "UPC", "value" => "012345678905" }])
+    end
+
+    it "maps structured options through onto both Product and Variant" do
+      product = described_class.product(node)
+
+      expect(product.options.map(&:to_wire_h)).to eq(
+        [{ "name" => "Size", "values" => [{ "id" => "opt_1", "label" => "12oz" }] }]
+      )
+      expect(product.variants.first.options.map(&:to_wire_h)).to eq([{ "name" => "Size", "label" => "12oz" }])
     end
   end
 

@@ -5,15 +5,34 @@ module Portage
       # and the response mapping (Mapper) can each be read and tested on their
       # own.
       module Queries
+        # `descriptionHtml` sourced alongside plain `description` — UCP's
+        # description.json accepts both, and Storefront sanitizes its own
+        # HTML output, satisfying the schema's "platforms MUST sanitize"
+        # note on the read side without this gem doing its own pass.
+        # `options`/`selectedOptions` and `sku`/`barcode` back the
+        # dev.ucp.shopping.catalog structured-attribute gap (design-log
+        # §20): GS1 identifiers and Size/Color axes as real fields instead
+        # of chaotic HTML the agent has to parse itself.
         PRODUCT_FIELDS = <<~GRAPHQL.freeze
           id
+          handle
           title
           description
+          descriptionHtml
           onlineStoreUrl
-          availableForSale
-          priceRange { minVariantPrice { amount currencyCode } }
+          tags
+          priceRange { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
+          compareAtPriceRange { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
+          featuredMedia: media(first: 1) { nodes { ... on MediaImage { image { url altText width height } } } }
+          options(first: 10) { name optionValues { id name } }
           variants(first: 25) {
-            nodes { id title availableForSale price { amount currencyCode } }
+            nodes {
+              id title availableForSale sku barcode
+              price { amount currencyCode }
+              compareAtPrice { amount currencyCode }
+              selectedOptions { name value }
+              image { url altText width height }
+            }
           }
         GRAPHQL
 

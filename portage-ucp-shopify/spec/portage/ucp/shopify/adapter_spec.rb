@@ -90,18 +90,22 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
   end
 
   describe "#search_catalog" do
-    it "queries the Admin API and maps results to Portage::Ucp::Product" do
+    it "queries the Admin API and maps results to a Portage::Ucp::CatalogSearchResult" do
       stub_admin({ data: { products: { nodes: [
                    { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
-                     availableForSale: true,
-                     priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" } },
-                     variants: { nodes: [] } }
+                     priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
+                                   maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
+                     variants: { nodes: [
+                       { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
+                         price: { amount: "5.00", currencyCode: "USD" } }
+                     ] } }
                  ] } } })
 
-      products = adapter.search_catalog(query: "brew", limit: 10)
+      result = adapter.search_catalog(query: "brew", limit: 10)
 
-      expect(products.first).to be_a(Portage::Ucp::Product)
-      expect(products.first.title).to eq("Cold Brew")
+      expect(result).to be_a(Portage::Ucp::CatalogSearchResult)
+      expect(result.products.first).to be_a(Portage::Ucp::Product)
+      expect(result.products.first.title).to eq("Cold Brew")
     end
   end
 
