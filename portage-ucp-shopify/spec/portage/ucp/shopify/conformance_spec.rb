@@ -1,51 +1,78 @@
 require "spec_helper"
-require "portage/ucp/rspec"
 
-# Design-log §17: runs the shipped conformance kit against the real Shopify
-# Adapter, not a test double — the kit routes every call through a real
-# Dispatcher, so this is the same path an MCP client takes.
+# Design-log §17 handoff: runs the core gem's conformance kit against a real
+# Shopify dev store instead of webmock stubs, so the three sequential
+# checkout mutations (cartCreate -> cartPaymentUpdate -> cartSubmitForCompletion)
+# each get a genuine response instead of one fixed stub body answering all
+# three. spec_helper.rb calls WebMock.disable_net_connect! with no args for
+# the rest of the suite; rather than widen that globally, the hole is opened
+# only around this file's own examples (see the `around` block below).
 #
-# The Storefront fixture is deliberately inline rather than shared with
-# adapter_spec.rb: this file is the thing a third-party adapter author copies
-# as a starting point, so it has to read standalone, and the kit needs exactly
-# one response shape (see below) where adapter_spec.rb needs a dozen.
-RSpec.describe Portage::Ucp::Shopify::Adapter do
-  let(:client) do
-    Portage::Ucp::Shopify::Client.new(shop_domain: "test-shop.myshopify.com", admin_access_token: "admin-token",
-                                      storefront_access_token: "storefront-token")
-  end
-  let(:adapter) { described_class.new(client: client) }
-  let(:existing_product_id) { "gid://shopify/ProductVariant/1" }
+# Needs SHOPIFY_SHOP_DOMAIN / SHOPIFY_ADMIN_ACCESS_TOKEN /
+# SHOPIFY_STOREFRONT_ACCESS_TOKEN in the environment — sourced here from the
+# repo-root .env if present and not already set. Every example skips itself
+# when SHOPIFY_SHOP_DOMAIN is absent, so `rspec` still passes in CI with no
+# live store configured. The admin token is not static (~24h expiry via
+# AccessTokenFetcher, see the Rakefile's shopify_access_token task) — if this
+# starts failing with an auth error, regenerate it before assuming the
+# adapter regressed.
+env_path = File.expand_path("../../../../../.env", __dir__)
+if File.exist?(env_path)
+  File.readlines(env_path).each do |line|
+    line = line.strip
+    next if line.empty? || line.start_with?("#")
 
-  let(:cart_response) do
-    {
-      "id" => "gid://shopify/Cart/1",
-      "checkoutUrl" => "https://test-shop.myshopify.com/cart/c/1",
-      "cost" => { "subtotalAmount" => { "amount" => "5.00", "currencyCode" => "USD" },
-                  "totalTaxAmount" => { "amount" => "0.00", "currencyCode" => "USD" },
-                  "totalAmount" => { "amount" => "5.00", "currencyCode" => "USD" } },
-      "lines" => { "nodes" => [
-        { "id" => "gid://shopify/CartLine/1", "quantity" => 1,
-          "cost" => { "totalAmount" => { "amount" => "5.00", "currencyCode" => "USD" } },
-          "merchandise" => { "id" => "gid://shopify/ProductVariant/1", "product" => { "title" => "Cold Brew" },
-                             "price" => { "amount" => "5.00", "currencyCode" => "USD" }, "availableForSale" => true } }
-      ] }
-    }
+    key, value = line.split("=", 2)
+    ENV[key] ||= value
   end
+end
 
-  # One fixed response per URL is enough here, and that's worth spelling out
-  # because the §17 handoff note assumed otherwise: the kit fires `cartCreate`
-  # and nothing else against the network. Its repeat-call example is answered
-  # from `Support::Idempotency`'s in-process dedup table (no second HTTP call),
-  # and its PAN example is rejected by `PaymentTokenGuard` inside the
-  # Dispatcher before `complete_checkout` — hence before `cartPaymentUpdate` /
-  # `cartSubmitForCompletion` — ever runs. If a future kit example completes a
-  # checkout for real, this stub has to start matching on the request body.
-  before do
-    stub_request(:post, "https://test-shop.myshopify.com/api/2026-04/graphql.json")
-      .to_return(status: 200, body: { "data" => { "cartCreate" => { "cart" => cart_response,
-                                                                    "userErrors" => [] } } }.to_json)
+shop_domain = ENV["SHOPIFY_SHOP_DOMAIN"]
+
+RSpec.describe Portage::Ucp::Shopify::Adapter, :live_store do
+  unless shop_domain
+    before do
+      skip "SHOPIFY_SHOP_DOMAIN not set — see docs/design-log.md §17 for how to set up a live test store"
+    end
   end
 
-  it_behaves_like "a portage adapter"
+  around do |example|
+    next example.run unless shop_domain
+
+    WebMock.disable_net_connect!(allow: shop_domain)
+    begin
+      example.run
+    ensure
+      WebMock.disable_net_connect!
+    end
+  end
+
+  # These lets must live inside the it_behaves_like block below, not at
+  # this describe's own level: the kit defines its own
+  # `let(:existing_variant_id) { existing_product_id }` directly in the
+  # nested group `it_behaves_like` creates, and a `let` from *this* outer
+  # group doesn't shadow one the shared example re-defines in that inner
+  # group — only a `let` passed into the block does (same pattern the
+  # kit's own doc comment shows).
+  it_behaves_like "a portage adapter" do
+    let(:client) do
+      Portage::Ucp::Shopify::Client.new(
+        shop_domain: shop_domain,
+        admin_access_token: ENV["SHOPIFY_ADMIN_ACCESS_TOKEN"],
+        storefront_access_token: ENV["SHOPIFY_STOREFRONT_ACCESS_TOKEN"]
+      )
+    end
+    let(:adapter) { described_class.new(client: client) }
+    # "The Minimal Snowboard" on ucp-test-bc2vif1p.myshopify.com — 50 in
+    # stock, availableForSale: true, confirmed live via the Admin API.
+    #
+    # Shopify genuinely needs two different ids for "the same" item —
+    # get_product/search_catalog go through the Admin API's Product node
+    # (existing_product_id), while create_checkout's cart_lines feeds
+    # straight into Storefront's CartLineInput#merchandiseId, which takes a
+    # ProductVariant GID (existing_variant_id) — see Mapper's top-of-file
+    # note.
+    let(:existing_product_id) { "gid://shopify/Product/8379425259567" }
+    let(:existing_variant_id) { "gid://shopify/ProductVariant/45662494818351" }
+  end
 end

@@ -1,4 +1,5 @@
 require "portage/ucp/shopify"
+require "portage/ucp/rspec"
 require "webmock/rspec"
 
 WebMock.disable_net_connect!
