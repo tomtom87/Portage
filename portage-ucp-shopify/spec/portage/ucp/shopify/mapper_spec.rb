@@ -61,6 +61,70 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       )
       expect(product.variants.first.options.map(&:to_wire_h)).to eq([{ "name" => "Size", "label" => "12oz" }])
     end
+
+    it "maps a product's metafields node onto Product#metadata end to end" do
+      Portage::Ucp::Shopify.configure { |c| c.metadata_field(:fabric, metafield: "custom.fabric_content") }
+      with_metafields = node.merge(
+        "metafields" => [{ "key" => "fabric_content", "namespace" => "custom", "value" => "cotton",
+                           "type" => "single_line_text_field" }]
+      )
+
+      expect(described_class.product(with_metafields).metadata).to eq({ "fabric" => "cotton" })
+    ensure
+      Portage::Ucp::Shopify.instance_variable_set(:@configuration, nil)
+    end
+  end
+
+  describe "metafields_metadata (§20 handoff)" do
+    after do
+      Portage::Ucp::Shopify.instance_variable_set(:@configuration, nil)
+    end
+
+    it "is nil when the query didn't request metafields for that scope" do
+      expect(described_class.send(:metafields_metadata, nil, :product)).to be_nil
+    end
+
+    it "maps a configured product metafield onto Product#metadata by its UCP key, not Shopify's" do
+      Portage::Ucp::Shopify.configure { |c| c.metadata_field(:fabric, metafield: "custom.fabric_content") }
+      metafields = [{ "key" => "fabric_content", "namespace" => "custom", "value" => "cotton",
+                      "type" => "single_line_text_field" }]
+
+      expect(described_class.send(:metafields_metadata, metafields, :product)).to eq({ "fabric" => "cotton" })
+    end
+
+    it "parses json/dimension/measurement/list.* types, passing everything else through as the raw string" do
+      Portage::Ucp::Shopify.configure do |c|
+        c.metadata_field(:specs, metafield: "custom.specs")
+        c.metadata_field(:weight, metafield: "custom.weight", scope: :variant)
+        c.metadata_field(:tags, metafield: "custom.tags", scope: :variant)
+        c.metadata_field(:notes, metafield: "custom.notes", scope: :variant)
+      end
+
+      product_metadata = described_class.send(
+        :metafields_metadata,
+        [{ "key" => "specs", "namespace" => "custom", "value" => '{"a":1}', "type" => "json" }], :product
+      )
+      variant_metadata = described_class.send(
+        :metafields_metadata,
+        [
+          { "key" => "weight", "namespace" => "custom", "value" => '{"value":"1.5","unit":"KILOGRAMS"}',
+            "type" => "dimension" },
+          { "key" => "tags", "namespace" => "custom", "value" => '["red","blue"]',
+            "type" => "list.single_line_text_field" },
+          { "key" => "notes", "namespace" => "custom", "value" => "fragile", "type" => "single_line_text_field" }
+        ], :variant
+      )
+
+      expect(product_metadata).to eq({ "specs" => { "a" => 1 } })
+      expect(variant_metadata).to eq({ "weight" => { "value" => "1.5", "unit" => "KILOGRAMS" },
+                                       "tags" => %w[red blue], "notes" => "fragile" })
+    end
+
+    it "skips a configured field that has no value set on this product (nil metafield entry)" do
+      Portage::Ucp::Shopify.configure { |c| c.metadata_field(:fabric, metafield: "custom.fabric_content") }
+
+      expect(described_class.send(:metafields_metadata, [nil], :product)).to be_nil
+    end
   end
 
   describe ".cart / .checkout" do

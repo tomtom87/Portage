@@ -55,13 +55,13 @@ module Portage
         end
 
         def search_catalog(query:, limit:)
-          data = @client.admin_query(Queries::SEARCH_CATALOG, variables: { query: query, first: limit })
+          data = @client.admin_query(Queries.search_catalog_query, variables: { query: query, first: limit })
           products = data.dig("products", "nodes").map { |node| Mapper.product(node) }
           Portage::Ucp::CatalogSearchResult.new(products: products)
         end
 
         def get_product(product_id:)
-          data = @client.admin_query(Queries::GET_PRODUCT, variables: { id: product_id })
+          data = @client.admin_query(Queries.product_by_id_query, variables: { id: product_id })
           node = data["product"]
           node && Portage::Ucp::ProductDetail.new(product: Mapper.product(node))
         end

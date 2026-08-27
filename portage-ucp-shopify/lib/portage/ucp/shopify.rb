@@ -1,5 +1,6 @@
 require "portage/ucp"
 require_relative "shopify/version"
+require_relative "shopify/configuration"
 require_relative "shopify/errors"
 require_relative "shopify/client"
 require_relative "shopify/access_token_fetcher"
