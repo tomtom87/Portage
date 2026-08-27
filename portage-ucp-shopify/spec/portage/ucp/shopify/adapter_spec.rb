@@ -107,6 +107,19 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       expect(result.products.first).to be_a(Portage::Ucp::Product)
       expect(result.products.first.title).to eq("Cold Brew")
     end
+
+    it "sends a configured metadata_field's identifier even when configure ran after the gem was required" do
+      Portage::Ucp::Shopify.configure { |c| c.metadata_field(:color_hex, metafield: "custom.color_code") }
+      stub_admin({ data: { products: { nodes: [] } } })
+
+      adapter.search_catalog(query: "brew", limit: 10)
+
+      expect(a_request(:post, "https://test-shop.myshopify.com/admin/api/2026-04/graphql.json")
+        .with(body: /metafields\(identifiers: \[\{namespace: \\"custom\\", key: \\"color_code\\"\}\]\)/))
+        .to have_been_made
+    ensure
+      Portage::Ucp::Shopify.instance_variable_set(:@configuration, nil)
+    end
   end
 
   describe "#get_cart" do
