@@ -19,6 +19,12 @@ module Portage
       # arbitrary order). The adapter picks whichever API actually has the
       # data it needs (see Portage::Ucp::Shopify::Adapter).
       class Client
+        # Retries a bare THROTTLED GraphQL response or a transport 5xx —
+        # safe here because every Adapter mutation calling into this Client
+        # is already wrapped in Support::Idempotency#dedup, and every read
+        # is naturally idempotent (see Support::Retry's own doc comment).
+        include Portage::Ucp::Support::Retry
+
         DEFAULT_API_VERSION = "2026-04".freeze
 
         def initialize(shop_domain:, admin_access_token: nil, storefront_access_token: nil,
@@ -31,21 +37,37 @@ module Portage
 
         def admin_query(query, variables: {})
           require_token!(@admin_access_token, "admin_access_token")
-          post("/admin/api/#{@api_version}/graphql.json", headers: { "X-Shopify-Access-Token" => @admin_access_token },
-                                                          query: query, variables: variables)
+          with_retry do
+            post("/admin/api/#{@api_version}/graphql.json",
+                 headers: { "X-Shopify-Access-Token" => @admin_access_token }, query: query, variables: variables)
+          end
         end
 
         def storefront_query(query, variables: {})
           require_token!(@storefront_access_token, "storefront_access_token")
-          post("/api/#{@api_version}/graphql.json",
-               headers: { "X-Shopify-Storefront-Access-Token" => @storefront_access_token },
-               query: query, variables: variables)
+          with_retry do
+            post("/api/#{@api_version}/graphql.json",
+                 headers: { "X-Shopify-Storefront-Access-Token" => @storefront_access_token },
+                 query: query, variables: variables)
+          end
         end
 
         private
 
         def require_token!(token, name)
           raise ArgumentError, "Portage::Ucp::Shopify::Client requires #{name} for this call" unless token
+        end
+
+        # Shopify's GraphQL THROTTLED code has no HTTP status of its own, and
+        # a transport 5xx here has no well-formed userErrors/GraphQL body to
+        # fall back on — Support::Retry's default `#status`-based check
+        # covers neither, so this hands both to it explicitly.
+        def retryable_error?(error)
+          case error
+          when Portage::Ucp::Shopify::ServerError then true
+          when Portage::Ucp::Shopify::GraphqlError then error.throttled?
+          else super
+          end
         end
 
         def post(path, headers:, query:, variables:)
@@ -56,6 +78,9 @@ module Portage
           request.body = JSON.generate({ query: query, variables: variables })
 
           response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
+          status = response.code.to_i
+          raise Portage::Ucp::Shopify::ServerError, status if status >= 500
+
           body = JSON.parse(response.body)
           raise Portage::Ucp::Shopify::GraphqlError, body["errors"] if body["errors"]
 

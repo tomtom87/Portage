@@ -63,9 +63,13 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
     cart_response.merge("lines" => { "nodes" => [line.merge("merchandise" => unavailable)] })
   end
 
-  def stub_storefront(response_body)
+  # Accepts either one response body (a single stubbed response, repeated for
+  # every call) or an array of bodies (sequential responses, one per call —
+  # used to stub a SubmitThrottled poll followed by an eventual success).
+  def stub_storefront(response_body_or_sequence)
+    bodies = response_body_or_sequence.is_a?(Array) ? response_body_or_sequence : [response_body_or_sequence]
     stub_request(:post, "https://test-shop.myshopify.com/api/2026-04/graphql.json")
-      .to_return(status: 200, body: response_body.to_json)
+      .to_return(bodies.map { |body| { status: 200, body: body.to_json } })
   end
 
   def stub_admin(response_body)
@@ -387,7 +391,25 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       expect(order.checkout_id).to eq("gid://shopify/Cart/1")
     end
 
-    it "maps a poll-required submission to complete_in_progress" do
+    it "polls through a SubmitThrottled response and returns completed once Shopify finishes" do
+      stub_storefront({ data: { cart: cart_response } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
+      stub_storefront([
+                        { data: { cartSubmitForCompletion: { result: { pollAfter: "2026-07-24T00:00:05Z" },
+                                                             userErrors: [] } } },
+                        { data: { cartSubmitForCompletion: { result: { attemptId: "a1" }, userErrors: [] } } }
+                      ]).with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
+      stub_admin({ data: { orders: { nodes: [] } } })
+
+      checkout = adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
+                                           idempotency_key: "chk1-poll")
+
+      expect(checkout.status).to eq("completed")
+    end
+
+    it "raises Portage::Ucp::UpstreamThrottledError once SubmitThrottled retries are exhausted" do
       stub_storefront({ data: { cart: cart_response } })
         .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
       stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
@@ -396,10 +418,10 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
                                                            userErrors: [] } } })
         .with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
 
-      checkout = adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
-                                           idempotency_key: "chk1-poll")
-
-      expect(checkout.status).to eq("complete_in_progress")
+      expect do
+        adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
+                                  idempotency_key: "chk1-poll-exhausted")
+      end.to raise_error(Portage::Ucp::UpstreamThrottledError)
     end
 
     it "raises when cartSubmitForCompletion reports a SubmitFailed result" do

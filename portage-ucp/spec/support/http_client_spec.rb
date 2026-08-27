@@ -75,6 +75,19 @@ RSpec.describe Portage::Ucp::Support::HttpClient do
     expect(client.raw_get("/cart")["Cart-Token"]).to eq("abc")
   end
 
+  it "normalizes a 409 to Portage::Ucp::ConflictError across every HttpClient-based gem" do
+    stub_request(:get, "https://example.test/carts/1").to_return(status: 409, body: '{"message":"stale version"}')
+    expect { client.get("/carts/1") }.to raise_error(Portage::Ucp::ConflictError, /409/)
+  end
+
+  it "carries a Retry-After header onto the raised error for Support::Retry to read" do
+    stub_request(:get, "https://example.test/products/9")
+      .to_return(status: 429, body: "{}", headers: { "Retry-After" => "2" })
+    expect { client.get("/products/9") }.to raise_error(test_error) { |error|
+      expect(error.retry_after).to eq("2")
+    }
+  end
+
   it "requires an including client to name its error class" do
     bare = Class.new { include Portage::Ucp::Support::HttpClient }.new
     stub_request(:get, "https://example.test/x").to_return(status: 500, body: "{}")

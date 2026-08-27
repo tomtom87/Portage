@@ -39,6 +39,11 @@ RSpec.describe Portage::Ucp::Support::ApiError do
       .to eq("TestPlatform/Graph API error (400): bad")
   end
 
+  it "defaults retry_after to nil and carries it through when given" do
+    expect(TestPlatform::ApiError.new(500, {}).retry_after).to be_nil
+    expect(TestPlatform::ApiError.new(429, {}, retry_after: "3").retry_after).to eq("3")
+  end
+
   it "leaves the including gem's own error hierarchy intact" do
     expect(TestPlatform::ApiError.new(404, {})).to be_a(TestPlatform::Error)
   end

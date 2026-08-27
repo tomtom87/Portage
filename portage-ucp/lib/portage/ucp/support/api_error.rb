@@ -6,16 +6,19 @@ module Portage
       # everything the Wix gem raises) — a module rather than a base class
       # precisely to leave that hierarchy alone.
       #
-      # Carries the two things every gem's ApiError carried identically: the
-      # HTTP status (which Support::NotFound#nil_on_not_found reads) and the parsed
-      # body. What differs per platform is only where the human-readable
-      # message lives inside that body, which is the `detail` hook.
+      # Carries the three things every gem's ApiError carried identically: the
+      # HTTP status (which Support::NotFound#nil_on_not_found reads), the
+      # parsed body, and — when the response sent one — the Retry-After
+      # header Support::Retry consults to time a 429's backoff. What differs
+      # per platform is only where the human-readable message lives inside
+      # the body, which is the `detail` hook.
       module ApiError
-        attr_reader :status, :body
+        attr_reader :status, :body, :retry_after
 
-        def initialize(status, body)
+        def initialize(status, body, retry_after: nil)
           @status = status
           @body = body
+          @retry_after = retry_after
           super("#{api_label} API error (#{status}): #{detail(body)}")
         end
 

@@ -40,9 +40,16 @@ module Portage
         # answer a successful DELETE with 204 and no content at all.
         def parse!(response)
           parsed = response.body.nil? || response.body.empty? ? {} : JSON.parse(response.body)
-          raise api_error_class.new(response.code.to_i, parsed) unless response.is_a?(Net::HTTPSuccess)
+          return parsed if response.is_a?(Net::HTTPSuccess)
 
-          parsed
+          status = response.code.to_i
+          # 409 means "you lost a race with a concurrent write" the same way
+          # on every REST platform behind this module — normalized here to
+          # Portage::Ucp::ConflictError rather than each gem's own ApiError,
+          # since it's cross-cutting, not platform-specific (see errors.rb).
+          raise Portage::Ucp::ConflictError, "conflict (409): #{parsed}" if status == 409
+
+          raise api_error_class.new(status, parsed, retry_after: response["Retry-After"])
         end
 
         def api_error_class

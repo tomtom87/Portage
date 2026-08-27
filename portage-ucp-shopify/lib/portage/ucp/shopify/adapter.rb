@@ -41,6 +41,13 @@ module Portage
         # just race on the same eventual value (§21). Support::SessionLock
         # serializes by id so the second call waits instead of interleaving.
         include Portage::Ucp::Support::SessionLock
+        # #poll_submission retries a SubmitThrottled cartSubmitForCompletion
+        # response instead of handing the caller an ambiguous
+        # "complete_in_progress" — safe because #submit_payment (its only
+        # caller) is always reached through #complete_checkout's dedup.
+        include Portage::Ucp::Support::Retry
+
+        SUBMIT_POLL_MAX_ATTEMPTS = 3
 
         def initialize(client:)
           super()
@@ -300,11 +307,7 @@ module Portage
 
             pay_for_cart(checkout_id, cart_node.dig("cost", "totalAmount"), payment_token)
 
-            submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
-                                                   variables: { cartId: checkout_id, attemptToken: idempotency_key })
-            status = unwrap_submit!(submit_data)
-            record_checkout_status(checkout_id, status)
-            order = link_cart_to_order(checkout_id) if status == "completed"
+            status, order = poll_submission(checkout_id, idempotency_key)
             Mapper.checkout(cart_node, status: status, order: order)
           end
         end
@@ -319,16 +322,14 @@ module Portage
           unwrap!(payment_data, "cartPaymentUpdate")
         end
 
-        # Best-effort: if `status` is `complete_in_progress` (SubmitThrottled),
-        # the order doesn't exist yet, so there's nothing to look up — a poller
-        # calling #get_checkout again later would need to retry this too, which
-        # this adapter doesn't do on its own. If the order search index hasn't
-        # caught up yet even for a synchronously-completed cart, this silently
-        # finds nothing (returns nil, #get_order's checkout_id stays blank)
-        # rather than raising, matching the "not information-complete but
-        # schema-valid" posture used elsewhere in this file. Also the only
-        # place that can hand the freshly-created order id back to
-        # #complete_checkout's own caller — nothing else surfaces it.
+        # Best-effort: only called once `status` is "completed" (#poll_submission
+        # already retried through any SubmitThrottled), but if the order search
+        # index hasn't caught up yet even so, this silently finds nothing
+        # (returns nil, #get_order's checkout_id stays blank) rather than
+        # raising, matching the "not information-complete but schema-valid"
+        # posture used elsewhere in this file. Also the only place that can
+        # hand the freshly-created order id back to #complete_checkout's own
+        # caller — nothing else surfaces it.
         def link_cart_to_order(checkout_id)
           token = checkout_id[%r{Cart/([^?]+)}, 1]
           return unless token
@@ -339,6 +340,29 @@ module Portage
 
           record_order_checkout(order_node["id"], checkout_id)
           Portage::Ucp::OrderConfirmation.new(id: order_node["id"], permalink_url: order_node["statusPageUrl"])
+        end
+
+        # Retries a SubmitThrottled cartSubmitForCompletion up to
+        # SUBMIT_POLL_MAX_ATTEMPTS, honoring each attempt's own pollAfter as
+        # the wait (see SubmitThrottled#retry_after). If Shopify is still
+        # throttled once attempts run out, that's surfaced to the caller as
+        # Portage::Ucp::UpstreamThrottledError rather than silently handing
+        # back an ambiguous "complete_in_progress" forever.
+        def poll_submission(checkout_id, idempotency_key)
+          with_retry(max_attempts: SUBMIT_POLL_MAX_ATTEMPTS) do
+            submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
+                                                   variables: { cartId: checkout_id, attemptToken: idempotency_key })
+            status = unwrap_submit!(submit_data)
+            record_checkout_status(checkout_id, status)
+            order = link_cart_to_order(checkout_id) if status == "completed"
+            [status, order]
+          end
+        rescue Portage::Ucp::Shopify::SubmitThrottled
+          raise Portage::Ucp::UpstreamThrottledError, "checkout #{checkout_id} still processing after retries"
+        end
+
+        def retryable_error?(error)
+          error.is_a?(Portage::Ucp::Shopify::SubmitThrottled) || super
         end
 
         def unwrap!(data, field)
@@ -373,8 +397,9 @@ module Portage
 
           result = payload["result"]
           raise Portage::Ucp::Shopify::Error, result.dig("errors", 0, "message") if result["errors"]
+          raise Portage::Ucp::Shopify::SubmitThrottled, result["pollAfter"] if result.key?("pollAfter")
 
-          result.key?("pollAfter") ? "complete_in_progress" : "completed"
+          "completed"
         end
       end
     end

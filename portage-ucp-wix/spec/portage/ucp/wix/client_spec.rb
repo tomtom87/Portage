@@ -54,4 +54,28 @@ RSpec.describe Portage::Ucp::Wix::Client do
     expect { client.get("/ecom/v1/carts/1") }
       .to raise_error(Portage::Ucp::Wix::ApiError, /cart not found/)
   end
+
+  it "raises Portage::Ucp::ConflictError for a 409 rather than Wix's own ApiError" do
+    stub_request(:get, "https://www.wixapis.com/ecom/v1/carts/1")
+      .to_return(status: 409, body: { message: "version mismatch" }.to_json)
+
+    expect { client.get("/ecom/v1/carts/1") }.to raise_error(Portage::Ucp::ConflictError)
+  end
+
+  it "retries a 429 and succeeds once Wix stops throttling" do
+    allow(client).to receive(:sleep)
+    stub_request(:get, "https://www.wixapis.com/ecom/v1/carts/1")
+      .to_return({ status: 429, body: "{}" }, { status: 200, body: { cart: { id: "1" } }.to_json })
+
+    expect(client.get("/ecom/v1/carts/1")).to eq({ "cart" => { "id" => "1" } })
+  end
+
+  it "does not retry a 404" do
+    allow(client).to receive(:sleep)
+    stub = stub_request(:get, "https://www.wixapis.com/ecom/v1/carts/1")
+           .to_return(status: 404, body: "{}")
+
+    expect { client.get("/ecom/v1/carts/1") }.to raise_error(Portage::Ucp::Wix::ApiError)
+    expect(stub).to have_been_requested.times(1)
+  end
 end
