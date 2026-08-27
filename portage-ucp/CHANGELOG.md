@@ -4,6 +4,60 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `Mcp::Server.call_tool` now emits a minimal pre-auth `tool_call_received`
+  event (capability, action, correlation id — no arguments) before
+  `authorize`/`rate_limit` run, moving the full `tool_called` event
+  (arguments included) below them. Previously the full event, arguments and
+  all, was logged before authorization, so an unauthenticated caller could
+  write attacker-chosen content into the operator's logs at whatever volume
+  the rate limiter would otherwise have refused (design-log §23).
+- `Mcp::Server.correlation_id_for` stamps both events with a correlation id
+  read from the inbound W3C `traceparent` in `server_context[:_meta]`
+  (SEP-414, `MCP::TraceContext`), falling back to `SecureRandom.uuid` when
+  absent or malformed. Deliberately per-request, not per-session —
+  `Server::Context` is built once per process in `.build`, and `mcp`
+  0.25.0's Streamable HTTP transport is stateful and multi-session, so
+  memoizing an id there would stamp every session in the process with the
+  same value (design-log §23). Because `traceparent` is unauthenticated
+  input read before `authorize`/`rate_limit` run, it's validated against
+  the W3C Trace Context format before use rather than accepted as-is — a
+  malformed or oversized value falls back to a generated id instead of
+  reaching the pre-auth log or `Dispatcher`/`CheckoutState` unchecked.
+- `Dispatcher` now threads its logger and each call's correlation id to the
+  adapter for the duration of that one call
+  (`Support::CheckoutState.with_observability`) so a
+  `checkout_state_transition` event (§12) fires from `record_checkout_status`
+  carrying the same correlation id as the `tool_called` event that triggered
+  it — without adding a `correlation_id:` kwarg to any checkout method, which
+  would have been a breaking change to the `Adapter` contract. Storage is
+  `Thread.current`, keyed per adapter object and restored on exit, rather
+  than an instance variable on the adapter: `Mcp::Server.build` constructs
+  one adapter per process, shared across every concurrent session, so an
+  instance variable would let two in-flight requests clobber each other's
+  correlation id — the same per-process-state trap §23 diagnosed for the
+  correlation id generator itself, one layer down. No `capability_negotiated`
+  event yet: `CapabilityNegotiator#negotiate` has no call site anywhere in
+  the gem outside its own spec, so there's nowhere to emit it from without
+  building that call site first (design-log §23).
+- `Observability::REDACTED_KEYS` grows past the three credential keys to
+  cover the PII that actually flows through logged events — `email`
+  (`Identity`, §3) and `first_name`/`last_name`/`phone_number`/
+  `street_address`/`extended_address`/`address_locality`/`address_region`/
+  `address_country`/`postal_code` (`PostalAddress`, fulfillment
+  destinations). §12's "Money-adjacent PII" named no real key — `Money`/
+  `Total` carry only amounts and currency codes (design-log §23 step 4).
+- `Rack::WebhookEndpoint` takes a `logger:` kwarg (defaulting to
+  `Portage::Ucp.configuration.logger`) and emits `order_webhook_received`
+  (order id, checkout id) on a verified payload and `order_webhook_rejected`
+  (reason: `invalid_signature` or `bad_request`) on the two rejection paths
+  — never the request body. No new `config.event_sink`: this endpoint is a
+  plain Rack app never built through `Mcp::Server.build`, so it can't reach
+  `mcp`'s own request hooks, and threading the gem's existing `logger:`
+  convention through one more constructor was the whole fix (design-log
+  §23 step 5).
+
 ## [0.3.0] - 2026-08-27
 
 - `Portage::Ucp::Support::Retry` (`lib/portage/ucp/support/retry.rb`) —

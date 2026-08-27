@@ -146,4 +146,94 @@ RSpec.describe Portage::Ucp::Mcp::Server do
     expect(logged["event"]).to eq("tool_called")
     expect(logged["action"]).to eq("get_product")
   end
+
+  it "generates a correlation id and stamps it on both events when no traceparent is inbound (§23)" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 12, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" } }
+                         })
+
+    received, called = io.string.lines.map { |line| JSON.parse(line) }
+    expect(received["correlation_id"]).not_to be_nil
+    expect(called["correlation_id"]).to eq(received["correlation_id"])
+  end
+
+  it "prefers the inbound W3C traceparent from _meta over generating one (§23)" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 13, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" },
+                                     _meta: { traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" } }
+                         })
+
+    received, called = io.string.lines.map { |line| JSON.parse(line) }
+    expect(received["correlation_id"]).to eq("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+    expect(called["correlation_id"]).to eq(received["correlation_id"])
+  end
+
+  it "never reuses a generated correlation id across requests (no Context-memoization trap, §23)" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 14, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" } }
+                         })
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 15, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" } }
+                         })
+
+    first_id, = io.string.lines.first(2).map { |line| JSON.parse(line)["correlation_id"] }
+    second_id, = io.string.lines.last(2).map { |line| JSON.parse(line)["correlation_id"] }
+    expect(first_id).not_to eq(second_id)
+  end
+
+  it "falls back to a generated id when the inbound traceparent doesn't match the W3C format" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 16, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" },
+                                     _meta: { traceparent: "not-a-real-traceparent" } }
+                         })
+
+    received = JSON.parse(io.string.lines.first)
+    expect(received["correlation_id"]).not_to eq("not-a-real-traceparent")
+    expect(received["correlation_id"]).to match(/\A[0-9a-f-]{36}\z/)
+  end
+
+  it "never writes an unauthenticated caller's malformed traceparent into the pre-auth log" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+    attacker_traceparent = "ATTACKER-#{'x' * 200}"
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 17, method: "tools/call",
+                           params: { name: "create_checkout",
+                                     arguments: { line_items: [], idempotency_key: "unauth-1" },
+                                     _meta: { traceparent: attacker_traceparent } }
+                         })
+
+    received = JSON.parse(io.string.lines.first)
+    expect(received["event"]).to eq("tool_call_received")
+    expect(received["correlation_id"]).not_to eq(attacker_traceparent)
+    expect(received["correlation_id"].length).to be < 40
+  end
 end

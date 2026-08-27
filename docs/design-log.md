@@ -437,14 +437,75 @@ original design had no inbound path. Added:
 
 ## 12. Observability
 
-Commerce debugging needs a trail. The gem:
-- emits structured log events (tool called, capability negotiated, checkout state
-  transition) through a consumer-injected logger (defaults to `Logger.new($stdout)`);
-- stamps a correlation id per MCP session and includes it on every event so an agent session
-  can be traced end to end;
-- **redacts** `payment_token`, `oauth_token`, `Authorization`, and any `Money`-adjacent PII
-  from logs by default;
-- instruments nothing to a specific APM — exposes the events, lets the consumer wire them.
+**This section was aspirational from §0 through 2026-08-27** — it described the
+intended shape before most of it existed. §23 reconciled it against the code
+(finding only one of three promised event types actually fired, an
+arguments-logged-before-auth ordering bug, and a correlation-id design that
+would have collided across sessions) and §23/§24's steps 1–6 are what's below
+now: what the gem actually does, not what it was meant to.
+
+Every event is a single `Portage::Ucp::Observability.log(logger, event, **fields)`
+call — one JSON line (`{"event" => ..., **fields}`), through a consumer-injected
+`Logger`-like object (`config.logger`, defaults to `Logger.new($stdout)`). There
+is no APM-specific instrumentation and no `config.event_sink` — see below.
+
+**Event types, and where each actually fires:**
+- `tool_call_received` — `Mcp::Server.call_tool`, emitted *before*
+  `authorize`/`rate_limit` run. Carries `capability`, `action`, `correlation_id`
+  only — deliberately no `arguments`, since this fires for every caller
+  including ones that go on to fail auth (§23 step 1).
+- `tool_called` — same call site, emitted only *after* both `authorize` and
+  `rate_limit` pass. Carries `capability`, `action`, `correlation_id`, and the
+  full `arguments` hash.
+- `checkout_state_transition` — `Support::CheckoutState#record_checkout_status`,
+  adapter-side. Only fires when the adapter is called through `Dispatcher`
+  (which sets `[logger, correlation_id]` on it via `#ucp_observability=`
+  immediately before each call, §23 step 3); an adapter invoked directly
+  bypasses this and the event silently doesn't fire — there is no other call
+  path today. Carries `checkout_id`, `status`, `correlation_id`.
+- `order_webhook_received` / `order_webhook_rejected` — `Rack::WebhookEndpoint`
+  (§11, §23 step 5), a plain Rack app never built through `Mcp::Server.build`
+  and so structurally outside `mcp`'s own request hooks. Takes its own
+  `logger:` (same `config.logger` default as everything else). `received`
+  carries `order_id`/`checkout_id` on a verified payload; `rejected` carries
+  `reason` (`invalid_signature` or `bad_request`) on the two rejection paths —
+  never the request body, before or after signature verification.
+- `capability_negotiated` — **not emitted.** `CapabilityNegotiator#negotiate`
+  (§10) has no call site anywhere in the gem outside its own spec, so there's
+  nowhere to log from; noted in `capability_negotiator.rb` for whoever builds
+  that call site next. Dropped from the list above rather than promised and
+  unfulfilled a second time.
+
+**Correlation id is per-request, not per-session** (§23 step 2, §24). MCP's
+Streamable HTTP transport is stateful and multi-session — one `MCP::Server`
+serves many sessions — so memoizing an id anywhere per-process (the original,
+wrong instinct) would stamp every session with the same value.
+`Server.correlation_id_for(server_context)` instead reads the inbound W3C
+Trace Context `traceparent` from `server_context[:_meta]` (SEP-414,
+`MCP::TraceContext`, passed through by the `mcp` gem untouched) and falls back
+to `SecureRandom.uuid` only when absent, so an agent that already traces its
+own calls gets one trace across both sides. `tool_call_received`/`tool_called`
+for one call share the id; two calls in one process never share a generated
+one. `checkout_state_transition` and the webhook events carry a correlation
+id the same way, threaded from the same request.
+
+**Redaction.** `Observability::REDACTED_KEYS` (`payment_token`, `oauth_token`,
+`authorization`, `email`, `first_name`, `last_name`, `phone_number`,
+`street_address`, `extended_address`, `address_locality`, `address_region`,
+`address_country`, `postal_code`) is applied recursively through any hash or
+array nesting depth before a field reaches the log. `email` covers
+`Identity` (§3, identity-linking results); the rest cover `PostalAddress`
+(fulfillment destinations). `Money`/`Total` carry only amounts and currency
+codes — no PII — so "Money-adjacent PII," this section's original phrase,
+named no real key and is gone (§23 step 4).
+
+**No `config.event_sink`.** §23 raised it as a possible seam for events that
+fire outside an MCP request; §24 built the concrete case
+(`Rack::WebhookEndpoint`) and found a dedicated interface unjustified —
+threading the existing `config.logger` convention through one more
+constructor (`logger:`, same default everywhere else) was the whole fix. If a
+second, genuinely-outside-a-request producer shows up later, decide then
+whether one new config option still isn't enough.
 
 ## 13. Testing strategy (expanded)
 
@@ -1629,3 +1690,99 @@ redaction into a store that already holds unredacted rows.
    §12 was aspirational from §0 until this section — the next person
    reading it should be able to tell which parts of this log are decisions
    and which are shipped behavior.
+
+## 24. Handoff — §23 steps 3–6 (added 2026-08-27)
+
+Steps 1 and 2 are done, on branch `handoff-23-observability-correlation-id`
+(off `main`, two commits, not yet merged). Steps 3–6 remain.
+
+**What's landed.** `Mcp::Server.call_tool`
+(`portage-ucp/lib/portage/ucp/mcp/server.rb`) now emits a pre-auth
+`tool_call_received` event (capability, action, correlation_id — no
+arguments) before `authorize`/`rate_limit` run, and the full `tool_called`
+event with `arguments` only after both pass. A new
+`Server.correlation_id_for(server_context)` reads `server_context[:_meta]`'s
+`traceparent` (SEP-414, `MCP::TraceContext`) and falls back to
+`SecureRandom.uuid` when absent; both events carry the same
+`correlation_id` for one call. This is deliberately per-*request*, not
+per-*session* — see §23's "obvious fix is wrong" note on why memoizing an
+id onto `Server::Context` (built once per process in `.build`) breaks under
+`mcp` 0.25.0's multi-session Streamable HTTP transport. Four new specs in
+`portage-ucp/spec/mcp/server_spec.rb` cover: no-arguments-when-unauthorized
+(from step 1, already existing before this branch — verify it's still
+there), fallback generation, traceparent pass-through, and two requests in
+one process never sharing a generated id. Full suite (230 examples) and
+rubocop both green on this branch as of the last commit.
+
+**Step 3 is the big one — thread logger + correlation id into `Dispatcher`
+and `CheckoutState`.** Right now `Dispatcher.new` takes only
+`adapter:`/`registry:` (see `portage-ucp/lib/portage/ucp/dispatcher.rb`),
+and `CapabilityNegotiator` (§10) never touches `Observability` at all —
+so `capability_negotiated` has no call site to add a log line to yet;
+find where negotiation actually happens (search for where
+`CapabilityNegotiator` is invoked, not just defined) before assuming
+`Dispatcher` is the only collaborator that needs the plumbing.
+`Support::CheckoutState#record_checkout_status` is adapter-side and has no
+logger in reach today, so this needs to decide: does the logger travel with
+the adapter instance (constructor arg, mirroring how `Context` already
+threads `authenticator`/`rate_limiter`), or does `Dispatcher` wrap adapter
+calls and log around them instead of the adapter logging itself? The
+correlation id has a harder problem: `Dispatcher.call` and
+`CheckoutState#record_checkout_status` are both already-existing method
+signatures called from multiple places — check every call site before
+adding a `correlation_id:` parameter, since a required kwarg there is a
+breaking change for any code that calls the adapter/dispatcher directly
+outside `Mcp::Server`. If step 3 turns out not to be worth the plumbing for
+either event, §23 already says to cut it from §12 rather than ship it
+half-built — don't force both events in if only one turns out clean to
+wire.
+
+**Step 4 — resolve the PII phrasing before the journal/console (§22)
+land.** Decide identity-linking result (§3) and fulfillment-destination
+keys (name, address, contact fields — check `Support::` value objects for
+the actual field names) get added to
+`Observability::REDACTED_KEYS`, or narrow what §12 promises about
+"Money-adjacent PII" instead. Whichever way, `REDACTED_KEYS` in
+`portage-ucp/lib/portage/ucp/observability.rb` and §12's prose must end up
+saying the same thing — grep for "PII" and "Money-adjacent" in §12 after
+deciding to make sure the wording actually changed, not just the code.
+
+**Step 5 — the event sink, only with the write-up done first.** Don't add
+`config.event_sink` without writing the outside-an-MCP-request
+justification into the code (a comment next to the config option, not just
+this log) — the point of the sink is that `Rack::WebhookEndpoint` (§11)
+and the adapter-side checkout transitions from step 3 can't reach any of
+`mcp`'s own `around_request`/`instrumentation_callback`/
+`notify_log_message` hooks. If step 3 ends up not giving `CheckoutState`
+a logger, re-check whether the sink is still justified before building it
+— a sink whose only producer is the one path `mcp`'s hooks already cover
+has no reason to exist, per §23.
+
+**Step 6 — rewrite §12 last.** Do this only after 3–5 land or are
+deliberately cut, and say in §12 itself that it was aspirational from §0
+until §23 reconciled it, so the next reader can tell decisions from shipped
+behavior.
+
+**Step 5 — done (2026-08-27).** Skipped the interface, per §23's own
+escape hatch ("skip the interface and document 'wire `around_request`'
+instead"): no `config.event_sink` was added. `Rack::WebhookEndpoint` is a
+plain Rack app, never built through `Mcp::Server.build`, so it's the one
+genuinely-outside-an-MCP-request case — `mcp`'s hooks structurally can't
+see it, not just don't happen to. It now takes a `logger:` kwarg
+(defaulting to `Portage::Ucp.configuration.logger`, same pattern as every
+other logging collaborator in the gem) and emits `order_webhook_received`
+(order id, checkout id) on a verified payload and `order_webhook_rejected`
+(reason: `invalid_signature` or `bad_request`) on the two rejection paths
+— never the body, before or after the signature check. The
+adapter-side-checkout-transitions half of the original justification
+didn't hold up: `CheckoutState` (step 3) only gets a logger when called
+through `Dispatcher`, which today is only reachable from
+`Mcp::Server.call_tool` — inside a request, not outside one — so it isn't
+a second producer for the same sink. Four new specs in
+`portage-ucp/spec/rack/webhook_endpoint_spec.rb` cover both event types
+and the rejection-reason field; full suite (237 examples) and rubocop
+clean on the touched files.
+
+**Before starting**, rebase/merge `handoff-23-observability-correlation-id`
+onto whatever `main` has moved to, and re-run the full spec suite —
+steps 1–2 haven't been reviewed or merged yet.
