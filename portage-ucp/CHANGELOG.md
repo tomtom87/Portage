@@ -36,6 +36,15 @@ pre-1.0, so APIs may still shift between minor versions.
   `address_country`/`postal_code` (`PostalAddress`, fulfillment
   destinations). §12's "Money-adjacent PII" named no real key — `Money`/
   `Total` carry only amounts and currency codes (design-log §23 step 4).
+- `Rack::WebhookEndpoint` takes a `logger:` kwarg (defaulting to
+  `Portage::Ucp.configuration.logger`) and emits `order_webhook_received`
+  (order id, checkout id) on a verified payload and `order_webhook_rejected`
+  (reason: `invalid_signature` or `bad_request`) on the two rejection paths
+  — never the request body. No new `config.event_sink`: this endpoint is a
+  plain Rack app never built through `Mcp::Server.build`, so it can't reach
+  `mcp`'s own request hooks, and threading the gem's existing `logger:`
+  convention through one more constructor was the whole fix (design-log
+  §23 step 5).
 
 ## [0.3.0] - 2026-08-27
 
