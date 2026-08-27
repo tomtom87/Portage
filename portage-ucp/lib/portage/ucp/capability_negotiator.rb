@@ -13,6 +13,14 @@ module Portage
     # params instead. Either way this class only deals in the parsed version
     # list — transports are responsible for extracting it from their own
     # request shape.
+    #
+    # §23 step 3: §12 promises a `capability_negotiated` event here, but
+    # #negotiate has no call site anywhere in this gem outside its own spec
+    # — nothing in the request path (transport `initialize` handling, or
+    # otherwise) invokes it yet. Wiring the event would mean building that
+    # call site first, which is a bigger change than threading a logger
+    # through an existing collaborator; left undone, and cut from §12
+    # rather than promised. Revisit once something actually calls #negotiate.
     class CapabilityNegotiator
       def initialize(registry: CapabilityRegistry.default)
         @registry = registry

@@ -17,8 +17,10 @@ module Portage
                        authenticator: Portage::Ucp.configuration.authenticator,
                        rate_limiter: Portage::Ucp.configuration.rate_limiter,
                        logger: Portage::Ucp.configuration.logger, **server_opts)
-          context = Context.new(dispatcher: Portage::Ucp::Dispatcher.new(adapter: adapter, registry: registry),
-                                authenticator: authenticator, rate_limiter: rate_limiter, logger: logger)
+          context = Context.new(
+            dispatcher: Portage::Ucp::Dispatcher.new(adapter: adapter, registry: registry, logger: logger),
+            authenticator: authenticator, rate_limiter: rate_limiter, logger: logger
+          )
           tools = registry.advertised(adapter).flat_map do |capability|
             capability.actions.map do |action_name, method_name|
               build_tool(adapter: adapter, capability: capability, action_name: action_name,
@@ -60,7 +62,8 @@ module Portage
                                                                          action: action_name, arguments: kwargs,
                                                                          correlation_id: correlation_id)
 
-          result = context.dispatcher.call(capability: capability.name, action: action_name, arguments: kwargs)
+          result = context.dispatcher.call(capability: capability.name, action: action_name, arguments: kwargs,
+                                           correlation_id: correlation_id)
           ::MCP::Tool::Response.new(result[:content], structured_content: result[:structuredContent])
         end
 

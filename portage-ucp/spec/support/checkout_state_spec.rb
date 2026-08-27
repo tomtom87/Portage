@@ -1,4 +1,5 @@
 require "spec_helper"
+require "stringio"
 
 RSpec.describe Portage::Ucp::Support::CheckoutState do
   let(:adapter) do
@@ -39,5 +40,21 @@ RSpec.describe Portage::Ucp::Support::CheckoutState do
   it "keys orders by string, so an integer id from a JSON body still resolves" do
     adapter.link(123, "cart-1")
     expect(adapter.origin_of("123")).to eq("cart-1")
+  end
+
+  it "doesn't log when nothing has set ucp_observability (§23)" do
+    expect { adapter.mark("cart-1", "completed") }.not_to raise_error
+  end
+
+  it "emits a checkout_state_transition event once ucp_observability= has been set (§12, §23)" do
+    io = StringIO.new
+    logger = Logger.new(io).tap { |l| l.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" } }
+    adapter.ucp_observability = [logger, "corr-abc"]
+
+    adapter.mark("cart-1", "completed")
+
+    logged = JSON.parse(io.string.lines.last)
+    expect(logged).to include("event" => "checkout_state_transition", "checkout_id" => "cart-1",
+                              "status" => "completed", "correlation_id" => "corr-abc")
   end
 end

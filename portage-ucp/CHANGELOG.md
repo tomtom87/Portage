@@ -4,6 +4,32 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `Mcp::Server.call_tool` now emits a minimal pre-auth `tool_call_received`
+  event (capability, action, correlation id — no arguments) before
+  `authorize`/`rate_limit` run, moving the full `tool_called` event
+  (arguments included) below them. Previously the full event, arguments and
+  all, was logged before authorization, so an unauthenticated caller could
+  write attacker-chosen content into the operator's logs at whatever volume
+  the rate limiter would otherwise have refused (design-log §23).
+- `Mcp::Server.correlation_id_for` stamps both events with a correlation id
+  read from the inbound W3C `traceparent` in `server_context[:_meta]`
+  (SEP-414, `MCP::TraceContext`), falling back to `SecureRandom.uuid` when
+  absent. Deliberately per-request, not per-session — `Server::Context` is
+  built once per process in `.build`, and `mcp` 0.25.0's Streamable HTTP
+  transport is stateful and multi-session, so memoizing an id there would
+  stamp every session in the process with the same value (design-log §23).
+- `Dispatcher` now threads its logger and each call's correlation id onto the
+  adapter (`Support::CheckoutState#ucp_observability=`) so a
+  `checkout_state_transition` event (§12) fires from `record_checkout_status`
+  carrying the same correlation id as the `tool_called` event that triggered
+  it — without adding a `correlation_id:` kwarg to any checkout method, which
+  would have been a breaking change to the `Adapter` contract. No
+  `capability_negotiated` event yet: `CapabilityNegotiator#negotiate` has no
+  call site anywhere in the gem outside its own spec, so there's nowhere to
+  emit it from without building that call site first (design-log §23).
+
 ## [0.3.0] - 2026-08-27
 
 - `Portage::Ucp::Support::Retry` (`lib/portage/ucp/support/retry.rb`) —
