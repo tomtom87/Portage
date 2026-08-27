@@ -20,7 +20,29 @@ module Portage
     # otherwise) invokes it yet. Wiring the event would mean building that
     # call site first, which is a bigger change than threading a logger
     # through an existing collaborator; left undone, and cut from §12
-    # rather than promised. Revisit once something actually calls #negotiate.
+    # rather than promised.
+    #
+    # §25: the reason there's no call site is structural, not just
+    # unbuilt. `mcp` 0.25.0's `MCP::Server#init`
+    # (lib/mcp/server.rb:608) never reads `params[:_meta]` and never calls
+    # `add_instrumentation_data`, unlike `call_tool` — so nothing at
+    # initialize time reaches `around_request`/`instrumentation_callback`
+    # or the `_meta` mechanism `Mcp::Server.correlation_id_for` already
+    # relies on (§23/§24). And over HTTP,
+    # `StreamableHTTPTransport#handle_initialization`
+    # (lib/mcp/server/transports/streamable_http_transport.rb:812) builds
+    # a `Rack::Request` with full headers but only pulls `HTTP_ORIGIN` out
+    # of it before handing the raw JSON body string to
+    # `ServerSession#handle_json` — a `UCP-Agent` header never crosses into
+    # the server at all. Wiring #negotiate for real means monkeypatching
+    # both (subclass/prepend `MCP::Server#init` to capture
+    # `clientInfo`/`_meta`, and `StreamableHTTPTransport#handle_initialization`
+    # to capture the `UCP-Agent` header), coupling this gem to `mcp`
+    # internals that could silently break on a `mcp` gem upgrade.
+    # Revisiting this needs either an upstream `mcp` gem hook at
+    # initialize time, or a deliberate decision to accept the monkeypatch
+    # coupling — not something to build silently as a side effect of
+    # another task.
     class CapabilityNegotiator
       def initialize(registry: CapabilityRegistry.default)
         @registry = registry
