@@ -919,7 +919,73 @@ Caveats for whoever picks this up:
   `mise uninstall ruby@3.4.9 && mise install ruby@3.4.9` to get a native arm64
   build, then a fresh `bundle install`. If `bundle exec rspec` throws a
   LoadError mentioning architecture, check `mise exec -- ruby -v`'s platform
-  suffix before chasing anything gem-level.
+  suffix before chasing anything gem-level. Separately, `bundle exec` under
+  the *bare* `ruby`/`bundle` on PATH resolves to a different, un-pinned mise
+  ruby (3.3.9) than the one `.mise.toml` asks for — always run specs via
+  `mise exec -- bundle exec rspec`, not `bundle exec rspec` alone, or it
+  silently loads against gems that were never installed for that Ruby.
+
+**Wired and green (2026-08-27):** `portage-ucp-shopify/spec/portage/ucp/
+shopify/conformance_spec.rb` runs the kit against the live store per the
+plan above (`WebMock.disable_net_connect!(allow: shop_domain)` scoped to
+this file's own `around` block, `.env` sourced manually since neither this
+repo nor the adapter gem carries a dotenv dependency; every example
+self-skips when `SHOPIFY_SHOP_DOMAIN` is absent, so a checkout with no live
+store configured still passes). `bundle exec rspec.rb`'s prediction from the
+original handoff held — it caught four real bugs, none of them webmock's
+fixed-response-body limitation, all of them "the real API doesn't return
+what our stubs pretended it would":
+
+1. **`ProductVariant#price`/`#compareAtPrice` are the bare `Money` scalar**
+   (a decimal string), not a `MoneyV2` object — Admin API 2026-04 rejects
+   `{ amount currencyCode }` sub-selections on them. `Mapper#variant` now
+   takes the product's own currency (from `priceRange`, shared by every
+   variant) and builds the `Price` from the scalar directly
+   (`Mapper.scalar_price`).
+2. **`ProductCompareAtPriceRange`'s fields are `minVariantCompareAtPrice`/
+   `maxVariantCompareAtPrice`**, not `minVariantPrice`/`maxVariantPrice`
+   (those names are `ProductPriceRangeV2`-only, and were copy-pasted onto
+   the compare-at query and mapper).
+3. **Storefront's `Cart#deliveryGroups` is a paginated connection**
+   (`CartDeliveryGroupConnection`, needs `(first: N) { nodes { ... } }`),
+   not a bare list — `queries.rb` and `Mapper#checkout_fulfillment` both
+   assumed the latter (§19 confirmed the *mutation* shapes live but never
+   actually exercised a cart with delivery groups against the query shape).
+4. **`Cart#cost.totalTaxAmount` is nullable** — a fresh cart with no
+   shipping address/tax context returns `null`, not a zeroed `MoneyV2`;
+   `Mapper#totals` crashed on it (`nil["amount"]`) rather than treating
+   absent tax as zero (which `Support::Totals.summary` already handles
+   correctly once given an actual `0`).
+
+None of these were catchable by `adapter_spec.rb`'s hand-rolled webmock
+fixtures, which fabricate response shapes by hand — they're exactly the
+"schema-valid-looking test double, wrong-shaped real API" gap §17 exists to
+close. Every affected fixture (`adapter_spec.rb`, `mapper_spec.rb`) updated
+to match the real shapes; a new `mapper_spec.rb` case locks in the null-tax
+handling.
+
+**A fifth thing surfaced that isn't a bug, but is a real conformance-kit
+gap:** the kit passed one `existing_product_id` to every example, but
+Shopify genuinely needs two different ids for "the same" item —
+`get_product`/`search_catalog` go through the Admin API's `Product` node,
+while `create_checkout`'s `cart_lines` feeds straight into Storefront's
+`CartLineInput#merchandiseId`, a `ProductVariant` GID (see `Mapper`'s
+top-of-file note — this was already known, just never exercised against a
+real store end-to-end). Fixed by giving the kit itself
+(`Portage::Ucp::RSpec`, `lib/portage/ucp/rspec.rb`) an `existing_variant_id`
+let that defaults to `existing_product_id` — a no-op for every other
+adapter, where the two are the same id — and threading it through the
+checkout-side examples instead of `existing_product_id`. Shopify's
+conformance spec sets both explicitly (`gid://shopify/Product/...` /
+`gid://shopify/ProductVariant/...`).
+
+**Still not built:** the other six adapters (step 5 of the original
+handoff) — Wix/WooCommerce/BigCommerce/Magento (cart+checkout+order only)
+and Etsy/Instagram (no checkout capability advertised at all). None of them
+have a live test store the way Shopify now does, so each would need either
+its own sandbox credentials or a decision to run the kit against webmock
+stubs there instead (accepting the "passes for the wrong reason" risk
+this section originally flagged for Shopify, now resolved for Shopify only).
 
 ---
 
