@@ -24,9 +24,6 @@ Metrics/BlockLength:
 Metrics/MethodLength:
   Max: 15
 
-Metrics/AbcSize:
-  Max: 25
-
 Metrics/ParameterLists:
   Max: 6
   Exclude:
@@ -39,6 +36,11 @@ Metrics/ParameterLists:
     # optional order_confirmation field — same one-keyword-per-wire-field
     # rationale as manifest.rb above, not a sign the object needs splitting.
     - "lib/portage/ucp/value_objects.rb"
+    # One keyword per Product field the spec seeds — same rationale as
+    # value_objects.rb above, applied to the fixture builder every core-gem
+    # spec shares instead of hand-assembling Price/Description/Variant/
+    # Product itself.
+    - "spec/support/product_factory.rb"
 
 Style/HashSlice:
   Enabled: false
@@ -47,6 +49,24 @@ Style/HashSlice:
 # (Fulfillment/Expectation/FulfillmentEvent/Adjustment alongside the existing
 # Total/Item/LineItem/etc.), same rationale as the ParameterLists exclude above.
 Metrics/ModuleLength:
+  Exclude:
+    - "lib/portage/ucp/value_objects.rb"
+
+# Product/Variant's optional_wire_h methods each omit ~5 independently-
+# optional wire fields (one `if`/`unless` per field, same "omit when absent"
+# posture every other value object in this file already uses) — that's the
+# schema's own field count, not tangled logic. Same breadth-not-complexity
+# rationale as the ModuleLength exclude above, on the same file.
+Metrics/AbcSize:
+  Max: 25
+  Exclude:
+    - "lib/portage/ucp/value_objects.rb"
+
+Metrics/CyclomaticComplexity:
+  Exclude:
+    - "lib/portage/ucp/value_objects.rb"
+
+Metrics/PerceivedComplexity:
   Exclude:
     - "lib/portage/ucp/value_objects.rb"
 

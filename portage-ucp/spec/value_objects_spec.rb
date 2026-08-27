@@ -14,15 +14,88 @@ RSpec.describe "Portage::Ucp value objects" do
     end
   end
 
+  describe Portage::Ucp::Price do
+    it "serializes amount/currency" do
+      price = Portage::Ucp::Price.new(amount: 500, currency: "USD")
+      expect(price.to_wire_h).to eq({ "amount" => 500, "currency" => "USD" })
+    end
+  end
+
+  describe Portage::Ucp::Description do
+    it "omits formats that weren't given" do
+      description = Portage::Ucp::Description.new(plain: "Cold brew")
+      expect(description.to_wire_h).to eq({ "plain" => "Cold brew" })
+    end
+  end
+
+  describe Portage::Ucp::Variant do
+    it "requires id/title/description/price, omitting optional fields when unset" do
+      variant = Portage::Ucp::Variant.new(
+        id: "var_1", title: "Default", description: Portage::Ucp::Description.new(plain: "Cold brew"),
+        price: Portage::Ucp::Price.new(amount: 500, currency: "USD")
+      )
+      expect(variant.to_wire_h).to eq(
+        { "id" => "var_1", "title" => "Default", "description" => { "plain" => "Cold brew" },
+          "price" => { "amount" => 500, "currency" => "USD" } }
+      )
+    end
+
+    it "includes barcodes/sku/availability once present" do
+      variant = Portage::Ucp::Variant.new(
+        id: "var_1", title: "Default", description: Portage::Ucp::Description.new(plain: "Cold brew"),
+        price: Portage::Ucp::Price.new(amount: 500, currency: "USD"), sku: "SKU-1",
+        barcodes: [{ "type" => "UPC", "value" => "012345678905" }], availability: { "available" => true }
+      )
+      wire = variant.to_wire_h
+      expect(wire["sku"]).to eq("SKU-1")
+      expect(wire["barcodes"]).to eq([{ "type" => "UPC", "value" => "012345678905" }])
+      expect(wire["availability"]).to eq({ "available" => true })
+    end
+  end
+
   describe Portage::Ucp::Product do
-    it "holds catalog fields" do
+    it "holds catalog fields, requiring price_range and at least one variant" do
+      price = Portage::Ucp::Price.new(amount: 500, currency: "USD")
+      variant = Portage::Ucp::Variant.new(
+        id: "prod_1_default", title: "Coffee", description: Portage::Ucp::Description.new(plain: "Cold brew"),
+        price: price
+      )
       product = Portage::Ucp::Product.new(
-        id: "prod_1", title: "Coffee", description: "Cold brew",
-        price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"),
-        available: true, variants: [], url: "https://example.com/prod_1"
+        id: "prod_1", title: "Coffee", description: Portage::Ucp::Description.new(plain: "Cold brew"),
+        price_range: Portage::Ucp::PriceRange.new(min: price, max: price),
+        variants: [variant], url: "https://example.com/prod_1"
       )
       expect(product.title).to eq("Coffee")
-      expect(product.price.currency).to eq("USD")
+      expect(product.to_wire_h["price_range"]).to eq(
+        { "min" => { "amount" => 500, "currency" => "USD" }, "max" => { "amount" => 500, "currency" => "USD" } }
+      )
+      expect(product.to_wire_h["variants"].size).to eq(1)
+    end
+  end
+
+  def minimal_product(id:)
+    price = Portage::Ucp::Price.new(amount: 500, currency: "USD")
+    description = Portage::Ucp::Description.new(plain: "d")
+    variant = Portage::Ucp::Variant.new(id: "#{id}_v1", title: "Coffee", description: description, price: price)
+    Portage::Ucp::Product.new(id: id, title: "Coffee", description: description,
+                              price_range: Portage::Ucp::PriceRange.new(min: price, max: price), variants: [variant])
+  end
+
+  describe Portage::Ucp::CatalogSearchResult do
+    it "wraps products for the search_response wire shape" do
+      product = minimal_product(id: "p1")
+
+      result = Portage::Ucp::CatalogSearchResult.new(products: [product])
+      expect(result.to_wire_h).to eq({ "products" => [product.to_wire_h] })
+    end
+  end
+
+  describe Portage::Ucp::ProductDetail do
+    it "wraps a single product for the get_product_response wire shape" do
+      product = minimal_product(id: "p1")
+
+      detail = Portage::Ucp::ProductDetail.new(product: product)
+      expect(detail.to_wire_h).to eq({ "product" => product.to_wire_h })
     end
   end
 

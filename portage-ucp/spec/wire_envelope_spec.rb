@@ -16,8 +16,13 @@ RSpec.describe Portage::Ucp::WireEnvelope do
     expect(wrapped["ucp"]).to eq({ "version" => "2026-04-08" })
   end
 
+  it "adds a minimal version envelope to a catalog payload" do
+    wrapped = described_class.wrap("dev.ucp.shopping.catalog", { "products" => [] })
+    expect(wrapped["ucp"]).to eq({ "version" => "2026-04-08" })
+  end
+
   it "leaves payloads for capabilities with no known envelope untouched" do
-    payload = { "id" => "prod_1" }
-    expect(described_class.wrap("dev.ucp.shopping.catalog", payload)).to equal(payload)
+    payload = { "subject" => "sub_1" }
+    expect(described_class.wrap("dev.ucp.shopping.identity", payload)).to equal(payload)
   end
 end

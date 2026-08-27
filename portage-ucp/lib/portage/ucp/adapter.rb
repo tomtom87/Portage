@@ -4,9 +4,11 @@ module Portage
     #   Unoverridden methods leave that capability out of the manifest.
     class Adapter
       # --- Catalog (dev.ucp.shopping.catalog) ---
-      # @return [Array<Portage::Ucp::Product>]
+      # @return [Portage::Ucp::CatalogSearchResult]
       def search_catalog(query:, limit:) = not_implemented
-      # @return [Portage::Ucp::Product, nil]
+      # nil when the product isn't found, same not-found posture as
+      # get_cart/get_checkout/get_order.
+      # @return [Portage::Ucp::ProductDetail, nil]
       def get_product(product_id:) = not_implemented
 
       # --- Cart (dev.ucp.shopping.cart) ---

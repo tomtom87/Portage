@@ -1,5 +1,6 @@
 require "spec_helper"
 require "support/fake_adapter"
+require "support/product_factory"
 require "stringio"
 
 RSpec.describe Portage::Ucp::Mcp::Server do
@@ -7,11 +8,7 @@ RSpec.describe Portage::Ucp::Mcp::Server do
   let(:server) { described_class.build(adapter: adapter) }
 
   before do
-    adapter.seed_product(
-      Portage::Ucp::Product.new(id: "prod_1", title: "Espresso Capsules", description: "Coffee capsules",
-                                price: Portage::Ucp::Money.new(amount_minor: 1999, currency: "USD"),
-                                available: true, variants: [], url: "https://example.com/prod_1")
-    )
+    adapter.seed_product(ProductFactory.build(id: "prod_1", title: "Espresso Capsules", price_minor: 1999))
   end
 
   it "lists a tool for every advertised capability action" do
@@ -29,7 +26,7 @@ RSpec.describe Portage::Ucp::Mcp::Server do
 
     result = response[:result]
     expect(result[:isError]).to be_falsey
-    expect(result[:structuredContent].id).to eq("prod_1")
+    expect(result[:structuredContent]["product"]["id"]).to eq("prod_1")
     expect(result[:content].first[:text]).to include("prod_1")
   end
 

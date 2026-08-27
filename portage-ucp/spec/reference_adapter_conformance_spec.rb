@@ -1,5 +1,6 @@
 require "spec_helper"
 require "portage/ucp/rspec"
+require "support/product_factory"
 
 # Runs the conformance kit against the gem's own ReferenceAdapter — proves
 # both that the shipped reference implementation actually satisfies the
@@ -11,16 +12,9 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
   let(:out_of_stock_product_id) { "oos_1" }
 
   before do
-    adapter.seed_product(
-      Portage::Ucp::Product.new(id: "prod_1", title: "Cold Brew", description: "desc",
-                                price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"),
-                                available: true, variants: [], url: "https://example.com/prod_1")
-    )
-    adapter.seed_product(
-      Portage::Ucp::Product.new(id: "oos_1", title: "Sold Out Blend", description: "desc",
-                                price: Portage::Ucp::Money.new(amount_minor: 700, currency: "USD"),
-                                available: false, variants: [], url: "https://example.com/oos_1")
-    )
+    adapter.seed_product(ProductFactory.build(id: "prod_1", title: "Cold Brew", price_minor: 500))
+    adapter.seed_product(ProductFactory.build(id: "oos_1", title: "Sold Out Blend", price_minor: 700,
+                                              available: false))
   end
 
   it_behaves_like "a portage adapter"

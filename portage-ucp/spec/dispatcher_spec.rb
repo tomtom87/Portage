@@ -1,30 +1,27 @@
 require "spec_helper"
 require "support/fake_adapter"
+require "support/product_factory"
 
 RSpec.describe Portage::Ucp::Dispatcher do
   let(:adapter) { Portage::Ucp::Support::FakeAdapter.new }
   let(:dispatcher) { described_class.new(adapter: adapter) }
-  let(:product) do
-    Portage::Ucp::Product.new(id: "prod_1", title: "Cold Brew", description: "desc",
-                              price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"),
-                              available: true, variants: [], url: "https://example.com/prod_1")
-  end
+  let(:product) { ProductFactory.build(id: "prod_1", title: "Cold Brew", price_minor: 500) }
 
   before { adapter.seed_product(product) }
 
-  it "accepts a UCP-shaped request and routes it to the matching adapter method" do
+  it "accepts a UCP-shaped request and routes it to the matching adapter method, wrapped in the ucp envelope" do
     response = dispatcher.call(capability: "dev.ucp.shopping.catalog", action: "search_catalog",
                                arguments: { query: "brew", limit: 10 })
 
-    expect(response[:structuredContent]).to eq([product])
+    expect(response[:structuredContent]["products"]).to eq([product.to_wire_h])
+    expect(response[:structuredContent]["ucp"]).to eq({ "version" => "2026-04-08" })
   end
 
   it "wraps the adapter's return value as both structuredContent and a text content block" do
     response = dispatcher.call(capability: "dev.ucp.shopping.catalog", action: "get_product",
                                arguments: { product_id: "prod_1" })
 
-    expect(response[:structuredContent]).to eq(product)
-    expect(response[:content]).to eq([{ type: "text", text: product.inspect }])
+    expect(response[:structuredContent]["product"]).to eq(product.to_wire_h)
   end
 
   it "routes a cart mutation through, idempotency_key included, wrapped in the ucp envelope" do
