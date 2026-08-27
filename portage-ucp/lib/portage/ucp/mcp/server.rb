@@ -1,4 +1,5 @@
 require "mcp"
+require "securerandom"
 
 module Portage
   module Ucp
@@ -46,18 +47,35 @@ module Portage
 
         def self.call_tool(context:, capability:, action_name:, mutating:, kwargs:)
           server_context = kwargs.delete(:server_context)
+          correlation_id = correlation_id_for(server_context)
           Portage::Ucp::Observability.log(context.logger, "tool_call_received", capability: capability.name,
-                                                                                action: action_name)
+                                                                                action: action_name,
+                                                                                correlation_id: correlation_id)
 
           rejection = authorize(context.authenticator, server_context, mutating: mutating) ||
                       rate_limit(context.rate_limiter, server_context, capability.name, mutating: mutating)
           return rejection if rejection
 
           Portage::Ucp::Observability.log(context.logger, "tool_called", capability: capability.name,
-                                                                         action: action_name, arguments: kwargs)
+                                                                         action: action_name, arguments: kwargs,
+                                                                         correlation_id: correlation_id)
 
           result = context.dispatcher.call(capability: capability.name, action: action_name, arguments: kwargs)
           ::MCP::Tool::Response.new(result[:content], structured_content: result[:structuredContent])
+        end
+
+        # Per-request correlation only (§23): `Context` above is built once per
+        # process in `.build`, and mcp 0.25.0's Streamable HTTP transport is
+        # explicitly stateful/multi-session, so memoizing an id there would
+        # stamp every session in the process with the same value. Prefers the
+        # inbound W3C `traceparent` the MCP spec passes through `_meta`
+        # untouched (SEP-414, see `MCP::TraceContext`) so a caller that already
+        # traces its own calls gets one trace across both sides; generates a
+        # fallback only when absent.
+        def self.correlation_id_for(server_context)
+          meta = server_context[:_meta] if server_context.respond_to?(:[])
+          traceparent = meta && (meta[:traceparent] || meta["traceparent"])
+          traceparent || SecureRandom.uuid
         end
 
         def self.authorize(authenticator, server_context, mutating:)
