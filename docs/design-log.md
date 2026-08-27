@@ -995,3 +995,89 @@ came back populated with priced options, and the selection round-tripped via
 `{ deliveryGroupId:, deliveryOptionHandle: }` with `selectedDeliveryOption`
 reflecting the chosen handle. No shape changes needed. `cartPaymentUpdate`'s
 `paymentMethod` sub-shape is still unconfirmed (roadmap step 5).
+
+---
+
+## 20. Catalog conformance (added 2026-08-27)
+
+Auditing whether `search_catalog`/`get_product` actually round-trip through
+UCP's own catalog schemas (`catalog_search.json`, `catalog_lookup.json`) —
+the same conformance-gate posture §17 established for checkout — found they
+didn't come close. `Product` had no `to_wire_h` at all: the dispatcher's
+`wrap` (§5) only merges the `ucp` envelope onto a value object's own wire
+hash, so a return value with no `to_wire_h` fell straight into the
+"unstructured" fallback branch and was never schema-checked by anything.
+Underneath that, the shape itself didn't match the spec — `Product` carried
+a single `price`/`available` pair with `variants` as bare hashes, where
+`types/product.json` requires `price_range` and `variants` (minItems: 1) of
+real `types/variant.json` objects, and neither `search_catalog` nor
+`get_product` wrapped their result in the required `{ucp, products}` /
+`{ucp, product}` container at all (a bare array/Product doesn't validate
+against `search_response`/`get_product_response`).
+
+This mattered beyond spec purity: `types/variant.json` already models GS1
+barcodes (`barcodes[]`), structured Size/Color axes (`options`/
+`selectedOptions`), a `sku`, and both `plain`/`html` description formats,
+and `product.json`/`variant.json` both carry a `metadata` field the spec
+itself names as "business-defined custom data extending the standard
+model" — every structured-attribute gap a business would actually hit
+(GTINs, metafields, real option axes instead of an HTML blob) already had a
+sanctioned home in the vendored spec. The gem just wasn't populating it.
+
+**Fix, in order:**
+1. New value objects — `Price`/`PriceRange` (the wire-shape counterpart to
+   the arithmetic-only `Money`), `Description`, `Category`, `Media`,
+   `OptionValue`/`ProductOption`/`SelectedOption`, `Rating`, and a real
+   `Variant` — plus rewritten `Product`, both with `to_wire_h`. `barcodes`
+   and `availability` stay plain wire-shaped hashes rather than their own
+   Data types, same posture as `Adjustment#line_items`' inline hashes —
+   the spec doesn't name them as standalone `$ref`s either.
+2. `CatalogSearchResult` (`{products, messages}`) and `ProductDetail`
+   (`{product}`) — the containers `search_catalog`/`get_product` actually
+   need to return for `WireEnvelope.wrap` to produce a conformant
+   `search_response`/`get_product_response`. Added a `dev.ucp.shopping.catalog`
+   entry to `WireEnvelope::ENVELOPES` to match. `ProductDetail` doesn't
+   model `catalog_lookup.json`'s `detail_product` extension (`selected`/
+   `options` availability signals for interactive variant narrowing) —
+   `Adapter#get_product`'s signature has no `selected:`/`preferences:`
+   params to source it from yet; unresearched, same backlog posture as §16.
+3. `SchemaValidator#errors_for` gained fragment support
+   (`"path/to.json#/$defs/name"`) — `catalog_search.json`/
+   `catalog_lookup.json` define several request/response shapes as sibling
+   `$defs` rather than one schema per file, unlike `checkout.json`'s flat
+   top-level shape. Resolves through the same `ref_resolver` every other
+   cross-document `$ref` in these vendored schemas already uses, so a
+   `$defs` entry `$ref`-ing a sibling `$defs` entry (`get_product_response`
+   -> `detail_product`) still resolves correctly.
+4. Two new conformance-kit examples (§17) validate `search_catalog`/
+   `get_product` output against `search_response`/`get_product_response`,
+   skipping when `dev.ucp.shopping.catalog` isn't advertised — same pattern
+   as the existing `create_checkout` example.
+5. Shopify: extended `PRODUCT_FIELDS` with `handle`/`tags`/`descriptionHtml`/
+   `options`/`compareAtPriceRange` and each variant's `sku`/`barcode`/
+   `selectedOptions`/`image`/`compareAtPrice` — all standard Storefront/Admin
+   fields, no metafield config needed for GTINs or option axes. `barcode` is
+   a single untyped Shopify string with no declared GS1 sub-standard;
+   inferred from length (8/12/13 -> EAN/UPC/EAN-13) rather than asserted,
+   falling back to bare `"GTIN"` for anything else rather than dropping the
+   value. `ProductVariant` has no description field of its own — reuses the
+   parent product's `Description`, same fallback shape as Wix's variant
+   title falling back to the product's below.
+6. Wix: V1 Catalog's `productOptions`/`choices` map onto `ProductOption`/
+   `OptionValue`; `media.mainMedia` onto `Media`. A single-SKU product (no
+   options) has no `variants` array in V1 at all — `product_variants`
+   synthesizes one straight from the product-level fields, since
+   `types/product.json` requires at least one. No barcode/GTIN field found
+   in V1 Catalog's documented schema — left unmapped rather than guessed at,
+   unresearched whether V3 exposes one.
+
+**Deliberately not done:** the merchant-defined-metadata config DSL
+(`Portage::Ucp::Shopify.configure { |c| c.metadata_field :color_hex,
+metafield: "custom.color_code" } }`) that motivated this pass in the first
+place. `Product#metadata`/`Variant#metadata` now exist as the wire target,
+but nothing populates them yet — Shopify's `metafields(identifiers:)` can't
+fetch-all, so populating them needs a per-adapter config surface (deferred,
+not core-`Configuration`, per `mapper.rb`'s "nothing Shopify-shaped leaks
+past this file") telling the query which metafields to ask for and how to
+parse each one's `type` (string/json/dimension/measurement/...). Follow-up,
+not blocked by anything above.
