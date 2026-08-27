@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `portage history` — local purchase/search history (`Portage::Cli::History`),
+  logged automatically to `~/.portage/history.json` on every `find`/checkout-
+  reaching `buy`. `list` (`--purchases`/`--searches`, `--limit`, `--json`) and
+  `clear` (same scoping flags) subcommands. Separate from `ProbeCache`, which
+  remembers hosts, not actions.
+
 ## [0.2.0] - 2026-08-21
 
 - `PORTAGE_SHIP_*` env vars (`Portage::Cli::ShippingProfile`) — configure a

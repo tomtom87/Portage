@@ -6,6 +6,11 @@ RSpec.describe Portage::Cli do
       products: [{ "id" => "p1", "title" => "Cold Brew" }], checkout_url: nil, message: "ok" }
   end
 
+  before do
+    allow(Portage::Cli::History).to receive(:new)
+      .and_return(instance_double(Portage::Cli::History, record_search: nil, record_purchase: nil))
+  end
+
   describe ".run" do
     it "prints usage and returns 1 for an unknown command" do
       expect { expect(described_class.run(["nope"])).to eq(1) }.to output.to_stderr
@@ -163,6 +168,84 @@ RSpec.describe Portage::Cli do
 
     it "still needs a url or a query" do
       expect { expect(described_class.run(["buy", "--yes"])).to eq(1) }.to output.to_stderr
+    end
+  end
+
+  describe "history" do
+    def stub_history
+      instance_double(Portage::Cli::History).tap do |h|
+        allow(Portage::Cli::History).to receive(:new).and_return(h)
+      end
+    end
+
+    it "records a search after find runs" do
+      allow(Portage::Cli::Find).to receive(:new)
+        .and_return(instance_double(Portage::Cli::Find,
+                                    call: { query: "cold", candidates: [], stores: [], offers: [],
+                                            message: "none" }))
+      h = stub_history
+      allow(h).to receive(:record_search)
+
+      capture_stdout { described_class.run(["find", "--query", "cold"]) }
+
+      expect(h).to have_received(:record_search).with(query: "cold", offer_count: 0, message: "none")
+    end
+
+    it "records a purchase only when the report reached checkout" do
+      h = stub_history
+      allow(h).to receive(:record_purchase)
+      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: report))
+
+      capture_stdout { described_class.run(["buy", "shop.example", "--query", "cold"]) }
+
+      expect(h).to have_received(:record_purchase).with(hash_including(url: "https://shop.example", query: "cold"))
+    end
+
+    it "does not record a purchase for a browse-only report" do
+      h = stub_history
+      allow(h).to receive(:record_purchase)
+      dead_end = report.merge(checkout: false)
+      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: dead_end))
+
+      capture_stdout { described_class.run(["buy", "shop.example", "--query", "cold"]) }
+
+      expect(h).not_to have_received(:record_purchase)
+    end
+
+    it "lists purchases and searches" do
+      h = stub_history
+      allow(h).to receive(:purchases).and_return([{ "url" => "https://shop.example", "query" => "cold",
+                                                    "checkout_status" => "completed", "message" => "Purchased.",
+                                                    "at" => 0 }])
+      allow(h).to receive(:searches).and_return([{ "query" => "cold", "offer_count" => 1, "at" => 0 }])
+
+      output = capture_stdout { expect(described_class.run(["history"])).to eq(0) }
+
+      expect(output).to include("Purchases:", "https://shop.example", "Searches:", "\"cold\"")
+    end
+
+    it "filters to just purchases or searches" do
+      h = stub_history
+      allow(h).to receive(:purchases).and_return([])
+      allow(h).to receive(:searches).and_return([])
+
+      capture_stdout { described_class.run(["history", "list", "--purchases"]) }
+
+      expect(h).to have_received(:purchases)
+      expect(h).not_to have_received(:searches)
+    end
+
+    it "clears history, optionally scoped to one kind" do
+      h = stub_history
+      allow(h).to receive(:clear)
+
+      capture_stdout { described_class.run(["history", "clear", "--searches"]) }
+
+      expect(h).to have_received(:clear).with(kind: "searches")
+    end
+
+    it "prints usage for an unknown history subcommand" do
+      expect { expect(described_class.run(%w[history nope])).to eq(1) }.to output.to_stderr
     end
   end
 
