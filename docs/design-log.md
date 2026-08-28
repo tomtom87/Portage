@@ -1887,6 +1887,41 @@ platform's own per-listing stock field — not a cross-adapter concept.)
    credentials" approach §22's handoff list already prescribes for other
    gaps (line 1568).
 
+## 27. §22's "find this same item elsewhere" — shipped, narrower than named (2026-08-28)
+
+`portage compare <url> --product-id ID` landed (`Portage::Cli::Compare`,
+`portage-cli/lib/portage/cli/compare.rb`), inheriting `Find`'s own
+candidate-discovery/probe/rank pipeline rather than duplicating it. What
+shipped, matched against what §22 and §26 named as open:
+
+- **Offer-identity key (§22/§26 item 1)** — resolved for shopper-initiated
+  comparison specifically, not solved generally. No adapter surfaces a
+  first-class GTIN/UPC field; `Compare` instead reads whatever a variant's
+  wire hash already carries (`sku`, `barcodes[].value`) plus an optional
+  caller-supplied `--id`, and scores confidence honestly rather than
+  pretending a merchant-internal SKU match is as strong as a barcode match —
+  three tiers (`confirmed`/`likely`/`unconfirmed`), never presented as
+  equivalent. §26's multi-vendor-sourcing item 1 (a first-class identity
+  field in `value_objects.rb`) is still unbuilt; nothing here required it.
+- **Catalog-price only, as decided.** No `create_checkout` runs against a
+  candidate store — ranking uses listed price, same compromise §22 named as
+  unvalidated. Still unvalidated: this ships the compromise, it doesn't
+  answer whether landed-price comparison is worth the abandoned-cart risk
+  §22 raised. That question is untouched.
+- **Recall ceiling documented, not solved.** Compare searches on the origin
+  product's own marketing title, same as `find`. If a backend's search
+  doesn't surface a competitor for that title, no tier system recovers it —
+  documented next to the tiers in `portage-cli/README.md` rather than built
+  around (a second barcode-keyed search pass was scoped and not built: extra
+  backend calls per compare, and general web search engines are weak at bare
+  barcode queries, so the cost didn't clearly beat just naming the
+  limitation).
+- **Not touched:** §26's multi-vendor sourcing (routing, splitting one order
+  across vendors within a single checkout) remains fully unbuilt — this is
+  still the shopper-initiated, two-candidate-at-a-time comparison §22 scoped,
+  not the automatic-routing superset §26 describes. Items 2–6 of §26's list
+  are unaffected by this work.
+
 **Not building this now.** Per §22 (line 1541-1543): core `portage-ucp`
 stays a dependency-light adapter-agnostic library: an orchestrator plus
 persisted routing/split state (item 3-4 above) is exactly the kind of

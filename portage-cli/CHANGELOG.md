@@ -6,6 +6,14 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `portage compare <url> --product-id ID` (`Portage::Cli::Compare`, §22's
+  "find this same item elsewhere" mode) — resolves a named product, then runs
+  `find`'s own candidate-discovery/probe/rank pipeline against its title.
+  Every offer carries a `match:` tier (`confirmed`/`likely`/`unconfirmed`)
+  based on shared barcode/sku/`--id` identity, the origin store is excluded
+  by host, and `--results` truncates after ranking. Catalog-price only — no
+  `create_checkout` against candidate stores. Recorded to `portage history`
+  as a search.
 - `portage history` — local purchase/search history (`Portage::Cli::History`),
   logged automatically to `~/.portage/history.json` on every `find`/checkout-
   reaching `buy`. `list` (`--purchases`/`--searches`, `--limit`, `--json`) and
