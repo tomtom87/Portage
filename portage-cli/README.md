@@ -29,6 +29,15 @@ portage find --query "burton snowboard" --max-price 400
 
 `portage buy` with no URL runs that search and then buys the offer you pick.
 
+Already have the item and want to know where else it's sold? `portage compare`
+resolves a product you name by URL + product id, then runs the same
+find pipeline against its title and ranks the results by how confident the
+match is:
+
+```bash
+portage compare https://your-shop.example --product-id prod_123 --results 5
+```
+
 Depends on [`portage-ucp`](https://github.com/tomtom87/Portage/tree/main/portage-ucp)
 (for platform detection via `Resolver`) and
 [`portage-ucp-client`](https://github.com/tomtom87/Portage/tree/main/portage-ucp-client)
@@ -60,6 +69,8 @@ portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id 
                                 [--yes] [--dry-run] [--json]
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
+portage compare <url> --product-id ID [--id VALUE ...] [--results N]
+                       [--max-price N] [--json]
 portage history [list] [--purchases|--searches] [--limit N] [--json]
 portage history clear [--purchases|--searches]
 ```
@@ -83,6 +94,55 @@ portage history clear [--purchases|--searches]
 Exits `0` when a checkout completed (or a dry-run/browse/search resolved
 successfully), `1` otherwise — including the "no native manifest, no adapter
 credentials" dead-end case, so it's scriptable in CI.
+
+### Compare
+
+`portage compare <url> --product-id ID` finds other stores selling the same
+item you already have. It resolves the named product, then runs `find`'s own
+candidate-discovery/probe/rank pipeline against the product's title, scoring
+each surviving offer instead of treating them all as equally confident hits:
+
+- `--product-id` — required. The item to compare, at the store you name.
+- `--id VALUE` — repeatable. A SKU, barcode (UPC/EAN/GTIN), or MPN you already
+  know, matched case-insensitively against every candidate's own identity
+  values. There's no way to tell the matcher which *kind* of identifier you
+  passed — the wire format doesn't distinguish them — so it doesn't pretend
+  to; passing one just adds it to the matching corpus. When omitted, the
+  origin product's own first variant sku/barcodes are used instead.
+- `--results N` — how many ranked offers to return, default 5. Applies after
+  ranking, not before — a truncated result is always the *worst* N dropped,
+  never an arbitrary N. The underlying probe cap (candidate origins checked,
+  not results returned) stays `find`'s own limit and isn't exposed on this
+  subcommand.
+- `--max-price` — same semantics as `find`'s.
+
+Every offer carries a `match:` tier so a caller never mistakes a coincidence
+for a confirmed match:
+
+| Tier | Means |
+| --- | --- |
+| `confirmed` | Origin and candidate share a barcode value (UPC/EAN/GTIN) — the one identifier the spec treats as globally unique. |
+| `likely` | Origin and candidate share a SKU, or an explicit `--id` hit landed on the candidate — both are "some string matched", not "a global identifier matched", so they share one tier rather than a false precision gradient. |
+| `unconfirmed` | Same search query, nothing shared. Could be the same item; could just have a similar title. |
+
+The origin store itself is excluded from results, matched by host (not by
+raw origin string), so an `http://`/`https://`/trailing-slash variant of your
+own store's URL doesn't show up as a "competitor." A `www.` variant is
+treated as a different host, same as `find`'s own candidate dedupe — worth
+knowing if your store answers on both.
+
+**Known limitation: recall, not ranking, is the ceiling.** Compare searches
+the backends using the origin product's own title — a store-specific
+marketing string. If a backend never surfaces the competitor for that title,
+no amount of tiering helps; every offer that *does* come back may be
+`unconfirmed` because nothing more specific was searched. There's no
+barcode/SKU-keyed second search pass yet.
+
+**Catalog-price only.** No `create_checkout` step runs against any candidate
+store — ranking uses each store's listed price, never a landed price
+(shipping/tax included). Verifying the actual cheapest landed price would
+mean starting a checkout on a store the shopper hasn't chosen, which risks
+abandoned carts on someone else's site; left out of scope for now.
 
 ### History
 

@@ -6,6 +6,7 @@ require_relative "cli/shipping_profile"
 require_relative "cli/catalog_products"
 require_relative "cli/buy"
 require_relative "cli/find"
+require_relative "cli/compare"
 require_relative "cli/history"
 
 module Portage
@@ -19,6 +20,8 @@ module Portage
                                 [--product-id ID] [--yes] [--dry-run] [--json]
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
+             portage compare <url> --product-id ID [--id VALUE ...] [--results N]
+                                    [--max-price N] [--json]
              portage history [list] [--purchases|--searches] [--limit N] [--json]
              portage history clear [--purchases|--searches]
     USAGE
@@ -30,6 +33,7 @@ module Portage
       case command
       when "buy" then run_buy(rest)
       when "find" then run_find(rest)
+      when "compare" then run_compare(rest)
       when "history" then run_history(rest)
       else
         warn USAGE
@@ -79,6 +83,50 @@ module Portage
     # conversion, and no attempt to handle zero-decimal currencies like JPY.
     def self.to_minor_units(major) = (major * 100).round
     private_class_method :to_minor_units
+
+    # --- compare ---
+
+    def self.run_compare(argv)
+      options = parse_compare_options(argv)
+      return 1 unless options
+
+      json = options.delete(:json)
+      url = options.delete(:url)
+      report = Compare.new(origin_url: url, **options).call
+      # Recorded as a search, not a purchase — compare never checks out. The
+      # query string names the compare so `portage history list` doesn't
+      # read it as a plain text search for the origin product's own title.
+      History.new.record_search(query: "compare: #{url} (product #{options[:origin_product_id]})",
+                                offer_count: report[:offers].length, message: report[:message])
+      puts json ? JSON.pretty_generate(report) : format_compare(report)
+      report[:offers].any? ? 0 : 1
+    end
+    private_class_method :run_compare
+
+    def self.parse_compare_options(argv)
+      url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      opts = { identity: [] }
+      compare_option_parser(opts).parse!(argv)
+      if !url || opts[:origin_product_id].to_s.strip.empty?
+        warn USAGE
+        return nil
+      end
+
+      opts[:url] = url
+      opts
+    end
+    private_class_method :parse_compare_options
+
+    def self.compare_option_parser(opts)
+      OptionParser.new do |parser|
+        parser.on("--product-id ID") { |v| opts[:origin_product_id] = v }
+        parser.on("--id VALUE") { |v| opts[:identity] << v }
+        parser.on("--results N", Integer) { |v| opts[:results] = v }
+        parser.on("--max-price N", Float) { |v| opts[:max_price] = to_minor_units(v) }
+        parser.on("--json") { opts[:json] = true }
+      end
+    end
+    private_class_method :compare_option_parser
 
     # --- buy ---
 
@@ -278,6 +326,20 @@ module Portage
       parts.join(" — ")
     end
     private_class_method :offer_line
+
+    def self.format_compare(report)
+      lines = [report[:message].to_s]
+      report[:offers].each_with_index { |offer, index| lines << "  #{index + 1}. #{compare_offer_line(offer)}" }
+      lines.join("\n")
+    end
+    private_class_method :format_compare
+
+    def self.compare_offer_line(offer)
+      parts = ["[#{offer[:match]}] #{offer[:store]} — #{offer[:title]} (#{offer[:product_id]})", format_price(offer)]
+      parts << "browse only" unless offer[:checkout]
+      parts.join(" — ")
+    end
+    private_class_method :compare_offer_line
 
     def self.format_price(offer)
       return "price n/a" unless offer[:amount]
