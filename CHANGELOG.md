@@ -7,6 +7,28 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.4.0] - 2026-08-28
+
+- `portage-cli` bumps to 0.3.0 for `portage compare` (§22's "find this same
+  item elsewhere" mode) and `portage history` (local purchase/search log),
+  plus a fix for a `search_catalog` envelope-unwrapping bug that had been
+  producing malformed offers against every real store since 0.2.0 — see
+  `portage-cli`'s own `CHANGELOG.md`.
+- `portage-ucp` bumps to 0.4.0 for the `app.portage-ucp.reorder` capability,
+  per-request correlation ids threaded through `Dispatcher`/`Mcp::Server`/
+  `CheckoutState` for observability, and a widened `Observability::REDACTED_KEYS`
+  covering the PII fields that actually flow through logged events — see
+  `portage-ucp`'s own `CHANGELOG.md`.
+- `portage-ucp-shopify` bumps to 0.3.1 to widen its `portage-ucp` dependency
+  pin from `~> 0.3` to `~> 0.4` — no code change of its own. Every other
+  adapter gemspec and `portage-ucp-client` got the same pin widened, but
+  none has published a version yet, so there's no install-breakage to fix
+  for them beyond keeping the constraint correct ahead of their first
+  release.
+- `portage-cli` and `portage-ucp` are the only two gems in this release with
+  behavior changes; `portage-ucp` and `portage-ucp-shopify` remain the only
+  two gems ever published to RubyGems.
+
 ## [0.3.0] - 2026-08-27
 
 - All seven adapter gems now run the core gem's conformance kit against their
