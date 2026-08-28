@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+## [0.3.1] - 2026-08-28
+
+- Widened the `portage-ucp` dependency pin from `~> 0.3` to `~> 0.4` —
+  `portage-ucp` bumped to 0.4.0 (reorder capability, correlation ids,
+  PII redaction), and this gem is published, so its old pin would refuse
+  the new core version on install. No code change in this gem itself.
+
 ## [0.3.0] - 2026-08-27
 
 - `metadata_field` config DSL (`Configuration`) — lets a merchant map their
