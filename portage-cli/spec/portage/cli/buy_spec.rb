@@ -9,7 +9,7 @@ RSpec.describe Portage::Cli::Buy do
     instance_double(
       Portage::Ucp::Client::Session,
       advertises?: advertises_checkout,
-      search_catalog: [product],
+      search_catalog: { "ucp" => 1, "products" => [product] },
       create_checkout: checkout,
       complete_checkout: completed
     )
@@ -73,9 +73,18 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).not_to have_received(:complete_checkout)
     end
 
+    it "unwraps search_catalog's wire envelope instead of treating it as the product list" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example").and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold").call
+
+      expect(report[:products]).to eq([product])
+    end
+
     it "reports no match without touching checkout when the catalog search is empty" do
       session = fake_session(advertises_checkout: true)
-      allow(session).to receive(:search_catalog).and_return([])
+      allow(session).to receive(:search_catalog).and_return({ "ucp" => 1, "products" => [] })
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
 
       report = described_class.new(url: "shop.example", query: "nonexistent").call
@@ -164,6 +173,33 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:checkout]).to be true
     end
 
+    it "unwraps a CatalogSearchResult struct from the own-store catalog-only adapter path" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
+      stub_request(:get, "https://shop.example/")
+        .to_return(status: 200, body: '<script src="https://cdn.shopify.com/x.js"></script>')
+
+      platform = Portage::Ucp::Resolver::PLATFORMS.find { |p| p.name == "Shopify" }
+      allow(Portage::Ucp::Resolver).to receive_messages(detect_platform: platform,
+                                                        env_for: { shop_domain: "shop.example" }, missing_env: [])
+
+      price = Portage::Ucp::Price.new(amount: 500, currency: "USD")
+      variant = Portage::Ucp::Variant.new(id: "v1", title: "Default", description: Portage::Ucp::Description.new,
+                                          price: price)
+      product_struct = Portage::Ucp::Product.new(
+        id: "p1", title: "Cold Brew", description: Portage::Ucp::Description.new,
+        price_range: Portage::Ucp::PriceRange.new(min: price, max: price), variants: [variant]
+      )
+      adapter = double("adapter", search_catalog: Portage::Ucp::CatalogSearchResult.new(products: [product_struct]))
+      allow(Portage::Ucp::Resolver).to receive(:build_adapter).and_return(adapter)
+      allow(Portage::Ucp::Capabilities::CART).to receive(:advertised_for?).with(adapter).and_return(false)
+      allow(Portage::Ucp::Capabilities::CHECKOUT).to receive(:advertised_for?).with(adapter).and_return(false)
+
+      report = described_class.new(url: "shop.example", query: "cold").call
+
+      expect(report[:source]).to eq("adapter:Shopify")
+      expect(report[:products]).to eq([product_struct])
+    end
+
     it "submits PORTAGE_SHIP_* as the checkout destination and auto-picks the cheapest option" do
       with_env(
         "PORTAGE_SHIP_STREET" => "1 Main St", "PORTAGE_SHIP_CITY" => "Erie", "PORTAGE_SHIP_COUNTRY" => "US",
@@ -191,7 +227,8 @@ RSpec.describe Portage::Cli::Buy do
           ] }] }
         )
         session = instance_double(
-          Portage::Ucp::Client::Session, advertises?: true, search_catalog: [product],
+          Portage::Ucp::Client::Session, advertises?: true,
+                                         search_catalog: { "ucp" => 1, "products" => [product] },
                                          create_checkout: priced_checkout, update_checkout: completed_checkout
         )
         allow(Portage::Ucp::Client).to receive(:for_adapter).with(adapter, anything).and_return(session)

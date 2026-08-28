@@ -3,6 +3,7 @@ require "json"
 
 require_relative "cli/version"
 require_relative "cli/shipping_profile"
+require_relative "cli/catalog_products"
 require_relative "cli/buy"
 require_relative "cli/find"
 require_relative "cli/history"

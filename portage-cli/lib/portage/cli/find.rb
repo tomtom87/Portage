@@ -135,7 +135,7 @@ module Portage
       # --- Step 3: ask the survivors what they stock ---
 
       def offers_for(store)
-        products = Array(store[:session].search_catalog(query: @query, limit: PER_STORE_RESULTS))
+        products = CatalogProducts.from(store[:session].search_catalog(query: @query, limit: PER_STORE_RESULTS))
         products.filter_map { |product| offer(store, product) }
       rescue StandardError
         []

@@ -14,7 +14,8 @@ RSpec.describe Portage::Cli::Find do
   end
 
   def session(advertises: true, products: [])
-    instance_double(Portage::Ucp::Client::Session, advertises?: advertises, search_catalog: products)
+    instance_double(Portage::Ucp::Client::Session, advertises?: advertises,
+                                                   search_catalog: { "ucp" => 1, "products" => products })
   end
 
   def find(**overrides)
@@ -127,6 +128,15 @@ RSpec.describe Portage::Cli::Find do
 
     expect(report[:offers].first).to include(store: "https://shop.example", product_id: "p1",
                                              title: "Cold Brew", amount: 2400, currency: "USD", checkout: true)
+  end
+
+  it "unwraps search_catalog's wire envelope instead of treating it as the product list" do
+    allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [product]))
+
+    report = find(backends: [backend("duckduckgo", ["https://shop.example"])]).call
+
+    expect(report[:offers].length).to eq(1)
+    expect(report[:offers].first[:product_id]).to eq("p1")
   end
 
   it "reads the price off a Product struct over the loopback transport" do
