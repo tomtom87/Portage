@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-28
+
 - Added `Adapter#reorder(order_id:, idempotency_key:)`, advertised as a new
   `app.portage-ucp.reorder` capability — a Portage extension, not part of the
   UCP spec. Hydrates a `Cart` from a previous order's line items, re-checking
