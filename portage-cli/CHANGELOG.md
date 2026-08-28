@@ -6,6 +6,15 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-28
+
+- Fixed: `find` and `buy` were treating `search_catalog`'s wire envelope
+  (`{"ucp" => ..., "products" => [...]}`) as the product list itself —
+  `Array(session.search_catalog(...))` wrapped the whole envelope Hash into a
+  single-element array instead of unwrapping `"products"`, so every offer
+  built from it was malformed against any real store. `Portage::Cli::CatalogProducts.from`
+  now unwraps the envelope (and the own-store adapter's raw
+  `CatalogSearchResult`) before either command touches the result.
 - `portage compare <url> --product-id ID` (`Portage::Cli::Compare`, §22's
   "find this same item elsewhere" mode) — resolves a named product, then runs
   `find`'s own candidate-discovery/probe/rank pipeline against its title.
