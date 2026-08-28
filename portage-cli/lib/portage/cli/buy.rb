@@ -131,7 +131,7 @@ module Portage
       end
 
       def catalog_only_adapter(adapter, platform)
-        products = Array(adapter.search_catalog(query: @query, limit: 10))
+        products = CatalogProducts.from(adapter.search_catalog(query: @query, limit: 10))
         checkout = redirect_checkout(adapter, products)
         build_report(
           source: "adapter:#{platform.name}", browse: true, checkout: !!checkout,
@@ -299,7 +299,7 @@ module Portage
       end
 
       def safe_search(session)
-        Array(session.search_catalog(query: @query, limit: 10))
+        CatalogProducts.from(session.search_catalog(query: @query, limit: 10))
       end
 
       # --- Homepage fetch (used by both the manifest-not-found path and the
