@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
   spec.bindir = "exe"
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "portage-ucp", "~> 0.3"
+  spec.add_dependency "portage-ucp", "~> 0.4"
 
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.88"
