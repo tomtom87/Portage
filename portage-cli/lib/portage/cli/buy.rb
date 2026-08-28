@@ -243,12 +243,13 @@ module Portage
         products.find { |product| product_id_of(product) == @product_id }
       end
 
-      # search_catalog's results are raw Portage::Ucp::Product structs over
-      # the loopback transport (Product has no #to_wire_h, see
-      # Dispatcher#wrap) but string-keyed wire hashes over stdio/HTTP (the
-      # `mcp` gem's client parses real JSON) — handle both.
+      # #select_product only ever sees products from #safe_search, which reads
+      # through a Session — native remote or the own-store loopback session
+      # built via Client.for_adapter alike — so Dispatcher#wrap has already
+      # called #to_wire_h on every result; a string-keyed wire hash either
+      # way, never a raw Portage::Ucp::Product struct.
       def product_id_of(product)
-        product.respond_to?(:id) ? product.id : product["id"]
+        product["id"]
       end
 
       def finish_checkout(session, source, products, checkout)

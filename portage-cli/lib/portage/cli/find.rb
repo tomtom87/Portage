@@ -161,10 +161,12 @@ module Portage
 
       # --- Shapes ---
 
-      # Products arrive as `Portage::Ucp::Product` structs over the loopback
-      # transport and as string-keyed wire hashes over stdio/HTTP (same split
-      # Buy#product_id_of documents), and the wire shape carries a
-      # `price_range` rather than a scalar price.
+      # Every product here comes from #offers_for, which reads through
+      # Session#search_catalog — Dispatcher#wrap has already called
+      # #to_wire_h on the result, so this is always a string-keyed wire hash,
+      # never a raw Portage::Ucp::Product struct (same posture as
+      # Buy#product_id_of), and it carries a `price_range` rather than a
+      # scalar price.
       def price_of(product)
         range = field(product, "price_range")
         return [money_amount(range["min"]), range["min"]["currency"]] if range.is_a?(Hash) && range["min"].is_a?(Hash)
@@ -184,11 +186,7 @@ module Portage
 
       def money_amount(price) = price["amount"]
 
-      def field(product, key)
-        return product[key] if product.is_a?(Hash)
-
-        product.respond_to?(key) ? product.public_send(key) : nil
-      end
+      def field(product, key) = product[key]
 
       def report(**fields)
         { query: @query, candidates: [], stores: [], offers: [], message: nil }.merge(fields)

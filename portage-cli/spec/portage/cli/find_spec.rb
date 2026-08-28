@@ -139,17 +139,6 @@ RSpec.describe Portage::Cli::Find do
     expect(report[:offers].first[:product_id]).to eq("p1")
   end
 
-  it "reads the price off a Product struct over the loopback transport" do
-    struct = Portage::Ucp::Product.new(id: "p1", title: "Cold Brew", description: nil,
-                                       price: Portage::Ucp::Money.new(amount_minor: 999, currency: "GBP"),
-                                       available: true, variants: [], url: nil)
-    allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [struct]))
-
-    report = find(backends: [backend("duckduckgo", ["https://shop.example"])]).call
-
-    expect(report[:offers].first).to include(amount: 999, currency: "GBP")
-  end
-
   it "filters out offers above --max-price" do
     allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [product]))
 
