@@ -25,6 +25,10 @@ in this gem.
 | `Portage::Ucp::Rack::WebhookEndpoint` | HMAC-verified inbound order-lifecycle webhooks. |
 | `Portage::Ucp::SchemaValidator` | Validates data against UCP's own vendored JSON Schemas/OpenRPC docs, offline. |
 | `Portage::Ucp::Resolver` / `exe/portage-ucp-check` | Probes any store's homepage/`.well-known/ucp` and recommends the matching adapter gem. |
+| `Portage::Ucp::Support::TransactionLog` | Durable pre/post-dispatch record of every `complete_checkout` call — reserved before dispatch, marked settled/failed after, so a crash mid-charge is diagnosable rather than silently lost. |
+| `Portage::Ucp::Support::OrderLedger` | Durable snapshot written after settlement, alongside (not instead of) the transaction record — a failed snapshot write surfaces without flipping an already-settled charge to failed. |
+| `Portage::Ucp::Confirmer` | Gate run just before `complete_checkout` dispatch, after `PolicyGuard`. `Confirmer::Terminal` blocks on stdin and fails closed on anything but an explicit `"y"`; `Confirmer::AutoApprove` is for specs/conformance kits that need a real `confirm!` without blocking. |
+| `Portage::Ucp::PolicyGuard` / `Portage::Ucp::Policy` | Per-transaction/rolling/velocity caps and a merchant allowlist, checked before `complete_checkout` dispatch; configured via `portage-cli`'s `portage policy show/set`. |
 
 Security defaults are all locked down, not permissive-by-omission —
 `UnconfiguredAuthenticator` rejects every mutating call until you configure a real

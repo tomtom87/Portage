@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-14
+
 - Added `Adapter#create_payment_enrollment(idempotency_key:)` /
   `#get_payment_enrollment(enrollment_id:)`, advertised as a new
   `app.portage-ucp.payment_enrollment` capability — a Portage extension, not
@@ -15,6 +17,44 @@ pre-1.0, so APIs may still shift between minor versions.
   until `status` leaves `"pending"` and a `payment_token` appears.
   Implemented in `ReferenceAdapter` as a worked example (docs/plans/agentic-payments.md
   Phase 1).
+- Made the idempotency dedup store pluggable — `Support::Idempotency` now
+  takes a `store:` (defaulting to the existing in-memory behavior via the new
+  `MemoryStore`), with a `FileStore` alternative for dedup that survives a
+  process restart.
+- Added a durable `Support::TransactionLog`, wired into
+  `Dispatcher#complete_checkout` dispatch — a transaction is reserved before
+  dispatch and marked settled/failed after, so a crash mid-charge leaves a
+  diagnosable record instead of silence.
+- Extended `TransactionLog` to also record policy decisions and confirmation
+  outcomes on the same transaction record `PolicyGuard`/`Confirmer` gate.
+- Added `PolicyGuard`, wired into `Dispatcher` just before `complete_checkout`
+  dispatch — enforces `Policy`'s per-transaction/rolling caps, velocity, and
+  merchant allowlist (docs/plans/agentic-payments.md Phase 2). Configured via
+  `portage-cli`'s `portage policy show/set`.
+- Added per-token enrollment scopes to `Policy` — a merchant/max-amount/
+  currency scope can be bound to a token at enrollment time and is checked by
+  `PolicyGuard` keyed by the same `token_ref` derived from the token at
+  charge time.
+- Added a `Confirmer` interface, wired into `Dispatcher` right after
+  `PolicyGuard.check!` passes and before `complete_checkout` dispatch.
+  `Confirmer::Terminal` blocks the process on stdin and fails closed on
+  anything but an explicit `"y"` (no answer, `"n"`, or EOF all deny);
+  `Confirmer::AutoApprove` is for specs/conformance kits (docs/plans/agentic-payments.md
+  Phase 3).
+- Added a durable `Support::OrderLedger`, wired into the `complete_checkout`
+  settle path — written after the transaction record is already complete, so
+  a failed snapshot write surfaces without flipping an already-settled charge
+  to failed.
+- `Mcp::Server.call_tool` now extracts `ucp-agent.profile` from `_meta` the
+  same way it already does `correlation_id` from `traceparent`, logging/
+  forwarding it as `agent_profile` through every transport (http, stdio,
+  loopback) and `Client::Session`. Additive only — `Dispatcher` accepts and
+  threads it without yet acting on it.
+- Added `Adapter#lookup_catalog(ids:)`, advertised alongside `search_catalog`
+  — fetches several known product ids in one round trip instead of one
+  `get_product` call per id. Implemented in `Shopify::Adapter` via the Admin
+  API's `nodes(ids:)` field, reusing the same `Mapper.product` shape
+  `get_product`/`search_catalog` already use.
 
 ## [0.4.0] - 2026-08-28
 
