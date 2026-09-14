@@ -63,9 +63,13 @@ RSpec.shared_examples "a portage adapter" do
   # kit exercises, it just keeps an adapter gem's conformance run from
   # reading and being affected by the real `~/.portage/policy.json`.
   let(:conformance_policy) { Portage::Ucp::Policy.new(path: File.join(Dir.mktmpdir, "policy.json")) }
+  # A conformance run isn't exercising Phase 3 confirmation, and the real
+  # default (Confirmer::Terminal) would block every run on stdin — auto-
+  # approve so `complete_checkout` examples complete unattended.
+  let(:conformance_confirmer) { Portage::Ucp::Confirmer::AutoApprove.new }
   let(:dispatcher) do
     Portage::Ucp::Dispatcher.new(adapter: adapter, transaction_log: conformance_transaction_log,
-                                 policy: conformance_policy)
+                                 policy: conformance_policy, confirmer: conformance_confirmer)
   end
   let(:schema_validator) { Portage::Ucp::SchemaValidator.new }
   let(:conformance_idempotency_key) { "conformance-#{object_id}-#{rand(1_000_000)}" }

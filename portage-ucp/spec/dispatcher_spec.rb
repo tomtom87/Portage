@@ -9,8 +9,10 @@ RSpec.describe Portage::Ucp::Dispatcher do
   let(:adapter) { Portage::Ucp::Support::FakeAdapter.new }
   let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new(path: @transactions_path) }
   let(:policy) { Portage::Ucp::Policy.new(path: File.join(Dir.mktmpdir, "policy.json")) }
+  let(:confirmer) { Portage::Ucp::Confirmer::AutoApprove.new }
   let(:dispatcher) do
-    described_class.new(adapter: adapter, transaction_log: transaction_log, policy: policy, shop: "shop.example.com")
+    described_class.new(adapter: adapter, transaction_log: transaction_log, policy: policy, confirmer: confirmer,
+                        shop: "shop.example.com")
   end
   let(:product) { ProductFactory.build(id: "prod_1", title: "Cold Brew", price_minor: 500) }
 
@@ -108,6 +110,44 @@ RSpec.describe Portage::Ucp::Dispatcher do
     record = transaction_log.find("chk-policy-block-complete")
     expect(record["status"]).to eq("failed")
     expect(record["policy_decision"]).to include("allowed" => false, "reason" => "merchant_not_allowlisted")
+  end
+
+  it "records a passing confirmation_outcome on the transaction record before dispatch (Phase 3)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-confirm-pass" })[:structuredContent]
+
+    dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                    arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                 idempotency_key: "chk-confirm-pass-complete" })
+
+    record = transaction_log.find("chk-confirm-pass-complete")
+    expect(record["confirmation_outcome"]).to eq({ "approved" => true })
+    expect(record["status"]).to eq("complete")
+  end
+
+  it "denies dispatch and settles the record failed when the confirmer denies (Phase 3)" do
+    denying_confirmer = instance_double(Portage::Ucp::Confirmer::AutoApprove)
+    allow(denying_confirmer).to receive(:confirm!).and_raise(
+      Portage::Ucp::ConfirmationDeniedError.new(
+        "nope", reason: :denied, decision: { approved: false, reason: :denied }
+      )
+    )
+    dispatcher = described_class.new(adapter: adapter, transaction_log: transaction_log, policy: policy,
+                                     confirmer: denying_confirmer, shop: "shop.example.com")
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-confirm-deny" })[:structuredContent]
+
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                   idempotency_key: "chk-confirm-deny-complete" })
+    end.to raise_error(Portage::Ucp::ConfirmationDeniedError)
+
+    record = transaction_log.find("chk-confirm-deny-complete")
+    expect(record["status"]).to eq("failed")
+    expect(record["confirmation_outcome"]).to include("approved" => false, "reason" => "denied")
   end
 
   it "routes cancel_order/request_return/refund_order through as dev.ucp.shopping.order actions (§16)" do
