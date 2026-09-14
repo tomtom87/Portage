@@ -38,21 +38,25 @@ module Portage
           capabilities&.include?(capability_name)
         end
 
-        def search_catalog(query:, limit: 20) = call("search_catalog", query: query, limit: limit)
-        def get_product(product_id:) = call("get_product", product_id: product_id)
-
-        def get_cart(cart_id:) = call("get_cart", cart_id: cart_id)
-
-        def create_cart(line_items:, idempotency_key: nil)
-          call("create_cart", line_items: line_items, idempotency_key: idempotency_key)
+        def search_catalog(query:, limit: 20,
+                           meta: nil)
+          call("search_catalog", meta: meta, query: query, limit: limit)
         end
 
-        def update_cart(cart_id:, line_items:, idempotency_key: nil)
-          call("update_cart", cart_id: cart_id, line_items: line_items, idempotency_key: idempotency_key)
+        def get_product(product_id:, meta: nil) = call("get_product", meta: meta, product_id: product_id)
+
+        def get_cart(cart_id:, meta: nil) = call("get_cart", meta: meta, cart_id: cart_id)
+
+        def create_cart(line_items:, idempotency_key: nil, meta: nil)
+          call("create_cart", meta: meta, line_items: line_items, idempotency_key: idempotency_key)
         end
 
-        def cancel_cart(cart_id:, idempotency_key: nil)
-          call("cancel_cart", cart_id: cart_id, idempotency_key: idempotency_key)
+        def update_cart(cart_id:, line_items:, idempotency_key: nil, meta: nil)
+          call("update_cart", meta: meta, cart_id: cart_id, line_items: line_items, idempotency_key: idempotency_key)
+        end
+
+        def cancel_cart(cart_id:, idempotency_key: nil, meta: nil)
+          call("cancel_cart", meta: meta, cart_id: cart_id, idempotency_key: idempotency_key)
         end
 
         # `fulfillment:` (dev.ucp.shopping.fulfillment) is only exercised over
@@ -61,45 +65,48 @@ module Portage
         # (a Portage::Ucp::CheckoutFulfillment for loopback). Over stdio/HTTP
         # it would need a JSON wire shape this gem doesn't build yet, so
         # callers on those transports should leave it nil.
-        def create_checkout(line_items:, idempotency_key: nil, fulfillment: nil)
-          call("create_checkout", line_items: line_items, idempotency_key: idempotency_key,
+        def create_checkout(line_items:, idempotency_key: nil, fulfillment: nil, meta: nil)
+          call("create_checkout", meta: meta, line_items: line_items, idempotency_key: idempotency_key,
                                   **(fulfillment ? { fulfillment: fulfillment } : {}))
         end
 
-        def get_checkout(checkout_id:) = call("get_checkout", checkout_id: checkout_id)
+        def get_checkout(checkout_id:, meta: nil) = call("get_checkout", meta: meta, checkout_id: checkout_id)
 
-        def update_checkout(checkout_id:, line_items:, idempotency_key: nil, fulfillment: nil)
-          call("update_checkout", checkout_id: checkout_id, line_items: line_items, idempotency_key: idempotency_key,
+        def update_checkout(checkout_id:, line_items:, idempotency_key: nil, fulfillment: nil, meta: nil)
+          call("update_checkout", meta: meta, checkout_id: checkout_id, line_items: line_items,
+                                  idempotency_key: idempotency_key,
                                   **(fulfillment ? { fulfillment: fulfillment } : {}))
         end
 
-        def complete_checkout(checkout_id:, payment_token:, idempotency_key: nil)
+        def complete_checkout(checkout_id:, payment_token:, idempotency_key: nil, meta: nil)
           Portage::Ucp::PaymentTokenGuard.validate!(payment_token)
-          call("complete_checkout", checkout_id: checkout_id, payment_token: payment_token,
+          call("complete_checkout", meta: meta, checkout_id: checkout_id, payment_token: payment_token,
                                     idempotency_key: idempotency_key)
         end
 
-        def cancel_checkout(checkout_id:, idempotency_key: nil)
-          call("cancel_checkout", checkout_id: checkout_id, idempotency_key: idempotency_key)
+        def cancel_checkout(checkout_id:, idempotency_key: nil, meta: nil)
+          call("cancel_checkout", meta: meta, checkout_id: checkout_id, idempotency_key: idempotency_key)
         end
 
-        def get_order(order_id:) = call("get_order", order_id: order_id)
-        def link_identity(oauth_token:) = call("link_identity", oauth_token: oauth_token)
+        def get_order(order_id:, meta: nil) = call("get_order", meta: meta, order_id: order_id)
+        def link_identity(oauth_token:, meta: nil) = call("link_identity", meta: meta, oauth_token: oauth_token)
 
         # app.portage-ucp.payment_enrollment (Portage extension, §ref
         # docs/plans/agentic-payments.md Phase 1) — not every adapter
         # advertises this, check #advertises? first.
-        def create_payment_enrollment(idempotency_key: nil)
-          call("create_payment_enrollment", idempotency_key: idempotency_key)
+        def create_payment_enrollment(idempotency_key: nil, meta: nil)
+          call("create_payment_enrollment", meta: meta, idempotency_key: idempotency_key)
         end
 
-        def get_payment_enrollment(enrollment_id:) = call("get_payment_enrollment", enrollment_id: enrollment_id)
+        def get_payment_enrollment(enrollment_id:, meta: nil)
+          call("get_payment_enrollment", meta: meta, enrollment_id: enrollment_id)
+        end
 
         private
 
-        def call(action, **arguments)
+        def call(action, meta: nil, **arguments)
           arguments[:idempotency_key] ||= SecureRandom.uuid if MUTATING_ACTIONS.include?(action)
-          @transport.call_tool(name: action, arguments: arguments)
+          @transport.call_tool(name: action, arguments: arguments, meta: meta)
         end
       end
     end

@@ -217,6 +217,54 @@ RSpec.describe Portage::Ucp::Mcp::Server do
     expect(received["correlation_id"]).to match(/\A[0-9a-f-]{36}\z/)
   end
 
+  it "reads ucp-agent.profile from _meta (string key) and stamps it on both events" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 18, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" },
+                                     _meta: { "ucp-agent.profile" => "agent-123" } }
+                         })
+
+    received, called = io.string.lines.map { |line| JSON.parse(line) }
+    expect(received["agent_profile"]).to eq("agent-123")
+    expect(called["agent_profile"]).to eq("agent-123")
+  end
+
+  it "reads ucp-agent.profile from _meta (symbol key) too" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 19, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" },
+                                     _meta: { "ucp-agent.profile": "agent-456" } }
+                         })
+
+    received = JSON.parse(io.string.lines.first)
+    expect(received["agent_profile"]).to eq("agent-456")
+  end
+
+  it "leaves agent_profile nil when absent from _meta" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_server = described_class.build(adapter: adapter, logger: logger)
+
+    logged_server.handle({
+                           jsonrpc: "2.0", id: 20, method: "tools/call",
+                           params: { name: "get_product", arguments: { product_id: "prod_1" } }
+                         })
+
+    received = JSON.parse(io.string.lines.first)
+    expect(received["agent_profile"]).to be_nil
+  end
+
   it "never writes an unauthenticated caller's malformed traceparent into the pre-auth log" do
     io = StringIO.new
     logger = Logger.new(io)

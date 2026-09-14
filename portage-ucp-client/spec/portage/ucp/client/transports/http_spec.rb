@@ -18,14 +18,27 @@ RSpec.describe Portage::Ucp::Client::Transports::Http do
   end
 
   it "delegates call_tool and normalizes the string-keyed response" do
-    allow(mcp_client).to receive(:call_tool).with(name: "search_catalog", arguments: { query: "x", limit: 1 })
-                                            .and_return({ "result" => { "isError" => false, "content" => [],
-                                                                        "structuredContent" => [] } })
+    allow(mcp_client).to receive(:call_tool)
+      .with(name: "search_catalog", arguments: { query: "x", limit: 1 }, meta: nil)
+      .and_return({ "result" => { "isError" => false, "content" => [], "structuredContent" => [] } })
 
     result = described_class.new(url: "https://shop.example/mcp")
                             .call_tool(name: "search_catalog", arguments: { query: "x", limit: 1 })
 
     expect(result).to eq([])
+  end
+
+  it "forwards a caller-supplied meta hash to the underlying MCP::Client" do
+    allow(mcp_client).to receive(:call_tool)
+      .with(name: "search_catalog", arguments: { query: "x", limit: 1 }, meta: { "ucp-agent.profile" => "agent-1" })
+      .and_return({ "result" => { "isError" => false, "content" => [], "structuredContent" => [] } })
+
+    described_class.new(url: "https://shop.example/mcp")
+                   .call_tool(name: "search_catalog", arguments: { query: "x", limit: 1 },
+                              meta: { "ucp-agent.profile" => "agent-1" })
+
+    expect(mcp_client).to have_received(:call_tool)
+      .with(name: "search_catalog", arguments: { query: "x", limit: 1 }, meta: { "ucp-agent.profile" => "agent-1" })
   end
 
   it "raises ServerError when the response reports isError" do

@@ -6,13 +6,14 @@ RSpec.describe Portage::Ucp::Client::Session do
 
   describe "read-only actions" do
     it "passes arguments straight through with no idempotency_key" do
-      expect(transport).to receive(:call_tool).with(name: "search_catalog", arguments: { query: "brew", limit: 20 })
+      expect(transport).to receive(:call_tool).with(name: "search_catalog", arguments: { query: "brew", limit: 20 },
+                                                    meta: nil)
 
       session.search_catalog(query: "brew")
     end
 
     it "get_order takes no idempotency_key either" do
-      expect(transport).to receive(:call_tool).with(name: "get_order", arguments: { order_id: "o1" })
+      expect(transport).to receive(:call_tool).with(name: "get_order", arguments: { order_id: "o1" }, meta: nil)
 
       session.get_order(order_id: "o1")
     end
@@ -20,7 +21,7 @@ RSpec.describe Portage::Ucp::Client::Session do
 
   describe "mutating actions" do
     it "generates an idempotency_key when the caller doesn't supply one" do
-      expect(transport).to receive(:call_tool) do |name:, arguments:|
+      expect(transport).to receive(:call_tool) do |name:, arguments:, **|
         expect(name).to eq("create_cart")
         expect(arguments[:idempotency_key]).to be_a(String)
         expect(arguments[:idempotency_key]).not_to be_empty
@@ -31,7 +32,8 @@ RSpec.describe Portage::Ucp::Client::Session do
 
     it "keeps the caller's idempotency_key when one is supplied" do
       expect(transport).to receive(:call_tool).with(name: "cancel_cart", arguments: { cart_id: "c1",
-                                                                                      idempotency_key: "mine" })
+                                                                                      idempotency_key: "mine" },
+                                                    meta: nil)
 
       session.cancel_cart(cart_id: "c1", idempotency_key: "mine")
     end
@@ -58,7 +60,8 @@ RSpec.describe Portage::Ucp::Client::Session do
     it "forwards a legitimate opaque token" do
       expect(transport).to receive(:call_tool).with(
         name: "complete_checkout",
-        arguments: { checkout_id: "chk_1", payment_token: "tok_opaque", idempotency_key: "k1" }
+        arguments: { checkout_id: "chk_1", payment_token: "tok_opaque", idempotency_key: "k1" },
+        meta: nil
       )
 
       session.complete_checkout(checkout_id: "chk_1", payment_token: "tok_opaque", idempotency_key: "k1")
@@ -67,7 +70,7 @@ RSpec.describe Portage::Ucp::Client::Session do
 
   describe "#create_checkout / #update_checkout fulfillment:" do
     it "omits the fulfillment argument entirely when none is given" do
-      expect(transport).to receive(:call_tool) do |name:, arguments:|
+      expect(transport).to receive(:call_tool) do |name:, arguments:, **|
         expect(name).to eq("create_checkout")
         expect(arguments).not_to have_key(:fulfillment)
       end
@@ -79,10 +82,39 @@ RSpec.describe Portage::Ucp::Client::Session do
       fulfillment = double("fulfillment")
       expect(transport).to receive(:call_tool).with(
         name: "update_checkout",
-        arguments: { checkout_id: "chk_1", line_items: [], idempotency_key: "k1", fulfillment: fulfillment }
+        arguments: { checkout_id: "chk_1", line_items: [], idempotency_key: "k1", fulfillment: fulfillment },
+        meta: nil
       )
 
       session.update_checkout(checkout_id: "chk_1", line_items: [], idempotency_key: "k1", fulfillment: fulfillment)
+    end
+  end
+
+  describe "meta:" do
+    it "passes nil through by default on a read-only action" do
+      expect(transport).to receive(:call_tool).with(name: "search_catalog", arguments: { query: "brew", limit: 20 },
+                                                    meta: nil)
+
+      session.search_catalog(query: "brew")
+    end
+
+    it "forwards a caller-supplied meta hash on a read-only action" do
+      expect(transport).to receive(:call_tool).with(
+        name: "search_catalog", arguments: { query: "brew", limit: 20 },
+        meta: { "ucp-agent.profile" => "agent-123" }
+      )
+
+      session.search_catalog(query: "brew", meta: { "ucp-agent.profile" => "agent-123" })
+    end
+
+    it "forwards meta on a mutating action too" do
+      expect(transport).to receive(:call_tool) do |name:, arguments:, meta:|
+        expect(name).to eq("cancel_cart")
+        expect(arguments).to eq(cart_id: "c1", idempotency_key: "mine")
+        expect(meta).to eq("ucp-agent.profile" => "agent-123")
+      end
+
+      session.cancel_cart(cart_id: "c1", idempotency_key: "mine", meta: { "ucp-agent.profile" => "agent-123" })
     end
   end
 

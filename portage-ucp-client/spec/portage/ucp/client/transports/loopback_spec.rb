@@ -1,4 +1,5 @@
 require "spec_helper"
+require "stringio"
 require "support/fake_adapter"
 
 RSpec.describe Portage::Ucp::Client::Transports::Loopback do
@@ -6,10 +7,14 @@ RSpec.describe Portage::Ucp::Client::Transports::Loopback do
   let(:transport) { described_class.new(adapter: adapter) }
 
   before do
+    price = Portage::Ucp::Price.new(amount: 500, currency: "USD")
+    variant = Portage::Ucp::Variant.new(id: "p1_default", title: "Cold Brew",
+                                        description: Portage::Ucp::Description.new(plain: "d"), price: price,
+                                        availability: { "available" => true })
     adapter.seed_product(
-      Portage::Ucp::Product.new(id: "p1", title: "Cold Brew", description: "d",
-                                price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"),
-                                available: true, variants: [], url: "u")
+      Portage::Ucp::Product.new(id: "p1", title: "Cold Brew", description: Portage::Ucp::Description.new(plain: "d"),
+                                price_range: Portage::Ucp::PriceRange.new(min: price, max: price),
+                                variants: [variant], url: "u")
     )
   end
 
@@ -44,6 +49,19 @@ RSpec.describe Portage::Ucp::Client::Transports::Loopback do
   it "raises ServerError when the underlying tool call reports isError" do
     expect { transport.call_tool(name: "get_product", arguments: {}) }
       .to raise_error(Portage::Ucp::Client::ServerError, /Missing required arguments/)
+  end
+
+  it "threads Session's meta: through to the Dispatcher as agent_profile (round trip, §23-style)" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_transport = described_class.new(adapter: adapter, logger: logger)
+    session = Portage::Ucp::Client::Session.new(transport: logged_transport)
+
+    session.search_catalog(query: "cold", meta: { "ucp-agent.profile" => "agent-123" })
+
+    logged = JSON.parse(io.string.lines.first)
+    expect(logged["agent_profile"]).to eq("agent-123")
   end
 
   it "assigns a fresh JSON-RPC id per call" do
