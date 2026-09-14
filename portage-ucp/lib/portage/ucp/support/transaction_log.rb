@@ -90,6 +90,22 @@ module Portage
           end
         end
 
+        # Called mid-flight, between a passing Confirmer#confirm! and the
+        # adapter dispatch it gates — same "record before the risky part"
+        # reasoning as `record_decision`. A *denying* outcome goes through
+        # `#complete(status: "failed", confirmation_outcome:)` instead, since
+        # a deny never reaches dispatch at all.
+        def record_confirmation(idempotency_key:, confirmation_outcome:)
+          with_lock(File::LOCK_EX) do |data, file|
+            record = data[idempotency_key]
+            raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
+
+            record["confirmation_outcome"] = confirmation_outcome
+            persist(data, file)
+            record
+          end
+        end
+
         def find(idempotency_key)
           with_lock(File::LOCK_SH) { |data, _file| data[idempotency_key] }
         end
