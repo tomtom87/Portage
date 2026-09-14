@@ -3,6 +3,7 @@ require "uri"
 require "json"
 require "portage/ucp"
 require "portage/ucp/client"
+require_relative "payment_methods"
 
 module Portage
   module Cli
@@ -262,9 +263,11 @@ module Portage
       end
 
       def complete(session, source, products, checkout)
+        @payment_token ||= PaymentMethods.default
         unless @payment_token
           return checkout_report(source, products, checkout,
-                                 message: "No --payment-token given — can't complete the purchase.")
+                                 message: "No --payment-token given, and no default payment method on file — " \
+                                          "run `portage payment enroll` or pass --payment-token.")
         end
 
         completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: @payment_token)

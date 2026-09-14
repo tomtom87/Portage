@@ -1,6 +1,12 @@
 require "spec_helper"
 
 RSpec.describe Portage::Cli::Buy do
+  # Never let #complete's `@payment_token ||= PaymentMethods.default`
+  # fallback hit the real Keychain/secret-tool/env — nil here means "as if
+  # nothing were enrolled", same as before Phase 1 existed. Tests that care
+  # about the fallback override this explicitly.
+  before { allow(Portage::Cli::PaymentMethods).to receive(:default).and_return(nil) }
+
   let(:product) { { "id" => "p1", "title" => "Cold Brew" } }
   let(:incomplete_checkout) { { "id" => "chk_1", "status" => "ready_for_complete", "links" => [], "totals" => [] } }
   let(:completed_checkout) { { "id" => "chk_1", "status" => "completed", "links" => [], "totals" => [] } }
@@ -57,6 +63,17 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:message]).to include("--payment-token")
       expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "falls back to the stored default payment method when --payment-token is omitted" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout, completed: completed_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      allow(Portage::Cli::PaymentMethods).to receive(:default).and_return("tok_default")
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true).call
+
+      expect(report[:message]).to eq("Purchased.")
+      expect(session).to have_received(:complete_checkout).with(checkout_id: "chk_1", payment_token: "tok_default")
     end
 
     it "surfaces requires_escalation as data, not an error, with the checkout_url" do

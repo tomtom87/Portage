@@ -38,6 +38,10 @@ Metrics/ClassLength:
   Exclude:
     - "lib/portage/cli/buy.rb"
     - "lib/portage/cli/find.rb"
+    # Same rationale — PaymentMethods is enroll/list/set_default/remove/
+    # freeze/revoke plus store-discovery, one class per Phase 1's whole
+    # payment-method-store algorithm (docs/plans/agentic-payments.md).
+    - "lib/portage/cli/payment_methods.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and
