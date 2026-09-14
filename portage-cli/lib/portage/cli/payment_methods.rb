@@ -132,7 +132,14 @@ module Portage
       #   "complete", "pending" (timed out — the CLI can re-poll later
       #   against the same enrollment id), or "unsupported" (nothing at
       #   `url` advertises payment enrollment).
-      def enroll(url, label: nil, poll_interval: 3, timeout: 300, sleeper: ->(s) { sleep(s) })
+      # @param scope [Hash, nil] Phase 2 per-token policy scope, bound at
+      #   enrollment time (docs/plans/agentic-payments.md) — e.g.
+      #   `{merchants: ["shop.example.com"], max_amount: 5000, currency: "USD"}`.
+      #   Written to Portage::Ucp::Policy keyed by the same token_ref
+      #   PolicyGuard derives from the token at charge time, never to
+      #   payment_methods.json — policy config is portage-ucp's file, not
+      #   this gem's.
+      def enroll(url, label: nil, scope: nil, poll_interval: 3, timeout: 300, sleeper: ->(s) { sleep(s) })
         raise NotSupportedError, "headless mode has no local storage — set PORTAGE_PAYMENT_TOKEN instead" if headless?
 
         session = discover_session(url)
@@ -140,7 +147,7 @@ module Portage
 
         enrollment = session.create_payment_enrollment
         yield enrollment["setup_url"] if block_given?
-        poll_until_resolved(session, enrollment, label, poll_interval, timeout, sleeper)
+        poll_until_resolved(session, enrollment, label, scope, poll_interval, timeout, sleeper)
       rescue Portage::Ucp::Client::Error
         # Capability not actually there despite #advertises? being nil
         # (own-store adapter loopback doesn't know capabilities upfront —
@@ -155,7 +162,7 @@ module Portage
         @backend.is_a?(EnvBackend)
       end
 
-      def poll_until_resolved(session, enrollment, label, poll_interval, timeout, sleeper)
+      def poll_until_resolved(session, enrollment, label, scope, poll_interval, timeout, sleeper)
         deadline = Time.now + timeout
         current = enrollment
         until current["status"] == "complete" || Time.now >= deadline
@@ -166,18 +173,26 @@ module Portage
         return { status: "pending", setup_url: enrollment["setup_url"], id: enrollment["id"] } unless
           current["status"] == "complete"
 
-        { status: "complete", **enroll_locally(current["payment_token"], label) }
+        { status: "complete", **enroll_locally(current["payment_token"], label, scope) }
       end
 
-      def enroll_locally(token, label)
+      def enroll_locally(token, label, scope)
         id = SecureRandom.uuid
         @backend.write(id, token)
         entry = { "id" => id, "label" => label || id, "frozen" => false,
                   "default" => store["methods"].empty?, "created_at" => Time.now.utc.iso8601 }
         store["methods"] << entry
         write
+        set_token_scope(token, scope) if scope
         { id: id, label: entry["label"] }
       end
+
+      def set_token_scope(token, scope)
+        token_ref = Portage::Ucp::Support::TokenRef.for(token)
+        Portage::Ucp::Policy.load.set_token_scope(token_ref, stringify_keys(scope))
+      end
+
+      def stringify_keys(hash) = hash.transform_keys(&:to_s)
 
       # Same native-manifest-first, own-store-adapter-fallback discovery as
       # Buy#call — duplicated rather than extracted since Buy's version is

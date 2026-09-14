@@ -27,10 +27,16 @@ module Portage
              portage history clear [--purchases|--searches]
              portage payment list [--json]
              portage payment enroll <url> [--label NAME] [--json]
+                                    [--scope-merchant HOST ...] [--scope-max-amount N] [--scope-currency CUR]
              portage payment set-default <id>
              portage payment remove <id>
              portage payment freeze <id>
              portage payment revoke <id>
+             portage policy show [--json]
+             portage policy set [--per-transaction-cap N --currency CUR]
+                                 [--rolling-cap N --rolling-window-seconds N --currency CUR]
+                                 [--velocity-count N --velocity-window-seconds N]
+                                 [--allow HOST ...] [--clear-allowlist]
     USAGE
 
     # @param argv [Array<String>]
@@ -43,6 +49,7 @@ module Portage
       when "compare" then run_compare(rest)
       when "history" then run_history(rest)
       when "payment" then run_payment(rest)
+      when "policy" then run_policy(rest)
       else
         warn USAGE
         1
@@ -355,15 +362,30 @@ module Portage
     private_class_method :run_payment_mutate
 
     def self.parse_payment_enroll_options(argv)
-      opts = {}
+      opts = { scope_merchants: [] }
       OptionParser.new do |parser|
         parser.on("--label NAME") { |v| opts[:label] = v }
         parser.on("--json") { opts[:json] = true }
+        parser.on("--scope-merchant HOST") { |v| opts[:scope_merchants] << v }
+        parser.on("--scope-max-amount N", Integer) { |v| opts[:scope_max_amount] = v }
+        parser.on("--scope-currency CUR") { |v| opts[:scope_currency] = v }
       end.parse!(argv)
       opts[:url] = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
       opts
     end
     private_class_method :parse_payment_enroll_options
+
+    # nil (not `{}`) when no --scope-* flag was given at all, so
+    # PaymentMethods#enroll's `scope:` default of no-scope-written stays the
+    # behavior for a plain `portage payment enroll` — Phase 2's per-token
+    # scope is opt-in.
+    def self.payment_enroll_scope(opts)
+      return nil if opts[:scope_merchants].empty? && !opts[:scope_max_amount]
+
+      { merchants: opts[:scope_merchants], max_amount: opts[:scope_max_amount], currency: opts[:scope_currency] }
+        .compact
+    end
+    private_class_method :payment_enroll_scope
 
     def self.run_payment_enroll(argv)
       opts = parse_payment_enroll_options(argv)
@@ -372,7 +394,8 @@ module Portage
         return 1
       end
 
-      result = PaymentMethods.new.enroll(opts[:url], label: opts[:label]) do |setup_url|
+      result = PaymentMethods.new.enroll(opts[:url], label: opts[:label],
+                                                     scope: payment_enroll_scope(opts)) do |setup_url|
         puts "Visit this link to add a card, then wait — polling for completion:\n  #{setup_url}"
       end
       puts opts[:json] ? JSON.pretty_generate(result) : format_payment_enroll(result)
@@ -382,6 +405,99 @@ module Portage
       1
     end
     private_class_method :run_payment_enroll
+
+    # --- policy ---
+
+    def self.run_policy(argv)
+      sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      case sub
+      when "show" then run_policy_show(argv)
+      when "set" then run_policy_set(argv)
+      else
+        warn USAGE
+        1
+      end
+    end
+    private_class_method :run_policy
+
+    def self.run_policy_show(argv)
+      json = false
+      OptionParser.new { |parser| parser.on("--json") { json = true } }.parse!(argv)
+      policy = Portage::Ucp::Policy.load.to_h
+      puts json ? JSON.pretty_generate(policy) : format_policy(policy)
+      0
+    end
+    private_class_method :run_policy_show
+
+    def self.format_policy(policy)
+      return "(no policy configured — every check passes)" if policy.empty?
+
+      JSON.pretty_generate(policy)
+    end
+    private_class_method :format_policy
+
+    def self.parse_policy_set_options(argv)
+      opts = { allow: [] }
+      OptionParser.new do |parser|
+        parser.on("--per-transaction-cap N", Integer) { |v| opts[:per_transaction_cap] = v }
+        parser.on("--rolling-cap N", Integer) { |v| opts[:rolling_cap] = v }
+        parser.on("--rolling-window-seconds N", Integer) { |v| opts[:rolling_window_seconds] = v }
+        parser.on("--currency CUR") { |v| opts[:currency] = v }
+        parser.on("--velocity-count N", Integer) { |v| opts[:velocity_count] = v }
+        parser.on("--velocity-window-seconds N", Integer) { |v| opts[:velocity_window_seconds] = v }
+        parser.on("--allow HOST") { |v| opts[:allow] << v }
+        parser.on("--clear-allowlist") { opts[:clear_allowlist] = true }
+      end.parse!(argv)
+      opts
+    end
+    private_class_method :parse_policy_set_options
+
+    # Each `--*` group is applied independently and only when its required
+    # fields are present — `portage policy set --allow shop.example.com`
+    # touches only the allowlist, leaving caps/velocity untouched, so caps
+    # and the allowlist can be configured in separate invocations.
+    def self.run_policy_set(argv)
+      opts = parse_policy_set_options(argv)
+      policy = Portage::Ucp::Policy.load
+      set_policy_cap(policy, opts)
+      set_policy_velocity(policy, opts)
+      set_policy_allowlist(policy, opts)
+      puts format_policy(policy.to_h)
+      0
+    end
+    private_class_method :run_policy_set
+
+    def self.set_policy_cap(policy, opts)
+      if opts[:per_transaction_cap]
+        policy.set("per_transaction_cap",
+                   { "amount" => opts[:per_transaction_cap], "currency" => require_currency!(opts) })
+      end
+      return unless opts[:rolling_cap] && opts[:rolling_window_seconds]
+
+      policy.set("rolling_cap", { "amount" => opts[:rolling_cap], "currency" => require_currency!(opts),
+                                  "window_seconds" => opts[:rolling_window_seconds] })
+    end
+    private_class_method :set_policy_cap
+
+    def self.set_policy_velocity(policy, opts)
+      return unless opts[:velocity_count] && opts[:velocity_window_seconds]
+
+      policy.set("velocity", { "count" => opts[:velocity_count], "window_seconds" => opts[:velocity_window_seconds] })
+    end
+    private_class_method :set_policy_velocity
+
+    def self.set_policy_allowlist(policy, opts)
+      return policy.set("merchant_allowlist", []) if opts[:clear_allowlist]
+      return if opts[:allow].empty?
+
+      policy.set("merchant_allowlist", (policy.merchant_allowlist + opts[:allow]).uniq)
+    end
+    private_class_method :set_policy_allowlist
+
+    def self.require_currency!(opts)
+      opts[:currency] || raise(ArgumentError, "--currency is required alongside a cap")
+    end
+    private_class_method :require_currency!
 
     def self.format_payment_list(methods)
       return "(no payment methods enrolled)" if methods.empty?
