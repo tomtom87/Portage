@@ -12,8 +12,8 @@ module Portage
             @client.connect
           end
 
-          def call_tool(name:, arguments:)
-            response = @client.call_tool(name: name, arguments: arguments)
+          def call_tool(name:, arguments:, meta: nil)
+            response = @client.call_tool(name: name, arguments: arguments, meta: meta)
             ToolResult.extract(response, symbol_keys: false)
           end
         end

@@ -190,6 +190,13 @@ RSpec.describe Portage::Ucp::Dispatcher do
       .to raise_error(Portage::Ucp::UnknownActionError, /not_a_real_action/)
   end
 
+  it "accepts an agent_profile: kwarg without changing the result (purely additive)" do
+    response = dispatcher.call(capability: "dev.ucp.shopping.catalog", action: "search_catalog",
+                               arguments: { query: "brew", limit: 10 }, agent_profile: "agent-123")
+
+    expect(response[:structuredContent]["products"]).to eq([product.to_wire_h])
+  end
+
   it "raises CapabilityNotAdvertisedError when the adapter hasn't overridden any backing method" do
     bare_adapter = Portage::Ucp::Adapter.new
     dispatcher = described_class.new(adapter: bare_adapter)

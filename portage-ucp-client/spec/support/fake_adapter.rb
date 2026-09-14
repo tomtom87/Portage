@@ -54,10 +54,11 @@ module Portage
 
           def build_line_item(req)
             product = @products.fetch(req[:product_id])
-            total = product.price.amount_minor * req[:quantity]
+            price = product.price_range.min.amount
+            total = price * req[:quantity]
             Portage::Ucp::LineItem.new(
               id: next_id("li"),
-              item: Portage::Ucp::Item.new(id: product.id, title: product.title, price: product.price.amount_minor),
+              item: Portage::Ucp::Item.new(id: product.id, title: product.title, price: price),
               quantity: req[:quantity], totals: totals_for(total)
             )
           end

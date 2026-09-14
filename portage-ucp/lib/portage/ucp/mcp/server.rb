@@ -50,21 +50,25 @@ module Portage
         def self.call_tool(context:, capability:, action_name:, mutating:, kwargs:)
           server_context = kwargs.delete(:server_context)
           correlation_id = correlation_id_for(server_context)
-          Portage::Ucp::Observability.log(context.logger, "tool_call_received", capability: capability.name,
-                                                                                action: action_name,
-                                                                                correlation_id: correlation_id)
+          agent_profile = agent_profile_for(server_context)
+          log_tool_event(context.logger, "tool_call_received", correlation_id, agent_profile,
+                         capability: capability.name, action: action_name)
 
           rejection = authorize(context.authenticator, server_context, mutating: mutating) ||
                       rate_limit(context.rate_limiter, server_context, capability.name, mutating: mutating)
           return rejection if rejection
 
-          Portage::Ucp::Observability.log(context.logger, "tool_called", capability: capability.name,
-                                                                         action: action_name, arguments: kwargs,
-                                                                         correlation_id: correlation_id)
+          log_tool_event(context.logger, "tool_called", correlation_id, agent_profile,
+                         capability: capability.name, action: action_name, arguments: kwargs)
 
           result = context.dispatcher.call(capability: capability.name, action: action_name, arguments: kwargs,
-                                           correlation_id: correlation_id)
+                                           correlation_id: correlation_id, agent_profile: agent_profile)
           ::MCP::Tool::Response.new(result[:content], structured_content: result[:structuredContent])
+        end
+
+        def self.log_tool_event(logger, event, correlation_id, agent_profile, **fields)
+          Portage::Ucp::Observability.log(logger, event, correlation_id: correlation_id, agent_profile: agent_profile,
+                                                         **fields)
         end
 
         # Per-request correlation only (§23): `Context` above is built once per
@@ -89,6 +93,15 @@ module Portage
           meta = server_context[:_meta] if server_context.respond_to?(:[])
           traceparent = meta && (meta[:traceparent] || meta["traceparent"])
           traceparent.is_a?(String) && TRACEPARENT_FORMAT.match?(traceparent) ? traceparent : SecureRandom.uuid
+        end
+
+        # Same `_meta` path as `traceparent` above, but for the caller-supplied
+        # `ucp-agent.profile` hint — no format validation, since (unlike
+        # traceparent) nothing here parses or trusts its shape, it's just
+        # threaded through for observability/policy consumers to interpret.
+        def self.agent_profile_for(server_context)
+          meta = server_context[:_meta] if server_context.respond_to?(:[])
+          meta && (meta["ucp-agent.profile"] || meta[:"ucp-agent.profile"])
         end
 
         def self.authorize(authenticator, server_context, mutating:)

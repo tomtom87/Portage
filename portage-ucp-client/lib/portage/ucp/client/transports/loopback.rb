@@ -15,10 +15,11 @@ module Portage
             @next_id = 0
           end
 
-          def call_tool(name:, arguments:)
+          def call_tool(name:, arguments:, meta: nil)
             @next_id += 1
             response = @server.handle(
-              { jsonrpc: "2.0", id: @next_id, method: "tools/call", params: { name: name, arguments: arguments } }
+              { jsonrpc: "2.0", id: @next_id, method: "tools/call",
+                params: { name: name, arguments: arguments, **(meta ? { _meta: meta } : {}) } }
             )
             ToolResult.extract(response, symbol_keys: true)
           end

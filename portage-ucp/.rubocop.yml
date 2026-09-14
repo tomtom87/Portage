@@ -96,6 +96,12 @@ Lint/UnusedMethodArgument:
   Exclude:
     - "lib/portage/ucp/adapter.rb"
     - "lib/portage/ucp/reference_adapter.rb"
+    # #call's agent_profile: kwarg has nowhere to go yet — Dispatcher has no
+    # direct Observability.log call of its own (only
+    # Support::CheckoutState.with_observability, which takes correlation_id,
+    # not agent_profile) — accepted purely so Mcp::Server.call_tool has a
+    # matching, equally optional slot alongside correlation_id:.
+    - "lib/portage/ucp/dispatcher.rb"
     - "spec/**/*.rb"
 
 Lint/MissingSuper:

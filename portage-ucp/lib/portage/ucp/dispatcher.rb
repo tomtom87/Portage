@@ -45,7 +45,13 @@ module Portage
       #   Dispatcher.call is also the conformance kit's
       #   (lib/portage/ucp/rspec.rb) and specs' direct entry point, outside
       #   any MCP request (§23).
-      def call(capability:, action:, arguments: {}, correlation_id: nil)
+      # @param agent_profile [String, nil] caller-supplied `ucp-agent.profile`
+      #   hint from `_meta` (see Mcp::Server.agent_profile_for). Dispatcher
+      #   has no direct Observability.log call of its own to thread this
+      #   into — accepted here purely so callers that already pass
+      #   correlation_id: have a matching, equally optional slot; existing
+      #   callers that omit it are unaffected.
+      def call(capability:, action:, arguments: {}, correlation_id: nil, agent_profile: nil)
         capability_definition = @registry.find(capability)
         raise UnknownCapabilityError, capability if capability_definition.nil?
 

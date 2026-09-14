@@ -18,7 +18,7 @@ RSpec.describe Portage::Ucp::Client::Transports::Stdio do
   end
 
   it "delegates call_tool and normalizes the string-keyed response" do
-    allow(mcp_client).to receive(:call_tool).with(name: "get_order", arguments: { order_id: "o1" })
+    allow(mcp_client).to receive(:call_tool).with(name: "get_order", arguments: { order_id: "o1" }, meta: nil)
                                             .and_return({ "result" => { "isError" => false, "content" => [],
                                                                         "structuredContent" => { "id" => "o1" } } })
 
@@ -26,5 +26,18 @@ RSpec.describe Portage::Ucp::Client::Transports::Stdio do
                                                                           arguments: { order_id: "o1" })
 
     expect(result).to eq({ "id" => "o1" })
+  end
+
+  it "forwards a caller-supplied meta hash to the underlying MCP::Client" do
+    allow(mcp_client).to receive(:call_tool)
+      .with(name: "get_order", arguments: { order_id: "o1" }, meta: { "ucp-agent.profile" => "agent-1" })
+      .and_return({ "result" => { "isError" => false, "content" => [], "structuredContent" => { "id" => "o1" } } })
+
+    described_class.new(command: "portage-ucp-server")
+                   .call_tool(name: "get_order", arguments: { order_id: "o1" },
+                              meta: { "ucp-agent.profile" => "agent-1" })
+
+    expect(mcp_client).to have_received(:call_tool)
+      .with(name: "get_order", arguments: { order_id: "o1" }, meta: { "ucp-agent.profile" => "agent-1" })
   end
 end
