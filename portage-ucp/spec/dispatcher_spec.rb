@@ -4,15 +4,22 @@ require "support/fake_adapter"
 require "support/product_factory"
 
 RSpec.describe Portage::Ucp::Dispatcher do
-  around { |example| Dir.mktmpdir { |dir| @transactions_path = File.join(dir, "transactions.json") and example.run } }
+  around do |example|
+    Dir.mktmpdir do |dir|
+      @transactions_path = File.join(dir, "transactions.json")
+      @orders_path = File.join(dir, "orders.json")
+      example.run
+    end
+  end
 
   let(:adapter) { Portage::Ucp::Support::FakeAdapter.new }
   let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new(path: @transactions_path) }
+  let(:order_ledger) { Portage::Ucp::Support::OrderLedger.new(path: @orders_path) }
   let(:policy) { Portage::Ucp::Policy.new(path: File.join(Dir.mktmpdir, "policy.json")) }
   let(:confirmer) { Portage::Ucp::Confirmer::AutoApprove.new }
   let(:dispatcher) do
-    described_class.new(adapter: adapter, transaction_log: transaction_log, policy: policy, confirmer: confirmer,
-                        shop: "shop.example.com")
+    described_class.new(adapter: adapter, transaction_log: transaction_log, order_ledger: order_ledger,
+                        policy: policy, confirmer: confirmer, shop: "shop.example.com")
   end
   let(:product) { ProductFactory.build(id: "prod_1", title: "Cold Brew", price_minor: 500) }
 
@@ -69,6 +76,52 @@ RSpec.describe Portage::Ucp::Dispatcher do
     expect(record["amount"]).to be_a(Integer)
     expect(record["currency"]).to eq(checkout["currency"])
     expect(record["completed_at"]).not_to be_nil
+  end
+
+  it "snapshots the settled order to the ledger, joinable to its transaction record (Phase 1)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-ledger" })[:structuredContent]
+
+    order = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                            arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                         idempotency_key: "chk-ledger-complete" })[:structuredContent]["order"]
+
+    tx_record = transaction_log.find("chk-ledger-complete")
+    expect(tx_record["status"]).to eq("complete")
+
+    snapshot = order_ledger.find(order["id"])
+    expect(snapshot["idempotency_key"]).to eq("chk-ledger-complete")
+    expect(snapshot["order"]).to eq(order)
+  end
+
+  it "writes nothing to the ledger and does not raise when the settled result has no order (Phase 1)" do
+    dispatcher.call(capability: "dev.ucp.shopping.cart", action: "create_cart",
+                    arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }], idempotency_key: "cart-k1" })
+
+    expect(File.exist?(@orders_path)).to be false
+  end
+
+  it "settles the transaction record complete before a ledger write failure surfaces (Phase 1)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-ledger-fail" })[:structuredContent]
+
+    allow(order_ledger).to receive(:record) do
+      # By the time the ledger write is attempted, the transaction record
+      # must already be durably `complete` — proves the ordering, not just
+      # that it's documented.
+      expect(transaction_log.find("chk-ledger-fail-complete")["status"]).to eq("complete")
+      raise IOError, "disk full"
+    end
+
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                   idempotency_key: "chk-ledger-fail-complete" })
+    end.to raise_error(IOError)
+
+    expect(transaction_log.find("chk-ledger-fail-complete")["status"]).to eq("complete")
   end
 
   it "settles the transaction record failed, not left pending, when the adapter raises (Phase 0)" do
