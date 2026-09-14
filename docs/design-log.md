@@ -635,9 +635,12 @@ above:
 - Wix — **researched above**, partially feasible (checkout redirect-only, see verdict
   above). Not yet built.
 - Fourthwall
+- Taobao/Tmall, JD.com, Pinduoduo — added 2026-09-09, see §28 for scope note
+  (regulatory/data-residency questions on top of the usual API-shape check).
 
-None of BigCommerce/Ecwid/Geins/Medusa/Prodigy/Saleor/Shopware/Swell/Umbraco/Fourthwall
-have had their headless cart/checkout/payment-token/order APIs checked yet — treat any
+None of BigCommerce/Ecwid/Geins/Medusa/Prodigy/Saleor/Shopware/Swell/Umbraco/Fourthwall/
+Taobao-Tmall/JD.com/Pinduoduo have had their headless cart/checkout/payment-token/order
+APIs checked yet — treat any
 assumption about their feasibility as unverified until researched the same way §14 did
 for WooCommerce and Wix (official docs, cited, verdict per capability). WooCommerce was
 researched in this same session but isn't on Vercel's list — keep it in the backlog
@@ -1933,3 +1936,276 @@ successor: **do the "find-it-elsewhere" comparison mode first** (§22 item
 revisit split-order routing as its own gem once that key exists —
 matching the "these want their own gems" call already made for the
 journal/console/scheduler at line 1543.
+
+---
+
+## 28. Roadmap addition: Chinese marketplace adapters + Alipay/WeChat Pay (added 2026-09-09)
+
+Two new backlog items, recorded as scope only — neither researched against
+official docs yet, so neither gets a feasibility verdict the way §14 gave
+WooCommerce/Wix. Flagging that up front rather than guessing: this section
+is a placeholder to research from, not a design.
+
+### Store adapters: Taobao / Tmall (Alibaba), JD.com, Pinduoduo
+
+Added to §14's "target platform backlog" list, same unresearched status as
+BigCommerce/Ecwid/Geins/Medusa/Prodigy/Saleor/Shopware/Swell/Umbraco/
+Fourthwall — nothing here has had its catalog/cart/checkout/payment-token/
+order APIs checked against official developer docs yet:
+
+- **Taobao/Tmall** — Alibaba Open Platform (TOP) API. Consumer-to-consumer
+  (Taobao) vs. B2C-brand (Tmall) split may matter for which catalog/order
+  calls apply; unconfirmed.
+- **JD.com** — JD Open Platform API. Single hosted platform like Shopify's
+  model, unconfirmed whether it has a genuine headless cart object or
+  redirect-only checkout like Wix's verdict in §14.
+- **Pinduoduo (PDD)** — Open API for merchants exists; whether it exposes
+  agentic cart/checkout at all (vs. merchant-management-only, e.g. listings/
+  orders/logistics) is unconfirmed.
+
+Before building any of these: research each the way §14 did WooCommerce and
+Wix — official docs, cited, a verdict per `Adapter` capability
+(`search_catalog`/`get_product`/`create_cart`/`update_cart`/`cancel_cart`/
+`complete_checkout`/`get_order`/`link_identity`), same connection-model
+question §14's table tracks (single hosted host + token vs. per-merchant
+credentials). All three sit behind China's regulatory/data-residency
+environment in a way none of §14's candidates do — cross-border API access,
+data localization requirements, and real-name/verification rules on
+merchant accounts are open questions that affect whether a `portage-ucp-*`
+adapter is even legally usable from outside mainland China, not just
+whether the API shape maps to `Adapter`. That's a research item for
+whoever picks this up, not something to wave past.
+
+### Payment: Alipay + WeChat Pay handlers
+
+This is a `payment_token` **handler**, not an adapter — different boundary
+than the stores above, and already scoped by §9/§16's existing "multiple
+payment methods per checkout" item (line 785): `complete_checkout`'s
+`payment_token` is handler-agnostic in principle (any AP2/UCP payment
+handler token), the same way §16 already noted for a hypothetical
+crypto-backed handler. If an Alipay- or WeChat-Pay-backed handler exists
+that mints a compliant `payment_token`, it should flow through
+`complete_checkout` unchanged — no gem-side Alipay/WeChat-specific code
+needed on the `portage-ucp` core side.
+
+What's actually unresearched, same posture §16 took on crypto: whether such
+a handler exists in the AP2/UCP ecosystem today. If it doesn't, this item
+either waits for one to exist upstream, or (out of scope for this gem)
+someone builds an Alipay/WeChat Pay AP2 payment handler as its own project —
+not something `portage-ucp`/`portage-ucp-client` should absorb, per §9's
+existing boundary that the gem never becomes a payment processor itself.
+
+`PaymentTokenGuard`'s Luhn/format check (§9) is card-shaped; Alipay/WeChat
+Pay tokens (QR-code/mini-program-redirect-based, not PAN-based) won't look
+like a card token at all, so the guard would need a second recognized token
+shape, not just a new value passed to the existing check. Unresearched
+which shape a compliant handler would actually emit — another item for
+whoever researches the handler question above, not something to guess at
+here.
+
+**Bottom line:** store-adapter work is new scope (§14-style research then
+build, three more candidates for the "sandbox credentials, one at a time"
+step already queued at §22 item 5). Payment-method work is very likely *not*
+new gem code at all — it's confirming an existing boundary holds, the same
+"research whether the ecosystem has one" framing §16 already gave crypto.
+Recording both here so neither gets lost, without pretending either is
+designed yet.
+
+---
+
+## 29. Handoff — §28's Chinese marketplace + payment items (added 2026-09-09)
+
+Research first, build second — §28 deliberately gave neither item a
+feasibility verdict, so step 1 of every track below is "find out," not
+"assume and code." Do not skip straight to an adapter gem.
+
+**Payment track (do this first — cheapest to resolve, blocks nothing else):**
+
+1. Search the AP2/UCP payment-handler ecosystem (spec repo, any published
+   reference handlers) for an existing Alipay- or WeChat-Pay-backed handler
+   that mints a `payment_token` compliant with §9's contract. This is a
+   yes/no research question, not an implementation task.
+2. If one exists: confirm its token shape against `PaymentTokenGuard`
+   (`portage-ucp/lib/portage/ucp/security/payment_token_guard.rb` — check
+   exact path/name against current code, guard referenced throughout §9/§22)
+   — it's Luhn/card-shaped today, so a QR/redirect-based token will fail the
+   existing check. Add a second recognized shape to the guard (not a bypass —
+   §9's "never accepts anything that looks like raw card data" posture still
+   applies, just needs a second pattern to recognize as *not* raw card data).
+   No adapter-side code needed — `complete_checkout(payment_token:)` already
+   accepts any compliant token per §9/§16.
+3. If none exists: stop here and document the gap in §28 (update its "what's
+   actually unresearched" paragraph with the answer) rather than building a
+   handler inside this gem — per §9's existing boundary, `portage-ucp` does
+   not become a payment processor.
+
+**Store adapter track (research each platform before touching code):**
+
+4. Research JD.com first (JD Open Platform API) — closest to Shopify's
+   single-hosted-platform model per §28's note, so most likely to reuse
+   patterns from the existing adapters rather than needing a new connection
+   model. Produce a §14-style verdict: cited docs, one row per `Adapter`
+   capability (`search_catalog`/`get_product`/`create_cart`/`update_cart`/
+   `cancel_cart`/`complete_checkout`/`get_order`/`link_identity`), same
+   "server-to-server payment completion vs. redirect-only" distinction §14
+   drew for Wix vs. Shopify/WooCommerce.
+5. Then Taobao/Tmall (Alibaba Open Platform / TOP API) — resolve the
+   consumer-to-consumer (Taobao) vs. B2C-brand (Tmall) split §28 flagged
+   before assuming one adapter covers both.
+6. Then Pinduoduo — confirm the Open API actually exposes agentic cart/
+   checkout before spending time on it; §28 flagged it may be
+   merchant-management-only (listings/orders/logistics), which would make it
+   a dead end for this gem's `Adapter` contract regardless of API quality.
+7. Regulatory check runs alongside 4-6, not after: cross-border API access
+   terms, data-localization requirements, and merchant real-name/
+   verification rules for each platform. A technically-feasible adapter that
+   can't legally be run from outside mainland China is still a dead end —
+   confirm this before writing `portage-ucp-jd`/`-taobao`/`-pinduoduo`, not
+   after.
+8. Only once a platform clears steps 4-7 with a real (not redirect-only, not
+   merchant-management-only) verdict: scaffold the new adapter gem following
+   `portage-ucp-wix`'s existing shape as the template — `lib/portage/ucp/
+   <platform>.rb` requiring `<platform>/version`, `errors`, `client`,
+   `access_token_fetcher` (or equivalent auth flow for that platform),
+   `mapper`, `adapter`, same file split `portage-ucp-wix/lib/portage/ucp/
+   wix/` uses. Reuse the §17 adapter conformance kit against it once built,
+   per §22 item 5's existing "sandbox credentials, one at a time" queue —
+   these three platforms slot into that same queue, not a separate process.
+9. If a platform's checkout turns out redirect-only (JD/Taobao/Tmall/PDD all
+   plausibly route payment through their own hosted checkout UI, unresearched
+   either way): don't silently build it as if it were agentic. Same call §14
+   made for Wix — document the asymmetry in the adapter's own README and in
+   whichever cross-platform summary table this section's findings get added
+   to, rather than implying uniform server-to-server completion.
+
+**What this handoff does not authorize:** guessing an API shape without the
+citation, or shipping a `PaymentTokenGuard` bypass instead of a second
+recognized token shape. Both would repeat the mistake §22 called out
+elsewhere in this log — a capability that's only true in the design log is
+worse than one that's honestly absent.
+
+---
+
+## 30. §29 executed — payment finding, store adapters in progress (2026-09-09)
+
+### Payment: Alipay/WeChat Pay handler — verdict is **no**
+
+Checked the AP2 spec (ap2-protocol.org/ap2/specification/) and the UCP site
+(ucp.dev) for any reference or third-party payment handler that mints an
+AP2/UCP-compliant `payment_token` backed by Alipay or WeChat Pay. Neither
+protocol prescribes concrete payment methods — AP2's spec states it is
+"agnostic to the particular payment instrument used... New Payment
+Instruments are supported by defining a unique `type`" — and neither site
+lists an Alipay/WeChat handler among reference implementations (UCP's own
+reference handler is Google Pay:
+developers.google.com/pay/api/universal-commerce-protocol/google-pay-payment-handler).
+
+One community project surfaced — `rhcjw/paypack`
+(github.com/rhcjw/paypack) — advertises AP2 support alongside Alipay/WeChat
+channels, but on inspection it does not mint a compliant `payment_token` at
+all: for Alipay it hands back a cashier URL for the user to scan, for WeChat
+Pay it hands back raw `wx.requestPayment()` prepay parameters. That's the
+provider's own native redirect/SDK payload, not an AP2 payment credential —
+using it would mean inventing a `payment_token` shape unilaterally, which is
+exactly the guessing §29 ruled out.
+
+Per §29 step 3: stopping here, not building a handler inside this gem
+(§9's boundary holds — `portage-ucp` is not a payment processor). No
+`PaymentTokenGuard` change follows from this finding — there is no
+compliant token shape to recognize yet. §28's "what's actually
+unresearched" paragraph is superseded by this: it is no longer
+unresearched, it's a confirmed gap. Revisit if/when an AP2/UCP ecosystem
+handler for Alipay or WeChat Pay actually ships upstream.
+
+### Store adapters: JD.com, Taobao/Tmall, Pinduoduo — verdict is **no build, any of the three**
+
+Ran §29 steps 4-7 (JD first, then Taobao/Tmall, then Pinduoduo, regulatory
+check alongside each). All three cleared neither check. No adapter gem
+scaffolded — §29 step 8 only authorizes scaffolding once a platform clears
+both, and none did.
+
+**JD.com (JD Open Platform / JOS, `jos.jd.com`; JD Union affiliate API,
+`union.jd.com`):** no `complete_checkout` in any form — not server-to-server,
+not even redirect-only. JD's public developer surface is two disjoint
+things, neither a buyer-facing storefront API: JOS is a merchant back-office
+API (list/update the caller's own listings, fulfill/query the caller's own
+orders — `jd.item.get`, JOS order group), and JD Union is a CPS
+affiliate-link generator (`jd.union.open.goods.query`) that hands the buyer
+off to JD's own app to browse and pay. `create_cart`/`update_cart`/
+`cancel_cart`: no such API exists at all. `get_order`/`link_identity`:
+supported but scoped to the caller's own authorized shop, not a
+third-party-agent-on-behalf-of-a-buyer flow. Regulatory: real-name
+enterprise verification requiring a Chinese business license is a practical
+prerequisite for any credential, and JD additionally IP/domain-whitelists
+application servers with no self-service path for a non-whitelisted
+(e.g. foreign-hosted) server. Primary docs (`jos.jd.com`) are
+login-gated/JS-rendered and couldn't be read directly; verdict is built from
+official doc *names*/URLs corroborated by third-party technical write-ups,
+not a first-hand read of jos.jd.com's endpoint pages — flagging that gap
+rather than presenting it as fully primary-sourced.
+
+**Taobao/Tmall (Alibaba Open Platform / TOP, `open.taobao.com`):**
+`search_catalog` is confirmed withdrawn. `create_cart`/`update_cart`/
+`cancel_cart` collapse into one "get add-to-cart URL" endpoint that redirects
+the buyer into Taobao's own cart page — no server-side cart object.
+`complete_checkout`: no confirmed server-to-server create-order/pay-order
+API for general third parties (one candidate method, `taobao.trade.create`,
+returned "API does not exist" on every doc mirror reached — gated behind
+partner approval, not confirmed absent, so leaving this as unverified rather
+than a clean no). `get_order` and `link_identity` are real and
+server-to-server, but seller-scoped (the caller's own sold orders; OAuth
+login) not a third-party-buys-on-someone's-behalf capability. Taobao vs.
+Tmall: confirmed **no meaningful capability split** — both sit under one TOP
+surface with the same OAuth flow and order APIs; they differ only in
+product-attribute schema and seller-onboarding track, so this was never a
+build-two-adapters question. Regulatory: enterprise API scope requires a
+Chinese business license, org code certificate, and tax registration
+submitted at onboarding; whether TOP API traffic itself (vs. consumer
+storefront traffic) is blocked from non-mainland IPs is genuinely
+undetermined from official sources — noting that rather than guessing
+either way. PIPL cross-border-transfer obligations apply to any order/buyer
+data pulled regardless. Primary `open.taobao.com` pages were not fetchable;
+verdict built from the `developer.alibaba.com/docs` mirror and secondary
+technical write-ups.
+
+**Pinduoduo (`open.pinduoduo.com`):** merchant-management-only, confirmed —
+every API category found (goods listing, seller-side order query/fulfill,
+logistics, customer-service messaging) manages the caller's own PDD shop;
+there is no buyer-facing cart/checkout surface of any kind, not even a
+redirect one, under the main Open Platform. The adjacent Duoduo Jinbao (DDK)
+affiliate API is sometimes mistaken for a shopping API since it exposes
+product search/detail lookups, but it only mints promotional links that hand
+the user off to PDD's own app/mini-program — no order state comes back to
+the caller. This is §28's suspected outcome for Pinduoduo, now confirmed
+rather than assumed. Regulatory: same enterprise real-name/business-license
+gate as the others, plus PIPL/CIIO data-localization exposure given PDD's
+scale — moot here since the API-shape disqualifier stands on its own.
+`open.pinduoduo.com` itself was not fetchable (JS-rendered/gated); verdict
+triangulated from third-party SDK source and integration write-ups, not a
+first-hand primary-doc read.
+
+**Bottom line, matched against what §28 claimed:** §28 flagged all three as
+unresearched and specifically flagged that Pinduoduo "may turn out
+merchant-management-only" and that JD/Taobao/Tmall/PDD "plausibly route
+payment through their own hosted checkout UI" — both guesses held, but
+undersold it: none of the three even clears to *redirect-only* the way
+Wix did in §14. Wix still completes a real transaction through a hosted UI
+the adapter hands off to; none of these three expose a documented
+checkout-initiation path at all, hosted or otherwise, to a third-party
+credential. Nothing added to the "sandbox credentials, one at a time" queue
+at §22 item 5 — there's no adapter to queue. §28's backlog list entry for
+these three platforms (line 638) should be read as closed-out-negative, not
+still-pending: keep the entry as a record of what was checked, not as
+open work.
+
+Caveat carried forward on all three: none of the primary developer portals
+(`jos.jd.com`, `open.taobao.com`, `open.pinduoduo.com`) were directly
+fetchable — they're login-gated and/or JS-rendered. Every verdict above
+rests on official doc *names and URLs* cross-checked against third-party
+technical write-ups and SDKs, not a first-hand read of the primary pages.
+If someone with a live developer login on any of these platforms wants to
+double-check before treating this as fully closed, the specific gaps to
+re-verify are: JD's IP-whitelisting exception process, Taobao's
+`taobao.trade.create` gated-partner scope, and whether TOP API traffic
+(as opposed to consumer storefront traffic) is blocked from non-mainland
+IPs.
