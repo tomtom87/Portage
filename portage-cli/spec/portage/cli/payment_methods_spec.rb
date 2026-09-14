@@ -85,6 +85,29 @@ RSpec.describe Portage::Cli::PaymentMethods do
       expect(payment_methods.default).to eq("reftok_abc")
     end
 
+    it "writes a Phase 2 policy scope for the enrolled token, keyed by its token_ref" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(fake_session)
+      policy_path = File.join(File.dirname(@path), "policy.json")
+      allow(Portage::Ucp::Policy).to receive(:load).and_return(Portage::Ucp::Policy.new(path: policy_path))
+
+      scope = { merchants: ["shop.example.com"], max_amount: 5000 }
+      payment_methods.enroll("https://shop.example", label: "Visa", poll_interval: 0, sleeper: ->(_s) {},
+                                                     scope: scope) { nil }
+
+      token_ref = Portage::Ucp::Support::TokenRef.for("reftok_abc")
+      persisted = JSON.parse(File.read(policy_path))
+      expect(persisted["token_scopes"][token_ref]).to eq({ "merchants" => ["shop.example.com"], "max_amount" => 5000 })
+    end
+
+    it "does not write a policy scope when none was given" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(fake_session)
+      policy_path = File.join(File.dirname(@path), "policy.json")
+
+      enroll!
+
+      expect(File.exist?(policy_path)).to be false
+    end
+
     it "marks the first enrollment as the default" do
       allow(Portage::Ucp::Client).to receive(:discover).and_return(fake_session)
 

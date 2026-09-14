@@ -1,4 +1,5 @@
 require "spec_helper"
+require "tmpdir"
 
 RSpec.describe Portage::Cli do
   let(:report) do
@@ -246,6 +247,48 @@ RSpec.describe Portage::Cli do
 
     it "prints usage for an unknown history subcommand" do
       expect { expect(described_class.run(%w[history nope])).to eq(1) }.to output.to_stderr
+    end
+  end
+
+  describe "policy" do
+    around { |example| Dir.mktmpdir { |dir| @policy_path = File.join(dir, "policy.json") and example.run } }
+
+    before { allow(Portage::Ucp::Policy).to receive(:load).and_return(Portage::Ucp::Policy.load(path: @policy_path)) }
+
+    it "reports no policy configured by default" do
+      output = capture_stdout { expect(described_class.run(%w[policy show])).to eq(0) }
+
+      expect(output).to include("no policy configured")
+    end
+
+    def persisted_policy = JSON.parse(File.read(@policy_path))
+
+    it "sets a per-transaction cap and shows it back" do
+      capture_stdout { described_class.run(%w[policy set --per-transaction-cap 5000 --currency USD]) }
+
+      expect(persisted_policy["per_transaction_cap"]).to eq({ "amount" => 5000, "currency" => "USD" })
+    end
+
+    it "requires --currency alongside a cap" do
+      expect { described_class.run(%w[policy set --per-transaction-cap 5000]) }.to raise_error(ArgumentError)
+    end
+
+    it "appends to the merchant allowlist across separate invocations" do
+      capture_stdout { described_class.run(%w[policy set --allow shop-a.example.com]) }
+      capture_stdout { described_class.run(%w[policy set --allow shop-b.example.com]) }
+
+      expect(persisted_policy["merchant_allowlist"]).to eq(%w[shop-a.example.com shop-b.example.com])
+    end
+
+    it "clears the allowlist" do
+      capture_stdout { described_class.run(%w[policy set --allow shop-a.example.com]) }
+      capture_stdout { described_class.run(%w[policy set --clear-allowlist]) }
+
+      expect(persisted_policy["merchant_allowlist"]).to eq([])
+    end
+
+    it "prints usage for an unknown policy subcommand" do
+      expect { expect(described_class.run(%w[policy nope])).to eq(1) }.to output.to_stderr
     end
   end
 
