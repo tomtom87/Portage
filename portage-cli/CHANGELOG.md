@@ -25,6 +25,10 @@ pre-1.0, so APIs may still shift between minor versions.
 - Added `portage policy show/set` — manages the Phase 2 policy file's
   top-level caps/velocity/allowlist (`Portage::Ucp::Policy`), checked by
   `PolicyGuard` on every `complete_checkout`.
+- Widened the `portage-ucp` dependency pin from `~> 0.4` to `~> 0.5` and the
+  `portage-ucp-client` pin from `~> 0.2` to `~> 0.3` — this release's
+  `Policy`/`PolicyGuard`/`TokenRef` and `Session#create_payment_enrollment`
+  calls only exist from those versions on.
 
 ## [0.3.0] - 2026-08-28
 
