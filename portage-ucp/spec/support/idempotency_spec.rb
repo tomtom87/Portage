@@ -53,6 +53,15 @@ RSpec.describe Portage::Ucp::Support::Idempotency do
     expect(mutator).not_to respond_to(:dedup)
   end
 
+  it "delegates to an injected store instead of the default in-memory one" do
+    store = Portage::Ucp::Support::Idempotency::MemoryStore.new
+    mutator.idempotency_store = store
+
+    mutator.charge("key-1")
+
+    expect(store.include?("key-1")).to be(true)
+  end
+
   it "runs the block once when two threads race on the same key" do
     ready = Queue.new
     release = Queue.new
