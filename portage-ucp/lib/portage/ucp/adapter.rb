@@ -123,6 +123,18 @@ module Portage
       # @return [Portage::Ucp::Identity] linked profile for an exchanged OAuth token
       def link_identity(oauth_token:) = not_implemented
 
+      # --- Payment Enrollment (app.portage-ucp.payment_enrollment — Portage
+      # extension, not part of the UCP spec) ---
+      # Starts a card-on-file enrollment. Card data never touches this
+      # process: #create_payment_enrollment returns a `setup_url` for a
+      # gateway-hosted page where the human enters their card, and the
+      # caller polls #get_payment_enrollment until `status` leaves
+      # "pending". See docs/plans/agentic-payments.md Phase 1.
+      # @return [Portage::Ucp::PaymentEnrollment]
+      def create_payment_enrollment(idempotency_key:) = not_implemented
+      # @return [Portage::Ucp::PaymentEnrollment, nil] nil if the enrollment isn't found
+      def get_payment_enrollment(enrollment_id:) = not_implemented
+
       private
 
       def not_implemented

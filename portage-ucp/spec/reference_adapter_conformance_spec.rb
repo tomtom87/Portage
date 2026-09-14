@@ -25,7 +25,43 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
     advertised = registry.advertised(adapter).map(&:name)
 
     expect(advertised).to include("dev.ucp.shopping.discount", "dev.ucp.shopping.fulfillment",
-                                  "dev.ucp.shopping.identity")
+                                  "dev.ucp.shopping.identity", "app.portage-ucp.payment_enrollment")
+  end
+
+  describe "#create_payment_enrollment / #get_payment_enrollment" do
+    it "starts pending with a setup_url, then completes with an opaque token" do
+      enrollment = adapter.create_payment_enrollment(idempotency_key: "enr-1")
+      expect(enrollment.status).to eq("pending")
+      expect(enrollment.setup_url).to match(%r{\Ahttps://})
+      expect(enrollment.payment_token).to be_nil
+
+      still_pending = adapter.get_payment_enrollment(enrollment_id: enrollment.id)
+      expect(still_pending.status).to eq("pending")
+
+      completed = adapter.get_payment_enrollment(enrollment_id: enrollment.id)
+      expect(completed.status).to eq("complete")
+      expect(completed.payment_token).to be_a(String)
+      expect(completed.setup_url).to be_nil
+    end
+
+    it "returns nil for an unknown enrollment id" do
+      expect(adapter.get_payment_enrollment(enrollment_id: "penr_nonexistent")).to be_nil
+    end
+
+    it "dedupes a repeated idempotency_key rather than starting a second enrollment" do
+      first = adapter.create_payment_enrollment(idempotency_key: "enr-2")
+      second = adapter.create_payment_enrollment(idempotency_key: "enr-2")
+
+      expect(second.id).to eq(first.id)
+    end
+
+    it "never returns a raw PAN as the payment_token" do
+      enrollment = adapter.create_payment_enrollment(idempotency_key: "enr-3")
+      adapter.get_payment_enrollment(enrollment_id: enrollment.id)
+      completed = adapter.get_payment_enrollment(enrollment_id: enrollment.id)
+
+      expect { Portage::Ucp::PaymentTokenGuard.validate!(completed.payment_token) }.not_to raise_error
+    end
   end
 
   describe "#reorder" do

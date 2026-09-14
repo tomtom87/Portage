@@ -544,5 +544,26 @@ module Portage
     end
 
     Identity = Data.define(:subject, :email, :linked_at)
+
+    # Portage extension (see Adapter#create_payment_enrollment /
+    # #get_payment_enrollment and Capabilities::PAYMENT_ENROLLMENT) — no
+    # schemas/ counterpart, not part of the UCP spec. Card entry never
+    # happens in this process: `setup_url` is a gateway-hosted page the
+    # human completes out-of-band; `payment_token` only appears once
+    # `status` reaches "complete", and is the same opaque string
+    # complete_checkout's payment_token: expects (never a raw PAN —
+    # PaymentTokenGuard rejects those regardless of source). See
+    # docs/plans/agentic-payments.md Phase 1.
+    PaymentEnrollment = Data.define(:id, :status, :setup_url, :payment_token, :expires_at) do
+      def initialize(id:, status:, setup_url: nil, payment_token: nil, expires_at: nil) = super
+
+      def to_wire_h
+        h = { "id" => id, "status" => status }
+        h["setup_url"] = setup_url if setup_url
+        h["payment_token"] = payment_token if payment_token
+        h["expires_at"] = expires_at if expires_at
+        h
+      end
+    end
   end
 end

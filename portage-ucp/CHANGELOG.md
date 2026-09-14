@@ -6,6 +6,16 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Added `Adapter#create_payment_enrollment(idempotency_key:)` /
+  `#get_payment_enrollment(enrollment_id:)`, advertised as a new
+  `app.portage-ucp.payment_enrollment` capability — a Portage extension, not
+  part of the UCP spec. Starts a card-on-file enrollment without the card
+  ever touching this process: `#create_payment_enrollment` returns a
+  gateway-hosted `setup_url`, and the caller polls `#get_payment_enrollment`
+  until `status` leaves `"pending"` and a `payment_token` appears.
+  Implemented in `ReferenceAdapter` as a worked example (docs/plans/agentic-payments.md
+  Phase 1).
+
 ## [0.4.0] - 2026-08-28
 
 - Added `Adapter#reorder(order_id:, idempotency_key:)`, advertised as a new
