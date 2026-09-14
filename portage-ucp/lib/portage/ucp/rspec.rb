@@ -1,4 +1,5 @@
 require "portage/ucp"
+require "tmpdir"
 
 module Portage
   module Ucp
@@ -50,7 +51,14 @@ module Portage
 end
 
 RSpec.shared_examples "a portage adapter" do
-  let(:dispatcher) { Portage::Ucp::Dispatcher.new(adapter: adapter) }
+  # A conformance suite runs against a real adapter gem's own spec suite —
+  # give it its own tmp-scoped transaction log rather than defaulting the
+  # Dispatcher to the real `~/.portage/transactions.json` every adapter's
+  # test run would otherwise write to.
+  let(:conformance_transaction_log) do
+    Portage::Ucp::Support::TransactionLog.new(path: File.join(Dir.mktmpdir, "transactions.json"))
+  end
+  let(:dispatcher) { Portage::Ucp::Dispatcher.new(adapter: adapter, transaction_log: conformance_transaction_log) }
   let(:schema_validator) { Portage::Ucp::SchemaValidator.new }
   let(:conformance_idempotency_key) { "conformance-#{object_id}-#{rand(1_000_000)}" }
   let(:existing_variant_id) { existing_product_id }

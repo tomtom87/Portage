@@ -20,6 +20,10 @@ require_relative "ucp/support/api_error"
 require_relative "ucp/support/not_found"
 require_relative "ucp/support/http_client"
 require_relative "ucp/support/token_exchange"
+# Unlike its Support:: siblings above, this one IS used in the core gem's own
+# request path — Dispatcher reserves/commits against it around
+# complete_checkout (Phase 0, docs/plans/agentic-payments.md).
+require_relative "ucp/support/transaction_log"
 require_relative "ucp/payment_token_guard"
 require_relative "ucp/authenticator"
 require_relative "ucp/rate_limiter"
