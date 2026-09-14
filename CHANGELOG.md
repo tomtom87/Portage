@@ -7,6 +7,35 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.5.0] - 2026-09-14
+
+- `portage-ucp` bumps to 0.5.0 for the agentic-payments work (docs/plans/agentic-payments.md):
+  `Adapter#create_payment_enrollment`/`#get_payment_enrollment` (card-on-file
+  enrollment without the card touching this process), a durable
+  `Support::TransactionLog` wired into `complete_checkout` dispatch,
+  `PolicyGuard`/`Policy` (per-transaction/rolling caps, velocity, merchant
+  allowlist, per-token enrollment scopes), a `Confirmer` gate
+  (`Terminal`/`AutoApprove`) run just before dispatch, a durable
+  `Support::OrderLedger` snapshot written after settlement, `_meta`
+  `ucp-agent.profile` threading alongside the existing `traceparent`
+  correlation id, and `Adapter#lookup_catalog(ids:)` for batch product
+  fetch by id — see `portage-ucp`'s own `CHANGELOG.md`.
+- `portage-cli` bumps to 0.4.0 for `portage payment list/enroll/set-default/
+  remove/freeze/revoke` (Keychain / Secret Service / env-var-only storage)
+  and `portage policy show/set`, both driving the new `portage-ucp` policy
+  and enrollment capabilities.
+- `portage-ucp-client` bumps to 0.3.0 for `Session#create_payment_enrollment`/
+  `#get_payment_enrollment` and an optional `meta:` kwarg threaded through
+  every transport.
+- `portage-ucp-shopify` bumps to 0.4.0 for `Adapter#lookup_catalog(ids:)`,
+  fetching several known product ids in one round trip via the Admin API's
+  `nodes(ids:)` field.
+- Every adapter gemspec and `portage-cli` widen their `portage-ucp` pin to
+  `~> 0.5` (and `portage-cli`'s `portage-ucp-client` pin to `~> 0.3`) for the
+  capabilities above; only `portage-ucp`, `portage-ucp-shopify`,
+  `portage-ucp-client`, and `portage-cli` have ever been published to
+  RubyGems.
+
 ## [0.4.0] - 2026-08-28
 
 - `portage-cli` bumps to 0.3.0 for `portage compare` (§22's "find this same
