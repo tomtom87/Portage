@@ -1,10 +1,14 @@
 require "spec_helper"
+require "tmpdir"
 require "support/fake_adapter"
 require "support/product_factory"
 
 RSpec.describe Portage::Ucp::Dispatcher do
+  around { |example| Dir.mktmpdir { |dir| @transactions_path = File.join(dir, "transactions.json") and example.run } }
+
   let(:adapter) { Portage::Ucp::Support::FakeAdapter.new }
-  let(:dispatcher) { described_class.new(adapter: adapter) }
+  let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new(path: @transactions_path) }
+  let(:dispatcher) { described_class.new(adapter: adapter, transaction_log: transaction_log) }
   let(:product) { ProductFactory.build(id: "prod_1", title: "Cold Brew", price_minor: 500) }
 
   before { adapter.seed_product(product) }
@@ -42,6 +46,34 @@ RSpec.describe Portage::Ucp::Dispatcher do
                       arguments: { checkout_id: checkout["id"], payment_token: "4111111111111111",
                                    idempotency_key: "chk1-complete" })
     end.to raise_error(Portage::Ucp::RawPanRejectedError)
+  end
+
+  it "reserves a pending transaction record before dispatch and settles it complete after (Phase 0)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-tx" })[:structuredContent]
+
+    dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                    arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                 idempotency_key: "chk-tx-complete" })
+
+    record = transaction_log.find("chk-tx-complete")
+    expect(record["status"]).to eq("complete")
+    expect(record["checkout_id"]).to eq(checkout["id"])
+    expect(record["payment_token_ref"]).not_to eq("tok_visa")
+    expect(record["amount"]).to be_a(Integer)
+    expect(record["currency"]).to eq(checkout["currency"])
+    expect(record["completed_at"]).not_to be_nil
+  end
+
+  it "settles the transaction record failed, not left pending, when the adapter raises (Phase 0)" do
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: "chk-missing", payment_token: "tok_visa",
+                                   idempotency_key: "chk-tx-missing-complete" })
+    end.to raise_error(KeyError)
+
+    expect(transaction_log.find("chk-tx-missing-complete")["status"]).to eq("failed")
   end
 
   it "routes cancel_order/request_return/refund_order through as dev.ucp.shopping.order actions (§16)" do
