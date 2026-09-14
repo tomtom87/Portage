@@ -75,10 +75,16 @@ portage history [list] [--purchases|--searches] [--limit N] [--json]
 portage history clear [--purchases|--searches]
 portage payment list [--json]
 portage payment enroll <url> [--label NAME] [--json]
+                              [--scope-merchant HOST ...] [--scope-max-amount N] [--scope-currency CUR]
 portage payment set-default <id>
 portage payment remove <id>
 portage payment freeze <id>
 portage payment revoke <id>
+portage policy show [--json]
+portage policy set [--per-transaction-cap N --currency CUR]
+                    [--rolling-cap N --rolling-window-seconds N --currency CUR]
+                    [--velocity-count N --velocity-window-seconds N]
+                    [--allow HOST ...] [--clear-allowlist]
 ```
 
 - `--query` — search term. Against the store's catalog when you name a store,
@@ -191,6 +197,19 @@ portage payment remove <id>    # same as revoke — no processor-side
                                 # "invalidate this token" call to differ by
 ```
 
+`--scope-merchant`/`--scope-max-amount`/`--scope-currency` bind a Phase 2
+policy scope to the token at enrollment time, rather than after the fact:
+
+```bash
+portage payment enroll https://your-shop.example --label "Ops card" \
+  --scope-merchant your-shop.example --scope-max-amount 5000 --scope-currency USD
+```
+
+Written to `Policy` keyed by the same `token_ref` `PolicyGuard` derives from
+the token at charge time — enrollment is the only place a scope gets
+attached to a specific token; `portage policy set` below only touches the
+global caps/velocity/allowlist, not per-token scopes.
+
 Storage picks the strongest tier your platform actually has, in order, with
 no homegrown fallback store of its own:
 
@@ -207,6 +226,32 @@ the Keychain/Secret Service entry directly — this is a convenience store, not
 a security boundary. The real backstop against a rogue or compromised agent
 is an issuer-side limit (a virtual card via Stripe Issuing, Privacy.com,
 etc.), not anything in this gem.
+
+### Policy
+
+`portage policy show`/`set` manage the Phase 2 policy file
+(`Portage::Ucp::Policy`, checked by `PolicyGuard` on every `complete_checkout`)
+— top-level caps, velocity, and a merchant allowlist that apply regardless of
+which token is spending:
+
+```bash
+portage policy show
+portage policy show --json
+
+portage policy set --per-transaction-cap 10000 --currency USD
+portage policy set --rolling-cap 50000 --rolling-window-seconds 86400 --currency USD
+portage policy set --velocity-count 5 --velocity-window-seconds 3600
+portage policy set --allow shop.example.com --allow other-shop.example.com
+portage policy set --clear-allowlist
+```
+
+Each `--*` group is applied independently — `portage policy set --allow
+shop.example.com` touches only the allowlist, leaving caps/velocity as they
+were, so caps and the allowlist can be configured in separate invocations.
+An empty policy (nothing ever set) means every check passes; this is an
+opt-in guardrail, not a default-deny one. Per-token scopes (merchant/amount
+limits bound to one enrolled card) are set via `portage payment enroll
+--scope-*` above, not here.
 
 ### Shipping address (own-store checkouts only)
 

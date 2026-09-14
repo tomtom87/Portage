@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-14
+
 - Added `portage payment list/enroll/set-default/remove/freeze/revoke` —
   card-on-file storage so `buy`'s `--payment-token` dead-end can fall back to
   a stored default (`@payment_token ||= PaymentMethods.default`) instead of
@@ -16,6 +18,13 @@ pre-1.0, so APIs may still shift between minor versions.
   to a gateway-hosted setup page (the new `app.portage-ucp.payment_enrollment`
   capability in `portage-ucp`) — no raw card number ever reaches this
   process.
+- Added `portage payment enroll --scope-merchant/--scope-max-amount/
+  --scope-currency` — binds a Phase 2 per-token policy scope at enrollment
+  time, written to `Portage::Ucp::Policy` keyed by the same `token_ref`
+  `PolicyGuard` derives from the token at charge time.
+- Added `portage policy show/set` — manages the Phase 2 policy file's
+  top-level caps/velocity/allowlist (`Portage::Ucp::Policy`), checked by
+  `PolicyGuard` on every `complete_checkout`.
 
 ## [0.3.0] - 2026-08-28
 
