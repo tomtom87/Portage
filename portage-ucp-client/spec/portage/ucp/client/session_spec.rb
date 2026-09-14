@@ -118,6 +118,15 @@ RSpec.describe Portage::Ucp::Client::Session do
     end
   end
 
+  describe "#lookup_catalog" do
+    it "delegates to call_tool with the given product_ids" do
+      expect(transport).to receive(:call_tool).with(name: "lookup_catalog", arguments: { product_ids: %w[p1 p2] },
+                                                    meta: nil)
+
+      session.lookup_catalog(product_ids: %w[p1 p2])
+    end
+  end
+
   describe "#advertises?" do
     it "returns nil when capabilities weren't known upfront" do
       expect(session.advertises?("dev.ucp.shopping.checkout")).to be_nil

@@ -83,6 +83,17 @@ module Portage
           GRAPHQL
         end
 
+        # Admin API batch-by-GID fetch — `nodes` returns one entry per
+        # requested id, in order, `null` for any id that doesn't resolve to a
+        # Product (see Adapter#lookup_catalog's `.compact`).
+        def self.products_by_ids_query
+          <<~GRAPHQL
+            query ProductsByIds($ids: [ID!]!) {
+              nodes(ids: $ids) { ... on Product { #{product_fields} } }
+            }
+          GRAPHQL
+        end
+
         CART_FIELDS = <<~GRAPHQL.freeze
           id
           checkoutUrl

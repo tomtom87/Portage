@@ -6,6 +6,7 @@ RSpec.describe Portage::Ucp::Adapter do
   it "raises Portage::Ucp::NotImplementedError for every unoverridden capability method" do
     expect { adapter.search_catalog(query: "x", limit: 1) }.to raise_error(Portage::Ucp::NotImplementedError)
     expect { adapter.get_product(product_id: "p") }.to raise_error(Portage::Ucp::NotImplementedError)
+    expect { adapter.lookup_catalog(product_ids: %w[p]) }.to raise_error(Portage::Ucp::NotImplementedError)
     expect { adapter.get_cart(cart_id: "c") }.to raise_error(Portage::Ucp::NotImplementedError)
     expect { adapter.create_cart(line_items: [], idempotency_key: "k") }
       .to raise_error(Portage::Ucp::NotImplementedError)

@@ -40,4 +40,13 @@ RSpec.describe Portage::Ucp::Shopify::Queries do
       expect(after_configure).to include("metafields(identifiers:")
     end
   end
+
+  describe ".products_by_ids_query" do
+    it "batch-fetches by GID via nodes(ids:), same product_fields shape as .product_by_id_query" do
+      query = described_class.products_by_ids_query
+
+      expect(query).to include("query ProductsByIds($ids: [ID!]!)")
+      expect(query).to include("nodes(ids: $ids) { ... on Product {")
+    end
+  end
 end

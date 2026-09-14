@@ -44,6 +44,7 @@ module Portage
         end
 
         def get_product(product_id:, meta: nil) = call("get_product", meta: meta, product_id: product_id)
+        def lookup_catalog(product_ids:, meta: nil) = call("lookup_catalog", meta: meta, product_ids: product_ids)
 
         def get_cart(cart_id:, meta: nil) = call("get_cart", meta: meta, cart_id: cart_id)
 

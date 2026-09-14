@@ -66,6 +66,12 @@ module Portage
           node && Portage::Ucp::ProductDetail.new(product: Mapper.product(node))
         end
 
+        def lookup_catalog(product_ids:)
+          data = @client.admin_query(Queries.products_by_ids_query, variables: { ids: product_ids })
+          products = data["nodes"].compact.map { |node| Mapper.product(node) }
+          Portage::Ucp::CatalogSearchResult.new(products: products)
+        end
+
         def get_cart(cart_id:)
           cart_node = fetch_cart_node(cart_id)
           cart_node && Mapper.cart(cart_node)

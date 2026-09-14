@@ -10,6 +10,11 @@ module Portage
       # get_cart/get_checkout/get_order.
       # @return [Portage::Ucp::ProductDetail, nil]
       def get_product(product_id:) = not_implemented
+      # Batch fetch — same result shape as search_catalog, for a caller that
+      # already has a set of product ids (e.g. hydrating a cart/order) and
+      # wants one round trip instead of N #get_product calls.
+      # @return [Portage::Ucp::CatalogSearchResult]
+      def lookup_catalog(product_ids:) = not_implemented
 
       # --- Cart (dev.ucp.shopping.cart) ---
       # Full-replacement semantics, matching UCP's real cart methods: create/
