@@ -72,4 +72,49 @@ RSpec.describe Portage::Ucp::Support::TransactionLog do
     expect(log.find("k1")["status"]).to eq("complete")
     expect(log.find("k2")["status"]).to eq("pending")
   end
+
+  it "records a policy_decision mid-flight without changing status (Phase 2)" do
+    log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: "ref1")
+
+    log.record_decision(idempotency_key: "k1", policy_decision: { "allowed" => true })
+
+    record = log.find("k1")
+    expect(record["status"]).to eq("pending")
+    expect(record["policy_decision"]).to eq({ "allowed" => true })
+  end
+
+  it "carries policy_decision/confirmation_outcome through #complete" do
+    log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: "ref1")
+
+    log.complete(idempotency_key: "k1", status: "failed",
+                 policy_decision: { "allowed" => false, "reason" => "spend_cap_exceeded" },
+                 confirmation_outcome: "denied")
+
+    record = log.find("k1")
+    expect(record["policy_decision"]).to eq({ "allowed" => false, "reason" => "spend_cap_exceeded" })
+    expect(record["confirmation_outcome"]).to eq("denied")
+  end
+
+  it "returns only completed records for the given shop within the window (#completed_since)" do
+    log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: "ref1", shop: "shop-a")
+    log.complete(idempotency_key: "k1", status: "complete", amount: 100, currency: "USD")
+
+    log.reserve(idempotency_key: "k2", checkout_id: "chk_2", payment_token_ref: "ref2", shop: "shop-a")
+    # left pending — must not count
+
+    log.reserve(idempotency_key: "k3", checkout_id: "chk_3", payment_token_ref: "ref3", shop: "shop-b")
+    log.complete(idempotency_key: "k3", status: "complete", amount: 200, currency: "USD")
+
+    results = log.completed_since(Time.now - 3600, shop: "shop-a")
+    expect(results.map { |r| r["idempotency_key"] }).to eq(["k1"])
+  end
+
+  it "excludes completed records outside the window (#completed_since)" do
+    stale_clock = -> { Time.now - 7200 }
+    stale_log = described_class.new(path: @path, clock: stale_clock)
+    stale_log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: "ref1", shop: "shop-a")
+    stale_log.complete(idempotency_key: "k1", status: "complete", amount: 100, currency: "USD")
+
+    expect(log.completed_since(Time.now - 3600, shop: "shop-a")).to eq([])
+  end
 end

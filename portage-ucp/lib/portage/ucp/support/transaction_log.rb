@@ -1,5 +1,6 @@
 require "json"
 require "fileutils"
+require "time"
 
 module Portage
   module Ucp
@@ -53,7 +54,8 @@ module Portage
         # `reserve` was ever recorded for this key — completing a
         # transaction that was never reserved means a call site skipped the
         # reserve step, which is the exact bug Phase 0 exists to prevent.
-        def complete(idempotency_key:, status:, amount: nil, currency: nil)
+        def complete(idempotency_key:, status:, amount: nil, currency: nil, policy_decision: nil,
+                     confirmation_outcome: nil)
           raise ArgumentError, "status must be one of #{TERMINAL_STATUSES}" unless TERMINAL_STATUSES.include?(status)
 
           with_lock(File::LOCK_EX) do |data, file|
@@ -63,7 +65,26 @@ module Portage
             record["status"] = status
             record["amount"] = amount unless amount.nil?
             record["currency"] = currency unless currency.nil?
+            record["policy_decision"] = policy_decision unless policy_decision.nil?
+            record["confirmation_outcome"] = confirmation_outcome unless confirmation_outcome.nil?
             record["completed_at"] = @clock.call.utc.iso8601
+            persist(data, file)
+            record
+          end
+        end
+
+        # Called mid-flight, between a passing PolicyGuard.check! and the
+        # adapter dispatch it gates — so a passing decision is on record even
+        # if the process dies during the adapter's own gateway round-trip,
+        # same reasoning as `reserve` landing before dispatch. A *blocking*
+        # decision goes through `#complete(status: "failed", policy_decision:)`
+        # instead, since a block never reaches dispatch at all.
+        def record_decision(idempotency_key:, policy_decision:)
+          with_lock(File::LOCK_EX) do |data, file|
+            record = data[idempotency_key]
+            raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
+
+            record["policy_decision"] = policy_decision
             persist(data, file)
             record
           end
@@ -71,6 +92,20 @@ module Portage
 
         def find(idempotency_key)
           with_lock(File::LOCK_SH) { |data, _file| data[idempotency_key] }
+        end
+
+        # Rolling-window records for PolicyGuard's spend cap / velocity
+        # checks — "complete" only (a "failed"/"pending" attempt never moved
+        # money, so it shouldn't count against a spend or velocity limit).
+        # Scoped to `shop` since caps/velocity are per-merchant in the policy
+        # file's mental model (a global cross-shop cap isn't a v1 goal).
+        def completed_since(since, shop:)
+          with_lock(File::LOCK_SH) do |data, _file|
+            data.values.select do |record|
+              record["status"] == "complete" && record["shop"] == shop && record["completed_at"] &&
+                Time.parse(record["completed_at"]) >= since
+            end
+          end
         end
 
         private
