@@ -73,6 +73,12 @@ portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                        [--max-price N] [--json]
 portage history [list] [--purchases|--searches] [--limit N] [--json]
 portage history clear [--purchases|--searches]
+portage payment list [--json]
+portage payment enroll <url> [--label NAME] [--json]
+portage payment set-default <id>
+portage payment remove <id>
+portage payment freeze <id>
+portage payment revoke <id>
 ```
 
 - `--query` — search term. Against the store's catalog when you name a store,
@@ -80,7 +86,9 @@ portage history clear [--purchases|--searches]
 - `--qty` — quantity, default `1`.
 - `--payment-token` — a tokenized payment credential (never a raw card number —
   `PaymentTokenGuard` in the core gem rejects those before they reach the wire).
-  Omit for `--dry-run` or to just browse.
+  Omit for `--dry-run` or to just browse, or to fall back to whatever
+  `portage payment` has on file as the default (see "Payment" below) — the
+  flag always wins when both are present.
 - `--product-id` — buy exactly this product rather than whatever the catalog
   search ranks first. If the id isn't in the results, nothing is bought.
 - `--store` — name the merchant without giving a full URL; skips the search.
@@ -161,6 +169,44 @@ portage history clear --purchases     # wipe just one
 
 This is a local convenience cache, not an audit log — `portage history clear`
 deletes it outright, and there's no server-side record.
+
+### Payment
+
+Card-on-file storage for `--payment-token`, so an autonomous agent can
+complete a checkout without a human handing over a fresh token every time
+(docs/plans/agentic-payments.md Phase 1). No raw card number ever touches
+this process — enrollment is a browser handoff to the gateway's own hosted
+setup page:
+
+```bash
+portage payment enroll https://your-shop.example --label "Ops card"
+# → prints a setup_url; visit it, enter the card there, this process polls
+#   until the gateway hands back a token, then stores it.
+
+portage payment list
+portage payment set-default <id>
+portage payment freeze <id>    # blocks spend, keeps the enrollment
+portage payment revoke <id>    # deletes the token and the enrollment
+portage payment remove <id>    # same as revoke — no processor-side
+                                # "invalidate this token" call to differ by
+```
+
+Storage picks the strongest tier your platform actually has, in order, with
+no homegrown fallback store of its own:
+
+1. **macOS Keychain**, via the `security` CLI.
+2. **Linux Secret Service** (GNOME Keyring/KWallet), via `secret-tool` — only
+   when a D-Bus session is actually live.
+3. **Headless** — no local storage at all. The token *is*
+   `PORTAGE_PAYMENT_TOKEN`; `list`/`enroll`/`freeze`/etc. don't apply, since
+   there's nothing local to manage.
+
+**Local policy guards agent mistakes, not a compromised agent.** Anyone
+running as the local user can read/edit `~/.portage/payment_methods.json` or
+the Keychain/Secret Service entry directly — this is a convenience store, not
+a security boundary. The real backstop against a rogue or compromised agent
+is an issuer-side limit (a virtual card via Stripe Issuing, Privacy.com,
+etc.), not anything in this gem.
 
 ### Shipping address (own-store checkouts only)
 

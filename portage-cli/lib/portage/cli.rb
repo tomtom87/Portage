@@ -8,6 +8,7 @@ require_relative "cli/buy"
 require_relative "cli/find"
 require_relative "cli/compare"
 require_relative "cli/history"
+require_relative "cli/payment_methods"
 
 module Portage
   # `portage` — the single command-line entrypoint for acting as a shopper's
@@ -24,6 +25,12 @@ module Portage
                                     [--max-price N] [--json]
              portage history [list] [--purchases|--searches] [--limit N] [--json]
              portage history clear [--purchases|--searches]
+             portage payment list [--json]
+             portage payment enroll <url> [--label NAME] [--json]
+             portage payment set-default <id>
+             portage payment remove <id>
+             portage payment freeze <id>
+             portage payment revoke <id>
     USAGE
 
     # @param argv [Array<String>]
@@ -35,6 +42,7 @@ module Portage
       when "find" then run_find(rest)
       when "compare" then run_compare(rest)
       when "history" then run_history(rest)
+      when "payment" then run_payment(rest)
       else
         warn USAGE
         1
@@ -297,6 +305,101 @@ module Portage
       "#{Time.at(entry['at'])} — \"#{entry['query']}\" — #{entry['offer_count']} offer(s)"
     end
     private_class_method :history_search_line
+
+    # --- payment ---
+
+    # Maps each single-id subcommand to the PaymentMethods method it calls —
+    # collapsing what would otherwise be four near-identical `when` branches
+    # (each just yielding a different method to #run_payment_mutate) into one
+    # table lookup.
+    PAYMENT_MUTATIONS = { "set-default" => :make_default, "remove" => :remove,
+                          "freeze" => :freeze_method, "revoke" => :revoke }.freeze
+
+    def self.run_payment(argv)
+      sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      return run_payment_list(argv) if sub == "list"
+      return run_payment_enroll(argv) if sub == "enroll"
+      return run_payment_mutate(argv, PAYMENT_MUTATIONS[sub]) if PAYMENT_MUTATIONS.key?(sub)
+
+      warn USAGE
+      1
+    end
+    private_class_method :run_payment
+
+    def self.run_payment_list(argv)
+      json = false
+      OptionParser.new { |parser| parser.on("--json") { json = true } }.parse!(argv)
+      methods = PaymentMethods.new.list
+      puts json ? JSON.pretty_generate(methods) : format_payment_list(methods)
+      0
+    end
+    private_class_method :run_payment_list
+
+    # Shared by set-default/remove/freeze/revoke — each takes exactly one
+    # `<id>` positional arg and reports the (now-updated) entry, or fails
+    # cleanly for an id that isn't enrolled.
+    def self.run_payment_mutate(argv, method_name)
+      id = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      unless id
+        warn USAGE
+        return 1
+      end
+
+      entry = PaymentMethods.new.public_send(method_name, id)
+      puts "#{entry['label']} (#{entry['id']}) — default: #{entry['default']}, frozen: #{entry['frozen']}"
+      0
+    rescue PaymentMethods::UnknownMethodError
+      warn "No payment method enrolled with id #{id}."
+      1
+    end
+    private_class_method :run_payment_mutate
+
+    def self.parse_payment_enroll_options(argv)
+      opts = {}
+      OptionParser.new do |parser|
+        parser.on("--label NAME") { |v| opts[:label] = v }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+      opts[:url] = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      opts
+    end
+    private_class_method :parse_payment_enroll_options
+
+    def self.run_payment_enroll(argv)
+      opts = parse_payment_enroll_options(argv)
+      unless opts[:url]
+        warn USAGE
+        return 1
+      end
+
+      result = PaymentMethods.new.enroll(opts[:url], label: opts[:label]) do |setup_url|
+        puts "Visit this link to add a card, then wait — polling for completion:\n  #{setup_url}"
+      end
+      puts opts[:json] ? JSON.pretty_generate(result) : format_payment_enroll(result)
+      result[:status] == "complete" ? 0 : 1
+    rescue PaymentMethods::NotSupportedError => e
+      warn e.message
+      1
+    end
+    private_class_method :run_payment_enroll
+
+    def self.format_payment_list(methods)
+      return "(no payment methods enrolled)" if methods.empty?
+
+      methods.map { |m| "#{m['label']} (#{m['id']}) — default: #{m['default']}, frozen: #{m['frozen']}" }.join("\n")
+    end
+    private_class_method :format_payment_list
+
+    def self.format_payment_enroll(result)
+      case result[:status]
+      when "complete" then "Enrolled #{result[:label]} (#{result[:id]})."
+      when "pending"
+        "Timed out waiting for enrollment — finish it at #{result[:setup_url]}, then run " \
+        "`portage payment enroll` again."
+      else "This store doesn't support payment enrollment."
+      end
+    end
+    private_class_method :format_payment_enroll
 
     # --- output ---
 

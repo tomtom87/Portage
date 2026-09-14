@@ -6,6 +6,17 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Added `portage payment list/enroll/set-default/remove/freeze/revoke` —
+  card-on-file storage so `buy`'s `--payment-token` dead-end can fall back to
+  a stored default (`@payment_token ||= PaymentMethods.default`) instead of
+  requiring a fresh token on every call (docs/plans/agentic-payments.md
+  Phase 1). Storage picks macOS Keychain / Linux Secret Service (`secret-tool`,
+  D-Bus session required) / a headless `PORTAGE_PAYMENT_TOKEN`-only tier, in
+  that order, with no homegrown fallback store. `enroll` is a browser handoff
+  to a gateway-hosted setup page (the new `app.portage-ucp.payment_enrollment`
+  capability in `portage-ucp`) — no raw card number ever reaches this
+  process.
+
 ## [0.3.0] - 2026-08-28
 
 - Fixed: `find` and `buy` were treating `search_catalog`'s wire envelope
