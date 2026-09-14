@@ -57,5 +57,21 @@ module Portage
         @decision = decision
       end
     end
+
+    # Raised by a Confirmer (docs/plans/agentic-payments.md Phase 3) when a
+    # payment-completing dispatch isn't approved — explicit "n", a timeout,
+    # or an async transport's own deny. Same reason/decision shape as
+    # PolicyViolationError above, for the same reasons: a stable symbol to
+    # branch on, and a decision Dispatcher persists onto the Phase 0
+    # transaction record via `confirmation_outcome`.
+    class ConfirmationDeniedError < Error
+      attr_reader :reason, :decision
+
+      def initialize(message, reason:, decision:)
+        super(message)
+        @reason = reason
+        @decision = decision
+      end
+    end
   end
 end
