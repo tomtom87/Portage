@@ -25,9 +25,13 @@ module Portage
       #   (blocks on stdin) — confirmation is on by default per the plan;
       #   specs and conformance suites inject `Confirmer::AutoApprove.new`
       #   instead so a run never blocks waiting on a human.
+      # @param order_ledger [Support::OrderLedger] settled-order snapshot
+      #   store (Phase 1, docs/plans/order-ledger.md). Injectable for the
+      #   same reason as `transaction_log` — defaults to the real
+      #   `~/.portage/orders.json`.
       def initialize(adapter:, registry: CapabilityRegistry.default, logger: Portage::Ucp.configuration.logger,
                      shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load,
-                     confirmer: Confirmer::Terminal.new)
+                     confirmer: Confirmer::Terminal.new, order_ledger: Support::OrderLedger.new)
         @adapter = adapter
         @registry = registry
         @logger = logger
@@ -35,6 +39,7 @@ module Portage
         @transaction_log = transaction_log
         @policy = policy
         @confirmer = confirmer
+        @order_ledger = order_ledger
       end
 
       # @param correlation_id [String, nil] threaded through to the adapter
@@ -87,6 +92,22 @@ module Portage
         idempotency_key = arguments.fetch(:idempotency_key)
         token_ref = payment_token_ref(arguments[:payment_token])
 
+        result = settle(method_name, arguments, correlation_id, idempotency_key, token_ref)
+
+        # Snapshot AFTER `complete` inside `settle` above, never before/
+        # interleaved — opposite of `reserve`'s pre-dispatch posture.
+        # Deliberately OUTSIDE `settle`'s rescue: the money has already
+        # moved by this point, so if this write raises it must surface only
+        # after the transaction record is durably `complete` — a lost local
+        # history write must never flip a settled charge to `failed` or
+        # leave the transaction record ambiguous. Not every completed
+        # checkout produces an order (e.g. cart-only flows), so skip
+        # silently when absent.
+        @order_ledger.record(idempotency_key: idempotency_key, order: result.order) if result.order
+        result
+      end
+
+      def settle(method_name, arguments, correlation_id, idempotency_key, token_ref)
         @transaction_log.reserve(idempotency_key: idempotency_key, shop: @shop,
                                  checkout_id: arguments[:checkout_id], payment_token_ref: token_ref)
 
