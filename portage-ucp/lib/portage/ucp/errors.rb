@@ -38,5 +38,24 @@ module Portage
     # UCP's freeform "rate_limited" error code, same convention as
     # ConflictError above.
     class UpstreamThrottledError < Error; end
+
+    # Raised by PolicyGuard.check! (docs/plans/agentic-payments.md Phase 2)
+    # when a payment-completing dispatch fails a locally-configured guard —
+    # spend cap, velocity limit, merchant allowlist, or per-token scope.
+    # `reason` is a stable snake_case symbol (not just the message) so a
+    # caller can branch on *why* without parsing prose, matching
+    # OutOfStockError/ConflictError's freeform-error-code convention above.
+    # `decision` carries the same shape PolicyGuard.check! returns on
+    # success, so Dispatcher can persist "blocked, here's why" onto the
+    # Phase 0 transaction record the same way it persists a passing decision.
+    class PolicyViolationError < Error
+      attr_reader :reason, :decision
+
+      def initialize(message, reason:, decision:)
+        super(message)
+        @reason = reason
+        @decision = decision
+      end
+    end
   end
 end

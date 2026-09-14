@@ -58,7 +58,15 @@ RSpec.shared_examples "a portage adapter" do
   let(:conformance_transaction_log) do
     Portage::Ucp::Support::TransactionLog.new(path: File.join(Dir.mktmpdir, "transactions.json"))
   end
-  let(:dispatcher) { Portage::Ucp::Dispatcher.new(adapter: adapter, transaction_log: conformance_transaction_log) }
+  # Same reasoning as `conformance_transaction_log` — an unconfigured Policy
+  # (no file at this tmp path) is permissive, so this doesn't change what the
+  # kit exercises, it just keeps an adapter gem's conformance run from
+  # reading and being affected by the real `~/.portage/policy.json`.
+  let(:conformance_policy) { Portage::Ucp::Policy.new(path: File.join(Dir.mktmpdir, "policy.json")) }
+  let(:dispatcher) do
+    Portage::Ucp::Dispatcher.new(adapter: adapter, transaction_log: conformance_transaction_log,
+                                 policy: conformance_policy)
+  end
   let(:schema_validator) { Portage::Ucp::SchemaValidator.new }
   let(:conformance_idempotency_key) { "conformance-#{object_id}-#{rand(1_000_000)}" }
   let(:existing_variant_id) { existing_product_id }

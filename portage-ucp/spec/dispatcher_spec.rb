@@ -8,7 +8,10 @@ RSpec.describe Portage::Ucp::Dispatcher do
 
   let(:adapter) { Portage::Ucp::Support::FakeAdapter.new }
   let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new(path: @transactions_path) }
-  let(:dispatcher) { described_class.new(adapter: adapter, transaction_log: transaction_log) }
+  let(:policy) { Portage::Ucp::Policy.new(path: File.join(Dir.mktmpdir, "policy.json")) }
+  let(:dispatcher) do
+    described_class.new(adapter: adapter, transaction_log: transaction_log, policy: policy, shop: "shop.example.com")
+  end
   let(:product) { ProductFactory.build(id: "prod_1", title: "Cold Brew", price_minor: 500) }
 
   before { adapter.seed_product(product) }
@@ -74,6 +77,37 @@ RSpec.describe Portage::Ucp::Dispatcher do
     end.to raise_error(KeyError)
 
     expect(transaction_log.find("chk-tx-missing-complete")["status"]).to eq("failed")
+  end
+
+  it "records a passing policy_decision on the transaction record before dispatch (Phase 2)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-policy-pass" })[:structuredContent]
+
+    dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                    arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                 idempotency_key: "chk-policy-pass-complete" })
+
+    record = transaction_log.find("chk-policy-pass-complete")
+    expect(record["policy_decision"]).to eq({ "allowed" => true })
+    expect(record["status"]).to eq("complete")
+  end
+
+  it "blocks complete_checkout and settles the record failed when the merchant isn't allowlisted (Phase 2)" do
+    policy.set("merchant_allowlist", ["some-other-shop.com"])
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-policy-block" })[:structuredContent]
+
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                   idempotency_key: "chk-policy-block-complete" })
+    end.to raise_error(Portage::Ucp::PolicyViolationError)
+
+    record = transaction_log.find("chk-policy-block-complete")
+    expect(record["status"]).to eq("failed")
+    expect(record["policy_decision"]).to include("allowed" => false, "reason" => "merchant_not_allowlisted")
   end
 
   it "routes cancel_order/request_return/refund_order through as dev.ucp.shopping.order actions (§16)" do

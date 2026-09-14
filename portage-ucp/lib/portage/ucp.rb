@@ -24,7 +24,10 @@ require_relative "ucp/support/token_exchange"
 # request path — Dispatcher reserves/commits against it around
 # complete_checkout (Phase 0, docs/plans/agentic-payments.md).
 require_relative "ucp/support/transaction_log"
+require_relative "ucp/support/token_ref"
 require_relative "ucp/payment_token_guard"
+require_relative "ucp/policy"
+require_relative "ucp/policy_guard"
 require_relative "ucp/authenticator"
 require_relative "ucp/rate_limiter"
 require_relative "ucp/observability"
