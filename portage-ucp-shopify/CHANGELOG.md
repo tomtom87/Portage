@@ -6,6 +6,17 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-14
+
+- Added `Adapter#lookup_catalog(ids:)` — fetches several known product ids in
+  one round trip via the Admin API's `nodes(ids:)` field, instead of one
+  `get_product` call per id. Mirrors Shopify's real `search_catalog`/
+  `lookup_catalog` split, and reuses `Mapper.product` against the same node
+  shape `get_product`/`search_catalog` already use.
+- Widened the `portage-ucp` dependency pin from `~> 0.4` to `~> 0.5` —
+  `lookup_catalog` is only advertised by the base `Adapter` from
+  `portage-ucp` 0.5.0 on.
+
 ## [0.3.1] - 2026-08-28
 
 - Widened the `portage-ucp` dependency pin from `~> 0.3` to `~> 0.4` —
