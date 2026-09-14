@@ -5,16 +5,35 @@ module Portage
       # agent's retry on a dropped connection can't double-charge. None of
       # the commerce APIs behind the bundled adapter gems takes an
       # idempotency key natively (Shopify's cartSubmitForCompletion attemptId
-      # is the one partial exception), so every adapter keeps an in-process
-      # dedup table — this is that table.
+      # is the one partial exception), so every adapter keeps a dedup table
+      # — this is that table, now backed by a pluggable store instead of a
+      # bare Hash.
       #
-      # In-process only: a multi-process deployment that must dedup across
-      # workers needs a shared store, which is a consumer concern the same
-      # way RateLimiter is.
+      # Defaults to `MemoryStore` (in-process, lost on restart — the same
+      # durability the old bare Hash had). A consumer that needs dedup to
+      # survive a process restart or be shared across processes (the actual
+      # complaint behind this: a single-host CLI invoked fresh per command,
+      # or a multi-worker server) injects a different store via
+      # `idempotency_store=` — `FileStore` ships for the single-host case;
+      # Redis/SQLite-backed stores are a consumer's own implementation
+      # against the same two-method interface (`#fetch(key)` /
+      # `#store(key, value)`).
       module Idempotency
+        # Sentinel distinguishing "no entry" from a memoized `nil` result.
+        NOT_FOUND = Object.new.freeze
+
         # Guards lazy init of each instance's lock table below — brief and
         # only touched once per instance, not on the hot dedup path.
         INIT_MUTEX = Mutex.new
+
+        # Injects a store other than the default `MemoryStore` — call this
+        # before the first `dedup`, typically from the including class's
+        # `initialize`. Public because store choice is a deployment concern
+        # (which durability a consumer needs), unlike `dedup` itself, which
+        # stays private/adapter-internal.
+        def idempotency_store=(store)
+          @idempotency_store = store
+        end
 
         private
 
@@ -24,10 +43,15 @@ module Portage
           key_lock = @idempotency_mutex.synchronize { @idempotency_locks[idempotency_key] ||= Mutex.new }
 
           key_lock.synchronize do
-            return @idempotency_results[idempotency_key] if @idempotency_results.key?(idempotency_key)
+            cached = idempotency_store.fetch(idempotency_key)
+            next cached unless cached.equal?(NOT_FOUND)
 
-            @idempotency_results[idempotency_key] = yield
+            idempotency_store.store(idempotency_key, yield)
           end
+        end
+
+        def idempotency_store
+          @idempotency_store ||= MemoryStore.new
         end
 
         def init_idempotency_locks!
@@ -35,7 +59,6 @@ module Portage
 
           INIT_MUTEX.synchronize do
             @idempotency_mutex ||= Mutex.new
-            @idempotency_results ||= {}
             @idempotency_locks ||= {}
           end
         end
@@ -43,3 +66,6 @@ module Portage
     end
   end
 end
+
+require_relative "idempotency/memory_store"
+require_relative "idempotency/file_store"

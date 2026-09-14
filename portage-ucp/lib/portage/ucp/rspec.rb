@@ -80,13 +80,16 @@ RSpec.shared_examples "a portage adapter" do
     expect(errors).to eq([]), "create_checkout's response doesn't validate: #{errors.join('; ')}"
   end
 
-  # The core gem's own dedup table, when the adapter uses it (every bundled
+  # The core gem's own dedup store, when the adapter uses it (every bundled
   # adapter includes `Support::Idempotency`). nil for an adapter that dedupes
   # some other way — see the example below for why that costs it a check.
+  # `dedup`/the store accessor are adapter-internal (private), so this reaches
+  # past that the same way `instance_variable_get` used to — it's the
+  # conformance kit checking the guarantee actually held, not a public API.
   def conformance_dedup_table
     return nil unless adapter.is_a?(Portage::Ucp::Support::Idempotency)
 
-    adapter.instance_variable_get(:@idempotency_results)
+    adapter.send(:idempotency_store)
   end
 
   it "dedupes a repeated idempotency_key on create_checkout rather than re-running the mutation (§9a)" do
