@@ -18,7 +18,7 @@ module Portage
       # must branch on it themselves.
       class Session
         MUTATING_ACTIONS = %w[create_cart update_cart cancel_cart create_checkout update_checkout
-                              complete_checkout cancel_checkout].freeze
+                              complete_checkout cancel_checkout create_payment_enrollment].freeze
 
         # @param capabilities [Array<String>, nil] reverse-domain capability
         #   names advertised by the server, when known upfront (Client.discover
@@ -85,6 +85,15 @@ module Portage
 
         def get_order(order_id:) = call("get_order", order_id: order_id)
         def link_identity(oauth_token:) = call("link_identity", oauth_token: oauth_token)
+
+        # app.portage-ucp.payment_enrollment (Portage extension, §ref
+        # docs/plans/agentic-payments.md Phase 1) — not every adapter
+        # advertises this, check #advertises? first.
+        def create_payment_enrollment(idempotency_key: nil)
+          call("create_payment_enrollment", idempotency_key: idempotency_key)
+        end
+
+        def get_payment_enrollment(enrollment_id:) = call("get_payment_enrollment", enrollment_id: enrollment_id)
 
         private
 
