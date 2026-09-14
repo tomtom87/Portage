@@ -4,7 +4,8 @@ module Portage
       CATALOG = Portage::Ucp::Capability.new(
         name: "dev.ucp.shopping.catalog",
         version: "1",
-        actions: { "search_catalog" => :search_catalog, "get_product" => :get_product }
+        actions: { "search_catalog" => :search_catalog, "get_product" => :get_product,
+                   "lookup_catalog" => :lookup_catalog }
       )
     end
   end

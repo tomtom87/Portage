@@ -122,6 +122,53 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
     end
   end
 
+  describe "#lookup_catalog" do
+    it "queries the Admin API via nodes(ids:) and maps results to a Portage::Ucp::CatalogSearchResult" do
+      stub_admin({ data: { nodes: [
+                   { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
+                     priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
+                                   maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
+                     variants: { nodes: [
+                       { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
+                         price: "5.00" }
+                     ] } },
+                   { id: "gid://shopify/Product/2", title: "Espresso", description: "desc", onlineStoreUrl: nil,
+                     priceRange: { minVariantPrice: { amount: "3.00", currencyCode: "USD" },
+                                   maxVariantPrice: { amount: "3.00", currencyCode: "USD" } },
+                     variants: { nodes: [
+                       { id: "gid://shopify/ProductVariant/2", title: "Default", availableForSale: true,
+                         price: "3.00" }
+                     ] } }
+                 ] } })
+        .with(body: hash_including("query" => a_string_matching(/query ProductsByIds/),
+                                   "variables" => { "ids" => %w[gid://shopify/Product/1
+                                                                gid://shopify/Product/2] }))
+
+      result = adapter.lookup_catalog(product_ids: %w[gid://shopify/Product/1 gid://shopify/Product/2])
+
+      expect(result).to be_a(Portage::Ucp::CatalogSearchResult)
+      expect(result.products.map(&:title)).to eq(["Cold Brew", "Espresso"])
+    end
+
+    it "drops nil nodes for ids that don't resolve to a Product" do
+      stub_admin({ data: { nodes: [
+                   nil,
+                   { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
+                     priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
+                                   maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
+                     variants: { nodes: [
+                       { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
+                         price: "5.00" }
+                     ] } }
+                 ] } })
+
+      result = adapter.lookup_catalog(product_ids: %w[gid://shopify/Product/missing gid://shopify/Product/1])
+
+      expect(result.products.size).to eq(1)
+      expect(result.products.first.title).to eq("Cold Brew")
+    end
+  end
+
   describe "#get_cart" do
     it "queries the Storefront API and maps the result to a Portage::Ucp::Cart" do
       stub_storefront({ data: { cart: cart_response } })
