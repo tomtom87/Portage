@@ -1,5 +1,3 @@
-require "digest"
-
 module Portage
   module Ucp
     # Accepts a UCP-shaped request (capability + action + arguments), routes it
@@ -18,13 +16,18 @@ module Portage
       # @param transaction_log [Support::TransactionLog] reserve/commit
       #   ledger for `complete_checkout` calls (Phase 0). Injectable so specs
       #   don't write to the real `~/.portage/transactions.json`.
+      # @param policy [Policy] Phase 2 policy config PolicyGuard.check! reads
+      #   caps/velocity/allowlist/token-scope from. Injectable for the same
+      #   reason as `transaction_log` — defaulting to `Policy.load` would
+      #   have every spec read the real `~/.portage/policy.json`.
       def initialize(adapter:, registry: CapabilityRegistry.default, logger: Portage::Ucp.configuration.logger,
-                     shop: nil, transaction_log: Support::TransactionLog.new)
+                     shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load)
         @adapter = adapter
         @registry = registry
         @logger = logger
         @shop = shop
         @transaction_log = transaction_log
+        @policy = policy
       end
 
       # @param correlation_id [String, nil] threaded through to the adapter
@@ -63,12 +66,24 @@ module Portage
       # reserve time (see TransactionLog#reserve) and filled in from the
       # settled Checkout on success; a raised error settles the record
       # `failed` before re-raising, never left dangling `pending`.
+      #
+      # PolicyGuard.check! (Phase 2) runs after reserve, before dispatch —
+      # it needs `amount`/`currency` to check the spend cap, which means
+      # fetching the checkout via `@adapter.get_checkout` up front rather
+      # than waiting for the settled result `call_adapter` would otherwise
+      # provide after the charge already happened. A block never reaches
+      # `call_adapter` at all; a pass is recorded immediately so it survives
+      # a crash during the adapter round-trip, same reasoning as `reserve`.
       def call_and_log_transaction(method_name, arguments, correlation_id)
         idempotency_key = arguments.fetch(:idempotency_key)
+        token_ref = payment_token_ref(arguments[:payment_token])
 
         @transaction_log.reserve(idempotency_key: idempotency_key, shop: @shop,
-                                 checkout_id: arguments[:checkout_id],
-                                 payment_token_ref: payment_token_ref(arguments[:payment_token]))
+                                 checkout_id: arguments[:checkout_id], payment_token_ref: token_ref)
+
+        checkout = @adapter.get_checkout(checkout_id: arguments[:checkout_id])
+        decision = policy_check!(idempotency_key, checkout, token_ref)
+        @transaction_log.record_decision(idempotency_key: idempotency_key, policy_decision: decision)
 
         result = call_adapter(method_name, arguments, correlation_id)
 
@@ -80,13 +95,20 @@ module Portage
         raise
       end
 
+      def policy_check!(idempotency_key, checkout, token_ref)
+        Portage::Ucp::PolicyGuard.check!(amount: settled_amount(checkout), currency: settled_currency(checkout),
+                                         merchant: @shop, token_ref: token_ref, policy: @policy,
+                                         transaction_log: @transaction_log)
+      rescue Portage::Ucp::PolicyViolationError => e
+        @transaction_log.complete(idempotency_key: idempotency_key, status: "failed", policy_decision: e.decision)
+        raise
+      end
+
       # Never persists the payment token itself (single-use, still sensitive
       # even though PaymentTokenGuard has already ruled out a raw PAN) — only
       # a one-way reference an operator can correlate against, not replay.
       def payment_token_ref(payment_token)
-        return nil if payment_token.nil?
-
-        Digest::SHA256.hexdigest(payment_token)[0, 16]
+        Support::TokenRef.for(payment_token)
       end
 
       def settled_amount(result)
