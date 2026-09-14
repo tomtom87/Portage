@@ -37,6 +37,7 @@ module Portage
         @checkouts = {}
         @orders = {}
         @identities = {}
+        @payment_enrollments = {}
         @next_id = 0
       end
 
@@ -158,6 +159,31 @@ module Portage
           @carts[cart.id] = cart
           Portage::Ucp::ReorderResult.new(cart: cart, unavailable_items: unavailable)
         end
+      end
+
+      # Simulates a real gateway-hosted enrollment: "pending" with a setup_url
+      # on the first poll, "complete" with a minted opaque token from the
+      # second poll onward — enough for a caller's poll loop to actually
+      # exercise both states rather than completing on the first check.
+      def create_payment_enrollment(idempotency_key:)
+        dedup(idempotency_key) do
+          id = next_id("penr")
+          @payment_enrollments[id] = 0
+          pending_enrollment(id)
+        end
+      end
+
+      def get_payment_enrollment(enrollment_id:)
+        polls = @payment_enrollments[enrollment_id]
+        return nil unless polls
+
+        @payment_enrollments[enrollment_id] += 1
+        return pending_enrollment(enrollment_id) if polls.zero?
+
+        Portage::Ucp::PaymentEnrollment.new(
+          id: enrollment_id, status: "complete",
+          payment_token: "reftok_#{Digest::SHA256.hexdigest(enrollment_id)[0, 16]}"
+        )
       end
 
       def discount_codes_supported? = true
@@ -327,6 +353,11 @@ module Portage
       def next_id(prefix)
         @next_id += 1
         "#{prefix}_#{@next_id}"
+      end
+
+      def pending_enrollment(id)
+        Portage::Ucp::PaymentEnrollment.new(id: id, status: "pending",
+                                            setup_url: "https://example.com/payment-setup/#{id}")
       end
     end
   end
