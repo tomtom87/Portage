@@ -20,14 +20,21 @@ module Portage
       #   caps/velocity/allowlist/token-scope from. Injectable for the same
       #   reason as `transaction_log` — defaulting to `Policy.load` would
       #   have every spec read the real `~/.portage/policy.json`.
+      # @param confirmer [#confirm!] Phase 3 gate, run after PolicyGuard
+      #   passes, before dispatch. Defaults to `Confirmer::Terminal.new`
+      #   (blocks on stdin) — confirmation is on by default per the plan;
+      #   specs and conformance suites inject `Confirmer::AutoApprove.new`
+      #   instead so a run never blocks waiting on a human.
       def initialize(adapter:, registry: CapabilityRegistry.default, logger: Portage::Ucp.configuration.logger,
-                     shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load)
+                     shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load,
+                     confirmer: Confirmer::Terminal.new)
         @adapter = adapter
         @registry = registry
         @logger = logger
         @shop = shop
         @transaction_log = transaction_log
         @policy = policy
+        @confirmer = confirmer
       end
 
       # @param correlation_id [String, nil] threaded through to the adapter
@@ -67,13 +74,15 @@ module Portage
       # settled Checkout on success; a raised error settles the record
       # `failed` before re-raising, never left dangling `pending`.
       #
-      # PolicyGuard.check! (Phase 2) runs after reserve, before dispatch —
-      # it needs `amount`/`currency` to check the spend cap, which means
+      # PolicyGuard.check! (Phase 2), then the Confirmer (Phase 3), run
+      # after reserve, before dispatch — both need `amount`/`currency` to
+      # check the spend cap / show the operator a prompt, which means
       # fetching the checkout via `@adapter.get_checkout` up front rather
       # than waiting for the settled result `call_adapter` would otherwise
-      # provide after the charge already happened. A block never reaches
-      # `call_adapter` at all; a pass is recorded immediately so it survives
-      # a crash during the adapter round-trip, same reasoning as `reserve`.
+      # provide after the charge already happened. A block or a deny never
+      # reaches `call_adapter` at all; a pass is recorded immediately so it
+      # survives a crash during the adapter round-trip, same reasoning as
+      # `reserve`.
       def call_and_log_transaction(method_name, arguments, correlation_id)
         idempotency_key = arguments.fetch(:idempotency_key)
         token_ref = payment_token_ref(arguments[:payment_token])
@@ -82,8 +91,7 @@ module Portage
                                  checkout_id: arguments[:checkout_id], payment_token_ref: token_ref)
 
         checkout = @adapter.get_checkout(checkout_id: arguments[:checkout_id])
-        decision = policy_check!(idempotency_key, checkout, token_ref)
-        @transaction_log.record_decision(idempotency_key: idempotency_key, policy_decision: decision)
+        gate!(idempotency_key, checkout, token_ref)
 
         result = call_adapter(method_name, arguments, correlation_id)
 
@@ -95,12 +103,32 @@ module Portage
         raise
       end
 
+      # PolicyGuard (Phase 2) then Confirmer (Phase 3), in that order — both
+      # gate the same dispatch, and each phase records its own outcome on
+      # the transaction record as soon as it passes, per `reserve`'s
+      # crash-survives-as-evidence reasoning above.
+      def gate!(idempotency_key, checkout, token_ref)
+        decision = policy_check!(idempotency_key, checkout, token_ref)
+        @transaction_log.record_decision(idempotency_key: idempotency_key, policy_decision: decision)
+
+        confirmation = confirmation_check!(idempotency_key, checkout)
+        @transaction_log.record_confirmation(idempotency_key: idempotency_key, confirmation_outcome: confirmation)
+      end
+
       def policy_check!(idempotency_key, checkout, token_ref)
         Portage::Ucp::PolicyGuard.check!(amount: settled_amount(checkout), currency: settled_currency(checkout),
                                          merchant: @shop, token_ref: token_ref, policy: @policy,
                                          transaction_log: @transaction_log)
       rescue Portage::Ucp::PolicyViolationError => e
         @transaction_log.complete(idempotency_key: idempotency_key, status: "failed", policy_decision: e.decision)
+        raise
+      end
+
+      def confirmation_check!(idempotency_key, checkout)
+        @confirmer.confirm!(amount: settled_amount(checkout), currency: settled_currency(checkout),
+                            merchant: @shop, idempotency_key: idempotency_key)
+      rescue Portage::Ucp::ConfirmationDeniedError => e
+        @transaction_log.complete(idempotency_key: idempotency_key, status: "failed", confirmation_outcome: e.decision)
         raise
       end
 

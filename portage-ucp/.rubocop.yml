@@ -41,6 +41,12 @@ Metrics/ParameterLists:
     # spec shares instead of hand-assembling Price/Description/Variant/
     # Product itself.
     - "spec/support/product_factory.rb"
+    # Dispatcher#initialize takes one keyword per injectable collaborator
+    # (transaction_log, policy, confirmer, ...) so each phase's spec suite
+    # can swap in a test double independently, same one-keyword-per-field
+    # rationale as manifest.rb/value_objects.rb above — collapsing them into
+    # an options hash would lose that.
+    - "lib/portage/ucp/dispatcher.rb"
 
 Style/HashSlice:
   Enabled: false
