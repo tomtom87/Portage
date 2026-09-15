@@ -8,7 +8,7 @@ module Portage
       )
 
       ALL = [CATALOG, CART, CHECKOUT, ORDER, IDENTITY_LINKING, DISCOUNT, FULFILLMENT, REORDER,
-             PAYMENT_ENROLLMENT].freeze
+             PAYMENT_ENROLLMENT, PAYMENT_METHOD, SAVED_ADDRESS, SHOPPER_DATA].freeze
     end
   end
 end
