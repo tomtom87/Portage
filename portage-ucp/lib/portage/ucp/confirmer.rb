@@ -1,4 +1,5 @@
 require "timeout"
+require "net/http"
 
 module Portage
   module Ucp
@@ -67,6 +68,107 @@ module Portage
       class AutoApprove
         def confirm!(**)
           { approved: true }
+        end
+      end
+
+      # Raised when the confirm or status HTTP call itself fails (non-2xx,
+      # not the 409 Support::HttpClient already normalizes to ConflictError)
+      # — a transport failure talking to the out-of-band approver, not a
+      # denial by it. Kept distinct from ConfirmationDeniedError: that one
+      # means "someone said no" or "no one answered in time," this one means
+      # "couldn't even ask."
+      class WebhookApiError < Portage::Ucp::Error
+        include Support::ApiError
+
+        private
+
+        def api_label
+          "Confirmer::Webhook"
+        end
+      end
+
+      # Out-of-band approval over plain HTTP: POST the request, then poll a
+      # status endpoint until the out-of-band channel (Slack, WhatsApp,
+      # whatever a caller wires up) records an answer. Core only ever speaks
+      # HTTP here — the actual notification transport is the caller's job,
+      # same "transport-agnostic by design" posture as this module's
+      # top-of-file comment.
+      #
+      # Deliberately its own timeout default, not Terminal::
+      # DEFAULT_TIMEOUT_SECONDS: 120s fits a human already at a keyboard, not
+      # someone who has to notice a Slack message and tap approve.
+      class Webhook
+        include Support::HttpClient
+
+        DEFAULT_TIMEOUT_SECONDS = 900
+        DEFAULT_POLL_INTERVAL_SECONDS = 5
+
+        # @param confirm_url [String] posted `{amount, currency, merchant,
+        #   idempotency_key}` once, to kick off the out-of-band approval.
+        # @param status_url [String] polled (GET, `?idempotency_key=...`)
+        #   for `{"status" => "approved" | "denied" | "pending"}` until it
+        #   stops answering "pending" or `timeout_seconds` elapses.
+        # @param wait [#call, nil] escape hatch for push-based transports —
+        #   when given, called with `idempotency_key` instead of polling,
+        #   and must itself return `"approved"` or `"denied"` (blocking as
+        #   long as it needs to; `timeout_seconds` isn't enforced around it,
+        #   since a push transport is expected to enforce its own).
+        def initialize(confirm_url:, status_url:, timeout_seconds: DEFAULT_TIMEOUT_SECONDS,
+                       poll_interval_seconds: DEFAULT_POLL_INTERVAL_SECONDS, headers: {}, wait: nil)
+          @confirm_url = confirm_url
+          @status_url = status_url
+          @timeout_seconds = timeout_seconds
+          @poll_interval_seconds = poll_interval_seconds
+          @headers = headers
+          @wait = wait
+        end
+
+        # @raise [Portage::Ucp::ConfirmationDeniedError] on an explicit
+        #   deny, or on timeout (fail-closed, same as Terminal).
+        # @raise [Portage::Ucp::Confirmer::WebhookApiError] if the confirm
+        #   or status HTTP call itself fails.
+        # @return [Hash] `{approved: true}` on approval.
+        def confirm!(amount:, currency:, merchant:, idempotency_key:)
+          json_request(Net::HTTP::Post, @confirm_url,
+                       body: { amount: amount, currency: currency, merchant: merchant,
+                               idempotency_key: idempotency_key },
+                       headers: @headers)
+
+          status = @wait ? @wait.call(idempotency_key) : poll(idempotency_key)
+          return { approved: true } if status == "approved"
+
+          deny!(status == "denied" ? :denied : :timeout, idempotency_key)
+        end
+
+        private
+
+        def poll(idempotency_key)
+          deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @timeout_seconds
+
+          loop do
+            response = json_request(Net::HTTP::Get, status_url_for(idempotency_key), headers: @headers)
+            return response["status"] if %w[approved denied].include?(response["status"])
+            return "timeout" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+            sleep(@poll_interval_seconds)
+          end
+        end
+
+        def status_url_for(idempotency_key)
+          uri = URI(@status_url)
+          uri.query = "idempotency_key=#{URI.encode_www_form_component(idempotency_key)}"
+          uri
+        end
+
+        def deny!(reason, idempotency_key)
+          message = reason == :timeout ? "confirmation timed out after #{@timeout_seconds}s" : "confirmation denied"
+          raise Portage::Ucp::ConfirmationDeniedError.new(
+            message, reason: reason, decision: { approved: false, reason: reason, idempotency_key: idempotency_key }
+          )
+        end
+
+        def api_error_class
+          WebhookApiError
         end
       end
     end
