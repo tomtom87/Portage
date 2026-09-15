@@ -180,6 +180,30 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       expect(checkout.totals.find { |t| t.type == "total" }.amount).to eq(1100)
     end
 
+    it "omits a resume-checkout link once the checkout has completed, even if a URL is available" do
+      checkout = described_class.checkout(node.merge("checkoutUrl" => "https://test-shop.myshopify.com/cart/c/1"),
+                                          status: "completed")
+
+      expect(checkout.links).to eq([])
+    end
+
+    it "surfaces the cart's own checkoutUrl as a resume-checkout Link while not yet completed" do
+      checkout = described_class.checkout(node.merge("checkoutUrl" => "https://test-shop.myshopify.com/cart/c/1"),
+                                          status: "incomplete")
+
+      expect(checkout.links).to eq([Portage::Ucp::Link.new(type: "resume-checkout",
+                                                           url: "https://test-shop.myshopify.com/cart/c/1")])
+    end
+
+    it "prefers the SubmitFailed-specific resume_url over the cart's own checkoutUrl" do
+      checkout = described_class.checkout(node.merge("checkoutUrl" => "https://test-shop.myshopify.com/cart/c/1"),
+                                          status: "requires_escalation",
+                                          resume_url: "https://test-shop.myshopify.com/cart/c/1?verify=1")
+
+      expect(checkout.links).to eq([Portage::Ucp::Link.new(type: "resume-checkout",
+                                                           url: "https://test-shop.myshopify.com/cart/c/1?verify=1")])
+    end
+
     it "maps discountCodes/discountAllocations into a Portage::Ucp::Discounts" do
       with_discounts = node.merge(
         "discountCodes" => [{ "code" => "SAVE10", "applicable" => true }],

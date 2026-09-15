@@ -488,20 +488,27 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
       end.to raise_error(Portage::Ucp::UpstreamThrottledError)
     end
 
-    it "raises when cartSubmitForCompletion reports a SubmitFailed result" do
+    it "returns a requires_escalation checkout with a resume-checkout Link when cartSubmitForCompletion " \
+       "reports a SubmitFailed result (decline, 3DS/verification challenge, etc.)" do
       stub_storefront({ data: { cart: cart_response } })
         .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
       stub_storefront({ data: { cartPaymentUpdate: { cart: cart_response, userErrors: [] } } })
         .with(body: hash_including("query" => a_string_matching(/mutation CartPaymentUpdate/)))
       stub_storefront(
-        { data: { cartSubmitForCompletion: { result: { errors: [{ message: "card declined" }] },
-                                             userErrors: [] } } }
+        { data: { cartSubmitForCompletion: {
+          result: { errors: [{ message: "card declined" }],
+                    checkoutUrl: "https://test-shop.myshopify.com/cart/c/1?verify=1" },
+          userErrors: []
+        } } }
       ).with(body: hash_including("query" => a_string_matching(/mutation CartSubmitForCompletion/)))
 
-      expect do
-        adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
-                                  idempotency_key: "chk1-complete")
-      end.to raise_error(Portage::Ucp::Shopify::Error, /card declined/)
+      checkout = adapter.complete_checkout(checkout_id: "gid://shopify/Cart/1", payment_token: "tok_abc123",
+                                           idempotency_key: "chk1-complete")
+
+      expect(checkout.status).to eq("requires_escalation")
+      expect(checkout.links).to eq([Portage::Ucp::Link.new(
+        type: "resume-checkout", url: "https://test-shop.myshopify.com/cart/c/1?verify=1"
+      )])
     end
 
     it "raises Portage::Ucp::OutOfStockError when a cart line is no longer available for sale, " \

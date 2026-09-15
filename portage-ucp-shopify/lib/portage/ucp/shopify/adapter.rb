@@ -314,8 +314,8 @@ module Portage
 
             pay_for_cart(checkout_id, cart_node.dig("cost", "totalAmount"), payment_token)
 
-            status, order = poll_submission(checkout_id, idempotency_key)
-            Mapper.checkout(cart_node, status: status, order: order)
+            status, order, resume_url = poll_submission(checkout_id, idempotency_key)
+            Mapper.checkout(cart_node, status: status, order: order, resume_url: resume_url)
           end
         end
 
@@ -359,10 +359,10 @@ module Portage
           with_retry(max_attempts: SUBMIT_POLL_MAX_ATTEMPTS) do
             submit_data = @client.storefront_query(Queries::CART_SUBMIT_FOR_COMPLETION,
                                                    variables: { cartId: checkout_id, attemptToken: idempotency_key })
-            status = unwrap_submit!(submit_data)
+            status, resume_url = unwrap_submit!(submit_data)
             record_checkout_status(checkout_id, status)
             order = link_cart_to_order(checkout_id) if status == "completed"
-            [status, order]
+            [status, order, resume_url]
           end
         rescue Portage::Ucp::Shopify::SubmitThrottled
           raise Portage::Ucp::UpstreamThrottledError, "checkout #{checkout_id} still processing after retries"
@@ -397,16 +397,21 @@ module Portage
           raise Portage::Ucp::OutOfStockError, "no longer available: #{titles}"
         end
 
+        # On SubmitFailed (declines, 3DS/verification challenges, etc.),
+        # Shopify hands back its own `checkoutUrl` for the buyer to finish in
+        # a browser rather than a bare error — surfaced as "requires_escalation"
+        # plus that URL so #submit_payment can thread it into a resume-checkout
+        # Link, instead of raising and discarding it.
         def unwrap_submit!(data)
           payload = data.fetch("cartSubmitForCompletion")
           errors = payload["userErrors"]
           raise Portage::Ucp::Shopify::UserError.new("cartSubmitForCompletion", errors) if errors && !errors.empty?
 
           result = payload["result"]
-          raise Portage::Ucp::Shopify::Error, result.dig("errors", 0, "message") if result["errors"]
+          return ["requires_escalation", result["checkoutUrl"]] if result["errors"]
           raise Portage::Ucp::Shopify::SubmitThrottled, result["pollAfter"] if result.key?("pollAfter")
 
-          "completed"
+          ["completed", nil]
         end
       end
     end
