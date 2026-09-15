@@ -98,7 +98,7 @@
       "items": {
         "$ref": "https://ucp.dev/2026-04-08/schemas/shopping/types/link.json"
       },
-      "description": "Links to be displayed by the platform (Privacy Policy, TOS). Mandatory for legal compliance.",
+      "description": "Links to be displayed by the platform (Privacy Policy, TOS) — mandatory for legal compliance — plus any platform checkout handoff URLs (type `resume-checkout`) the buyer must finish in a browser.",
       "ucp_request": "omit"
     },
     "expires_at": {
