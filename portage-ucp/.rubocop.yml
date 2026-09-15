@@ -106,6 +106,12 @@ Metrics/ClassLength:
     # method (parse, coverage check, freshness, digest, ECDSA) — breadth
     # across a fixed protocol's steps, not a class doing unrelated things.
     - "lib/portage/ucp/security/signature.rb"
+    # Dispatcher's private methods are each one step of settling the single
+    # complete_checkout call (reserve, policy, confirm, commit, ledger,
+    # journal) — one cohesive sequence that's grown a step per phase
+    # (§9a/Phase 0-3, order-ledger.md, storage-abstraction-journal.md), not
+    # unrelated responsibilities piling up.
+    - "lib/portage/ucp/dispatcher.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:
