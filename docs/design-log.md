@@ -2321,3 +2321,45 @@ fallback and would have reached `structuredContent` as raw `Data` objects,
 unserializable to JSON. Fixed generically (any array of `to_wire_h`-capable
 items now maps to an array of wire hashes), not special-cased to these two
 actions.
+
+## 33. §22 slice, Phase A — pluggable TransactionLog/OrderLedger storage (2026-09-15)
+
+§22 named "make TransactionLog/OrderLedger pluggable" as one of three items
+blocking the agentic-payments work from being production-grade rather than
+reference. `PATH` was already a default kwarg on both classes — not
+hardcoded — so the actual gap was narrower than "make the path
+configurable": there was no formal storage interface, no second backend,
+and no doc claim of pluggability at all.
+
+Mirrored `Portage::Ucp::Journal::Store`/`FileStore`
+(`portage-ucp-journal/lib/portage/ucp/journal/store.rb`), the closest
+reviewed-and-merged shape in the repo, rather than inventing a new pattern.
+Added `Support::TransactionLog::Store`/`FileStore` and
+`Support::OrderLedger::Store`/`FileStore`. The split sits at the semantic
+level each class already exposed (`#reserve`, `#complete`,
+`#record_decision`, `#record_confirmation`, `#find`, `#completed_since` for
+TransactionLog; `#record`/`#find` for OrderLedger) rather than a bare
+key-value fetch/store — PolicyGuard's spend-cap/velocity checks need
+shop+status+time filtering that a generic KV interface can't do without
+leaking storage-specific query logic back into the guard.
+
+`TransactionLog`'s `ArgumentError` (bad status) and `KeyError` (unreserved
+key) raises stay on `TransactionLog`, not the store — they're contract, not
+storage. A `Store`'s update methods (`#complete`/`#record_decision`/
+`#record_confirmation`) signal "no such record" by returning `nil`;
+`TransactionLog` turns that into `KeyError` itself. `FileStore` extracts
+the whole-file `flock` + `chmod 0600` + JSON read/persist mechanics
+verbatim — zero behavior change. `path:`/`clock:` remain valid kwargs on
+both classes as a shorthand that builds the file-backed default, so every
+existing construction site (`Dispatcher#initialize`, `PolicyGuard.check!`'s
+own default, the conformance kit, and every existing spec) keeps working
+unmodified; new `store:` is the seam for a real database, Redis, or an
+in-memory double.
+
+This reverses a claim in `portage-ucp-journal/README.md`: it said
+TransactionLog/OrderLedger "stay in core `portage-ucp`, unchanged." They
+still stay in core, but "unchanged" is no longer true — updated to say so.
+
+Still open after this slice: §22 items 2 (`idempotency_provider` on
+`Configuration`), 5 (sandbox credentials for the webmock-only adapters),
+6's console, and 7's scheduler — none of them touched by this pass.
