@@ -10,7 +10,7 @@ module Portage
         name: "app.portage-ucp.payment_enrollment",
         version: "1",
         actions: { "create_payment_enrollment" => :create_payment_enrollment,
-                  "get_payment_enrollment" => :get_payment_enrollment }
+                   "get_payment_enrollment" => :get_payment_enrollment }
       )
     end
   end

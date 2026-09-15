@@ -12,16 +12,16 @@ module Portage
         name: "app.portage-ucp.payment_method",
         version: "1",
         actions: { "save_payment_method" => :save_payment_method,
-                  "list_payment_methods" => :list_payment_methods,
-                  "delete_payment_method" => :delete_payment_method }
+                   "list_payment_methods" => :list_payment_methods,
+                   "delete_payment_method" => :delete_payment_method }
       )
 
       SAVED_ADDRESS = Portage::Ucp::Capability.new(
         name: "app.portage-ucp.saved_address",
         version: "1",
         actions: { "save_address" => :save_address,
-                  "list_addresses" => :list_addresses,
-                  "delete_address" => :delete_address }
+                   "list_addresses" => :list_addresses,
+                   "delete_address" => :delete_address }
       )
     end
   end

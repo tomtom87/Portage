@@ -91,6 +91,6 @@ RSpec.describe Portage::Ucp::Support::Idempotency do
     results = threads.map(&:value)
 
     expect(racer.calls).to eq(1)
-    expect(results).to eq(["order-1", "order-1"])
+    expect(results).to eq(%w[order-1 order-1])
   end
 end

@@ -474,7 +474,7 @@ RSpec.describe "Portage::Ucp value objects" do
   describe Portage::Ucp::ShopperDataErasure do
     it "serializes what was erased" do
       erasure = Portage::Ucp::ShopperDataErasure.new(subject: "sub_1", payment_methods_deleted: 2,
-                                                      addresses_deleted: 1, identity_unlinked: true)
+                                                     addresses_deleted: 1, identity_unlinked: true)
       expect(erasure.to_wire_h).to eq(
         { "subject" => "sub_1", "payment_methods_deleted" => 2, "addresses_deleted" => 1,
           "identity_unlinked" => true }
