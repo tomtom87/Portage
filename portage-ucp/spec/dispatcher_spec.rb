@@ -312,6 +312,21 @@ RSpec.describe Portage::Ucp::Dispatcher do
                                            idempotency_key: "chk-native-complete" })
   end
 
+  it "serializes an Array<to_wire_h> adapter result (list_payment_methods) to a plain array of wire hashes" do
+    reference_dispatcher = described_class.new(adapter: Portage::Ucp::ReferenceAdapter.new,
+                                               transaction_log: transaction_log, order_ledger: order_ledger,
+                                               policy: policy, confirmer: confirmer)
+    saved = reference_dispatcher.call(
+      capability: "app.portage-ucp.payment_method", action: "save_payment_method",
+      arguments: { oauth_token: "tok_a", payment_token: "tok", idempotency_key: "pm-list-1" }
+    )[:structuredContent]
+
+    response = reference_dispatcher.call(capability: "app.portage-ucp.payment_method",
+                                         action: "list_payment_methods", arguments: { oauth_token: "tok_a" })
+
+    expect(response[:structuredContent]).to eq([saved])
+  end
+
   it "raises CapabilityNotAdvertisedError when the adapter hasn't overridden any backing method" do
     bare_adapter = Portage::Ucp::Adapter.new
     dispatcher = described_class.new(adapter: bare_adapter)
