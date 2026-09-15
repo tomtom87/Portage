@@ -30,11 +30,15 @@ in this gem.
 | `Portage::Ucp::Support::OrderLedger` | Durable snapshot written after settlement, alongside (not instead of) the transaction record — a failed snapshot write surfaces without flipping an already-settled charge to failed. |
 | `Portage::Ucp::Confirmer` | Gate run just before `complete_checkout` dispatch, after `PolicyGuard`. `Confirmer::Terminal` blocks on stdin and fails closed on anything but an explicit `"y"`; `Confirmer::AutoApprove` is for specs/conformance kits that need a real `confirm!` without blocking. |
 | `Portage::Ucp::PolicyGuard` / `Portage::Ucp::Policy` | Per-transaction/rolling/velocity caps and a merchant allowlist, checked before `complete_checkout` dispatch; configured via `portage-cli`'s `portage policy show/set`. |
+| `Portage::Ucp::PaymentEnrollmentGuard` | Validates every `create_payment_enrollment`/`get_payment_enrollment` result an `Adapter` returns — `status` must be `"pending"` (with a `setup_url`, no `payment_token`) or `"complete"` (with a `payment_token`, no `setup_url`). Runs automatically in `Dispatcher#call`. |
+| `Portage::Ucp::Ap2::PaymentMandate` / `Portage::Ucp::Ap2::MandateGuard` | A typed shape for an AP2 payment mandate, and shape-only validation (required fields + expiry — not cryptographic verification) run automatically on any `mandate:` argument passed through `Dispatcher#call`. |
 
 Security defaults are all locked down, not permissive-by-omission —
 `UnconfiguredAuthenticator` rejects every mutating call until you configure a real
 one, `PaymentTokenGuard` rejects raw card numbers before they reach your `Adapter`,
-and manifest signing is opt-in. Full detail in the root README's
+`PaymentEnrollmentGuard`/`Ap2::MandateGuard` reject malformed enrollments/mandates
+before they cross the same boundary, and manifest signing is opt-in. Full detail in
+the root README's
 [Security hooks](https://github.com/tomtom87/Portage#security-hooks--nothing-is-permissive-by-default)
 section.
 
