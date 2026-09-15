@@ -3,7 +3,7 @@ PATH
   specs:
     portage-ucp-client (0.3.0)
       mcp (~> 0.24)
-      portage-ucp (~> 0.5)
+      portage-ucp (~> 0.6)
 
 PATH
   remote: ../portage-ucp
@@ -18,7 +18,7 @@ PATH
   remote: .
   specs:
     portage-cli (0.4.0)
-      portage-ucp (~> 0.5)
+      portage-ucp (~> 0.6)
       portage-ucp-client (~> 0.3)
 
 GEM

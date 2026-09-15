@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.5.0)
+    portage-ucp (0.6.0)
       base64 (~> 0.2)
       json_schemer (~> 2.5)
       mcp (~> 0.24)
@@ -11,7 +11,7 @@ PATH
   remote: .
   specs:
     portage-ucp-shopify (0.4.0)
-      portage-ucp (~> 0.5)
+      portage-ucp (~> 0.6)
 
 GEM
   remote: https://rubygems.org/
