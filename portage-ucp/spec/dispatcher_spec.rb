@@ -327,6 +327,19 @@ RSpec.describe Portage::Ucp::Dispatcher do
     expect(response[:structuredContent]).to eq([saved])
   end
 
+  it "runs PaymentTokenGuard on save_payment_method the same way it does on complete_checkout (§16)" do
+    reference_dispatcher = described_class.new(adapter: Portage::Ucp::ReferenceAdapter.new,
+                                               transaction_log: transaction_log, order_ledger: order_ledger,
+                                               policy: policy, confirmer: confirmer)
+
+    expect do
+      reference_dispatcher.call(
+        capability: "app.portage-ucp.payment_method", action: "save_payment_method",
+        arguments: { oauth_token: "tok_a", payment_token: "4242424242424242", idempotency_key: "pm-pan-1" }
+      )
+    end.to raise_error(Portage::Ucp::RawPanRejectedError)
+  end
+
   it "raises CapabilityNotAdvertisedError when the adapter hasn't overridden any backing method" do
     bare_adapter = Portage::Ucp::Adapter.new
     dispatcher = described_class.new(adapter: bare_adapter)
