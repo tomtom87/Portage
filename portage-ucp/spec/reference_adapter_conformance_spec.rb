@@ -25,7 +25,9 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
     advertised = registry.advertised(adapter).map(&:name)
 
     expect(advertised).to include("dev.ucp.shopping.discount", "dev.ucp.shopping.fulfillment",
-                                  "dev.ucp.shopping.identity", "app.portage-ucp.payment_enrollment")
+                                  "dev.ucp.shopping.identity", "app.portage-ucp.payment_enrollment",
+                                  "app.portage-ucp.payment_method", "app.portage-ucp.saved_address",
+                                  "app.portage-ucp.shopper_data")
   end
 
   describe "#create_payment_enrollment / #get_payment_enrollment" do
