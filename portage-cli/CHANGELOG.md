@@ -6,6 +6,12 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-15
+
+- No behavior change — widens the `portage-ucp` dependency pin to `~> 0.6`
+  so this gem can install alongside `portage-ucp` 0.6.0 (the pessimistic
+  `~> 0.5` pin published with 0.4.0 excludes it).
+
 ## [0.4.0] - 2026-09-14
 
 - Added `portage payment list/enroll/set-default/remove/freeze/revoke` —

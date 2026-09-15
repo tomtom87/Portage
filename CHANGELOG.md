@@ -46,8 +46,13 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 - `portage-ucp-journal` is a new gem (0.1.0, not yet published to
   RubyGems): a buyer-side purchase journal plus the injectable `Store`
   abstraction `portage-ucp`'s own `Store`/`FileStore` split now mirrors.
-- Every other gem's `portage-ucp` pin widens to `~> 0.6`; no behavior
-  changes of their own in this release.
+- `portage-cli` bumps to 0.4.1, `portage-ucp-client` to 0.3.1,
+  `portage-ucp-shopify` to 0.4.1, and `portage-ucp-wix` to 0.1.1 — pin-only
+  releases (no behavior change) so each can install alongside `portage-ucp`
+  0.6.0: their previously-published `~> 0.5` (`~> 0.5` for `-wix`'s 0.1.0)
+  pin is pessimistic and excludes 0.6.x. Every other gem's `portage-ucp` pin
+  also widens to `~> 0.6` in its gemspec, with no release of its own needed
+  beyond what's already covered above.
 
 ## [0.5.0] - 2026-09-14
 
