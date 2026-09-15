@@ -54,13 +54,15 @@ module Portage
 
         def search_catalog(query:, limit:)
           data = @client.admin_get("/products?search=#{URI.encode_www_form_component(query)}&per_page=#{limit}")
-          data.map { |node| Mapper.product(node, currency: @currency) }
+          Portage::Ucp::CatalogSearchResult.new(products: data.map { |node| Mapper.product(node, currency: @currency) })
         end
 
         def get_product(product_id:)
           nil_on_not_found do
             node = @client.admin_get("/products/#{product_id}")
-            node["id"] ? Mapper.product(with_variations(node), currency: @currency) : nil
+            next nil unless node["id"]
+
+            Portage::Ucp::ProductDetail.new(product: Mapper.product(with_variations(node), currency: @currency))
           end
         end
 

@@ -21,6 +21,22 @@ module Portage
           Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
+        def description(node)
+          Portage::Ucp::Description.new(plain: node["description"])
+        end
+
+        def price(amount, currency)
+          Portage::Ucp::Price.new(amount: minor_units(amount), currency: currency)
+        end
+
+        # A single price node's price_range is degenerate (min == max) — WC's
+        # Admin product resource has no separate low/high range field, unlike
+        # a variable product's variants, which each carry their own price.
+        def price_range(amount, currency)
+          p = price(amount, currency)
+          Portage::Ucp::PriceRange.new(min: p, max: p)
+        end
+
         # `node["variations_detail"]` is adapter-populated, not a real WC
         # field: the Admin product resource only lists variation *ids* for a
         # variable product (`variations: [123, 124]`), so fetching full
@@ -30,9 +46,8 @@ module Portage
           Portage::Ucp::Product.new(
             id: node["id"].to_s,
             title: node["name"],
-            description: node["description"],
-            price: money(node["price"], currency),
-            available: node["stock_status"] != "outofstock",
+            description: description(node),
+            price_range: price_range(node["price"], currency),
             variants: variants(node, currency),
             url: node["permalink"]
           )
@@ -44,17 +59,21 @@ module Portage
         def variants(node, currency)
           detail = node["variations_detail"]
           unless detail
-            return [{ id: node["id"].to_s, title: node["name"],
-                      available: node["stock_status"] != "outofstock", price: money(node["price"], currency) }]
+            return [Portage::Ucp::Variant.new(id: node["id"].to_s, title: node["name"], description: description(node),
+                                              price: price(node["price"], currency),
+                                              availability: { "available" => node["stock_status"] != "outofstock" })]
           end
 
-          detail.map { |v| variant(v, currency) }
+          detail.map { |v| variant(v, node, currency) }
         end
 
-        def variant(node, currency)
+        def variant(node, parent_node, currency)
           title = (node["attributes"] || []).map { |a| a["option"] }.join(" / ")
-          { id: node["id"].to_s, title: title, available: node["stock_status"] != "outofstock",
-            price: money(node["price"], currency) }
+          Portage::Ucp::Variant.new(
+            id: node["id"].to_s, title: title, description: description(parent_node),
+            price: price(node["price"], currency),
+            availability: { "available" => node["stock_status"] != "outofstock" }
+          )
         end
 
         # `id:` is caller-supplied rather than read off the response body:

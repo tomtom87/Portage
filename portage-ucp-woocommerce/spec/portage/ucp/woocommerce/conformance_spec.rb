@@ -22,17 +22,27 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
                     "total_price" => "500" } }
   end
 
+  let(:product_node) do
+    { "id" => 1, "name" => "Cold Brew", "description" => "desc", "permalink" => "https://shop.example.com/cold-brew",
+      "price" => "5.00", "stock_status" => "instock", "type" => "simple" }
+  end
+
   # Woo's #create_checkout replaces cart lines, so the kit reaches the cart
   # read plus add-item and nothing further: the repeat call is served by
   # Support::Idempotency's in-process table, and the PAN example is rejected by
   # PaymentTokenGuard inside the Dispatcher before #complete_checkout (and so
-  # before the Store API checkout POST) runs.
+  # before the Store API checkout POST) runs. The catalog reads are hit
+  # directly by the kit's own schema-validation examples.
   before do
     stub_request(:get, "https://shop.example.com/wp-json/wc/store/v1/cart")
       .to_return(status: 200, body: cart_response.merge("items" => []).to_json,
                  headers: { "Cart-Token" => "tok_1" })
     stub_request(:post, "https://shop.example.com/wp-json/wc/store/v1/cart/add-item")
       .to_return(status: 200, body: cart_response.to_json, headers: { "Cart-Token" => "tok_1" })
+    stub_request(:get, "https://shop.example.com/wp-json/wc/v3/products?per_page=5&search=")
+      .to_return(status: 200, body: [product_node].to_json)
+    stub_request(:get, "https://shop.example.com/wp-json/wc/v3/products/1")
+      .to_return(status: 200, body: product_node.to_json)
   end
 
   it_behaves_like "a portage adapter"
