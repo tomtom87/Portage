@@ -17,26 +17,33 @@ RSpec.describe Portage::Ucp::Instagram::Mapper do
       product = described_class.product(node)
 
       expect(product.id).to eq("1")
-      expect(product.price).to eq(Portage::Ucp::Money.new(amount_minor: 2500, currency: "USD"))
-      expect(product.available).to be(true)
+      expect(product.price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 2500, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 2500, currency: "USD"))
+      )
       expect(product.url).to eq("https://merchant.example.com/products/mug")
-      expect(product.variants).to eq([{ id: "1", title: "Handmade Mug", available: true,
-                                        price: Portage::Ucp::Money.new(amount_minor: 2500, currency: "USD") }])
+      variant = product.variants.first
+      expect(variant.id).to eq("1")
+      expect(variant.title).to eq("Handmade Mug")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 2500, currency: "USD"))
     end
 
     it "is unavailable when out of stock or discontinued" do
       node["availability"] = "out of stock"
-      expect(described_class.product(node).available).to be(false)
+      expect(described_class.product(node).variants.first.availability).to eq({ "available" => false })
     end
 
     it "maps variants_detail (adapter-fetched item_group siblings) into real variants when present" do
       node["variants_detail"] = [{ "id" => "2", "name" => "Handmade Mug - Large", "price" => "30.00 USD",
                                    "availability" => "in stock" }]
 
-      variants = described_class.product(node).variants
+      variant = described_class.product(node).variants.first
 
-      expect(variants).to eq([{ id: "2", title: "Handmade Mug - Large", available: true,
-                                price: Portage::Ucp::Money.new(amount_minor: 3000, currency: "USD") }])
+      expect(variant.id).to eq("2")
+      expect(variant.title).to eq("Handmade Mug - Large")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 3000, currency: "USD"))
     end
   end
 
