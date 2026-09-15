@@ -36,10 +36,10 @@ RSpec.describe Portage::Ucp::Etsy::Adapter do
         .to_return(status: 200, body: { results: [listing_node, listing_node.merge("listing_id" => 2,
                                                                                    "title" => "Wool Scarf")] }.to_json)
 
-      products = adapter.search_catalog(query: "mug", limit: 10)
+      result = adapter.search_catalog(query: "mug", limit: 10)
 
-      expect(products.size).to eq(1)
-      expect(products.first.title).to eq("Handmade Mug")
+      expect(result.products.size).to eq(1)
+      expect(result.products.first.title).to eq("Handmade Mug")
     end
   end
 
@@ -52,8 +52,8 @@ RSpec.describe Portage::Ucp::Etsy::Adapter do
 
       product = adapter.get_product(product_id: 1)
 
-      expect(product).to be_a(Portage::Ucp::Product)
-      expect(product.variants).to eq([])
+      expect(product.product).to be_a(Portage::Ucp::Product)
+      expect(product.product.variants).to eq([])
     end
 
     it "returns nil for a listing the API doesn't find" do
