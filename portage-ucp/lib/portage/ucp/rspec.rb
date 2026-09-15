@@ -195,4 +195,115 @@ RSpec.shared_examples "a portage adapter" do
                                    idempotency_key: "#{conformance_idempotency_key}-oos-complete" })
     end.to raise_error(Portage::Ucp::OutOfStockError)
   end
+
+  # app.portage-ucp.payment_method / saved_address / shopper_data (§22 item
+  # 7) — Portage extensions, no schemas/ counterpart to validate against, so
+  # these examples check the behavioral guarantee §16 called out instead:
+  # oauth_token: is the authorization boundary, not just a call parameter.
+  let(:conformance_oauth_token) { "conformance-oauth-#{object_id}-#{rand(1_000_000)}" }
+  let(:other_conformance_oauth_token) { "conformance-oauth-other-#{object_id}-#{rand(1_000_000)}" }
+
+  def payment_method_capability_advertised?
+    Portage::Ucp::RSpec.advertised?(adapter, "app.portage-ucp.payment_method")
+  end
+
+  def saved_address_capability_advertised?
+    Portage::Ucp::RSpec.advertised?(adapter, "app.portage-ucp.saved_address")
+  end
+
+  def shopper_data_capability_advertised?
+    Portage::Ucp::RSpec.advertised?(adapter, "app.portage-ucp.shopper_data")
+  end
+
+  it "saves, lists, and deletes a payment method scoped to the oauth_token that saved it" do
+    skip "adapter does not advertise app.portage-ucp.payment_method" unless payment_method_capability_advertised?
+
+    saved = dispatcher.call(
+      capability: "app.portage-ucp.payment_method", action: "save_payment_method",
+      arguments: { oauth_token: conformance_oauth_token, payment_token: "sptk_conformance_test_token",
+                   idempotency_key: "#{conformance_idempotency_key}-pm" }
+    )
+    payment_method_id = saved[:structuredContent]["id"]
+
+    listed = dispatcher.call(capability: "app.portage-ucp.payment_method", action: "list_payment_methods",
+                             arguments: { oauth_token: conformance_oauth_token })
+    expect(listed[:structuredContent].map { |ref| ref["id"] }).to include(payment_method_id)
+
+    other = dispatcher.call(capability: "app.portage-ucp.payment_method", action: "list_payment_methods",
+                            arguments: { oauth_token: other_conformance_oauth_token })
+    expect(other[:structuredContent].map { |ref| ref["id"] }).not_to include(payment_method_id)
+
+    dispatcher.call(capability: "app.portage-ucp.payment_method", action: "delete_payment_method",
+                    arguments: { oauth_token: conformance_oauth_token, payment_method_id: payment_method_id,
+                                 idempotency_key: "#{conformance_idempotency_key}-pm-del" })
+
+    after_delete = dispatcher.call(capability: "app.portage-ucp.payment_method", action: "list_payment_methods",
+                                   arguments: { oauth_token: conformance_oauth_token })
+    expect(after_delete[:structuredContent].map { |ref| ref["id"] }).not_to include(payment_method_id)
+  end
+
+  it "never lets a raw, Luhn-valid PAN reach the adapter's save_payment_method (§9's PCI boundary)" do
+    skip "adapter does not advertise app.portage-ucp.payment_method" unless payment_method_capability_advertised?
+
+    expect do
+      dispatcher.call(capability: "app.portage-ucp.payment_method", action: "save_payment_method",
+                      arguments: { oauth_token: conformance_oauth_token, payment_token: "4242424242424242",
+                                   idempotency_key: "#{conformance_idempotency_key}-pm-pan" })
+    end.to raise_error(Portage::Ucp::RawPanRejectedError)
+  end
+
+  it "saves, lists, and deletes an address scoped to the oauth_token that saved it" do
+    skip "adapter does not advertise app.portage-ucp.saved_address" unless saved_address_capability_advertised?
+
+    saved = dispatcher.call(
+      capability: "app.portage-ucp.saved_address", action: "save_address",
+      arguments: { oauth_token: conformance_oauth_token, address: Portage::Ucp::PostalAddress.new(postal_code: "1"),
+                   idempotency_key: "#{conformance_idempotency_key}-addr" }
+    )
+    address_id = saved[:structuredContent]["id"]
+
+    listed = dispatcher.call(capability: "app.portage-ucp.saved_address", action: "list_addresses",
+                             arguments: { oauth_token: conformance_oauth_token })
+    expect(listed[:structuredContent].map { |addr| addr["id"] }).to include(address_id)
+
+    other = dispatcher.call(capability: "app.portage-ucp.saved_address", action: "list_addresses",
+                            arguments: { oauth_token: other_conformance_oauth_token })
+    expect(other[:structuredContent].map { |addr| addr["id"] }).not_to include(address_id)
+
+    dispatcher.call(capability: "app.portage-ucp.saved_address", action: "delete_address",
+                    arguments: { oauth_token: conformance_oauth_token, address_id: address_id,
+                                 idempotency_key: "#{conformance_idempotency_key}-addr-del" })
+
+    after_delete = dispatcher.call(capability: "app.portage-ucp.saved_address", action: "list_addresses",
+                                   arguments: { oauth_token: conformance_oauth_token })
+    expect(after_delete[:structuredContent].map { |addr| addr["id"] }).not_to include(address_id)
+  end
+
+  it "erases every payment method and address for the subject, and is safe to repeat" do
+    skip "adapter does not advertise app.portage-ucp.shopper_data" unless shopper_data_capability_advertised?
+
+    if payment_method_capability_advertised?
+      dispatcher.call(capability: "app.portage-ucp.payment_method", action: "save_payment_method",
+                      arguments: { oauth_token: conformance_oauth_token, payment_token: "sptk_conformance_test_token",
+                                   idempotency_key: "#{conformance_idempotency_key}-sd-pm" })
+    end
+    if saved_address_capability_advertised?
+      dispatcher.call(capability: "app.portage-ucp.saved_address", action: "save_address",
+                      arguments: { oauth_token: conformance_oauth_token,
+                                   address: Portage::Ucp::PostalAddress.new(postal_code: "1"),
+                                   idempotency_key: "#{conformance_idempotency_key}-sd-addr" })
+    end
+
+    erasure = dispatcher.call(capability: "app.portage-ucp.shopper_data", action: "delete_shopper_data",
+                              arguments: { oauth_token: conformance_oauth_token,
+                                           idempotency_key: "#{conformance_idempotency_key}-sd" })
+    expect(erasure[:structuredContent]["payment_methods_deleted"]).to be >= 0
+    expect(erasure[:structuredContent]["addresses_deleted"]).to be >= 0
+
+    expect do
+      dispatcher.call(capability: "app.portage-ucp.shopper_data", action: "delete_shopper_data",
+                      arguments: { oauth_token: conformance_oauth_token,
+                                   idempotency_key: "#{conformance_idempotency_key}-sd-2" })
+    end.not_to raise_error
+  end
 end
