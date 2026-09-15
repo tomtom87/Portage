@@ -274,26 +274,31 @@ module Portage
 
         def replace_lines(cart_id, line_items, discount_codes)
           synchronize(cart_id) do
-            current_line_ids = fetch_cart_node(cart_id).dig("lines", "nodes").map { |n| n["id"] }
-            unless current_line_ids.empty?
-              removed = @client.storefront_query(Queries::CART_LINES_REMOVE,
-                                                 variables: { cartId: cart_id, lineIds: current_line_ids })
-              unwrap!(removed, "cartLinesRemove")
-            end
-
-            cart_node = if line_items.empty?
-                          fetch_cart_node(cart_id)
-                        else
-                          added = @client.storefront_query(
-                            Queries::CART_LINES_ADD,
-                            variables: { cartId: cart_id, lines: cart_lines(line_items) }
-                          )
-                          unwrap!(added, "cartLinesAdd")
-                        end
+            remove_current_lines(cart_id)
+            cart_node = add_lines(cart_id, line_items)
             next cart_node if discount_codes.nil?
 
             apply_discount_codes(cart_id, discount_codes)
           end
+        end
+
+        def remove_current_lines(cart_id)
+          current_line_ids = fetch_cart_node(cart_id).dig("lines", "nodes").map { |n| n["id"] }
+          return if current_line_ids.empty?
+
+          removed = @client.storefront_query(Queries::CART_LINES_REMOVE,
+                                             variables: { cartId: cart_id, lineIds: current_line_ids })
+          unwrap!(removed, "cartLinesRemove")
+        end
+
+        def add_lines(cart_id, line_items)
+          return fetch_cart_node(cart_id) if line_items.empty?
+
+          added = @client.storefront_query(
+            Queries::CART_LINES_ADD,
+            variables: { cartId: cart_id, lines: cart_lines(line_items) }
+          )
+          unwrap!(added, "cartLinesAdd")
         end
 
         def apply_discount_codes(cart_id, discount_codes)

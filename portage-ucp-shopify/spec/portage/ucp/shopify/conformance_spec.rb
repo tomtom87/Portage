@@ -27,7 +27,7 @@ if File.exist?(env_path)
   end
 end
 
-shop_domain = ENV["SHOPIFY_SHOP_DOMAIN"]
+shop_domain = ENV.fetch("SHOPIFY_SHOP_DOMAIN", nil)
 
 RSpec.describe Portage::Ucp::Shopify::Adapter, :live_store do
   unless shop_domain
@@ -58,8 +58,8 @@ RSpec.describe Portage::Ucp::Shopify::Adapter, :live_store do
     let(:client) do
       Portage::Ucp::Shopify::Client.new(
         shop_domain: shop_domain,
-        admin_access_token: ENV["SHOPIFY_ADMIN_ACCESS_TOKEN"],
-        storefront_access_token: ENV["SHOPIFY_STOREFRONT_ACCESS_TOKEN"]
+        admin_access_token: ENV.fetch("SHOPIFY_ADMIN_ACCESS_TOKEN", nil),
+        storefront_access_token: ENV.fetch("SHOPIFY_STOREFRONT_ACCESS_TOKEN", nil)
       )
     end
     let(:adapter) { described_class.new(client: client) }
