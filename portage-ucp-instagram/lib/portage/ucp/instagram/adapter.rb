@@ -53,14 +53,14 @@ module Portage
         def search_catalog(query:, limit:)
           filter = URI.encode_www_form_component(JSON.generate(name: { i_contains: query }))
           data = @client.get("/#{@catalog_id}/products?fields=#{PRODUCT_FIELDS}&limit=#{limit}&filter=#{filter}")
-          (data["data"] || []).map { |node| Mapper.product(node) }
+          Portage::Ucp::CatalogSearchResult.new(products: (data["data"] || []).map { |node| Mapper.product(node) })
         end
 
         def get_product(product_id:)
           node = @client.get("/#{product_id}?fields=#{PRODUCT_FIELDS}")
           return nil unless node["id"]
 
-          Mapper.product(with_variants(node))
+          Portage::Ucp::ProductDetail.new(product: Mapper.product(with_variants(node)))
         rescue Portage::Ucp::Instagram::ApiError => e
           raise unless [400, 404].include?(e.status)
 

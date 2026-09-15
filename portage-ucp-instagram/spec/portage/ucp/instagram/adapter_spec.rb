@@ -34,10 +34,10 @@ RSpec.describe Portage::Ucp::Instagram::Adapter do
       stub_request(:get, %r{/catalog_1/products\?})
         .to_return(status: 200, body: { data: [product_node] }.to_json)
 
-      products = adapter.search_catalog(query: "mug", limit: 10)
+      result = adapter.search_catalog(query: "mug", limit: 10)
 
-      expect(products.first).to be_a(Portage::Ucp::Product)
-      expect(products.first.title).to eq("Handmade Mug")
+      expect(result.products.first).to be_a(Portage::Ucp::Product)
+      expect(result.products.first.title).to eq("Handmade Mug")
     end
   end
 
@@ -50,7 +50,7 @@ RSpec.describe Portage::Ucp::Instagram::Adapter do
 
       product = adapter.get_product(product_id: "1")
 
-      expect(product.variants.first[:id]).to eq("2")
+      expect(product.product.variants.first.id).to eq("2")
     end
 
     it "returns nil for a product the API doesn't find" do

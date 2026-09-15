@@ -29,6 +29,22 @@ module Portage
           Portage::Ucp::Support::Amounts.money(amount, currency)
         end
 
+        def description(node)
+          Portage::Ucp::Description.new(plain: node["description"])
+        end
+
+        def price(price_string)
+          return Portage::Ucp::Price.new(amount: 0, currency: nil) unless price_string
+
+          amount, currency = price_string.split
+          Portage::Ucp::Price.new(amount: Portage::Ucp::Support::Amounts.decimal_to_minor(amount), currency: currency)
+        end
+
+        def price_range(price_string)
+          p = price(price_string)
+          Portage::Ucp::PriceRange.new(min: p, max: p)
+        end
+
         # `node["variants_detail"]` is adapter-populated, not a real Meta
         # field: variants of a catalog product are just *other whole
         # product nodes* sharing the same `item_group_id` — there's no
@@ -40,9 +56,8 @@ module Portage
           Portage::Ucp::Product.new(
             id: node["id"],
             title: node["name"],
-            description: node["description"],
-            price: money(node["price"]),
-            available: AVAILABLE_STATES.include?(node["availability"]),
+            description: description(node),
+            price_range: price_range(node["price"]),
             variants: variants(node),
             url: node["url"] || site_url
           )
@@ -53,14 +68,16 @@ module Portage
         # that variant's own id.
         def variants(node)
           detail = node["variants_detail"]
-          return [variant(node)] unless detail
+          return [variant(node, node)] unless detail
 
-          detail.map { |v| variant(v) }
+          detail.map { |v| variant(v, node) }
         end
 
-        def variant(node)
-          { id: node["id"], title: node["name"], available: AVAILABLE_STATES.include?(node["availability"]),
-            price: money(node["price"]) }
+        def variant(node, parent_node)
+          Portage::Ucp::Variant.new(
+            id: node["id"], title: node["name"], description: description(parent_node), price: price(node["price"]),
+            availability: { "available" => AVAILABLE_STATES.include?(node["availability"]) }
+          )
         end
 
         # `id:` is caller-supplied: there's no real Meta checkout resource
