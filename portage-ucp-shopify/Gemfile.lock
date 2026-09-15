@@ -10,7 +10,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-shopify (0.4.0)
+    portage-ucp-shopify (0.4.1)
       portage-ucp (~> 0.6)
 
 GEM

@@ -10,7 +10,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-client (0.3.0)
+    portage-ucp-client (0.3.1)
       mcp (~> 0.24)
       portage-ucp (~> 0.6)
 
