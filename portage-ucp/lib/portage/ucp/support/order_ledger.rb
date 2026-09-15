@@ -1,6 +1,6 @@
-require "json"
-require "fileutils"
 require "time"
+require_relative "order_ledger/store"
+require_relative "order_ledger/file_store"
 
 module Portage
   module Ucp
@@ -14,11 +14,15 @@ module Portage
       # Same raising-write posture as TransactionLog, for the same reason —
       # a silently lost order snapshot is an unnoticed hole in the evidence
       # trail. Do not add a `rescue StandardError; nil` here.
+      #
+      # Storage is pluggable via `store:` (see `Store`/`FileStore`,
+      # design-log §33) — `path:` stays as a shorthand for the file-backed
+      # default, so every existing caller keeps working unchanged.
       class OrderLedger
-        PATH = File.join(Dir.home, ".portage", "orders.json").freeze
+        PATH = FileStore::PATH
 
-        def initialize(path: PATH, clock: -> { Time.now })
-          @path = path
+        def initialize(store: nil, path: PATH, clock: -> { Time.now })
+          @store = store || FileStore.new(path: path)
           @clock = clock
         end
 
@@ -31,47 +35,11 @@ module Portage
             "recorded_at" => @clock.call.utc.iso8601
           }
 
-          with_lock(File::LOCK_EX) do |data, file|
-            data[order.id] = record
-            persist(data, file)
-          end
-
-          record
+          @store.record(order.id, record)
         end
 
         def find(order_id)
-          with_lock(File::LOCK_SH) { |data, _file| data[order_id] }
-        end
-
-        private
-
-        def with_lock(lock_mode)
-          FileUtils.mkdir_p(File.dirname(@path))
-          File.open(@path, File::RDWR | File::CREAT, 0o600) do |file|
-            file.flock(lock_mode)
-            yield(read(file), file)
-          end
-        end
-
-        def read(file)
-          file.rewind
-          raw = file.read
-          return {} if raw.empty?
-
-          parsed = JSON.parse(raw)
-          parsed.is_a?(Hash) ? parsed : {}
-        rescue JSON::ParserError
-          {}
-        end
-
-        # No `rescue StandardError; nil` — see class comment. A failed write
-        # here must raise, not vanish.
-        def persist(data, file)
-          file.rewind
-          file.truncate(0)
-          file.write(JSON.pretty_generate(data))
-          file.flush
-          File.chmod(0o600, @path)
+          @store.find(order_id)
         end
       end
     end
