@@ -41,10 +41,10 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
         .to_return(status: 200, body: [{ id: 1, name: "Cold Brew", price: "5.00", stock_status: "instock",
                                          type: "simple" }].to_json)
 
-      products = adapter.search_catalog(query: "brew", limit: 10)
+      result = adapter.search_catalog(query: "brew", limit: 10)
 
-      expect(products.first).to be_a(Portage::Ucp::Product)
-      expect(products.first.title).to eq("Cold Brew")
+      expect(result.products.first).to be_a(Portage::Ucp::Product)
+      expect(result.products.first.title).to eq("Cold Brew")
     end
   end
 
@@ -58,7 +58,7 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
 
       product = adapter.get_product(product_id: 1)
 
-      expect(product.variants.first[:id]).to eq("2")
+      expect(product.product.variants.first.id).to eq("2")
     end
 
     it "returns nil for a product the API doesn't find" do

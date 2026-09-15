@@ -19,10 +19,15 @@ RSpec.describe Portage::Ucp::WooCommerce::Mapper do
       product = described_class.product(node, currency: "USD")
 
       expect(product.id).to eq("1")
-      expect(product.price).to eq(Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"))
-      expect(product.available).to be(true)
-      expect(product.variants).to eq([{ id: "1", title: "Cold Brew", available: true,
-                                        price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD") }])
+      expect(product.price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 500, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 500, currency: "USD"))
+      )
+      variant = product.variants.first
+      expect(variant.id).to eq("1")
+      expect(variant.title).to eq("Cold Brew")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 500, currency: "USD"))
     end
 
     it "maps variations_detail (adapter-fetched) into real variants when present" do
@@ -31,16 +36,18 @@ RSpec.describe Portage::Ucp::WooCommerce::Mapper do
           "attributes" => [{ "name" => "Size", "option" => "Large" }] }
       ]
 
-      variants = described_class.product(node, currency: "USD").variants
+      variant = described_class.product(node, currency: "USD").variants.first
 
-      expect(variants).to eq([{ id: "2", title: "Large", available: true,
-                                price: Portage::Ucp::Money.new(amount_minor: 600, currency: "USD") }])
+      expect(variant.id).to eq("2")
+      expect(variant.title).to eq("Large")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 600, currency: "USD"))
     end
 
     it "treats stock_status other than outofstock as available" do
       node["stock_status"] = "onbackorder"
 
-      expect(described_class.product(node, currency: "USD").available).to be(true)
+      expect(described_class.product(node, currency: "USD").variants.first.availability).to eq({ "available" => true })
     end
   end
 
