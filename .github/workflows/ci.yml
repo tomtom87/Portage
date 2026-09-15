@@ -14,6 +14,7 @@ jobs:
         ruby: ["3.2", "3.4"]
         gem:
           - portage-ucp
+          - portage-ucp-journal
           - portage-ucp-client
           - portage-cli
           - portage-ucp-shopify
