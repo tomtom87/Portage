@@ -44,4 +44,31 @@ RSpec.describe Portage::Ucp::Support::OrderLedger do
   it "returns nil for an order id never recorded" do
     expect(ledger.find("nope")).to be_nil
   end
+
+  describe "pluggable store (§33)" do
+    let(:memory_store) do
+      Class.new(Portage::Ucp::Support::OrderLedger::Store) do
+        def initialize
+          @records = {}
+        end
+
+        def record(order_id, record) = @records[order_id] = record
+        def find(order_id) = @records[order_id]
+      end.new
+    end
+
+    it "routes record/find through an injected store without touching a file" do
+      ledger = described_class.new(store: memory_store)
+
+      ledger.record(idempotency_key: "k1", order: build_order(id: "ord_1"))
+
+      expect(ledger.find("ord_1")["idempotency_key"]).to eq("k1")
+      expect(File.exist?(@path)).to be(false)
+    end
+
+    it "raises NotImplementedError from the abstract Store" do
+      expect { Portage::Ucp::Support::OrderLedger::Store.new.record("x", {}) }
+        .to raise_error(Portage::Ucp::NotImplementedError)
+    end
+  end
 end
