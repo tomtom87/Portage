@@ -29,9 +29,15 @@ module Portage
       #   store (Phase 1, docs/plans/order-ledger.md). Injectable for the
       #   same reason as `transaction_log` — defaults to the real
       #   `~/.portage/orders.json`.
+      # @param journal [#record_checkout, nil] optional buyer-side purchase
+      #   journal (docs/plans/storage-abstraction-journal.md) — the
+      #   `portage-ucp-journal` gem's `PurchaseJournal`, or anything
+      #   duck-typed the same way. `nil` by default and never `require`d
+      #   from core (§2: core stays dependency-light); a consumer wires
+      #   one in from their own app after requiring that gem themselves.
       def initialize(adapter:, registry: CapabilityRegistry.default, logger: Portage::Ucp.configuration.logger,
                      shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load,
-                     confirmer: Confirmer::Terminal.new, order_ledger: Support::OrderLedger.new)
+                     confirmer: Confirmer::Terminal.new, order_ledger: Support::OrderLedger.new, journal: nil)
         @adapter = adapter
         @registry = registry
         @logger = logger
@@ -40,6 +46,7 @@ module Portage
         @policy = policy
         @confirmer = confirmer
         @order_ledger = order_ledger
+        @journal = journal
       end
 
       # @param correlation_id [String, nil] threaded through to the adapter
@@ -110,6 +117,16 @@ module Portage
         # checkout produces an order (e.g. cart-only flows), so skip
         # silently when absent.
         @order_ledger.record(idempotency_key: idempotency_key, order: result.order) if result.order
+
+        # Same after-settle, outside-the-rescue posture as the order_ledger
+        # write immediately above, for the same reason: the money has
+        # already moved, so a lost journal write must never flip a settled
+        # charge to `failed`. @journal is nil unless a consumer opted in
+        # (see #initialize) — never required from core.
+        if @journal && result.order
+          @journal.record_checkout(shop: @shop, source: journal_source(@adapter), checkout: result,
+                                   idempotency_key: idempotency_key)
+        end
         result
       end
 
@@ -178,6 +195,20 @@ module Portage
 
       def settled_currency(result)
         result.respond_to?(:currency) ? result.currency : nil
+      end
+
+      # "native_ucp" vs "adapter:<platform>" (design-log §22) — Dispatcher
+      # has no separate platform-identity concept of its own, so this reads
+      # it off the adapter's class: the in-repo ReferenceAdapter (and any
+      # anonymous/no-name adapter, e.g. a test double) counts as native_ucp,
+      # every namespaced adapter (Portage::Ucp::Shopify::Adapter, ...)
+      # reports its namespace.
+      def journal_source(adapter)
+        name = adapter.class.name
+        return "native_ucp" if name.nil? || name == "Portage::Ucp::ReferenceAdapter"
+
+        platform = name.split("::")[-2]
+        "adapter:#{(platform || name).downcase}"
       end
 
       def call_adapter(method_name, arguments, correlation_id)

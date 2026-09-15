@@ -6,6 +6,15 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `Dispatcher.new` gains an optional `journal:` argument (`nil` by default,
+  never `require`d from this gem) — after a successful `complete_checkout`
+  with a settled order, `@journal.record_checkout(shop:, source:, checkout:,
+  idempotency_key:)` runs alongside the existing `order_ledger` write, same
+  after-settle/outside-the-rescue posture. `source` is `"native_ucp"` or
+  `"adapter:<platform>"`, read off the adapter's class. Pairs with the new
+  `portage-ucp-journal` gem's `PurchaseJournal` (design-log §22,
+  docs/plans/storage-abstraction-journal.md) — core takes on no new runtime
+  dependency; a consumer wires the journal in from their own app.
 - Added `Portage::Ucp::Security::Signature` and
   `Portage::Ucp::Rack::SignatureVerification` — verifies RFC 9421 HTTP
   Message Signatures on inbound requests per UCP's signature spec

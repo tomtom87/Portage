@@ -250,6 +250,68 @@ RSpec.describe Portage::Ucp::Dispatcher do
     expect(response[:structuredContent]["products"]).to eq([product.to_wire_h])
   end
 
+  it "is a no-op when no journal is configured (default)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-no-journal" })[:structuredContent]
+
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                   idempotency_key: "chk-no-journal-complete" })
+    end.not_to raise_error
+  end
+
+  it "records a purchase-journal entry per line item of the settled order, alongside the ledger" do
+    journal = instance_double("Portage::Ucp::Journal::PurchaseJournal")
+    dispatcher = described_class.new(adapter: adapter, transaction_log: transaction_log, order_ledger: order_ledger,
+                                     policy: policy, confirmer: confirmer, shop: "shop.example.com",
+                                     journal: journal)
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                            idempotency_key: "chk-journal" })[:structuredContent]
+
+    expect(journal).to receive(:record_checkout)
+      .with(shop: "shop.example.com", source: "adapter:support", checkout: an_instance_of(Portage::Ucp::Checkout),
+            idempotency_key: "chk-journal-complete")
+
+    dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                    arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                 idempotency_key: "chk-journal-complete" })
+  end
+
+  it "writes nothing to the journal when the settled result has no order" do
+    journal = instance_double("Portage::Ucp::Journal::PurchaseJournal")
+    dispatcher = described_class.new(adapter: adapter, transaction_log: transaction_log, order_ledger: order_ledger,
+                                     policy: policy, confirmer: confirmer, shop: "shop.example.com",
+                                     journal: journal)
+
+    expect(journal).not_to receive(:record_checkout)
+
+    dispatcher.call(capability: "dev.ucp.shopping.cart", action: "create_cart",
+                    arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
+                                 idempotency_key: "cart-journal-k1" })
+  end
+
+  it "reports native_ucp as the journal source for the in-repo ReferenceAdapter" do
+    reference_dispatcher = described_class.new(adapter: Portage::Ucp::ReferenceAdapter.new,
+                                               transaction_log: transaction_log, order_ledger: order_ledger,
+                                               policy: policy, confirmer: confirmer, shop: "shop.example.com",
+                                               journal: (journal = instance_double(
+                                                 "Portage::Ucp::Journal::PurchaseJournal", record_checkout: nil
+                                               )))
+    checkout = reference_dispatcher.call(
+      capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+      arguments: { line_items: [], idempotency_key: "chk-native" }
+    )[:structuredContent]
+
+    expect(journal).to receive(:record_checkout).with(hash_including(source: "native_ucp"))
+
+    reference_dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                              arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                           idempotency_key: "chk-native-complete" })
+  end
+
   it "raises CapabilityNotAdvertisedError when the adapter hasn't overridden any backing method" do
     bare_adapter = Portage::Ucp::Adapter.new
     dispatcher = described_class.new(adapter: bare_adapter)
