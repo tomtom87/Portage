@@ -47,6 +47,17 @@ Metrics/ParameterLists:
     # rationale as manifest.rb/value_objects.rb above — collapsing them into
     # an options hash would lose that.
     - "lib/portage/ucp/dispatcher.rb"
+    # Signature.verify!/#initialize take one keyword per RFC 9421 request
+    # field (method/authority/path/query/headers/body) plus verification
+    # knobs (trusted_keys/required_components/max_age) — same one-keyword-
+    # per-wire-field rationale as manifest.rb above, not a sign the method
+    # needs splitting.
+    - "lib/portage/ucp/security/signature.rb"
+    # SigningHelper.sign (spec-only) mirrors Signature's own request-field
+    # parameter list above, plus signing-specific knobs (digest_name, coord,
+    # components, created) a spec needs to construct arbitrary test
+    # signatures — same rationale, test-fixture side.
+    - "spec/support/signing_helper.rb"
 
 Style/HashSlice:
   Enabled: false
@@ -91,6 +102,10 @@ Metrics/ClassLength:
     # plus discount/fulfillment/identity — same breadth-not-complexity
     # rationale, wider surface since it's the shipped conformance fixture.
     - "lib/portage/ucp/reference_adapter.rb"
+    # Signature (§22) implements one RFC 9421 verification step per private
+    # method (parse, coverage check, freshness, digest, ECDSA) — breadth
+    # across a fixed protocol's steps, not a class doing unrelated things.
+    - "lib/portage/ucp/security/signature.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:
