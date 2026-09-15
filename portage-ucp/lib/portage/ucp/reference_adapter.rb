@@ -107,7 +107,10 @@ module Portage
       # single call needs to, so it's accepted and left unused rather than
       # stored (see .rubocop.yml's Lint/UnusedMethodArgument exclude, same
       # posture as the abstract Adapter#complete_checkout it overrides).
-      def complete_checkout(checkout_id:, payment_token:, idempotency_key:)
+      # mandate: (design-log §33/Phase B) is the same story — already
+      # shape-validated by Ap2::MandateGuard via Dispatcher#call before this
+      # ever runs, and there's no real PSP here to hand it to.
+      def complete_checkout(checkout_id:, payment_token:, idempotency_key:, mandate: nil)
         dedup(idempotency_key) do
           checkout = @checkouts.fetch(checkout_id)
           raise_if_any_line_out_of_stock!(checkout)
@@ -167,23 +170,27 @@ module Portage
       # on the first poll, "complete" with a minted opaque token from the
       # second poll onward — enough for a caller's poll loop to actually
       # exercise both states rather than completing on the first check.
-      def create_payment_enrollment(idempotency_key:)
+      # `mandate:` (design-log §33/Phase B) is stored and echoed back on
+      # every subsequent poll — this in-memory adapter has no PSP to verify
+      # it against, but round-tripping it proves the plumbing for a real
+      # adapter that would.
+      def create_payment_enrollment(idempotency_key:, mandate: nil)
         dedup(idempotency_key) do
           id = next_id("penr")
-          @payment_enrollments[id] = 0
-          pending_enrollment(id)
+          @payment_enrollments[id] = { polls: 0, mandate: mandate }
+          pending_enrollment(id, mandate)
         end
       end
 
       def get_payment_enrollment(enrollment_id:)
-        polls = @payment_enrollments[enrollment_id]
-        return nil unless polls
+        entry = @payment_enrollments[enrollment_id]
+        return nil unless entry
 
-        @payment_enrollments[enrollment_id] += 1
-        return pending_enrollment(enrollment_id) if polls.zero?
+        entry[:polls] += 1
+        return pending_enrollment(enrollment_id, entry[:mandate]) if entry[:polls] == 1
 
         Portage::Ucp::PaymentEnrollment.new(
-          id: enrollment_id, status: "complete",
+          id: enrollment_id, status: "complete", mandate: entry[:mandate],
           payment_token: "reftok_#{Digest::SHA256.hexdigest(enrollment_id)[0, 16]}"
         )
       end
@@ -423,8 +430,8 @@ module Portage
         "#{prefix}_#{@next_id}"
       end
 
-      def pending_enrollment(id)
-        Portage::Ucp::PaymentEnrollment.new(id: id, status: "pending",
+      def pending_enrollment(id, mandate = nil)
+        Portage::Ucp::PaymentEnrollment.new(id: id, status: "pending", mandate: mandate,
                                             setup_url: "https://example.com/payment-setup/#{id}")
       end
     end

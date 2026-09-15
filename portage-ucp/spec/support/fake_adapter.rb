@@ -67,7 +67,7 @@ module Portage
           end
         end
 
-        def complete_checkout(checkout_id:, payment_token:, idempotency_key:)
+        def complete_checkout(checkout_id:, payment_token:, idempotency_key:, mandate: nil)
           dedup(idempotency_key) do
             checkout = @checkouts.fetch(checkout_id)
             order = store_order(checkout)

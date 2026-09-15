@@ -554,14 +554,21 @@ module Portage
     # complete_checkout's payment_token: expects (never a raw PAN —
     # PaymentTokenGuard rejects those regardless of source). See
     # docs/plans/agentic-payments.md Phase 1.
-    PaymentEnrollment = Data.define(:id, :status, :setup_url, :payment_token, :expires_at) do
-      def initialize(id:, status:, setup_url: nil, payment_token: nil, expires_at: nil) = super
+    # `mandate:` (design-log §33/Phase B) — an optional Ap2::PaymentMandate
+    # an adapter that received one at enrollment time can carry back on the
+    # enrollment it returns. Safe to add here (unlike Checkout/Order, which
+    # are schema-validated against UCP's own JSON schemas) because
+    # `payment_enrollment` is a Portage extension with no schemas/
+    # counterpart to conflict with — see rspec.rb's comment on that.
+    PaymentEnrollment = Data.define(:id, :status, :setup_url, :payment_token, :expires_at, :mandate) do
+      def initialize(id:, status:, setup_url: nil, payment_token: nil, expires_at: nil, mandate: nil) = super
 
       def to_wire_h
         h = { "id" => id, "status" => status }
         h["setup_url"] = setup_url if setup_url
         h["payment_token"] = payment_token if payment_token
         h["expires_at"] = expires_at if expires_at
+        h["mandate"] = mandate.to_wire_h if mandate
         h
       end
     end
