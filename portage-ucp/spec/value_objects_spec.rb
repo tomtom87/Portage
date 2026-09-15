@@ -418,4 +418,41 @@ RSpec.describe "Portage::Ucp value objects" do
       expect(identity.email).to eq("a@example.com")
     end
   end
+
+  describe Portage::Ucp::PaymentMethodRef do
+    it "requires id/psp_reference, omitting optional fields when unset" do
+      ref = Portage::Ucp::PaymentMethodRef.new(id: "pm_1", psp_reference: "psp_ref_1")
+      expect(ref.to_wire_h).to eq({ "id" => "pm_1", "psp_reference" => "psp_ref_1" })
+    end
+
+    it "includes brand/last4/expires_at/created_at once present" do
+      ref = Portage::Ucp::PaymentMethodRef.new(id: "pm_1", psp_reference: "psp_ref_1", brand: "visa", last4: "4242",
+                                               expires_at: "2028-01-01", created_at: "2026-07-23T00:00:00Z")
+      expect(ref.to_wire_h).to eq(
+        { "id" => "pm_1", "psp_reference" => "psp_ref_1", "brand" => "visa", "last4" => "4242",
+          "expires_at" => "2028-01-01", "created_at" => "2026-07-23T00:00:00Z" }
+      )
+    end
+  end
+
+  describe Portage::Ucp::SavedAddress do
+    it "merges the postal address with its own id/created_at" do
+      address = Portage::Ucp::PostalAddress.new(postal_code: "94043")
+      saved = Portage::Ucp::SavedAddress.new(id: "addr_1", address: address, created_at: "2026-07-23T00:00:00Z")
+      expect(saved.to_wire_h).to eq(
+        { "id" => "addr_1", "created_at" => "2026-07-23T00:00:00Z", "postal_code" => "94043" }
+      )
+    end
+  end
+
+  describe Portage::Ucp::ShopperDataErasure do
+    it "serializes what was erased" do
+      erasure = Portage::Ucp::ShopperDataErasure.new(subject: "sub_1", payment_methods_deleted: 2,
+                                                      addresses_deleted: 1, identity_unlinked: true)
+      expect(erasure.to_wire_h).to eq(
+        { "subject" => "sub_1", "payment_methods_deleted" => 2, "addresses_deleted" => 1,
+          "identity_unlinked" => true }
+      )
+    end
+  end
 end
