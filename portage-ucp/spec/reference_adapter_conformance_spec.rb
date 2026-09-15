@@ -136,4 +136,87 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
     expect(logged["status"]).to eq("incomplete")
     expect(logged["correlation_id"]).to eq("corr-123")
   end
+
+  describe "#save_payment_method / #list_payment_methods / #delete_payment_method" do
+    it "saves and lists a payment method for the calling shopper" do
+      ref = adapter.save_payment_method(oauth_token: "tok_a", payment_token: "tok", idempotency_key: "pm-1")
+
+      expect(ref.psp_reference).to be_a(String)
+      expect(adapter.list_payment_methods(oauth_token: "tok_a")).to eq([ref])
+    end
+
+    it "dedupes a repeated idempotency_key rather than saving a second reference" do
+      first = adapter.save_payment_method(oauth_token: "tok_a", payment_token: "tok", idempotency_key: "pm-2")
+      second = adapter.save_payment_method(oauth_token: "tok_a", payment_token: "tok", idempotency_key: "pm-2")
+
+      expect(second.id).to eq(first.id)
+    end
+
+    it "never lets one shopper's oauth_token see another shopper's saved payment methods" do
+      adapter.save_payment_method(oauth_token: "tok_a", payment_token: "tok", idempotency_key: "pm-3")
+
+      expect(adapter.list_payment_methods(oauth_token: "tok_b")).to eq([])
+    end
+
+    it "deletes a payment method, returning false for an already-gone id" do
+      ref = adapter.save_payment_method(oauth_token: "tok_a", payment_token: "tok", idempotency_key: "pm-4")
+
+      expect(adapter.delete_payment_method(oauth_token: "tok_a", payment_method_id: ref.id,
+                                           idempotency_key: "pm-4-del")).to be(true)
+      expect(adapter.delete_payment_method(oauth_token: "tok_a", payment_method_id: ref.id,
+                                           idempotency_key: "pm-4-del-2")).to be(false)
+    end
+  end
+
+  describe "#save_address / #list_addresses / #delete_address" do
+    let(:address) { Portage::Ucp::PostalAddress.new(postal_code: "94043") }
+
+    it "saves and lists an address for the calling shopper" do
+      saved = adapter.save_address(oauth_token: "tok_a", address: address, idempotency_key: "addr-1")
+
+      expect(saved.address).to eq(address)
+      expect(adapter.list_addresses(oauth_token: "tok_a")).to eq([saved])
+    end
+
+    it "never lets one shopper's oauth_token see another shopper's saved addresses" do
+      adapter.save_address(oauth_token: "tok_a", address: address, idempotency_key: "addr-2")
+
+      expect(adapter.list_addresses(oauth_token: "tok_b")).to eq([])
+    end
+
+    it "deletes an address, returning false for an already-gone id" do
+      saved = adapter.save_address(oauth_token: "tok_a", address: address, idempotency_key: "addr-3")
+
+      expect(adapter.delete_address(oauth_token: "tok_a", address_id: saved.id,
+                                    idempotency_key: "addr-3-del")).to be(true)
+      expect(adapter.delete_address(oauth_token: "tok_a", address_id: saved.id,
+                                    idempotency_key: "addr-3-del-2")).to be(false)
+    end
+  end
+
+  describe "#delete_shopper_data" do
+    let(:address) { Portage::Ucp::PostalAddress.new(postal_code: "94043") }
+
+    it "erases every payment method, address, and the linked identity for the subject" do
+      adapter.save_payment_method(oauth_token: "tok_a", payment_token: "tok", idempotency_key: "sd-pm-1")
+      adapter.save_address(oauth_token: "tok_a", address: address, idempotency_key: "sd-addr-1")
+
+      erasure = adapter.delete_shopper_data(oauth_token: "tok_a", idempotency_key: "sd-1")
+
+      expect(erasure.payment_methods_deleted).to eq(1)
+      expect(erasure.addresses_deleted).to eq(1)
+      expect(erasure.identity_unlinked).to be(true)
+      expect(adapter.list_payment_methods(oauth_token: "tok_a")).to eq([])
+      expect(adapter.list_addresses(oauth_token: "tok_a")).to eq([])
+    end
+
+    it "is safe to repeat, returning zero counts without raising" do
+      adapter.delete_shopper_data(oauth_token: "tok_a", idempotency_key: "sd-2")
+
+      second = adapter.delete_shopper_data(oauth_token: "tok_a", idempotency_key: "sd-3")
+
+      expect(second.payment_methods_deleted).to eq(0)
+      expect(second.addresses_deleted).to eq(0)
+    end
+  end
 end
