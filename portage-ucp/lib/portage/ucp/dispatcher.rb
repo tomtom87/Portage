@@ -72,17 +72,36 @@ module Portage
         method_name = capability_definition.actions[action]
         raise UnknownActionError, action if method_name.nil?
 
-        Portage::Ucp::PaymentTokenGuard.validate!(arguments[:payment_token]) if arguments.key?(:payment_token)
+        validate_inbound_boundaries!(arguments)
 
         result = if action == PAYMENT_COMPLETING_ACTION
                    call_and_log_transaction(method_name, arguments, correlation_id)
                  else
                    call_adapter(method_name, arguments, correlation_id)
                  end
+        validate_outbound_boundaries!(result)
         wrap(capability, result)
       end
 
       private
+
+      # PaymentTokenGuard/Ap2::MandateGuard, run before any adapter method
+      # (design-log §9/§33) — whichever action carries the argument, not
+      # gated to complete_checkout, so misuse is caught at the one seam
+      # every call already passes through.
+      def validate_inbound_boundaries!(arguments)
+        Portage::Ucp::PaymentTokenGuard.validate!(arguments[:payment_token]) if arguments.key?(:payment_token)
+        Portage::Ucp::Ap2::MandateGuard.validate!(arguments[:mandate]) if arguments[:mandate]
+      end
+
+      # Outbound counterpart to the above (design-log §33) — every adapter's
+      # create_payment_enrollment/get_payment_enrollment result is held to
+      # PaymentEnrollmentGuard here, not just ReferenceAdapter's own.
+      def validate_outbound_boundaries!(result)
+        return unless result.is_a?(Portage::Ucp::PaymentEnrollment)
+
+        Portage::Ucp::PaymentEnrollmentGuard.validate!(result)
+      end
 
       # Reserve-then-commit around the one action that dispatches a charge:
       # the `pending` record lands *before* `call_adapter` runs, so a crash

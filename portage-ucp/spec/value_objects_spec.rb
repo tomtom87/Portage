@@ -419,6 +419,32 @@ RSpec.describe "Portage::Ucp value objects" do
     end
   end
 
+  describe Portage::Ucp::PaymentEnrollment do
+    it "requires id/status, omitting optional fields when unset" do
+      enrollment = Portage::Ucp::PaymentEnrollment.new(id: "penr_1", status: "pending")
+      expect(enrollment.to_wire_h).to eq({ "id" => "penr_1", "status" => "pending" })
+    end
+
+    it "includes the mandate's wire hash once present (§33)" do
+      mandate = Portage::Ucp::Ap2::PaymentMandate.new(amount: 500, currency: "USD", merchant: "shop.example.com",
+                                                      expires_at: "2099-01-01T00:00:00Z", signature: "sig")
+      enrollment = Portage::Ucp::PaymentEnrollment.new(id: "penr_1", status: "pending",
+                                                       setup_url: "https://example.com/setup", mandate: mandate)
+      expect(enrollment.to_wire_h["mandate"]).to eq(mandate.to_wire_h)
+    end
+  end
+
+  describe Portage::Ucp::Ap2::PaymentMandate do
+    it "serializes every field" do
+      mandate = Portage::Ucp::Ap2::PaymentMandate.new(amount: 500, currency: "USD", merchant: "shop.example.com",
+                                                      expires_at: "2099-01-01T00:00:00Z", signature: "sig")
+      expect(mandate.to_wire_h).to eq(
+        { "amount" => 500, "currency" => "USD", "merchant" => "shop.example.com",
+          "expires_at" => "2099-01-01T00:00:00Z", "signature" => "sig" }
+      )
+    end
+  end
+
   describe Portage::Ucp::PaymentMethodRef do
     it "requires id/psp_reference, omitting optional fields when unset" do
       ref = Portage::Ucp::PaymentMethodRef.new(id: "pm_1", psp_reference: "psp_ref_1")

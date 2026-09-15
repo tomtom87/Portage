@@ -60,6 +60,32 @@ RSpec.describe Portage::Ucp::Dispatcher do
     end.to raise_error(Portage::Ucp::RawPanRejectedError)
   end
 
+  it "rejects a complete_checkout call whose mandate is missing required fields (§33)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [], idempotency_key: "chk-mandate" })[:structuredContent]
+    mandate = Portage::Ucp::Ap2::PaymentMandate.new(amount: nil, currency: "USD", merchant: "shop.example.com",
+                                                    expires_at: "2099-01-01T00:00:00Z", signature: "sig")
+
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout["id"], payment_token: "tok_visa", mandate: mandate,
+                                   idempotency_key: "chk-mandate-complete" })
+    end.to raise_error(Portage::Ucp::InvalidMandateError)
+  end
+
+  it "rejects a complete_checkout call whose mandate has expired (§33)" do
+    checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                               arguments: { line_items: [], idempotency_key: "chk-mandate-exp" })[:structuredContent]
+    mandate = Portage::Ucp::Ap2::PaymentMandate.new(amount: 500, currency: "USD", merchant: "shop.example.com",
+                                                    expires_at: "2020-01-01T00:00:00Z", signature: "sig")
+
+    expect do
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout["id"], payment_token: "tok_visa", mandate: mandate,
+                                   idempotency_key: "chk-mandate-exp-complete" })
+    end.to raise_error(Portage::Ucp::InvalidMandateError)
+  end
+
   it "reserves a pending transaction record before dispatch and settles it complete after (Phase 0)" do
     checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
                                arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],
@@ -338,6 +364,20 @@ RSpec.describe Portage::Ucp::Dispatcher do
         arguments: { oauth_token: "tok_a", payment_token: "4242424242424242", idempotency_key: "pm-pan-1" }
       )
     end.to raise_error(Portage::Ucp::RawPanRejectedError)
+  end
+
+  it "runs PaymentEnrollmentGuard on every adapter's create_payment_enrollment result, not just ReferenceAdapter's " \
+     "own (§33)" do
+    reference_adapter = Portage::Ucp::ReferenceAdapter.new
+    allow(reference_adapter).to receive(:create_payment_enrollment)
+      .and_return(Portage::Ucp::PaymentEnrollment.new(id: "penr_bad", status: "banana"))
+    reference_dispatcher = described_class.new(adapter: reference_adapter, transaction_log: transaction_log,
+                                               order_ledger: order_ledger, policy: policy, confirmer: confirmer)
+
+    expect do
+      reference_dispatcher.call(capability: "app.portage-ucp.payment_enrollment",
+                                action: "create_payment_enrollment", arguments: { idempotency_key: "penr-bad-1" })
+    end.to raise_error(Portage::Ucp::InvalidPaymentEnrollmentError)
   end
 
   it "raises CapabilityNotAdvertisedError when the adapter hasn't overridden any backing method" do

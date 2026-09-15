@@ -71,8 +71,16 @@ module Portage
       # than a generic/platform error, so callers can distinguish a stale-stock
       # failure from e.g. a declined payment.
       # @raise [Portage::Ucp::OutOfStockError] if a line item is no longer available
+      # @param mandate [Portage::Ucp::Ap2::PaymentMandate, nil] an AP2
+      #   mandate authorizing this charge, alongside or instead of relying
+      #   on `payment_token` alone (design-log §33/Phase B). Validated for
+      #   shape (not cryptographically) by Dispatcher#call via
+      #   Ap2::MandateGuard before an adapter ever sees it. Optional and
+      #   `nil` by default — no adapter in this repo has a real PSP to
+      #   verify a mandate's signature against, so this is a pass-through
+      #   slot, same posture as `payment_token` on this same method.
       # @return [Portage::Ucp::Checkout]
-      def complete_checkout(checkout_id:, payment_token:, idempotency_key:) = not_implemented
+      def complete_checkout(checkout_id:, payment_token:, idempotency_key:, mandate: nil) = not_implemented
       # @return [Portage::Ucp::Checkout]
       def cancel_checkout(checkout_id:, idempotency_key:) = not_implemented
 
@@ -135,8 +143,13 @@ module Portage
       # gateway-hosted page where the human enters their card, and the
       # caller polls #get_payment_enrollment until `status` leaves
       # "pending". See docs/plans/agentic-payments.md Phase 1.
+      # @param mandate [Portage::Ucp::Ap2::PaymentMandate, nil] an AP2
+      #   mandate presented at enrollment time (design-log §33/Phase B),
+      #   same optional/pass-through posture as `complete_checkout`'s
+      #   `mandate:` above — validated for shape by Dispatcher#call, never
+      #   cryptographically, before an adapter ever sees it.
       # @return [Portage::Ucp::PaymentEnrollment]
-      def create_payment_enrollment(idempotency_key:) = not_implemented
+      def create_payment_enrollment(idempotency_key:, mandate: nil) = not_implemented
       # @return [Portage::Ucp::PaymentEnrollment, nil] nil if the enrollment isn't found
       def get_payment_enrollment(enrollment_id:) = not_implemented
 
