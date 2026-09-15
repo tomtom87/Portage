@@ -70,6 +70,19 @@ pre-1.0, so APIs may still shift between minor versions.
   hole remaining before 1.0. Verify-before-parse, same posture as
   `Rack::WebhookEndpoint`; trusted keys reuse `Manifest#signing_keys`'
   current+next JWK-array shape rather than a second key config.
+- Added `Confirmer::Webhook` (design-log §22 slice, Phase C) — out-of-band
+  approval for the confirmation gate, alongside `Terminal`/`AutoApprove`.
+  POSTs `{amount, currency, merchant, idempotency_key}` to a configured
+  URL, then polls a configured status endpoint (or calls a caller-supplied
+  `wait:` callback, for push-based transports) until approve/deny/timeout.
+  Fails closed on timeout, same as `Terminal`, but with its own longer
+  default timeout (900s vs. `Terminal`'s 120s) — a human already at a
+  terminal isn't the same wait as noticing and acting on a Slack message.
+  Built on `Support::HttpClient`, no new runtime dependency. Non-2xx
+  responses from the confirm/status calls themselves raise the new
+  `Confirmer::WebhookApiError`, distinct from `ConfirmationDeniedError`:
+  one means the out-of-band approver couldn't be reached, the other means
+  it was reached and said no (or never answered).
 
 ## [0.5.0] - 2026-09-14
 

@@ -2423,3 +2423,51 @@ do it.
 Still open after this slice: §22 item 6's console and item 7's scheduler
 (Phase B didn't touch either); real PSP integration and cryptographic AP2
 verification remain explicit non-goals, not deferred work.
+
+## 35. §22 slice, Phase C — Confirmer::Webhook, out-of-band approval (2026-09-15)
+
+§22 named "expand `Confirmer` beyond terminal y/n" as the third of three
+items blocking the agentic-payments work from being production-grade.
+`Confirmer` (`confirmer.rb`) was already a clean transport-agnostic
+interface — `Terminal` and `AutoApprove` both just implement `confirm!` —
+so this slice adds a third implementation rather than touching the
+interface itself.
+
+`Confirmer::Webhook` POSTs `{amount, currency, merchant, idempotency_key}`
+to a configured `confirm_url`, then polls a configured `status_url`
+(`?idempotency_key=...`, expecting `{"status" => "approved"|"denied"|
+"pending"}`) until it stops answering "pending" or `timeout_seconds`
+elapses. A caller-supplied `wait:` callback is the escape hatch for
+push-based transports — given one, `Webhook` calls it with the
+`idempotency_key` instead of polling, and trusts it to block as long as it
+needs to and return `"approved"`/`"denied"` itself. Built on
+`Support::HttpClient` (`json_request`/`parse!`), the same house mixin
+every adapter gem's `Client` uses — no new runtime dependency, and it
+already carries the "deliberately Net::HTTP, no vendor gem" rationale.
+
+Fails closed on timeout, identically to `Terminal`: raises
+`ConfirmationDeniedError.new(msg, reason: :timeout, decision: {approved:
+false, reason: :timeout, idempotency_key:})`, the same `decision` shape
+`Dispatcher#confirmation_check!` already persists onto the transaction
+record — that shape is a hard contract this slice doesn't touch.
+Deliberately does **not** reuse `Terminal::DEFAULT_TIMEOUT_SECONDS`
+(120s) — that's tuned for a human already at a keyboard; an out-of-band
+Slack/WhatsApp approval takes minutes, not seconds, so `Webhook` gets its
+own default (900s), injectable the same way.
+
+A non-2xx from the confirm or status HTTP call itself (not the 409
+`Support::HttpClient` already normalizes to `ConflictError`) raises a new
+`Confirmer::WebhookApiError`, kept distinct from
+`ConfirmationDeniedError` on purpose: one means "couldn't even ask the
+out-of-band approver," the other means "asked, and got a no or no
+answer" — a caller needs to tell those apart to know whether retrying the
+HTTP call or accepting the denial is the right response.
+
+`docs/plans/agentic-payments.md` was untracked despite committed source
+citing it (`errors.rb`, `confirmer.rb`, `policy.rb`) — committed here
+alongside the other in-flight plan docs so cloning the repo actually
+ships what those citations point at.
+
+Still open after this slice, and after all three: §22 items 2
+(`idempotency_provider`), 5 (sandbox credentials), 6's console, and 7's
+scheduler — none of them touched across Phases A/B/C.
