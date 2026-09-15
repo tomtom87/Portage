@@ -1,6 +1,6 @@
-require "json"
-require "fileutils"
 require "time"
+require_relative "transaction_log/store"
+require_relative "transaction_log/file_store"
 
 module Portage
   module Ucp
@@ -18,15 +18,15 @@ module Portage
       # or re-charge, whereas a lost write to those is just a forgotten
       # local note. Write failures on this file raise.
       #
-      # `chmod 0600` on every write: none of the existing `~/.portage/*`
-      # files do this today, but this one carries payment_token_ref/amount
-      # data, so it gets a stricter, explicit convention of its own.
+      # Storage is pluggable via `store:` (see `Store`/`FileStore`,
+      # design-log §33) — `path:` stays as a shorthand for the file-backed
+      # default, so every existing caller keeps working unchanged.
       class TransactionLog
-        PATH = File.join(Dir.home, ".portage", "transactions.json").freeze
+        PATH = FileStore::PATH
         TERMINAL_STATUSES = %w[complete failed].freeze
 
-        def initialize(path: PATH, clock: -> { Time.now })
-          @path = path
+        def initialize(store: nil, path: PATH, clock: -> { Time.now })
+          @store = store || FileStore.new(path: path)
           @clock = clock
         end
 
@@ -42,12 +42,7 @@ module Portage
             "created_at" => @clock.call.utc.iso8601, "completed_at" => nil
           }
 
-          with_lock(File::LOCK_EX) do |data, file|
-            data[idempotency_key] = record
-            persist(data, file)
-          end
-
-          record
+          @store.reserve(record)
         end
 
         # Called after dispatch settles, success or failure. Raises if no
@@ -58,19 +53,16 @@ module Portage
                      confirmation_outcome: nil)
           raise ArgumentError, "status must be one of #{TERMINAL_STATUSES}" unless TERMINAL_STATUSES.include?(status)
 
-          with_lock(File::LOCK_EX) do |data, file|
-            record = data[idempotency_key]
-            raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
+          updates = { "status" => status, "completed_at" => @clock.call.utc.iso8601 }
+          updates["amount"] = amount unless amount.nil?
+          updates["currency"] = currency unless currency.nil?
+          updates["policy_decision"] = policy_decision unless policy_decision.nil?
+          updates["confirmation_outcome"] = confirmation_outcome unless confirmation_outcome.nil?
 
-            record["status"] = status
-            record["amount"] = amount unless amount.nil?
-            record["currency"] = currency unless currency.nil?
-            record["policy_decision"] = policy_decision unless policy_decision.nil?
-            record["confirmation_outcome"] = confirmation_outcome unless confirmation_outcome.nil?
-            record["completed_at"] = @clock.call.utc.iso8601
-            persist(data, file)
-            record
-          end
+          record = @store.complete(idempotency_key, updates)
+          raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
+
+          record
         end
 
         # Called mid-flight, between a passing PolicyGuard.check! and the
@@ -80,14 +72,10 @@ module Portage
         # decision goes through `#complete(status: "failed", policy_decision:)`
         # instead, since a block never reaches dispatch at all.
         def record_decision(idempotency_key:, policy_decision:)
-          with_lock(File::LOCK_EX) do |data, file|
-            record = data[idempotency_key]
-            raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
+          record = @store.record_decision(idempotency_key, policy_decision)
+          raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
 
-            record["policy_decision"] = policy_decision
-            persist(data, file)
-            record
-          end
+          record
         end
 
         # Called mid-flight, between a passing Confirmer#confirm! and the
@@ -96,18 +84,14 @@ module Portage
         # `#complete(status: "failed", confirmation_outcome:)` instead, since
         # a deny never reaches dispatch at all.
         def record_confirmation(idempotency_key:, confirmation_outcome:)
-          with_lock(File::LOCK_EX) do |data, file|
-            record = data[idempotency_key]
-            raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
+          record = @store.record_confirmation(idempotency_key, confirmation_outcome)
+          raise KeyError, "no transaction reserved for idempotency_key #{idempotency_key.inspect}" unless record
 
-            record["confirmation_outcome"] = confirmation_outcome
-            persist(data, file)
-            record
-          end
+          record
         end
 
         def find(idempotency_key)
-          with_lock(File::LOCK_SH) { |data, _file| data[idempotency_key] }
+          @store.find(idempotency_key)
         end
 
         # Rolling-window records for PolicyGuard's spend cap / velocity
@@ -116,43 +100,7 @@ module Portage
         # Scoped to `shop` since caps/velocity are per-merchant in the policy
         # file's mental model (a global cross-shop cap isn't a v1 goal).
         def completed_since(since, shop:)
-          with_lock(File::LOCK_SH) do |data, _file|
-            data.values.select do |record|
-              record["status"] == "complete" && record["shop"] == shop && record["completed_at"] &&
-                Time.parse(record["completed_at"]) >= since
-            end
-          end
-        end
-
-        private
-
-        def with_lock(lock_mode)
-          FileUtils.mkdir_p(File.dirname(@path))
-          File.open(@path, File::RDWR | File::CREAT, 0o600) do |file|
-            file.flock(lock_mode)
-            yield(read(file), file)
-          end
-        end
-
-        def read(file)
-          file.rewind
-          raw = file.read
-          return {} if raw.empty?
-
-          parsed = JSON.parse(raw)
-          parsed.is_a?(Hash) ? parsed : {}
-        rescue JSON::ParserError
-          {}
-        end
-
-        # No `rescue StandardError; nil` — see class comment. A failed write
-        # here must raise, not vanish.
-        def persist(data, file)
-          file.rewind
-          file.truncate(0)
-          file.write(JSON.pretty_generate(data))
-          file.flush
-          File.chmod(0o600, @path)
+          @store.completed_since(since, shop: shop)
         end
       end
     end

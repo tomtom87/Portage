@@ -117,4 +117,58 @@ RSpec.describe Portage::Ucp::Support::TransactionLog do
 
     expect(log.completed_since(Time.now - 3600, shop: "shop-a")).to eq([])
   end
+
+  describe "pluggable store (§33)" do
+    let(:memory_store) do
+      Class.new(Portage::Ucp::Support::TransactionLog::Store) do
+        def initialize
+          @records = {}
+        end
+
+        def reserve(record) = @records[record["idempotency_key"]] = record
+
+        def complete(idempotency_key, updates)
+          record = @records[idempotency_key]
+          record&.merge!(updates)
+        end
+
+        def record_decision(idempotency_key, policy_decision)
+          record = @records[idempotency_key]
+          record&.merge!("policy_decision" => policy_decision)
+        end
+
+        def record_confirmation(idempotency_key, confirmation_outcome)
+          record = @records[idempotency_key]
+          record&.merge!("confirmation_outcome" => confirmation_outcome)
+        end
+
+        def find(idempotency_key) = @records[idempotency_key]
+
+        def completed_since(_since, shop:)
+          @records.values.select { |r| r["status"] == "complete" && r["shop"] == shop }
+        end
+      end.new
+    end
+
+    it "routes reserve/complete/find through an injected store without touching a file" do
+      log = described_class.new(store: memory_store)
+
+      log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: "ref1", shop: "shop1")
+      log.complete(idempotency_key: "k1", status: "complete", amount: 100, currency: "USD")
+
+      expect(log.find("k1")).to include("status" => "complete", "amount" => 100)
+      expect(File.exist?(@path)).to be(false)
+    end
+
+    it "still raises KeyError from TransactionLog, not the store, for an unreserved key" do
+      log = described_class.new(store: memory_store)
+
+      expect { log.complete(idempotency_key: "nope", status: "complete") }.to raise_error(KeyError)
+    end
+
+    it "raises NotImplementedError from the abstract Store" do
+      expect { Portage::Ucp::Support::TransactionLog::Store.new.reserve({}) }
+        .to raise_error(Portage::Ucp::NotImplementedError)
+    end
+  end
 end
