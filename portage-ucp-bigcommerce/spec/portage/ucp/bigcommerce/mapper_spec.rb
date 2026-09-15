@@ -19,11 +19,16 @@ RSpec.describe Portage::Ucp::BigCommerce::Mapper do
       product = described_class.product(node, currency: "USD", site_url: "https://shop.example.com")
 
       expect(product.id).to eq("1")
-      expect(product.price).to eq(Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"))
-      expect(product.available).to be(true)
+      expect(product.price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 500, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 500, currency: "USD"))
+      )
       expect(product.url).to eq("https://shop.example.com/cold-brew/")
-      expect(product.variants).to eq([{ id: "1", title: "Cold Brew", available: true,
-                                        price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD") }])
+      variant = product.variants.first
+      expect(variant.id).to eq("1")
+      expect(variant.title).to eq("Cold Brew")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 500, currency: "USD"))
     end
 
     it "maps real variants when present, falling back to the parent price when unset" do
@@ -32,17 +37,19 @@ RSpec.describe Portage::Ucp::BigCommerce::Mapper do
           "option_values" => [{ "label" => "Large" }] }
       ]
 
-      variants = described_class.product(node, currency: "USD", site_url: "https://shop.example.com").variants
+      variant = described_class.product(node, currency: "USD", site_url: "https://shop.example.com").variants.first
 
-      expect(variants).to eq([{ id: "2", title: "Large", available: true,
-                                price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD") }])
+      expect(variant.id).to eq("2")
+      expect(variant.title).to eq("Large")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 500, currency: "USD"))
     end
 
     it "treats availability other than disabled as available" do
       node["availability"] = "preorder"
 
-      expect(described_class.product(node, currency: "USD", site_url: "https://shop.example.com").available)
-        .to be(true)
+      product = described_class.product(node, currency: "USD", site_url: "https://shop.example.com")
+      expect(product.variants.first.availability).to eq({ "available" => true })
     end
   end
 

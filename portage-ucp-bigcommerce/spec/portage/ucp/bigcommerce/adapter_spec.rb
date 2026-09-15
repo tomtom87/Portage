@@ -48,10 +48,10 @@ RSpec.describe Portage::Ucp::BigCommerce::Adapter do
         .to_return(status: 200, body: { data: [{ id: 1, name: "Cold Brew", price: 5.0,
                                                  availability: "available" }] }.to_json)
 
-      products = adapter.search_catalog(query: "brew", limit: 10)
+      result = adapter.search_catalog(query: "brew", limit: 10)
 
-      expect(products.first).to be_a(Portage::Ucp::Product)
-      expect(products.first.title).to eq("Cold Brew")
+      expect(result.products.first).to be_a(Portage::Ucp::Product)
+      expect(result.products.first.title).to eq("Cold Brew")
     end
   end
 
@@ -63,7 +63,7 @@ RSpec.describe Portage::Ucp::BigCommerce::Adapter do
 
       product = adapter.get_product(product_id: 1)
 
-      expect(product.id).to eq("1")
+      expect(product.product.id).to eq("1")
     end
 
     it "returns nil for a product the API doesn't find" do
