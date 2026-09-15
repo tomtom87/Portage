@@ -8,7 +8,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
 
-> **Status**: `0.5.0`, published to RubyGems. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
+> **Status**: `0.6.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
 ## Contents
 
@@ -146,7 +146,9 @@ Read this before wiring a server up to anything real — every default here is d
 - **Observability**: `Portage::Ucp::Observability.log` emits structured JSON log events through a consumer-injected logger, redacting `payment_token`/`oauth_token`/`authorization` automatically.
 - **Manifest signing**: `Portage::Ucp::Manifest` never generates or stores keys — pass a `signer` (anything responding to `#kid` and `#sign(canonical_json)`) to produce a signed manifest; omit it to serve unsigned.
 - **Policy caps**: `Portage::Ucp::PolicyGuard`, wired into `Dispatcher` just before `complete_checkout` dispatch, enforces `Portage::Ucp::Policy`'s per-transaction/rolling caps, velocity limits, and merchant allowlist — plus per-token enrollment scopes (merchant/max-amount/currency) bound at enrollment time and checked by the same `token_ref` at charge time. Configured via `portage-cli`'s `portage policy show/set` and `portage payment enroll --scope-*`.
-- **Confirmation**: `Portage::Ucp::Confirmer`, run right after `PolicyGuard.check!` passes and before `complete_checkout` dispatch. `Confirmer::Terminal` blocks on stdin and fails closed on anything but an explicit `"y"`; `Confirmer::AutoApprove` is for specs/conformance kits that need a real `confirm!` without blocking.
+- **Confirmation**: `Portage::Ucp::Confirmer`, run right after `PolicyGuard.check!` passes and before `complete_checkout` dispatch. `Confirmer::Terminal` blocks on stdin and fails closed on anything but an explicit `"y"`; `Confirmer::AutoApprove` is for specs/conformance kits that need a real `confirm!` without blocking; `Confirmer::Webhook` is for out-of-band approval — POSTs to a configured URL and polls (or calls a caller-supplied `wait:` callback) until approve/deny/timeout, failing closed on timeout like `Terminal` but with a longer default (900s vs. 120s).
+- **Payment enrollment**: `Portage::Ucp::PaymentEnrollmentGuard`, run via `Dispatcher#call`, validates every `create_payment_enrollment`/`get_payment_enrollment` response an adapter returns — `"pending"` must carry a `setup_url` and no `payment_token`, `"complete"` the reverse — raising `InvalidPaymentEnrollmentError` on a violation. An optional `mandate:` kwarg on the same two methods is shape-checked by `Portage::Ucp::Ap2::MandateGuard` (AP2 mandate shape, not cryptographic verification).
+- **Inbound request signatures**: `Portage::Ucp::Security::Signature` / `Rack::SignatureVerification` verify RFC 9421 HTTP Message Signatures on inbound requests per UCP's signature spec — the same verify-before-parse posture as `Rack::WebhookEndpoint`, trusting `Manifest#signing_keys`' current+next JWK array.
 - **Durable records**: `Portage::Ucp::Support::TransactionLog` reserves a transaction before `complete_checkout` dispatch and marks it settled/failed after, recording `PolicyGuard`/`Confirmer` outcomes on the same record. `Portage::Ucp::Support::OrderLedger` writes a durable snapshot alongside it once settlement succeeds — a failed snapshot write surfaces without flipping an already-settled charge to failed.
 
 ## How the pieces fit together

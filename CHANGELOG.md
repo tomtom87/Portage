@@ -7,6 +7,48 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.6.0] - 2026-09-15
+
+- **Fix:** `portage-ucp-woocommerce`, `-bigcommerce`, `-magento`, `-etsy`, and
+  `-instagram` all bump to 0.1.1 for a standing bug, unrelated to the
+  `portage-ucp` work below and predating it: each `Mapper.product` built a
+  `Portage::Ucp::Product`/`Variant` with keywords (`price:`, `available:`)
+  `dev.ucp.shopping.catalog`'s schema-conformance work removed in favor of
+  `price_range:`/a real `variants:` array (see that work's own changelog
+  entries, back when only `portage-ucp-shopify` and `-wix` got their mappers
+  migrated) — every real `search_catalog`/`get_product` call against these
+  five adapters raised `ArgumentError: missing keyword: :price_range`. Each
+  adapter's `#search_catalog`/`#get_product` also returned a bare
+  `Array<Product>`/`Product` instead of the `CatalogSearchResult`/
+  `ProductDetail` wrapper the `Adapter` contract documents, which would have
+  failed UCP schema validation even once the first bug was fixed. Caught by
+  running the core gem's schema-validation conformance examples (added
+  earlier for the payment-enrollment slice below) against every adapter,
+  not just Shopify/Wix's specs, which asserted the same wrong shape their
+  mappers produced.
+
+- `portage-ucp` bumps to 0.6.0 for the §22/§33-§35 payment-enrollment and
+  signature-verification slice: `PaymentEnrollmentGuard` (validates every
+  `create_payment_enrollment`/`get_payment_enrollment` response — breaking,
+  raises `InvalidPaymentEnrollmentError` on a malformed one), an AP2 mandate
+  shape (`Ap2::PaymentMandate`/`Ap2::MandateGuard`, shape-only — no
+  cryptographic verification), a `Store`/`FileStore` extraction under
+  `Support::TransactionLog`/`Support::OrderLedger` so either can be backed
+  by something other than a file, `app.portage-ucp.payment_method` /
+  `saved_address` / `shopper_data` extensions, `Dispatcher.new(journal:)`
+  wiring for the new `portage-ucp-journal` gem, RFC 9421 HTTP Message
+  Signature verification (`Security::Signature`,
+  `Rack::SignatureVerification`) for inbound requests, and
+  `Confirmer::Webhook` — an out-of-band approval path for the confirmation
+  gate (POST + poll, or a caller-supplied `wait:` callback), alongside the
+  existing `Terminal`/`AutoApprove` confirmers. See `portage-ucp`'s own
+  `CHANGELOG.md`.
+- `portage-ucp-journal` is a new gem (0.1.0, not yet published to
+  RubyGems): a buyer-side purchase journal plus the injectable `Store`
+  abstraction `portage-ucp`'s own `Store`/`FileStore` split now mirrors.
+- Every other gem's `portage-ucp` pin widens to `~> 0.6`; no behavior
+  changes of their own in this release.
+
 ## [0.5.0] - 2026-09-14
 
 - `portage-ucp` bumps to 0.5.0 for the agentic-payments work (docs/plans/agentic-payments.md):

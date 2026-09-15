@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-15
+
 - **Breaking:** `PaymentEnrollment` results are now validated by the new
   `PaymentEnrollmentGuard` (design-log §33/Phase B) — every
   `create_payment_enrollment`/`get_payment_enrollment` response an adapter
