@@ -43,6 +43,13 @@ RSpec.describe Portage::Ucp::Observability do
     logged["arguments"].each_value { |v| expect(v).to eq("[REDACTED]") }
   end
 
+  it "redacts psp_reference (opaque payment method reference)" do
+    described_class.log(logger, "tool_called", arguments: { psp_reference: "psp_live_secret" })
+
+    logged = JSON.parse(io.string.lines.last)
+    expect(logged["arguments"]["psp_reference"]).to eq("[REDACTED]")
+  end
+
   it "leaves non-sensitive fields untouched" do
     described_class.log(logger, "tool_called", capability: "dev.ucp.shopping.cart", quantity: 2)
 

@@ -18,6 +18,7 @@ module Portage
         payment_token oauth_token authorization
         email first_name last_name phone_number
         street_address extended_address address_locality address_region address_country postal_code
+        psp_reference
       ].freeze
       REDACTED = "[REDACTED]".freeze
 

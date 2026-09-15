@@ -565,5 +565,32 @@ module Portage
         h
       end
     end
+
+    # Portage extension (app.portage-ucp.payment_method) — an opaque PSP-issued
+    # reference only, never a raw PAN or the payment_token itself (§9/§16).
+    PaymentMethodRef = Data.define(:id, :psp_reference, :brand, :last4, :expires_at, :created_at) do
+      def initialize(id:, psp_reference:, brand: nil, last4: nil, expires_at: nil, created_at: nil) = super
+
+      def to_wire_h
+        { "id" => id, "psp_reference" => psp_reference, "brand" => brand, "last4" => last4,
+          "expires_at" => expires_at, "created_at" => created_at }.compact
+      end
+    end
+
+    # Portage extension (app.portage-ucp.saved_address) — wraps the existing
+    # transient-checkout PostalAddress with an id + timestamp so it can be
+    # listed/deleted.
+    SavedAddress = Data.define(:id, :address, :created_at) do
+      def to_wire_h = { "id" => id, "created_at" => created_at }.merge(address.to_wire_h)
+    end
+
+    # Receipt returned by delete_shopper_data — not a bare boolean, so a caller
+    # / audit trail can see exactly what was erased.
+    ShopperDataErasure = Data.define(:subject, :payment_methods_deleted, :addresses_deleted, :identity_unlinked) do
+      def to_wire_h
+        { "subject" => subject, "payment_methods_deleted" => payment_methods_deleted,
+          "addresses_deleted" => addresses_deleted, "identity_unlinked" => identity_unlinked }
+      end
+    end
   end
 end
