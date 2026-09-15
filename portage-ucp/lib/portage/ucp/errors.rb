@@ -15,10 +15,11 @@ module Portage
     # guard's own error, not value_objects.rb's.
     class InvalidPaymentEnrollmentError < Error; end
     # Raised by Ap2::MandateGuard.validate! (design-log §33/Phase B) — a
-    # mandate that's expired or missing a required field. Mandate-shape
-    # validation only, not cryptographic AP2 verification: no key
-    # infrastructure or trust anchor exists in this repo to verify a
-    # mandate's signature against (see Ap2::MandateGuard's own comment).
+    # mandate that's expired, missing a required field, or (when the caller
+    # supplies a `trusted_keys:` trust anchor) fails cryptographic
+    # verification via Ap2::MandateSignature. Shape-only vs shape+crypto is
+    # the caller's choice, not this error's — see Ap2::MandateGuard's own
+    # comment.
     class InvalidMandateError < Error; end
     class RateLimitExceededError < Error; end
     # Raised by #complete_checkout when the platform rejects completion

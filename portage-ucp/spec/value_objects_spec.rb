@@ -435,13 +435,20 @@ RSpec.describe "Portage::Ucp value objects" do
   end
 
   describe Portage::Ucp::Ap2::PaymentMandate do
-    it "serializes every field" do
+    it "serializes every field, kid defaulting to nil when omitted" do
       mandate = Portage::Ucp::Ap2::PaymentMandate.new(amount: 500, currency: "USD", merchant: "shop.example.com",
                                                       expires_at: "2099-01-01T00:00:00Z", signature: "sig")
       expect(mandate.to_wire_h).to eq(
         { "amount" => 500, "currency" => "USD", "merchant" => "shop.example.com",
-          "expires_at" => "2099-01-01T00:00:00Z", "signature" => "sig" }
+          "expires_at" => "2099-01-01T00:00:00Z", "signature" => "sig", "kid" => nil }
       )
+    end
+
+    it "serializes kid when present" do
+      mandate = Portage::Ucp::Ap2::PaymentMandate.new(amount: 500, currency: "USD", merchant: "shop.example.com",
+                                                      expires_at: "2099-01-01T00:00:00Z", signature: "sig",
+                                                      kid: "issuer-1")
+      expect(mandate.to_wire_h["kid"]).to eq("issuer-1")
     end
   end
 
