@@ -2363,3 +2363,63 @@ still stay in core, but "unchanged" is no longer true — updated to say so.
 Still open after this slice: §22 items 2 (`idempotency_provider` on
 `Configuration`), 5 (sandbox credentials for the webmock-only adapters),
 6's console, and 7's scheduler — none of them touched by this pass.
+
+## 34. §22 slice, Phase B — payment-enrollment contract + AP2 mandate shape (2026-09-15)
+
+§22 named "tighten the payment-enrollment contract, and give AP2 a typed
+shape to carry" as the second of three items blocking the agentic-payments
+work from being production-grade. `PaymentEnrollment` (value_objects.rb)
+had **no validation of any kind** — `status: "banana"`, or `"complete"`
+with no `payment_token`, constructed fine — and no AP2 code existed at all
+(design-log §29/§30 already confirmed that gap; cited here, not re-derived).
+
+**Validated in a guard, not in `Data.define`** — `value_objects.rb` has
+zero `raise`s across every `Data.define` in the file, all raise-free by
+convention; the established mold for this kind of check is a guard,
+`PaymentTokenGuard`'s own shape. New `Portage::Ucp::PaymentEnrollmentGuard.
+validate!` enforces: `status` is `"pending"` or `"complete"`; `"pending"`
+carries a `setup_url` and no `payment_token`; `"complete"` carries a
+`payment_token` and no `setup_url`. Raises the new
+`InvalidPaymentEnrollmentError` (`errors.rb`, alongside `RawPanRejectedError`).
+Run from `Dispatcher#call` on any result that's a `PaymentEnrollment` —
+not gated on capability name, so every adapter is held to it, not just
+`ReferenceAdapter`. This is a breaking change to a published gem:
+`PaymentEnrollment` values that constructed fine before now raise the
+first time they cross `Dispatcher#call` — `CHANGELOG.md` and a minor
+version bump (0.5.0 → 0.6.0) record it. `portage-cli`/`portage-ucp-client`,
+the two known consumers, are unaffected: both branch on the CLI's own
+wire-level status string (`"complete"`/`"pending"`/`"unsupported"`), never
+construct a `PaymentEnrollment` themselves.
+
+**AP2, honestly scoped** — `Portage::Ucp::Ap2::PaymentMandate` (amount,
+currency, merchant, expires_at, signature) and `Ap2::MandateGuard.validate!`
+(required fields + not expired). This is mandate-*shape* validation, not
+cryptographic AP2 verification — no key infrastructure or trust anchor
+exists in this repo to verify a signature against, the same carve-out the
+existing plan draws around crypto-signing the confirmation payload. A real
+PSP adapter is expected to verify a mandate's signature against the
+issuing agent's trust anchor before ever handing it to this gem.
+`create_payment_enrollment`/`complete_checkout` take an optional `mandate:`
+kwarg, shape-checked by `Dispatcher#call` (same boundary-crossing posture
+as `PaymentTokenGuard` on `payment_token:`) before any adapter sees it.
+`ReferenceAdapter` accepts one and echoes it back on every subsequent poll
+of the enrollment it returns — proves the plumbing holds for a real
+adapter, since this in-memory adapter has no PSP to verify it against
+itself. `PaymentEnrollment` gained an optional `mandate:` field for that
+echo; safe to add because `payment_enrollment` is a Portage extension with
+no `schemas/` counterpart to conflict with, unlike `Checkout`/`Order`.
+
+**Conformance kit** (`lib/portage/ucp/rspec.rb`) had zero enrollment
+coverage — the only existing assertions lived in
+`spec/reference_adapter_conformance_spec.rb`, which exercises `ReferenceAdapter`
+directly and ships to nobody. Added a capability-advertised helper and an
+example proving a `create_payment_enrollment`/`get_payment_enrollment` pair
+satisfies `PaymentEnrollmentGuard` through `Dispatcher#call`. `ReferenceAdapter`
+is still the only implementor across all eight adapter gems, so today this
+forces exactly one adapter — the value is future-facing: it fixes the
+contract before the first real PSP adapter is written, the cheap moment to
+do it.
+
+Still open after this slice: §22 item 6's console and item 7's scheduler
+(Phase B didn't touch either); real PSP integration and cryptographic AP2
+verification remain explicit non-goals, not deferred work.
