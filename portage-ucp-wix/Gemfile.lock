@@ -10,7 +10,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-wix (0.1.0)
+    portage-ucp-wix (0.1.1)
       portage-ucp (~> 0.6)
 
 GEM
