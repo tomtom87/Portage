@@ -64,6 +64,18 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
 
       expect { Portage::Ucp::PaymentTokenGuard.validate!(completed.payment_token) }.not_to raise_error
     end
+
+    it "echoes an AP2 mandate given at enrollment time on every subsequent poll (§33)" do
+      mandate = Portage::Ucp::Ap2::PaymentMandate.new(amount: 500, currency: "USD", merchant: "shop.example.com",
+                                                      expires_at: "2099-01-01T00:00:00Z", signature: "sig")
+
+      pending = adapter.create_payment_enrollment(idempotency_key: "enr-4", mandate: mandate)
+      expect(pending.mandate).to eq(mandate)
+
+      completed = adapter.get_payment_enrollment(enrollment_id: pending.id)
+      completed = adapter.get_payment_enrollment(enrollment_id: pending.id) while completed.status == "pending"
+      expect(completed.mandate).to eq(mandate)
+    end
   end
 
   describe "#reorder" do
