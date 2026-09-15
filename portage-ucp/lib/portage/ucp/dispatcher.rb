@@ -35,9 +35,19 @@ module Portage
       #   duck-typed the same way. `nil` by default and never `require`d
       #   from core (§2: core stays dependency-light); a consumer wires
       #   one in from their own app after requiring that gem themselves.
+      # @param mandate_trust_keys [Array<Hash>, #call, nil] forwarded to
+      #   Ap2::MandateGuard.validate! as `trusted_keys:`. `nil` by default —
+      #   same reasoning as `journal`: this gem has no AP2 issuer keys of
+      #   its own to default to, so an unconfigured Dispatcher gets
+      #   shape-only mandate validation, not a silent skip of crypto a
+      #   caller thought was on. A caller with a real trust anchor (a PSP
+      #   adapter's own key store, or a resolver against the issuing
+      #   agent's manifest) passes it here to get Ap2::MandateSignature's
+      #   cryptographic check on every dispatch that carries a `mandate`.
       def initialize(adapter:, registry: CapabilityRegistry.default, logger: Portage::Ucp.configuration.logger,
                      shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load,
-                     confirmer: Confirmer::Terminal.new, order_ledger: Support::OrderLedger.new, journal: nil)
+                     confirmer: Confirmer::Terminal.new, order_ledger: Support::OrderLedger.new, journal: nil,
+                     mandate_trust_keys: nil)
         @adapter = adapter
         @registry = registry
         @logger = logger
@@ -47,6 +57,7 @@ module Portage
         @confirmer = confirmer
         @order_ledger = order_ledger
         @journal = journal
+        @mandate_trust_keys = mandate_trust_keys
       end
 
       # @param correlation_id [String, nil] threaded through to the adapter
@@ -91,7 +102,9 @@ module Portage
       # every call already passes through.
       def validate_inbound_boundaries!(arguments)
         Portage::Ucp::PaymentTokenGuard.validate!(arguments[:payment_token]) if arguments.key?(:payment_token)
-        Portage::Ucp::Ap2::MandateGuard.validate!(arguments[:mandate]) if arguments[:mandate]
+        return unless arguments[:mandate]
+
+        Portage::Ucp::Ap2::MandateGuard.validate!(arguments[:mandate], trusted_keys: @mandate_trust_keys)
       end
 
       # Outbound counterpart to the above (design-log §33) — every adapter's
