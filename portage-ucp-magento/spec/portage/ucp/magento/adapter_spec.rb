@@ -41,10 +41,10 @@ RSpec.describe Portage::Ucp::Magento::Adapter do
         .to_return(status: 200, body: { items: [{ sku: "cold-brew", name: "Cold Brew", price: 5.0,
                                                   status: 1 }] }.to_json)
 
-      products = adapter.search_catalog(query: "brew", limit: 10)
+      result = adapter.search_catalog(query: "brew", limit: 10)
 
-      expect(products.first).to be_a(Portage::Ucp::Product)
-      expect(products.first.title).to eq("Cold Brew")
+      expect(result.products.first).to be_a(Portage::Ucp::Product)
+      expect(result.products.first.title).to eq("Cold Brew")
     end
   end
 
@@ -58,7 +58,7 @@ RSpec.describe Portage::Ucp::Magento::Adapter do
 
       product = adapter.get_product(product_id: "cold-brew")
 
-      expect(product.variants.first[:id]).to eq("cold-brew-large")
+      expect(product.product.variants.first.id).to eq("cold-brew-large")
     end
 
     it "returns nil for a product the API doesn't find" do
