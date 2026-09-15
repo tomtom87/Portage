@@ -221,12 +221,25 @@ module Portage
         end
       end
 
+      # Every existing action returns either a single to_wire_h-capable
+      # object or a bare Array of plain values (never a Data object) — the
+      # new list_payment_methods/list_addresses are the first actions to
+      # return Array<to_wire_h-capable>, which needs its own branch here:
+      # left to the plain `result.inspect` fallback below, a Data-object
+      # array would reach structuredContent unserialized to JSON.
       def wrap(capability_name, result)
+        return wrap_list(result) if result.is_a?(Array) && result.all? { |item| item.respond_to?(:to_wire_h) }
+
         unless result.respond_to?(:to_wire_h)
           return { content: [{ type: "text", text: result.inspect }], structuredContent: result }
         end
 
         payload = Portage::Ucp::WireEnvelope.wrap(capability_name, result.to_wire_h)
+        { content: [{ type: "text", text: payload.inspect }], structuredContent: payload }
+      end
+
+      def wrap_list(result)
+        payload = result.map(&:to_wire_h)
         { content: [{ type: "text", text: payload.inspect }], structuredContent: payload }
       end
     end
