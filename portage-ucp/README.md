@@ -23,6 +23,7 @@ in this gem.
 | `Portage::Ucp::Manifest` | Builds the signed `/.well-known/ucp` discovery document. |
 | `Portage::Ucp::Rack::ManifestEndpoint` | Serves that manifest over Rack. |
 | `Portage::Ucp::Rack::WebhookEndpoint` | HMAC-verified inbound order-lifecycle webhooks. |
+| `Portage::Ucp::Security::Signature` / `Portage::Ucp::Rack::SignatureVerification` | Verifies RFC 9421 HTTP Message Signatures on inbound requests per UCP's signature spec — cryptographic proof the call carries a signed AP2/UCP authorization, not just an authenticated caller. Wrap your mounted MCP/UCP endpoint with the Rack middleware; verification runs before the body is parsed. |
 | `Portage::Ucp::SchemaValidator` | Validates data against UCP's own vendored JSON Schemas/OpenRPC docs, offline. |
 | `Portage::Ucp::Resolver` / `exe/portage-ucp-check` | Probes any store's homepage/`.well-known/ucp` and recommends the matching adapter gem. |
 | `Portage::Ucp::Support::TransactionLog` | Durable pre/post-dispatch record of every `complete_checkout` call — reserved before dispatch, marked settled/failed after, so a crash mid-charge is diagnosable rather than silently lost. |
