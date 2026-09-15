@@ -111,12 +111,13 @@ Five tool calls, one snowboard bought. [`docs/walkthrough.md`](docs/walkthrough.
 
 ## The gems
 
-Ten gems, mirroring how Faraday/Devise split core-vs-adapter:
+Eleven gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 | Gem | Role |
 |---|---|
 | [`portage-ucp`](portage-ucp/) | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. Zero commerce-backend deps — works with any backend that implements `Adapter`, Shopify or otherwise. |
 | [`portage-ucp-client`](portage-ucp-client/) | Client-side SDK — the other direction from every gem below: connect to somebody else's manifest (or drive your own `Adapter` directly) and act as the shopper's agent. Loopback/stdio/HTTP transports behind one interface. |
+| [`portage-ucp-journal`](portage-ucp-journal/) | Buyer-side purchase journal + the injectable `Store` abstraction it's built on (design-log §22) — an append-only record of every completed purchase, kept out of core so `portage-ucp` stays dependency-light. Wires in via `Dispatcher`'s optional `journal:` argument. |
 | [`portage-cli`](portage-cli/) | Ships the `portage` command — `portage buy <url>` tries native UCP discovery first, falls back to a platform adapter only when you already have that platform's own credentials, and says so plainly otherwise. `portage find --query "..."` covers the no-URL case: search backends propose stores, `/.well-known/ucp` filters them, their catalogs answer. `portage history` browses the local log of past purchases and searches. `portage payment list/enroll/set-default/remove/freeze/revoke` stores card-on-file tokens (macOS Keychain / Linux Secret Service / a headless env-var-only tier) so `buy` can fall back to a stored default instead of demanding a fresh token every call; `portage policy show/set` manages the caps/velocity/allowlist `PolicyGuard` checks. |
 | [`portage-ucp-shopify`](portage-ucp-shopify/) | Shopify adapter — implements `Adapter` against Shopify's Admin + Storefront GraphQL APIs. One consumer of the core gem, not a dependency of it. |
 | [`portage-ucp-wix`](portage-ucp-wix/) | Wix adapter — implements `Adapter` against Wix's Stores Catalog and eCommerce REST APIs. |
