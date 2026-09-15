@@ -38,6 +38,8 @@ module Portage
         @orders = {}
         @identities = {}
         @payment_enrollments = {}
+        @payment_methods = Hash.new { |h, k| h[k] = {} } # subject => id => PaymentMethodRef
+        @addresses = Hash.new { |h, k| h[k] = {} } # subject => id => SavedAddress
         @next_id = 0
       end
 
@@ -201,6 +203,72 @@ module Portage
           subject: "user_#{Digest::SHA256.hexdigest(oauth_token)[0, 12]}",
           email: nil, linked_at: Time.now.utc.iso8601
         )
+      end
+
+      # payment_token: already passed PaymentTokenGuard (via Dispatcher#call,
+      # dispatcher.rb:75) before this ever runs — same posture as
+      # #complete_checkout, this in-memory adapter has no PSP to forward it
+      # to, so it's hashed into a stand-in psp_reference rather than stored.
+      def save_payment_method(oauth_token:, payment_token:, idempotency_key:)
+        dedup(idempotency_key) do
+          subject = link_identity(oauth_token: oauth_token).subject
+          id = next_id("pm")
+          ref = Portage::Ucp::PaymentMethodRef.new(
+            id: id, psp_reference: "psp_ref_#{Digest::SHA256.hexdigest(payment_token.to_s)[0, 16]}",
+            created_at: Time.now.utc.iso8601
+          )
+          @payment_methods[subject][id] = ref
+        end
+      end
+
+      def list_payment_methods(oauth_token:)
+        @payment_methods[link_identity(oauth_token: oauth_token).subject].values
+      end
+
+      def delete_payment_method(oauth_token:, payment_method_id:, idempotency_key:)
+        dedup(idempotency_key) do
+          subject = link_identity(oauth_token: oauth_token).subject
+          !@payment_methods[subject].delete(payment_method_id).nil?
+        end
+      end
+
+      def save_address(oauth_token:, address:, idempotency_key:)
+        dedup(idempotency_key) do
+          subject = link_identity(oauth_token: oauth_token).subject
+          id = next_id("addr")
+          saved = Portage::Ucp::SavedAddress.new(id: id, address: address, created_at: Time.now.utc.iso8601)
+          @addresses[subject][id] = saved
+        end
+      end
+
+      def list_addresses(oauth_token:)
+        @addresses[link_identity(oauth_token: oauth_token).subject].values
+      end
+
+      def delete_address(oauth_token:, address_id:, idempotency_key:)
+        dedup(idempotency_key) do
+          subject = link_identity(oauth_token: oauth_token).subject
+          !@addresses[subject].delete(address_id).nil?
+        end
+      end
+
+      # Idempotent by construction, not by a guard: counts are captured
+      # before deleting, and Hash#delete/size on an already-empty subject
+      # naturally return zero — a second call is a no-op, never a raise.
+      def delete_shopper_data(oauth_token:, idempotency_key:)
+        dedup(idempotency_key) do
+          subject = link_identity(oauth_token: oauth_token).subject
+          payment_methods_deleted = @payment_methods[subject].size
+          addresses_deleted = @addresses[subject].size
+          @payment_methods.delete(subject)
+          @addresses.delete(subject)
+          identity_unlinked = !@identities.reject! { |_, identity| identity.subject == subject }.nil?
+
+          Portage::Ucp::ShopperDataErasure.new(
+            subject: subject, payment_methods_deleted: payment_methods_deleted,
+            addresses_deleted: addresses_deleted, identity_unlinked: identity_unlinked
+          )
+        end
       end
 
       private
