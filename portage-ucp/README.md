@@ -76,6 +76,18 @@ and the [detailed walkthrough](https://github.com/tomtom87/Portage/blob/main/doc
 for the full agent-side conversation, manifest/webhook Rack mounting, and a real
 adapter to model your own against.
 
+## Swapping the store
+
+`Support::TransactionLog` and `Support::OrderLedger` each accept a `store:`
+(`Dispatcher.new(transaction_log:, order_ledger:)` is the injection point).
+`FileStore` — whole-file `flock` + JSON, `chmod 0600` — is the shipped
+default for both; nothing else ships today. Write your own subclass of
+`Support::TransactionLog::Store` / `Support::OrderLedger::Store` for a real
+database, Redis, or an in-memory double for tests — same posture as
+`portage-ucp-journal`'s `Store`/`FileStore` seam, no bundled second backend
+(see that gem's README). `path:`/`clock:` still work as a shorthand that
+builds a `FileStore` under the hood, so existing callers are unaffected.
+
 ## Checking any store
 
 ```bash

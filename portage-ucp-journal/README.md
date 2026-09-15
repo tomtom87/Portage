@@ -42,7 +42,9 @@ or an in-memory double for tests.
 
 - Not `Support::TransactionLog` (payment-dispatch bookkeeping — reserve/
   commit, spend caps) or `Support::OrderLedger` (a settled-order snapshot
-  keyed for lookup). Both stay in core `portage-ucp`, unchanged.
+  keyed for lookup). Both stay in core `portage-ucp` — as of design-log §33
+  they gained the same pluggable-`Store` seam this gem has, but the classes
+  themselves did not move.
 - Not a console, a CLI history command, or a scheduler. This gem is the
   write path and the shared `Store` seam those would read from and build
   on, not the read/UI surface itself.
