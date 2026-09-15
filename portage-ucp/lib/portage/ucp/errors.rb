@@ -7,6 +7,19 @@ module Portage
     class CapabilityNotAdvertisedError < Error; end
     class AuthenticationError < Error; end
     class RawPanRejectedError < Error; end
+    # Raised by PaymentEnrollmentGuard.validate! (design-log §33/Phase B)
+    # when an Adapter's create_payment_enrollment/get_payment_enrollment
+    # result doesn't hold the shape `PaymentEnrollment` itself never
+    # enforces — value_objects.rb has no validation of any kind, same
+    # raise-free posture as every other Data.define there, so this is the
+    # guard's own error, not value_objects.rb's.
+    class InvalidPaymentEnrollmentError < Error; end
+    # Raised by Ap2::MandateGuard.validate! (design-log §33/Phase B) — a
+    # mandate that's expired or missing a required field. Mandate-shape
+    # validation only, not cryptographic AP2 verification: no key
+    # infrastructure or trust anchor exists in this repo to verify a
+    # mandate's signature against (see Ap2::MandateGuard's own comment).
+    class InvalidMandateError < Error; end
     class RateLimitExceededError < Error; end
     # Raised by #complete_checkout when the platform rejects completion
     # because a line item is out of stock or otherwise unavailable —
