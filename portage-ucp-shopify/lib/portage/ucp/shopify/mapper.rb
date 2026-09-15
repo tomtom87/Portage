@@ -217,18 +217,32 @@ module Portage
         # `status` isn't a Shopify Cart field — Cart/Checkout is one object in
         # Shopify's model, so the adapter tracks status itself across the
         # create/update/complete/cancel lifecycle and passes it in here.
-        def checkout(node, status:, order: nil)
+        #
+        # `resume_url` is the SubmitFailed-specific checkoutUrl (3DS/
+        # verification/decline) — falls back to the cart's own checkoutUrl
+        # (CART_FIELDS, always present) so any non-completed checkout still
+        # carries a browser handoff link.
+        def checkout(node, status:, order: nil, resume_url: nil)
           Portage::Ucp::Checkout.new(
             id: node["id"],
             status: status,
             line_items: node.dig("lines", "nodes").map { |n| cart_line_item(n) },
             currency: node.dig("cost", "subtotalAmount", "currencyCode"),
             totals: totals(node),
-            links: [],
+            links: checkout_links(node, status: status, resume_url: resume_url),
             order: order,
             discounts: discounts(node),
             fulfillment: checkout_fulfillment(node)
           )
+        end
+
+        def checkout_links(node, status:, resume_url:)
+          return [] if status == "completed"
+
+          url = resume_url || node["checkoutUrl"]
+          return [] unless url
+
+          [Portage::Ucp::Link.new(type: "resume-checkout", url: url)]
         end
 
         # dev.ucp.shopping.fulfillment (pre-purchase shipping-option
