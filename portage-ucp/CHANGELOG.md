@@ -6,6 +6,36 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Breaking:** `PaymentEnrollment` results are now validated by the new
+  `PaymentEnrollmentGuard` (design-log §33/Phase B) — every
+  `create_payment_enrollment`/`get_payment_enrollment` response an adapter
+  returns is checked via `Dispatcher#call`: `status` must be `"pending"` or
+  `"complete"`; `"pending"` must carry a `setup_url` and no `payment_token`;
+  `"complete"` must carry a `payment_token` and no `setup_url`. Raises the
+  new `Portage::Ucp::InvalidPaymentEnrollmentError` on a violation. A value
+  that constructed fine before (e.g. `status: "banana"`, or `"complete"`
+  with no token) now raises the first time it crosses `Dispatcher#call` —
+  consumers of `PaymentEnrollment` (`portage-cli`, `portage-ucp-client`)
+  are unaffected since they only branch on the CLI's own wire-level status
+  string, never construct the object themselves.
+- Added `Portage::Ucp::Ap2` — an AP2 mandate shape (design-log §33/Phase B,
+  citing the AP2/UCP payment-handler gap already confirmed at design-log
+  §29/§30). `Ap2::PaymentMandate` (amount, currency, merchant, expires_at,
+  signature) and `Ap2::MandateGuard.validate!` (required fields + expiry —
+  mandate-*shape* validation, not cryptographic AP2 verification; no key
+  infrastructure or trust anchor exists in this repo to verify a signature
+  against). `create_payment_enrollment`/`complete_checkout` take an
+  optional `mandate:` kwarg, shape-checked by `Dispatcher#call` before any
+  adapter sees it; `ReferenceAdapter` accepts one and echoes it back on the
+  enrollment it returns. `PaymentEnrollment` gains an optional `mandate:`
+  field for that echo (safe to add — it's a Portage extension, not a
+  UCP-schema-validated type).
+- Adapter conformance kit (`lib/portage/ucp/rspec.rb`) gains an
+  `app.portage-ucp.payment_enrollment` example proving an adapter's
+  enrollment responses satisfy `PaymentEnrollmentGuard` — previously the
+  kit had zero enrollment coverage; the only existing assertions lived in
+  this gem's own `reference_adapter_conformance_spec.rb`, which ships to
+  nobody.
 - `Support::TransactionLog` and `Support::OrderLedger` are now backed by a
   pluggable `Store` (design-log §33) — new `Store`/`FileStore` pair on
   each, mirroring `portage-ucp-journal`. `Dispatcher.new(transaction_log:,
