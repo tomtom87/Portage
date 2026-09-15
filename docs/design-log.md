@@ -2209,3 +2209,64 @@ re-verify are: JD's IP-whitelisting exception process, Taobao's
 `taobao.trade.create` gated-partner scope, and whether TOP API traffic
 (as opposed to consumer storefront traffic) is blocked from non-mainland
 IPs.
+
+---
+
+## 31. §22 item 4 built — inbound request signature verification (2026-09-15)
+
+§22 flagged this as "the one genuine security hole" and explicitly refused
+to write code until the wire format was pinned rather than guessed. Pinned
+first, against the live spec (`ucp.dev/2026-04-08/specification/overview/`
+→ `.../signatures/`, not the vendored `schemas/2026-04-08/` snapshot, which
+turned out to carry no signature-scheme material at all — checked and
+confirmed empty on this before fetching live): UCP specifies **RFC 9421
+HTTP Message Signatures**, ECDSA only (P-256 mandatory, P-384 optional,
+raw `r||s` signature encoding — never ASN.1/DER on the wire), `Signature-Input`/
+`Signature`/`Content-Digest` (RFC 9530) headers, JWK (RFC 7517) public keys,
+and a documented current+next key-rotation convention (new key alongside the
+old in `signing_keys[]`, old key still accepted 7 days, then removed).
+
+**Built**, matching both hard constraints §22 named:
+- `Portage::Ucp::Security::Signature` (`lib/portage/ucp/security/signature.rb`)
+  — verifies a request's signature against a `trusted_keys` JWK set (or a
+  `#call(kid)` resolver, for a consumer trusting more than one platform).
+  Verify-before-parse, matching `Rack::WebhookEndpoint`'s posture exactly:
+  it only ever touches the body as raw bytes for the `Content-Digest` check,
+  never as JSON. Enforces a minimum covered-component set
+  (`@method`/`@authority`/`@path`/`idempotency-key`, `content-digest`
+  additionally whenever a body is present) — a signature that covers only
+  some harmless header would otherwise "verify" without proving anything
+  about the request that matters. Also enforces a `created` freshness window
+  (default 300s, disableable) — a documented best practice for this class of
+  signature, not something the fetched spec text itself mandated, called out
+  as such in the code rather than passed off as a spec requirement.
+- `Portage::Ucp::Rack::SignatureVerification` (`lib/portage/ucp/rack/
+  signature_verification.rb`) — the generic Rack middleware §22 asked for,
+  wrapping whatever Rack app the consumer mounts for MCP/UCP traffic (this
+  gem stays deployment-agnostic, §7.3 — it doesn't assume `mcp`'s own
+  Streamable HTTP transport is mounted any particular way). Rejects with 401
+  before the wrapped app ever sees the request on any `Security::SignatureError`.
+- Key set: a new `trusted_keys` parameter/config value, same flat
+  JWK-array-with-multiple-entries-for-rotation *shape* as `Manifest#signing_keys`,
+  but not the same data — `Manifest`'s keys are the business's own, advertised
+  for others to verify the manifest with; these are the calling platform's
+  keys, trusted by the business to verify inbound requests with. Same shape,
+  deliberately not the same config, per §22's instruction not to invent a
+  second differently-shaped key config.
+- EC public keys are built from JWK `x`/`y` via a hand-assembled
+  SubjectPublicKeyInfo DER rather than `OpenSSL::PKey::EC#public_key=`  —
+  that setter no longer works since EC keys became immutable in the
+  `openssl` gem's OpenSSL 3.0 support; discovered by the specs failing
+  with "pkeys are immutable on OpenSSL 3.0", not anticipated up front.
+
+Specs (`spec/security/signature_spec.rb`, `spec/rack/signature_verification_spec.rb`)
+sign real requests independently of the class under test, via a shared
+`spec/support/signing_helper.rb`, rather than asserting against the
+implementation's own internals — covers missing/malformed/unknown-key/
+tampered-body/tampered-component/corrupted-signature/insufficient-coverage/
+stale rejections, P-256 and P-384, and the callable-resolver key lookup.
+
+§22's handoff list, items 2/3 (cross-process `idempotency_provider`,
+reconciling §12's correlation-id/redaction claims with the code) remain
+open — this pass did item 4 only, since that's what was asked for; nothing
+here depends on either of those two.
