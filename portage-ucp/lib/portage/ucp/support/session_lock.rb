@@ -18,12 +18,12 @@ module Portage
 
         private
 
-        def synchronize(session_id)
+        def synchronize(session_id, &)
           init_session_locks!
 
           key_lock = @session_lock_mutex.synchronize { @session_locks[session_id] ||= Mutex.new }
 
-          key_lock.synchronize { yield }
+          key_lock.synchronize(&)
         end
 
         def init_session_locks!
