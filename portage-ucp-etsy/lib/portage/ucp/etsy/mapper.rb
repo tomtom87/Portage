@@ -18,6 +18,19 @@ module Portage
           Portage::Ucp::Money.new(amount_minor: node["amount"], currency: node["currency_code"])
         end
 
+        def description(node)
+          Portage::Ucp::Description.new(plain: node["description"])
+        end
+
+        def price(node)
+          Portage::Ucp::Price.new(amount: node["amount"], currency: node["currency_code"])
+        end
+
+        def price_range(node)
+          p = price(node)
+          Portage::Ucp::PriceRange.new(min: p, max: p)
+        end
+
         # `node["variants_detail"]` is adapter-populated, not a real Etsy
         # field: a listing's own resource has no variant/SKU breakdown at
         # all — that's a second call to the separate Inventory endpoint
@@ -28,9 +41,8 @@ module Portage
           Portage::Ucp::Product.new(
             id: node["listing_id"].to_s,
             title: node["title"],
-            description: node["description"],
-            price: money(node["price"]),
-            available: node["state"] == "active" && node["quantity"].to_i.positive?,
+            description: description(node),
+            price_range: price_range(node["price"]),
             variants: variants(node),
             url: node["url"]
           )
@@ -41,20 +53,25 @@ module Portage
         # that variant's own id.
         def variants(node)
           detail = node["variants_detail"]
-          unless detail
-            return [{ id: node["listing_id"].to_s, title: node["title"],
-                      available: node["state"] == "active" && node["quantity"].to_i.positive?,
-                      price: money(node["price"]) }]
-          end
+          return [implicit_variant(node)] unless detail
 
-          (detail["products"] || []).reject { |p| p["is_deleted"] }.map { |p| variant(p) }
+          (detail["products"] || []).reject { |p| p["is_deleted"] }.map { |p| variant(p, node) }
         end
 
-        def variant(node)
+        def implicit_variant(node)
+          available = node["state"] == "active" && node["quantity"].to_i.positive?
+          Portage::Ucp::Variant.new(id: node["listing_id"].to_s, title: node["title"], description: description(node),
+                                    price: price(node["price"]), availability: { "available" => available })
+        end
+
+        def variant(node, parent_node)
           title = (node["property_values"] || []).flat_map { |p| p["values"] }.join(" / ")
           offering = (node["offerings"] || []).find { |o| o["is_enabled"] } || {}
-          { id: node["product_id"].to_s, title: title, available: offering["quantity"].to_i.positive?,
-            price: money(offering["price"] || {}) }
+          Portage::Ucp::Variant.new(
+            id: node["product_id"].to_s, title: title, description: description(parent_node),
+            price: price(offering["price"] || {}),
+            availability: { "available" => offering["quantity"].to_i.positive? }
+          )
         end
 
         # `id:` is caller-supplied: there's no real Etsy checkout resource

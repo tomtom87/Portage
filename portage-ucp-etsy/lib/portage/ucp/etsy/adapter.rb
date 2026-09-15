@@ -62,7 +62,7 @@ module Portage
         def search_catalog(query:, limit:)
           data = @client.get("/shops/#{@shop_id}/listings/active?limit=100")
           matches = (data["results"] || []).select { |l| l["title"].to_s.downcase.include?(query.downcase) }
-          matches.first(limit).map { |node| Mapper.product(node) }
+          Portage::Ucp::CatalogSearchResult.new(products: matches.first(limit).map { |node| Mapper.product(node) })
         end
 
         def get_product(product_id:)
@@ -71,7 +71,7 @@ module Portage
             next nil unless node["listing_id"]
 
             inventory = @client.get("/listings/#{product_id}/inventory")
-            Mapper.product(node.merge("variants_detail" => inventory))
+            Portage::Ucp::ProductDetail.new(product: Mapper.product(node.merge("variants_detail" => inventory)))
           end
         end
 

@@ -19,20 +19,25 @@ RSpec.describe Portage::Ucp::Etsy::Mapper do
       product = described_class.product(node)
 
       expect(product.id).to eq("1")
-      expect(product.price).to eq(Portage::Ucp::Money.new(amount_minor: 2500, currency: "USD"))
-      expect(product.available).to be(true)
+      expect(product.price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 2500, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 2500, currency: "USD"))
+      )
       expect(product.url).to eq("https://www.etsy.com/listing/1/handmade-mug")
-      expect(product.variants).to eq([{ id: "1", title: "Handmade Mug", available: true,
-                                        price: Portage::Ucp::Money.new(amount_minor: 2500, currency: "USD") }])
+      variant = product.variants.first
+      expect(variant.id).to eq("1")
+      expect(variant.title).to eq("Handmade Mug")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 2500, currency: "USD"))
     end
 
     it "is unavailable when inactive or out of stock" do
       node["state"] = "inactive"
-      expect(described_class.product(node).available).to be(false)
+      expect(described_class.product(node).variants.first.availability).to eq({ "available" => false })
 
       node["state"] = "active"
       node["quantity"] = 0
-      expect(described_class.product(node).available).to be(false)
+      expect(described_class.product(node).variants.first.availability).to eq({ "available" => false })
     end
 
     it "maps variants_detail (adapter-fetched inventory) into real variants when present" do
@@ -43,10 +48,12 @@ RSpec.describe Portage::Ucp::Etsy::Mapper do
         { "product_id" => 11, "is_deleted" => true, "offerings" => [] }
       ] }
 
-      variants = described_class.product(node).variants
+      variant = described_class.product(node).variants.first
 
-      expect(variants).to eq([{ id: "10", title: "Red", available: true,
-                                price: Portage::Ucp::Money.new(amount_minor: 2500, currency: "USD") }])
+      expect(variant.id).to eq("10")
+      expect(variant.title).to eq("Red")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 2500, currency: "USD"))
     end
   end
 
