@@ -6,6 +6,15 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Added `Portage::Ucp::Security::Signature` and
+  `Portage::Ucp::Rack::SignatureVerification` — verifies RFC 9421 HTTP
+  Message Signatures on inbound requests per UCP's signature spec
+  (`ucp.dev/2026-04-08/specification/signatures/`), the cryptographic
+  proof-of-consent piece design-log §22 named as the one genuine security
+  hole remaining before 1.0. Verify-before-parse, same posture as
+  `Rack::WebhookEndpoint`; trusted keys reuse `Manifest#signing_keys`'
+  current+next JWK-array shape rather than a second key config.
+
 ## [0.5.0] - 2026-09-14
 
 - Added `Adapter#create_payment_enrollment(idempotency_key:)` /
