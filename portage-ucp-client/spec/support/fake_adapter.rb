@@ -19,7 +19,8 @@ module Portage
           end
 
           def search_catalog(query:, limit:)
-            @products.values.select { |p| p.title.downcase.include?(query.downcase) }.first(limit)
+            matches = @products.values.select { |p| p.title.downcase.include?(query.downcase) }.first(limit)
+            Portage::Ucp::CatalogSearchResult.new(products: matches)
           end
 
           def get_product(product_id:)
