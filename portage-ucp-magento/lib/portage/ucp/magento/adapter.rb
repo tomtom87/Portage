@@ -63,13 +63,17 @@ module Portage
                      "searchCriteria[filterGroups][0][filters][0][conditionType]" => "like",
                      "searchCriteria[pageSize]" => limit }
           data = @client.admin_get("/products?#{URI.encode_www_form(params)}")
-          (data["items"] || []).map { |node| Mapper.product(node, currency: @currency, site_url: @site_url) }
+          products = (data["items"] || []).map { |node| Mapper.product(node, currency: @currency, site_url: @site_url) }
+          Portage::Ucp::CatalogSearchResult.new(products: products)
         end
 
         def get_product(product_id:)
           nil_on_not_found do
             node = @client.admin_get("/products/#{URI.encode_www_form_component(product_id)}")
-            node["sku"] ? Mapper.product(with_children(node), currency: @currency, site_url: @site_url) : nil
+            if node["sku"]
+              Portage::Ucp::ProductDetail.new(product: Mapper.product(with_children(node),
+                                                                      currency: @currency, site_url: @site_url))
+            end
           end
         end
 

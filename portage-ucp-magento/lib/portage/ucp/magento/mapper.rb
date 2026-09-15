@@ -33,6 +33,19 @@ module Portage
           node.dig("extension_attributes", "stock_item", "is_in_stock") != false
         end
 
+        def description(node)
+          Portage::Ucp::Description.new(plain: custom_attribute(node, "description"))
+        end
+
+        def price(amount, currency)
+          Portage::Ucp::Price.new(amount: minor_units(amount), currency: currency)
+        end
+
+        def price_range(amount, currency)
+          p = price(amount, currency)
+          Portage::Ucp::PriceRange.new(min: p, max: p)
+        end
+
         # `node["children_detail"]` is adapter-populated, not a real Magento
         # field: a configurable product's own resource only lists child skus
         # under `extension_attributes.configurable_product_links` (bare ids)
@@ -44,9 +57,8 @@ module Portage
           Portage::Ucp::Product.new(
             id: node["sku"],
             title: node["name"],
-            description: custom_attribute(node, "description"),
-            price: money(node["price"], currency),
-            available: node["status"] == 1 && in_stock?(node),
+            description: description(node),
+            price_range: price_range(node["price"], currency),
             variants: variants(node, currency),
             url: product_url(node, site_url)
           )
@@ -65,13 +77,15 @@ module Portage
         def variants(node, currency)
           children = node["children_detail"]
           unless children
-            return [{ id: node["sku"], title: node["name"], available: node["status"] == 1 && in_stock?(node),
-                      price: money(node["price"], currency) }]
+            return [Portage::Ucp::Variant.new(id: node["sku"], title: node["name"], description: description(node),
+                                              price: price(node["price"], currency),
+                                              availability: { "available" => node["status"] == 1 && in_stock?(node) })]
           end
 
           children.map do |c|
-            { id: c["sku"], title: c["name"], available: c["status"] == 1 && in_stock?(c),
-              price: money(c["price"], currency) }
+            Portage::Ucp::Variant.new(id: c["sku"], title: c["name"], description: description(c),
+                                      price: price(c["price"], currency),
+                                      availability: { "available" => c["status"] == 1 && in_stock?(c) })
           end
         end
 

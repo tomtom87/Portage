@@ -21,12 +21,17 @@ RSpec.describe Portage::Ucp::Magento::Mapper do
       product = described_class.product(node, currency: "USD", site_url: "https://shop.example.com")
 
       expect(product.id).to eq("cold-brew")
-      expect(product.description).to eq("desc")
-      expect(product.price).to eq(Portage::Ucp::Money.new(amount_minor: 500, currency: "USD"))
-      expect(product.available).to be(true)
+      expect(product.description.plain).to eq("desc")
+      expect(product.price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 500, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 500, currency: "USD"))
+      )
       expect(product.url).to eq("https://shop.example.com/cold-brew.html")
-      expect(product.variants).to eq([{ id: "cold-brew", title: "Cold Brew", available: true,
-                                        price: Portage::Ucp::Money.new(amount_minor: 500, currency: "USD") }])
+      variant = product.variants.first
+      expect(variant.id).to eq("cold-brew")
+      expect(variant.title).to eq("Cold Brew")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 500, currency: "USD"))
     end
 
     it "maps children_detail (adapter-fetched) into real variants when present" do
@@ -36,25 +41,27 @@ RSpec.describe Portage::Ucp::Magento::Mapper do
           "extension_attributes" => { "stock_item" => { "is_in_stock" => true } } }
       ]
 
-      variants = described_class.product(node, currency: "USD").variants
+      variant = described_class.product(node, currency: "USD").variants.first
 
-      expect(variants).to eq([{ id: "cold-brew-large", title: "Cold Brew - Large", available: true,
-                                price: Portage::Ucp::Money.new(amount_minor: 600, currency: "USD") }])
+      expect(variant.id).to eq("cold-brew-large")
+      expect(variant.title).to eq("Cold Brew - Large")
+      expect(variant.availability).to eq({ "available" => true })
+      expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 600, currency: "USD"))
     end
 
     it "treats a missing stock_item as available (extension_attributes not always populated)" do
       node.delete("extension_attributes")
 
-      expect(described_class.product(node, currency: "USD").available).to be(true)
+      expect(described_class.product(node, currency: "USD").variants.first.availability).to eq({ "available" => true })
     end
 
     it "is unavailable when disabled or out of stock" do
       node["status"] = 2
-      expect(described_class.product(node, currency: "USD").available).to be(false)
+      expect(described_class.product(node, currency: "USD").variants.first.availability).to eq({ "available" => false })
 
       node["status"] = 1
       node["extension_attributes"]["stock_item"]["is_in_stock"] = false
-      expect(described_class.product(node, currency: "USD").available).to be(false)
+      expect(described_class.product(node, currency: "USD").variants.first.availability).to eq({ "available" => false })
     end
   end
 

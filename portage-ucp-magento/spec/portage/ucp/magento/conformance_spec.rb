@@ -16,11 +16,19 @@ RSpec.describe Portage::Ucp::Magento::Adapter do
   end
   let(:existing_product_id) { "cold-brew" }
 
+  let(:product_node) do
+    { "sku" => "cold-brew", "name" => "Cold Brew", "price" => 5.0, "status" => 1,
+      "custom_attributes" => [{ "attribute_code" => "url_key", "value" => "cold-brew" },
+                              { "attribute_code" => "description", "value" => "desc" }],
+      "extension_attributes" => { "stock_item" => { "is_in_stock" => true } } }
+  end
+
   # #create_checkout mints a guest cart, adds items, then snapshots
   # items+totals — and the kit reaches nothing further: the repeat call is
   # served by Support::Idempotency's in-process table, and the PAN example is
   # rejected by PaymentTokenGuard inside the Dispatcher before
-  # #complete_checkout (and so before shipping/payment-information) runs.
+  # #complete_checkout (and so before shipping/payment-information) runs. The
+  # catalog reads are hit directly by the kit's own schema-validation examples.
   before do
     stub_request(:post, "https://shop.example.com/rest/V1/guest-carts").to_return(status: 200, body: '"cart_1"')
     stub_request(:post, "https://shop.example.com/rest/V1/guest-carts/cart_1/items")
@@ -32,6 +40,10 @@ RSpec.describe Portage::Ucp::Magento::Adapter do
       .to_return(status: 200, body: { "quote_currency_code" => "USD",
                                       "items" => [{ "item_id" => 1, "row_total" => "5.0000",
                                                     "tax_amount" => "0.0000" }] }.to_json)
+    stub_request(:get, %r{\A https://shop\.example\.com/rest/V1/products\? }x)
+      .to_return(status: 200, body: { items: [product_node] }.to_json)
+    stub_request(:get, "https://shop.example.com/rest/V1/products/cold-brew")
+      .to_return(status: 200, body: product_node.to_json)
   end
 
   it_behaves_like "a portage adapter"
