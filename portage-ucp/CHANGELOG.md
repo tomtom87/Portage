@@ -6,6 +6,13 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `Support::TransactionLog` and `Support::OrderLedger` are now backed by a
+  pluggable `Store` (design-log §33) — new `Store`/`FileStore` pair on
+  each, mirroring `portage-ucp-journal`. `Dispatcher.new(transaction_log:,
+  order_ledger:)` / `TransactionLog.new(store:)` / `OrderLedger.new(store:)`
+  are the injection points; `path:`/`clock:` still work unchanged as a
+  shorthand for the file-backed default. Pure extract-interface refactor —
+  no behavior change, no new construction-site requirements.
 - Added `app.portage-ucp.payment_method`, `app.portage-ucp.saved_address`, and
   `app.portage-ucp.shopper_data` — Portage-owned extensions (design-log §22
   item 7) for saved payment references, saved addresses, and shopper data
