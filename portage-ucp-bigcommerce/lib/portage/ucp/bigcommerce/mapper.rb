@@ -21,6 +21,19 @@ module Portage
           Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
+        def description(node)
+          Portage::Ucp::Description.new(plain: node["description"])
+        end
+
+        def price(amount, currency)
+          Portage::Ucp::Price.new(amount: minor_units(amount), currency: currency)
+        end
+
+        def price_range(amount, currency)
+          p = price(amount, currency)
+          Portage::Ucp::PriceRange.new(min: p, max: p)
+        end
+
         # `site_url` is only used to turn `custom_url.url` (always store-
         # relative, e.g. "/cold-brew/") into an absolute product URL — the v3
         # Catalog resource never returns an absolute one itself.
@@ -28,9 +41,8 @@ module Portage
           Portage::Ucp::Product.new(
             id: node["id"].to_s,
             title: node["name"],
-            description: node["description"],
-            price: money(node["price"], currency),
-            available: node["availability"] != "disabled",
+            description: description(node),
+            price_range: price_range(node["price"], currency),
             variants: variants(node, currency),
             url: node.dig("custom_url", "url") ? "#{site_url}#{node.dig('custom_url', 'url')}" : nil
           )
@@ -42,8 +54,9 @@ module Portage
         def variants(node, currency)
           nodes = node["variants"]
           unless nodes&.any?
-            return [{ id: node["id"].to_s, title: node["name"], available: node["availability"] != "disabled",
-                      price: money(node["price"], currency) }]
+            return [Portage::Ucp::Variant.new(id: node["id"].to_s, title: node["name"], description: description(node),
+                                              price: price(node["price"], currency),
+                                              availability: { "available" => node["availability"] != "disabled" })]
           end
 
           nodes.map { |v| variant(v, node, currency) }
@@ -55,8 +68,11 @@ module Portage
         # documents for variant pricing.
         def variant(node, parent_node, currency)
           title = (node["option_values"] || []).map { |ov| ov["label"] }.join(" / ")
-          price = node["price"].to_f.zero? ? parent_node["price"] : node["price"]
-          { id: node["id"].to_s, title: title, available: !node["purchasing_disabled"], price: money(price, currency) }
+          amount = node["price"].to_f.zero? ? parent_node["price"] : node["price"]
+          Portage::Ucp::Variant.new(
+            id: node["id"].to_s, title: title, description: description(parent_node), price: price(amount, currency),
+            availability: { "available" => !node["purchasing_disabled"] }
+          )
         end
 
         # `id:` is caller-supplied rather than read off the response body's

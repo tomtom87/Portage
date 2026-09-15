@@ -22,17 +22,27 @@ RSpec.describe Portage::Ucp::BigCommerce::Adapter do
       ] } }
   end
 
+  let(:product_node) do
+    { "id" => 1, "name" => "Cold Brew", "description" => "desc", "price" => 5.0, "availability" => "available",
+      "custom_url" => { "url" => "/cold-brew/" } }
+  end
+
   # #create_checkout creates a cart then fetches its matching checkout, and the
   # kit reaches nothing beyond that pair: the repeat call is served by
   # Support::Idempotency's in-process table, and the PAN example is rejected by
   # PaymentTokenGuard inside the Dispatcher before #complete_checkout (and so
-  # before the orders/payments calls) runs.
+  # before the orders/payments calls) runs. The catalog reads are hit
+  # directly by the kit's own schema-validation examples.
   before do
     stub_request(:post, "https://api.bigcommerce.com/stores/abc123/v3/carts")
       .to_return(status: 200, body: { data: cart_response }.to_json)
     stub_request(:get, "https://api.bigcommerce.com/stores/abc123/v3/checkouts/cart_1")
       .to_return(status: 200, body: { data: { "cart" => cart_response, "subtotal" => 5.0, "tax_total" => 0.0,
                                               "grand_total" => 5.0 } }.to_json)
+    stub_request(:get, "https://api.bigcommerce.com/stores/abc123/v3/catalog/products?keyword=&limit=5&include=variants")
+      .to_return(status: 200, body: { data: [product_node] }.to_json)
+    stub_request(:get, "https://api.bigcommerce.com/stores/abc123/v3/catalog/products/1?include=variants")
+      .to_return(status: 200, body: { data: product_node }.to_json)
   end
 
   it_behaves_like "a portage adapter"

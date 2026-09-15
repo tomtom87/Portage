@@ -53,13 +53,17 @@ module Portage
 
         def search_catalog(query:, limit:)
           path = "/catalog/products?keyword=#{URI.encode_www_form_component(query)}&limit=#{limit}&include=variants"
-          @client.v3_get(path)["data"].map { |node| Mapper.product(node, currency: @currency, site_url: @site_url) }
+          products = @client.v3_get(path)["data"].map do |node|
+            Mapper.product(node, currency: @currency, site_url: @site_url)
+          end
+          Portage::Ucp::CatalogSearchResult.new(products: products)
         end
 
         def get_product(product_id:)
           nil_on_not_found do
             node = @client.v3_get("/catalog/products/#{product_id}?include=variants")["data"]
-            node && Mapper.product(node, currency: @currency, site_url: @site_url)
+            node && Portage::Ucp::ProductDetail.new(product: Mapper.product(node, currency: @currency,
+                                                                                  site_url: @site_url))
           end
         end
 
