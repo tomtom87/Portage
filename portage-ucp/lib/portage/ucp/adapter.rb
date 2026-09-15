@@ -140,6 +140,46 @@ module Portage
       # @return [Portage::Ucp::PaymentEnrollment, nil] nil if the enrollment isn't found
       def get_payment_enrollment(enrollment_id:) = not_implemented
 
+      # --- Payment Method / Saved Address / Shopper Data (app.portage-ucp.*
+      # — Portage extensions, not part of the UCP spec) ---
+      # `oauth_token:` — not `subject:` — is the authorization boundary on
+      # every method below, including the two list_* reads. Mcp::Server
+      # treats a call as mutating only when it takes an idempotency_key
+      # (mcp/server.rb:38), and both the authorize and rate_limit guards
+      # skip non-mutating calls entirely. A bare `subject:` string would let
+      # any caller who knows (or guesses) a subject enumerate another
+      # shopper's saved payment references and addresses — the exact risk
+      # §16 (design-log.md:816-819) calls out lookups against this data for.
+      # Carrying the credential on every call closes that: possession of a
+      # subject grants nothing without a valid oauth_token to derive it from.
+      # Do not "simplify" this back to `subject:`.
+      #
+      # @return [Portage::Ucp::PaymentMethodRef] stores an already-tokenized
+      #   payment_token; PaymentTokenGuard runs on it via Dispatcher#call
+      #   before this method is ever reached (dispatcher.rb:75), so a raw PAN
+      #   never arrives here.
+      def save_payment_method(oauth_token:, payment_token:, idempotency_key:) = not_implemented
+      # @return [Array<Portage::Ucp::PaymentMethodRef>]
+      def list_payment_methods(oauth_token:) = not_implemented
+      # @return [Boolean]
+      def delete_payment_method(oauth_token:, payment_method_id:, idempotency_key:) = not_implemented
+
+      # @return [Portage::Ucp::SavedAddress]
+      def save_address(oauth_token:, address:, idempotency_key:) = not_implemented
+      # @return [Array<Portage::Ucp::SavedAddress>]
+      def list_addresses(oauth_token:) = not_implemented
+      # @return [Boolean]
+      def delete_address(oauth_token:, address_id:, idempotency_key:) = not_implemented
+
+      # Erases every payment method, address, and linked identity Portage
+      # holds for this shopper. Idempotent and safe to repeat: a second call
+      # on an already-erased subject returns zero counts, never raises. A
+      # real adapter must forward the deletion to the PSP/platform's own
+      # API — Portage core never holds the credential behind psp_reference,
+      # only the opaque reference itself.
+      # @return [Portage::Ucp::ShopperDataErasure]
+      def delete_shopper_data(oauth_token:, idempotency_key:) = not_implemented
+
       private
 
       def not_implemented
