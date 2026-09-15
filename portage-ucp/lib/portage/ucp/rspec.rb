@@ -196,12 +196,39 @@ RSpec.shared_examples "a portage adapter" do
     end.to raise_error(Portage::Ucp::OutOfStockError)
   end
 
+  # app.portage-ucp.payment_enrollment (design-log §33/Phase B) — Portage
+  # extension, no schemas/ counterpart to validate against, same posture as
+  # payment_method/saved_address/shopper_data below. Dispatcher#call already
+  # runs every create_payment_enrollment/get_payment_enrollment result
+  # through PaymentEnrollmentGuard (dispatcher.rb), so an adapter that
+  # returns a malformed enrollment fails these examples with
+  # InvalidPaymentEnrollmentError, not a silent pass — this is the contract
+  # a real PSP adapter must be held to before it's the only implementor,
+  # same "cheap moment" framing as ReferenceAdapter today.
+  it "produces create_payment_enrollment / get_payment_enrollment responses that satisfy the " \
+     "payment-enrollment guard (§33)" do
+    skip "adapter does not advertise app.portage-ucp.payment_enrollment" unless
+      payment_enrollment_capability_advertised?
+
+    created = dispatcher.call(capability: "app.portage-ucp.payment_enrollment", action: "create_payment_enrollment",
+                              arguments: { idempotency_key: "#{conformance_idempotency_key}-penr" })
+
+    expect do
+      dispatcher.call(capability: "app.portage-ucp.payment_enrollment", action: "get_payment_enrollment",
+                      arguments: { enrollment_id: created[:structuredContent]["id"] })
+    end.not_to raise_error
+  end
+
   # app.portage-ucp.payment_method / saved_address / shopper_data (§22 item
   # 7) — Portage extensions, no schemas/ counterpart to validate against, so
   # these examples check the behavioral guarantee §16 called out instead:
   # oauth_token: is the authorization boundary, not just a call parameter.
   let(:conformance_oauth_token) { "conformance-oauth-#{object_id}-#{rand(1_000_000)}" }
   let(:other_conformance_oauth_token) { "conformance-oauth-other-#{object_id}-#{rand(1_000_000)}" }
+
+  def payment_enrollment_capability_advertised?
+    Portage::Ucp::RSpec.advertised?(adapter, "app.portage-ucp.payment_enrollment")
+  end
 
   def payment_method_capability_advertised?
     Portage::Ucp::RSpec.advertised?(adapter, "app.portage-ucp.payment_method")
