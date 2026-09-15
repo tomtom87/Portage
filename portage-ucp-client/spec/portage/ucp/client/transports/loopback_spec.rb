@@ -21,7 +21,7 @@ RSpec.describe Portage::Ucp::Client::Transports::Loopback do
   it "runs a tool call in-process and returns the structuredContent" do
     result = transport.call_tool(name: "search_catalog", arguments: { query: "cold", limit: 5 })
 
-    expect(result.first.id).to eq("p1")
+    expect(result["products"].first["id"]).to eq("p1")
   end
 
   it "runs the real authenticator/rate-limiter/Dispatcher stack, not a bypass" do
