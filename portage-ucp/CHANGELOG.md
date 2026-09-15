@@ -6,6 +6,16 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Added `app.portage-ucp.payment_method`, `app.portage-ucp.saved_address`, and
+  `app.portage-ucp.shopper_data` — Portage-owned extensions (design-log §22
+  item 7) for saved payment references, saved addresses, and shopper data
+  erasure, shipped together per §16. `oauth_token:` is the authorization
+  boundary on every method, including the two `list_*` reads, since
+  `Mcp::Server` only authorizes/rate-limits calls carrying an
+  `idempotency_key`. `save_payment_method`'s `payment_token:` runs through
+  the existing `PaymentTokenGuard` via `Dispatcher#call`, same as
+  `complete_checkout`. `ReferenceAdapter` implements all three; `Adapter`'s
+  stubs raise `NotImplementedError` until overridden.
 - `Dispatcher.new` gains an optional `journal:` argument (`nil` by default,
   never `require`d from this gem) — after a successful `complete_checkout`
   with a settled order, `@journal.record_checkout(shop:, source:, checkout:,

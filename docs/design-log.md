@@ -2270,3 +2270,54 @@ stale rejections, P-256 and P-384, and the callable-resolver key lookup.
 reconciling §12's correlation-id/redaction claims with the code) remain
 open — this pass did item 4 only, since that's what was asked for; nothing
 here depends on either of those two.
+
+## 32. §22 item 7 built — payment methods, saved addresses, `delete_shopper_data` (2026-09-15)
+
+§22 item 7 called for saved payment references, saved addresses, and
+`delete_shopper_data`, shipped as one step, per §16's "shipping persistence
+without a deletion path is the mistake to avoid, not a follow-up to fix
+later." The vendored spec has zero hits for `payment_method`, `shopper`, or
+`erasure` — new ground, built as Portage extensions the same way
+`payment_enrollment`/`reorder` were, not §22's own `dev.ucp.shopping.*`
+name (there is no such name in the vendored schemas — do not claim it).
+
+**Storage is Adapter-owned**, not a `portage-ucp-journal` `Store` extension:
+`ReferenceAdapter` holds plain in-memory `Hash`es (subject → id → object),
+mirroring `payment_enrollment`/`identity_linking`. The journal `Store` is
+deliberately append/replay-only, with no Dispatcher-side hook analogous to
+`record_checkout` for this data — bolting keyed CRUD onto it would serve no
+consumer yet.
+
+**`oauth_token:` is the authorization boundary, not `subject:`** — the one
+non-obvious decision in the whole feature, and the reason it's called out
+here so it isn't re-litigated. `Mcp::Server` derives mutating-ness from the
+presence of an `idempotency_key:` (`mcp/server.rb:38`), and both the
+`authorize` and `rate_limit` guards skip non-mutating calls. The two
+`list_*` reads carry no idempotency key, so if they took a bare `subject:`
+string, any caller who knew (or guessed) a subject could enumerate another
+shopper's saved payment references and addresses — precisely the risk §16
+named lookups against this data for. Carrying the credential on every call
+closes it: possession of a subject grants nothing without a valid
+`oauth_token` to derive it from.
+
+Three new capabilities (`app.portage-ucp.payment_method`,
+`app.portage-ucp.saved_address`, `app.portage-ucp.shopper_data`),
+kept as three rather than one since the erasure duty spans both the others
+plus the linked identity, not a peer alongside them. `save_payment_method`'s
+`payment_token:` inherits `PaymentTokenGuard` for free via
+`Dispatcher#call`'s existing `arguments.key?(:payment_token)` check
+(`dispatcher.rb:75`) — zero Dispatcher changes needed there. `delete_shopper_data`
+is idempotent by construction (counts captured before deleting, so a
+repeat call on an already-erased subject is a `Hash#delete`/`size` no-op,
+never a raised error), and a real adapter is documented to forward deletion
+to its PSP/platform's own API — Portage core never holds the credential
+behind `psp_reference`, only the opaque reference itself.
+
+One production gap found and fixed along the way, outside the plan:
+`Dispatcher#wrap` only called `to_wire_h` on a single result object;
+`list_payment_methods`/`list_addresses` are the first actions to return
+`Array<to_wire_h-capable>`, which fell through to the `result.inspect`
+fallback and would have reached `structuredContent` as raw `Data` objects,
+unserializable to JSON. Fixed generically (any array of `to_wire_h`-capable
+items now maps to an array of wire hashes), not special-cased to these two
+actions.
