@@ -65,6 +65,10 @@ require_relative "ucp/security/signature"
 require_relative "ucp/rack/signature_verification"
 require_relative "ucp/resolver"
 require_relative "ucp/check"
+# Rails integration is opt-in and never a hard dependency (this stays the
+# protocol-only core gem, per the gemspec) — only loaded when a host app
+# already has Rails on the load path.
+require_relative "ucp/railtie" if defined?(Rails::Railtie)
 
 module Portage
   module Ucp

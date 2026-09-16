@@ -11,7 +11,8 @@ Gem::Specification.new do |spec|
   spec.homepage = "https://github.com/tomtom87/Portage/tree/main/portage-ucp"
   spec.required_ruby_version = ">= 3.2"
 
-  spec.files = Dir["lib/**/*.rb", "exe/*", "schemas/**/*.json", "README.md", "LICENSE", "CHANGELOG.md"]
+  spec.files = Dir["lib/**/*.rb", "lib/generators/**/templates/**/*", "exe/*", "schemas/**/*.json",
+                   "README.md", "LICENSE", "CHANGELOG.md"]
   spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
