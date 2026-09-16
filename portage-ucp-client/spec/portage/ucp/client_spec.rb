@@ -77,5 +77,37 @@ RSpec.describe Portage::Ucp::Client do
       expect { described_class.discover("https://shop.example") }
         .to raise_error(Portage::Ucp::Client::DiscoveryError, /no mcp service/)
     end
+
+    # Real shape served by live Shopify UCP rollouts (Casper, Allbirds,
+    # Glossier, and 34+ others) as of manifest "version": "2026-08-25" —
+    # everything nested under "ucp", services/capabilities as hashes keyed by
+    # name rather than flat arrays.
+    it "parses the nested hash-of-arrays manifest shape real stores serve" do
+      stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
+        status: 200,
+        body: {
+          ucp: {
+            version: "2026-08-25",
+            services: {
+              "dev.ucp.shopping" => [
+                { version: "2026-08-25", transport: "mcp", endpoint: "https://shop.example/api/ucp/mcp" },
+                { version: "2026-04-08", transport: "embedded" }
+              ]
+            },
+            capabilities: {
+              "dev.ucp.shopping.checkout" => [{ version: "2026-08-25" }],
+              "dev.ucp.shopping.cart" => [{ version: "2026-08-25" }]
+            }
+          }
+        }.to_json
+      )
+      transport = instance_double(Portage::Ucp::Client::Transports::Http)
+      allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
+        .with(url: "https://shop.example/api/ucp/mcp", headers: {}).and_return(transport)
+
+      session = described_class.discover("https://shop.example")
+
+      expect(session.capabilities).to contain_exactly("dev.ucp.shopping.checkout", "dev.ucp.shopping.cart")
+    end
   end
 end
