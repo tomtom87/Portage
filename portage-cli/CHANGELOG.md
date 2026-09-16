@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.5.1] - 2026-09-16
+
+- No behavior change — 0.5.0 was built and pushed with `gem build` run from
+  the workspace root instead of this gem's own directory, so `spec.files =
+  Dir[...]` resolved against the wrong working directory and packaged an
+  empty gem. 0.5.0 has been yanked; 0.5.1 repackages the exact same 0.5.0
+  code correctly.
+
 ## [0.5.0] - 2026-09-16
 
 - Added `portage-console` — a read-only IRB REPL over the local

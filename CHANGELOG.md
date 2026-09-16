@@ -7,6 +7,18 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.7.1] - 2026-09-16
+
+- No behavior change in any gem. 0.7.0's `portage-ucp`, `portage-cli`,
+  `portage-ucp-shopify`, `portage-ucp-client`, `portage-ucp-wix`, and the
+  five smaller adapters were all built and pushed to RubyGems with `gem
+  build` run from the workspace root instead of each gem's own directory —
+  every gemspec's `spec.files = Dir["lib/**/*.rb", ...]` resolved against
+  the wrong working directory, so every 0.7.0-line package shipped empty
+  (no `lib/`). All ten 0.7.0-line versions have been yanked; this release
+  repackages the exact same code, correctly, one patch version up from
+  each.
+
 ## [0.7.0] - 2026-09-16
 
 - `portage-ucp` bumps to 0.7.0: cryptographic AP2 mandate signature

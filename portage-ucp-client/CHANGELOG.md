@@ -6,6 +6,14 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-16
+
+- No behavior change — 0.3.2 was built and pushed with `gem build` run from
+  the workspace root instead of this gem's own directory, so `spec.files =
+  Dir[...]` resolved against the wrong working directory and packaged an
+  empty gem. 0.3.2 has been yanked; 0.3.3 repackages the exact same 0.3.2
+  code correctly.
+
 ## [0.3.2] - 2026-09-16
 
 - No behavior change — widens the `portage-ucp` dependency pin to `~> 0.7`
