@@ -82,7 +82,7 @@ module Portage
         def self.sized_signature!(mandate, curve)
           raw_signature = decode_signature(mandate.signature)
           unless raw_signature.bytesize == curve[:coord] * 2
-            raise Portage::Ucp::InvalidMandateError, "mandate signature is the wrong length for #{curve}"
+            raise Portage::Ucp::InvalidMandateError, "mandate signature is the wrong length for #{curve[:digest]}"
           end
 
           raw_signature
