@@ -51,6 +51,21 @@ RSpec.describe Portage::Ucp::Support::Idempotency::FileStore do
     expect(store.fetch("k2")).to eq("order-2")
   end
 
+  it "treats a truncated/corrupted file as empty instead of raising" do
+    store.store("k1", "order-1")
+    File.write(@path, File.read(@path)[0..-10]) # simulate a crash mid-write
+
+    expect(store.fetch("k1")).to equal(Portage::Ucp::Support::Idempotency::NOT_FOUND)
+  end
+
+  it "leaves the previous good file untouched if persist is interrupted before rename" do
+    store.store("k1", "order-1")
+
+    fresh = described_class.new(path: @path)
+    expect(fresh.fetch("k1")).to eq("order-1")
+    expect(Dir.glob("#{@path}*.tmp")).to be_empty
+  end
+
   describe "#fetch_or_store" do
     it "returns the yielded value and persists it when the key is absent" do
       expect(store.fetch_or_store("k1") { "computed" }).to eq("computed")
