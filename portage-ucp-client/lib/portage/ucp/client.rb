@@ -86,7 +86,7 @@ module Portage
         endpoint = entries.select { |s| s["transport"] == "mcp" }
                           .max_by { |s| s["version"].to_s }
                           &.fetch("endpoint", nil)
-        raise DiscoveryError, "manifest has no mcp service entry to connect to" unless endpoint
+        raise ManifestShapeError, "manifest has no mcp service entry to connect to" unless endpoint
 
         endpoint
       end

@@ -9,7 +9,8 @@ Gem::Specification.new do |spec|
                      "/.well-known/ucp manifest, or drive your own Adapter directly, and place an order " \
                      "as the client. Three transports behind one interface (loopback over an in-process " \
                      "Adapter, stdio, Streamable HTTP) — callers never know which they got. Depends only " \
-                     "on portage-ucp + the mcp gem's client half; no adapter gem is a dependency."
+                     "on portage-ucp, the mcp gem's client half, and faraday (the HTTP transport's backend); " \
+                     "no adapter gem is a dependency."
   spec.authors = ["Tom Whitbread"]
   spec.license = "MIT"
   spec.homepage = "https://github.com/tomtom87/Portage/tree/main/portage-ucp-client"
@@ -18,6 +19,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md"]
   spec.require_paths = ["lib"]
 
+  spec.add_dependency "faraday", ">= 2.0"
   spec.add_dependency "mcp", "~> 0.24"
   spec.add_dependency "portage-ucp", "~> 0.7"
 
