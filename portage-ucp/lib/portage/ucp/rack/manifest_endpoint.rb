@@ -32,7 +32,7 @@ module Portage
         def payment_handlers_over_plaintext?(payload, request)
           return false if @allow_insecure || request.ssl?
 
-          !Array(payload[:payment_handlers]).empty?
+          !Array(payload.dig(:ucp, :payment_handlers)).empty?
         end
 
         def not_found

@@ -31,23 +31,30 @@ module Portage
         @services = services
       end
 
+      # Nests everything under a "ucp" envelope, and keys `capabilities` by
+      # capability name (matching what live Shopify UCP rollouts — Casper,
+      # Allbirds, Glossier, and 34+ others — actually serve as of manifest
+      # "version": "2026-08-25"; see docs/well-known-ucp.md and
+      # portage-ucp-client's Client.discover, which this shape now matches).
       def to_h
-        payload = {
-          ucp_version: UCP_VERSION,
+        ucp = {
+          version: UCP_VERSION,
           business: @business,
           services: @services,
-          capabilities: @registry.advertised(@adapter).map do |capability|
-            { name: capability.name, version: capability.version }
-          end,
+          capabilities: capability_hash,
           payment_handlers: @payment_handlers,
           signing_keys: @signing_keys
         }
-        return payload unless @signer
+        ucp = ucp.merge(signature: sign(ucp)) if @signer
 
-        payload.merge(signature: sign(payload))
+        { ucp: ucp }
       end
 
       private
+
+      def capability_hash
+        @registry.advertised(@adapter).to_h { |capability| [capability.name, [{ version: capability.version }]] }
+      end
 
       def sign(payload)
         canonical = JSON.generate(payload)

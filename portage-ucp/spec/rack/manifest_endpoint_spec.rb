@@ -19,8 +19,8 @@ RSpec.describe Portage::Ucp::Rack::ManifestEndpoint do
     expect(last_response.headers["content-type"]).to eq("application/json")
 
     body = JSON.parse(last_response.body)
-    expect(body["ucp_version"]).to eq("2026-04-08")
-    expect(body["business"]).to eq("name" => "Test Roastery")
+    expect(body["ucp"]["version"]).to eq("2026-04-08")
+    expect(body["ucp"]["business"]).to eq("name" => "Test Roastery")
   end
 
   it "rejects non-GET requests" do
