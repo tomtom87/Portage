@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.7.0)
+    portage-ucp (0.7.1)
       base64 (~> 0.2)
       json_schemer (~> 2.5)
       mcp (~> 0.24)
@@ -10,7 +10,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-wix (0.1.2)
+    portage-ucp-wix (0.1.3)
       portage-ucp (~> 0.7)
 
 GEM
