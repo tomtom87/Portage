@@ -2529,3 +2529,71 @@ accessor itself (the race fix above closes the correctness gap but doesn't
 add the promised config-level seam — `idempotency_store=` per-instance
 injection is what exists today), 5 (sandbox credentials), and 6's console.
 7's scheduler remains correctly gated behind 2.
+
+## 37. §22 item 6, closed — a REPL, not the web panel (2026-09-16)
+
+§16 named "an admin/console panel" as the last piece of item 6, and named
+two constraints for it up front: its own session auth (`Authenticator`
+guards MCP calls, not a web UI, and the process would also hold live
+platform admin credentials in its env) and every rendered field through
+`Observability.redact`. Building that panel was still blocked on nothing
+today — §33 (Store abstraction) and the journal gem both already existed —
+so the remaining work was just "build it." This entry narrows *what* gets
+built: a REPL, not a server.
+
+**Why a REPL clears both §16 constraints without solving them.** A web
+panel needs session auth because a browser is a new network-reachable
+surface on a process already holding admin credentials — anyone who can
+reach the panel's port can act as that process. A local IRB REPL
+(`portage-cli/exe/portage-console`) has no such surface: whoever runs it
+already has shell access to this machine's `~/.portage` files and env, the
+same access level `Authenticator`'s own `PermissiveAuthenticator` already
+grants the CLI's own-store loopback path (§22's original handoff list,
+item 1's neighbor). Skipping session auth here isn't a shortcut around
+§16's constraint — the constraint doesn't apply to a process with no
+listening socket. Redaction still applies unconditionally: `Observability.redact`
+runs on every value `Portage::Cli::Console`'s methods return, REPL or not,
+since "no new leak surface" was never the whole of §16's ask — "never
+prints a secret" is the other half, and that has nothing to do with
+transport.
+
+**Read surface, extended once, as planned.** `TransactionLog::Store` and
+`OrderLedger::Store`'s own doc comments (§33) said to extend the
+keyed-lookup-only interface "when a second real consumer... needs more
+than append-and-replay, not before" — the console is that consumer. Added
+`#each_record`/`#all` to both (mirroring `PurchaseJournal`'s existing
+names), implemented under the same shared-file lock every other read on
+those classes already uses. `#find`/`#completed_since` are unchanged;
+this is additive.
+
+**`portage-cli`, not a new gem, and not core.** §16 said a console "wants
+its own gem," reasoning that core `portage-ucp` must stay dependency-light
+(§2) and a console shipping Rack/a database inside core would break that.
+A local REPL ships neither — no Rack, no database, just IRB (stdlib) and a
+new runtime dependency on `portage-ucp-journal` (`~> 0.1`, already a
+sibling gem with zero dependency on core itself). `portage-cli` already
+owns every `~/.portage/*` file this console reads (`History` reads/writes
+`history.json` from the same directory) and already ships a second
+executable's worth of local-machine tooling in spirit if not in fact, so
+`exe/portage-console` extends it rather than standing up a fourth gem for
+one REPL script. A genuine web panel, if ever built, still wants its own
+gem — that part of §16's reasoning is untouched.
+
+**The journal's real gap, named rather than papered over.** `journal`
+comes back empty on a fresh install: `Dispatcher`'s `journal:` kwarg
+defaults to `nil` (§2, no auto-require from core), and nothing in
+`portage-cli`'s own buy flow (`Buy#adapter_flow` → `Client.for_adapter` →
+`Loopback` → `Mcp::Server.build`) passes one — `Mcp::Server.build` only
+ever constructs `Dispatcher.new(adapter:, registry:, logger:)`, so
+`transaction_log`/`order_ledger` get their real file-backed defaults
+(populating `transactions.json`/`orders.json` for real on every loopback
+buy) while `journal` silently stays `nil`. `transactions`/`orders` have
+real data to show out of the box; `journal` needs a consumer to wire
+`journal:` through `Mcp::Server.build` first — left as its own gap rather
+than silently wired up here, since that's a change to core's own
+server-building API, a different unit of work than the console this entry
+closes.
+
+Still open after this: §22 item 5 (sandbox credentials) and item 7's
+scheduler (gated behind item 2's `Configuration#idempotency_provider`
+accessor). Item 6 itself is now fully closed.
