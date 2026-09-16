@@ -3,13 +3,19 @@ require "spec_helper"
 RSpec.describe Portage::Ucp::Client::Transports::Http do
   let(:mcp_transport) { instance_double(MCP::Client::HTTP) }
   let(:mcp_client) { instance_double(MCP::Client) }
+  let(:agent_meta) { { agent_profile: "https://agent.example/profile" } }
+  let(:wire_meta) { { "ucp-agent" => { "profile" => "https://agent.example/profile" } } }
 
   before do
     allow(MCP::Client::HTTP).to receive(:new).with(url: "https://shop.example/mcp", headers: {})
                                              .and_return(mcp_transport)
     allow(MCP::Client).to receive(:new).with(transport: mcp_transport).and_return(mcp_client)
     allow(mcp_client).to receive(:connect)
+    allow(mcp_client).to receive(:call_tool)
+      .and_return({ "result" => { "isError" => false, "content" => [], "structuredContent" => [] } })
   end
+
+  subject(:transport) { described_class.new(url: "https://shop.example/mcp") }
 
   it "connects the underlying MCP::Client eagerly" do
     expect(mcp_client).to receive(:connect)
@@ -17,28 +23,84 @@ RSpec.describe Portage::Ucp::Client::Transports::Http do
     described_class.new(url: "https://shop.example/mcp")
   end
 
-  it "delegates call_tool and normalizes the string-keyed response" do
-    allow(mcp_client).to receive(:call_tool)
-      .with(name: "search_catalog", arguments: { query: "x", limit: 1 }, meta: nil)
-      .and_return({ "result" => { "isError" => false, "content" => [], "structuredContent" => [] } })
-
-    result = described_class.new(url: "https://shop.example/mcp")
-                            .call_tool(name: "search_catalog", arguments: { query: "x", limit: 1 })
-
-    expect(result).to eq([])
+  it "raises MissingAgentProfileError when meta has no agent_profile" do
+    expect { transport.call_tool(name: "search_catalog", arguments: { query: "x", limit: 1 }) }
+      .to raise_error(Portage::Ucp::Client::MissingAgentProfileError)
   end
 
-  it "forwards a caller-supplied meta hash to the underlying MCP::Client" do
-    allow(mcp_client).to receive(:call_tool)
-      .with(name: "search_catalog", arguments: { query: "x", limit: 1 }, meta: { "ucp-agent.profile" => "agent-1" })
-      .and_return({ "result" => { "isError" => false, "content" => [], "structuredContent" => [] } })
+  # Shopify's own tool schemas list "meta" as a property of the tool's
+  # `arguments` object, not the MCP protocol's `_meta` envelope field —
+  # confirmed live, so every assertion below checks `arguments["meta"]`
+  # rather than a `meta:` kwarg passed to the underlying MCP::Client.
+  it "nests search_catalog's query/limit under catalog and folds meta into arguments" do
+    transport.call_tool(name: "search_catalog", arguments: { query: "x", limit: 1 }, meta: agent_meta)
 
-    described_class.new(url: "https://shop.example/mcp")
-                   .call_tool(name: "search_catalog", arguments: { query: "x", limit: 1 },
-                              meta: { "ucp-agent.profile" => "agent-1" })
+    expect(mcp_client).to have_received(:call_tool).with(
+      name: "search_catalog",
+      arguments: { "catalog" => { "query" => "x", "pagination" => { "limit" => 1 } }, "meta" => wire_meta }
+    )
+  end
+
+  it "nests get_product under catalog with id" do
+    transport.call_tool(name: "get_product", arguments: { product_id: "p1" }, meta: agent_meta)
 
     expect(mcp_client).to have_received(:call_tool)
-      .with(name: "search_catalog", arguments: { query: "x", limit: 1 }, meta: { "ucp-agent.profile" => "agent-1" })
+      .with(name: "get_product", arguments: { "catalog" => { "id" => "p1" }, "meta" => wire_meta })
+  end
+
+  it "nests lookup_catalog under catalog with ids" do
+    transport.call_tool(name: "lookup_catalog", arguments: { product_ids: %w[p1 p2] }, meta: agent_meta)
+
+    expect(mcp_client).to have_received(:call_tool)
+      .with(name: "lookup_catalog", arguments: { "catalog" => { "ids" => %w[p1 p2] }, "meta" => wire_meta })
+  end
+
+  it "flattens a plain id-only action to a top-level id" do
+    transport.call_tool(name: "get_cart", arguments: { cart_id: "c1" }, meta: agent_meta)
+
+    expect(mcp_client).to have_received(:call_tool)
+      .with(name: "get_cart", arguments: { "id" => "c1", "meta" => wire_meta })
+  end
+
+  it "flattens a mutating id-only action's id and moves idempotency_key into meta" do
+    transport.call_tool(name: "cancel_checkout", arguments: { checkout_id: "co1", idempotency_key: "k" },
+                        meta: agent_meta)
+
+    expect(mcp_client).to have_received(:call_tool).with(
+      name: "cancel_checkout",
+      arguments: { "id" => "co1", "meta" => wire_meta.merge("idempotency-key" => "k") }
+    )
+  end
+
+  it "wraps create_cart's line_items as {item: {id:}, quantity:} and moves idempotency_key into meta" do
+    transport.call_tool(name: "create_cart",
+                        arguments: { line_items: [{ product_id: "v1", quantity: 2 }], idempotency_key: "k1" },
+                        meta: agent_meta)
+
+    expect(mcp_client).to have_received(:call_tool).with(
+      name: "create_cart",
+      arguments: { "cart" => { "line_items" => [{ "item" => { "id" => "v1" }, "quantity" => 2 }] },
+                   "meta" => wire_meta.merge("idempotency-key" => "k1") }
+    )
+  end
+
+  it "includes an id for update_cart/update_checkout, wrapped under cart/checkout" do
+    transport.call_tool(name: "update_checkout",
+                        arguments: { checkout_id: "co1", line_items: [{ product_id: "v1", quantity: 1 }] },
+                        meta: agent_meta)
+
+    expect(mcp_client).to have_received(:call_tool).with(
+      name: "update_checkout",
+      arguments: { "checkout" => { "line_items" => [{ "item" => { "id" => "v1" }, "quantity" => 1 }] },
+                   "id" => "co1", "meta" => wire_meta }
+    )
+  end
+
+  it "raises UnsupportedWireShapeError for complete_checkout" do
+    expect do
+      transport.call_tool(name: "complete_checkout",
+                          arguments: { checkout_id: "co1", payment_token: "tok" }, meta: agent_meta)
+    end.to raise_error(Portage::Ucp::Client::UnsupportedWireShapeError)
   end
 
   it "raises ServerError when the response reports isError" do
@@ -46,7 +108,7 @@ RSpec.describe Portage::Ucp::Client::Transports::Http do
       { "result" => { "isError" => true, "content" => [{ "type" => "text", "text" => "boom" }] } }
     )
 
-    expect { described_class.new(url: "https://shop.example/mcp").call_tool(name: "x", arguments: {}) }
+    expect { transport.call_tool(name: "get_order", arguments: { order_id: "o1" }, meta: agent_meta) }
       .to raise_error(Portage::Ucp::Client::ServerError, "boom")
   end
 end
