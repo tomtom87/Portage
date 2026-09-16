@@ -37,6 +37,11 @@ RSpec.describe Portage::Ucp::Ap2::MandateGuard do
     expect { described_class.validate!(mandate(signature: "not-even-base64")) }.not_to raise_error
   end
 
+  it "raises when require_signature is true but trusted_keys resolves to nil" do
+    expect { described_class.validate!(mandate, require_signature: true) }
+      .to raise_error(Portage::Ucp::InvalidMandateError, /signature verification is required/)
+  end
+
   describe "with trusted_keys" do
     let(:ec_key) { SigningHelper.keypair }
     let(:jwk) { SigningHelper.jwk(ec_key, kid: "issuer-1") }
@@ -55,6 +60,11 @@ RSpec.describe Portage::Ucp::Ap2::MandateGuard do
       tampered = signed_mandate.with(amount: 999_999)
       expect { described_class.validate!(tampered, trusted_keys: [jwk]) }
         .to raise_error(Portage::Ucp::InvalidMandateError, /does not verify/)
+    end
+
+    it "does not raise the require_signature error when trusted_keys are given" do
+      expect { described_class.validate!(signed_mandate, trusted_keys: [jwk], require_signature: true) }
+        .not_to raise_error
     end
   end
 end
