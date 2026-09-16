@@ -37,3 +37,13 @@ jobs:
       - name: rubocop
         working-directory: ${{ matrix.gem }}
         run: bundle exec rubocop
+
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+      - name: verify every adapter gem runs the shared conformance kit
+        run: rake conformance
