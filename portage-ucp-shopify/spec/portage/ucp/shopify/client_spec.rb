@@ -44,6 +44,14 @@ RSpec.describe Portage::Ucp::Shopify::Client do
       .to raise_error(Portage::Ucp::Shopify::GraphqlError, /field not found/)
   end
 
+  it "raises GraphqlError with the bare string when errors isn't the usual array shape (auth rejections)" do
+    stub_request(:post, "https://test-shop.myshopify.com/admin/api/2026-04/graphql.json")
+      .to_return(status: 200, body: { errors: "[API] Invalid API key or access token" }.to_json)
+
+    expect { client.admin_query("query { shop { name } }") }
+      .to raise_error(Portage::Ucp::Shopify::GraphqlError, /Invalid API key/)
+  end
+
   it "raises ServerError on a bare 5xx rather than trying to parse a GraphQL body" do
     stub_request(:post, "https://test-shop.myshopify.com/admin/api/2026-04/graphql.json")
       .to_return(status: 502, body: "<html>bad gateway</html>")
