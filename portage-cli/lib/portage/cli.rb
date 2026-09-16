@@ -10,6 +10,7 @@ require_relative "cli/compare"
 require_relative "cli/history"
 require_relative "cli/payment_methods"
 require_relative "cli/doctor"
+require_relative "cli/generate/adapter"
 
 module Portage
   # `portage` — the single command-line entrypoint for acting as a shopper's
@@ -39,11 +40,12 @@ module Portage
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
+             portage generate adapter NAME [--dir DIR]
     USAGE
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
-                 "doctor" => :run_doctor }.freeze
+                 "doctor" => :run_doctor, "generate" => :run_generate }.freeze
 
     # @param argv [Array<String>]
     # @return [Integer] process exit code
@@ -546,6 +548,23 @@ module Portage
       findings.map { |f| "[#{f.check}] #{f.message}" }.join("\n")
     end
     private_class_method :format_doctor
+
+    # --- generate ---
+
+    def self.run_generate(argv)
+      kind, name, *rest = argv
+      unless kind == "adapter" && name
+        warn USAGE
+        return 1
+      end
+
+      dir = nil
+      OptionParser.new { |parser| parser.on("--dir DIR") { |v| dir = v } }.parse!(rest)
+      path = Generate::Adapter.new(name: name, dir: dir).call
+      puts "Scaffolded #{path}/"
+      0
+    end
+    private_class_method :run_generate
 
     # --- output ---
 
