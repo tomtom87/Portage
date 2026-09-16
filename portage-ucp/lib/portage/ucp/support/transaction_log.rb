@@ -102,6 +102,14 @@ module Portage
         def completed_since(since, shop:)
           @store.completed_since(since, shop: shop)
         end
+
+        def each_record(&)
+          @store.each_record(&)
+        end
+
+        def all
+          enum_for(:each_record).to_a
+        end
       end
     end
   end

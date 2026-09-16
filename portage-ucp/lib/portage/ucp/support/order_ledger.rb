@@ -41,6 +41,14 @@ module Portage
         def find(order_id)
           @store.find(order_id)
         end
+
+        def each_record(&)
+          @store.each_record(&)
+        end
+
+        def all
+          enum_for(:each_record).to_a
+        end
       end
     end
   end
