@@ -16,6 +16,13 @@ module Portage
           def find(order_id)
             raise NotImplementedError, "#{self.class} must implement #find"
           end
+
+          # Yields every snapshot, in no guaranteed order, without a block
+          # returns an Enumerator — same §22 item 6 console read surface
+          # added to `TransactionLog::Store`. Additive; `#find` is unchanged.
+          def each_record(&)
+            raise NotImplementedError, "#{self.class} must implement #each_record"
+          end
         end
       end
     end

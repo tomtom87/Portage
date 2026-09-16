@@ -32,6 +32,12 @@ module Portage
             with_lock(File::LOCK_SH) { |data, _file| data[order_id] }
           end
 
+          def each_record(&block)
+            return enum_for(:each_record) unless block
+
+            with_lock(File::LOCK_SH) { |data, _file| data.values }.each(&block)
+          end
+
           private
 
           def with_lock(lock_mode)

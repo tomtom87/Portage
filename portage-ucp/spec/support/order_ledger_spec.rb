@@ -45,6 +45,19 @@ RSpec.describe Portage::Ucp::Support::OrderLedger do
     expect(ledger.find("nope")).to be_nil
   end
 
+  it "enumerates every recorded snapshot via #each_record/#all" do
+    ledger.record(idempotency_key: "k1", order: build_order(id: "ord_1"))
+    ledger.record(idempotency_key: "k2", order: build_order(id: "ord_2"))
+
+    expect(ledger.all.map { |r| r["idempotency_key"] }).to contain_exactly("k1", "k2")
+  end
+
+  it "returns an Enumerator from #each_record without a block" do
+    ledger.record(idempotency_key: "k1", order: build_order)
+
+    expect(ledger.each_record).to be_a(Enumerator)
+  end
+
   describe "pluggable store (§33)" do
     let(:memory_store) do
       Class.new(Portage::Ucp::Support::OrderLedger::Store) do

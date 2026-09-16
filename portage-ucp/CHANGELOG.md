@@ -6,6 +6,13 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Added `#each_record`/`#all` to `TransactionLog`/`OrderLedger` (and to both
+  classes' `Store` abstraction) — read-only enumeration over every stored
+  record, additive alongside the existing keyed `#find`/`#completed_since`.
+  §22 item 6's console is the second real consumer the `Store` docs said
+  would trigger this; `FileStore` implements it under the same shared-file
+  lock as every other read.
+
 ## [0.6.0] - 2026-09-15
 
 - **Breaking:** `PaymentEnrollment` results are now validated by the new

@@ -118,6 +118,20 @@ RSpec.describe Portage::Ucp::Support::TransactionLog do
     expect(log.completed_since(Time.now - 3600, shop: "shop-a")).to eq([])
   end
 
+  it "enumerates every reserved record via #each_record/#all" do
+    log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: "ref1", shop: "shop-a")
+    log.reserve(idempotency_key: "k2", checkout_id: "chk_2", payment_token_ref: "ref2", shop: "shop-b")
+    log.complete(idempotency_key: "k2", status: "complete", amount: 100, currency: "USD")
+
+    expect(log.all.map { |r| r["idempotency_key"] }).to contain_exactly("k1", "k2")
+  end
+
+  it "returns an Enumerator from #each_record without a block" do
+    log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: "ref1")
+
+    expect(log.each_record).to be_a(Enumerator)
+  end
+
   describe "pluggable store (§33)" do
     let(:memory_store) do
       Class.new(Portage::Ucp::Support::TransactionLog::Store) do

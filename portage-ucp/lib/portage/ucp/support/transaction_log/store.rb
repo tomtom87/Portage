@@ -44,6 +44,15 @@ module Portage
             raise NotImplementedError, "#{self.class} must implement #find"
           end
 
+          # Yields every record, in no guaranteed order, without a block
+          # returns an Enumerator — the read surface §22 item 6's console
+          # needed and this class's own comment flagged as the trigger to
+          # add it. `#find`/`#completed_since` stay as they were; this is
+          # additive, not a replacement for either.
+          def each_record(&)
+            raise NotImplementedError, "#{self.class} must implement #each_record"
+          end
+
           def completed_since(since, shop:)
             raise NotImplementedError, "#{self.class} must implement #completed_since"
           end
