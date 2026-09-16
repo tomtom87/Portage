@@ -2471,3 +2471,61 @@ ships what those citations point at.
 Still open after this slice, and after all three: §22 items 2
 (`idempotency_provider`), 5 (sandbox credentials), 6's console, and 7's
 scheduler — none of them touched across Phases A/B/C.
+
+## 36. §34 reconciled — AP2 mandate signatures are now cryptographically verified; §22 item 2's cross-process race fixed (2026-09-16)
+
+Two unrelated fixes, landed together because both surfaced auditing §22's
+close-out state.
+
+**§34 is stale.** It says AP2 support is "mandate-*shape* validation, not
+cryptographic AP2 verification — no key infrastructure or trust anchor
+exists in this repo to verify a signature against." That's no longer true:
+`Ap2::MandateSignature` verifies a `PaymentMandate`'s signature against a
+JWK trust-key set (ECDSA, P-256/P-384), `MandateGuard.validate!` calls it
+whenever `trusted_keys` are supplied, `PaymentMandate` carries an optional
+`kid` and signing payload to identify which key signed it, and
+`Dispatcher` takes an injectable mandate-trust-key resolver rather than a
+fixed key set — a consumer wires up however it looks up an issuing agent's
+current keys (static config, JWKS endpoint, whatever). §34 itself is left
+as-written above (it was accurate when written); this entry is the
+correction, same pattern §23 used to reconcile stale §12 claims.
+
+**§22 item 2, the race §33 didn't touch.** §33 made `TransactionLog`/
+`OrderLedger` storage pluggable but explicitly left `Support::Idempotency`
+alone. Auditing it found `#dedup` was never actually safe across
+processes: it called `idempotency_store.fetch(key)` then, separately,
+`idempotency_store.store(key, yield)` — two independent lock acquisitions
+on `FileStore` (each wrapped in its own `with_lock`/`flock`), with only an
+in-process `Mutex` in between. Two `portage` invocations racing the same
+idempotency key could both observe `NOT_FOUND` in the gap and both run the
+mutation — the exact double-charge §9a exists to prevent, on the store
+that's supposed to be the cross-process one.
+
+Fixed by adding `#fetch_or_store(key) { block }` to the `Store` interface —
+one lock acquisition spanning the whole check-then-set, not two.
+`FileStore` holds `LOCK_EX` across the read, the mutation, and the write;
+`MemoryStore` keeps its existing fetch-then-store shape unmodified, since
+there's no second process to race it there — `Idempotency#dedup`'s
+per-key `Mutex` already covers same-process callers. `#fetch`/`#store`
+stay on both stores' public interface (the conformance kit's
+`conformance_dedup_table` and existing specs use them directly) — only
+`dedup`'s own call path changed.
+
+Trade-off worth naming: `FileStore#fetch_or_store` holds the whole-file
+lock for the mutation's full duration, not just the metadata read/write, so
+two *different* keys now serialize behind whichever one is mid-mutation.
+Coarser than a per-key lock would give, but this store is documented for
+the single-host CLI case where that contention is rare, and correctness
+was the actual gap — a per-key file-lock scheme is more machinery than
+this warrants unless real contention shows up.
+
+Verified with a `Process.fork`-based spec (two real OS processes racing
+one key, `sleep 0.05` inside the block to widen the window) — fails
+against the pre-fix code (`NoMethodError` on the not-yet-existing
+`fetch_or_store`, confirming the test isn't vacuous) and passes after.
+
+Still open after this: §22 items 2's `Configuration#idempotency_provider`
+accessor itself (the race fix above closes the correctness gap but doesn't
+add the promised config-level seam — `idempotency_store=` per-instance
+injection is what exists today), 5 (sandbox credentials), and 6's console.
+7's scheduler remains correctly gated behind 2.
