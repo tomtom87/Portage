@@ -1,9 +1,9 @@
 PATH
   remote: ../portage-ucp-client
   specs:
-    portage-ucp-client (0.3.1)
+    portage-ucp-client (0.3.2)
       mcp (~> 0.24)
-      portage-ucp (~> 0.6)
+      portage-ucp (~> 0.7)
 
 PATH
   remote: ../portage-ucp-journal
@@ -13,7 +13,7 @@ PATH
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.6.0)
+    portage-ucp (0.7.0)
       base64 (~> 0.2)
       json_schemer (~> 2.5)
       mcp (~> 0.24)
@@ -22,8 +22,8 @@ PATH
 PATH
   remote: .
   specs:
-    portage-cli (0.4.1)
-      portage-ucp (~> 0.6)
+    portage-cli (0.5.0)
+      portage-ucp (~> 0.7)
       portage-ucp-client (~> 0.3)
       portage-ucp-journal (~> 0.1)
 
