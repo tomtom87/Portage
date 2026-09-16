@@ -113,7 +113,7 @@ module Portage
         return unless arguments[:mandate]
 
         Portage::Ucp::Ap2::MandateGuard.validate!(arguments[:mandate], trusted_keys: @mandate_trust_keys,
-                                                                        require_signature: @require_mandate_signature)
+                                                                       require_signature: @require_mandate_signature)
       end
 
       # Outbound counterpart to the above (design-log §33) — every adapter's
