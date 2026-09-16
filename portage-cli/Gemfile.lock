@@ -6,6 +6,11 @@ PATH
       portage-ucp (~> 0.6)
 
 PATH
+  remote: ../portage-ucp-journal
+  specs:
+    portage-ucp-journal (0.1.0)
+
+PATH
   remote: ../portage-ucp
   specs:
     portage-ucp (0.6.0)
@@ -20,6 +25,7 @@ PATH
     portage-cli (0.4.1)
       portage-ucp (~> 0.6)
       portage-ucp-client (~> 0.3)
+      portage-ucp-journal (~> 0.1)
 
 GEM
   remote: https://rubygems.org/
@@ -102,6 +108,7 @@ DEPENDENCIES
   portage-cli!
   portage-ucp!
   portage-ucp-client!
+  portage-ucp-journal!
   rspec (~> 3.13)
   rubocop (~> 1.88)
   webmock (~> 3.24)

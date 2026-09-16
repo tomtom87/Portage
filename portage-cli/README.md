@@ -39,11 +39,13 @@ portage compare https://your-shop.example --product-id prod_123 --results 5
 ```
 
 Depends on [`portage-ucp`](https://github.com/tomtom87/Portage/tree/main/portage-ucp)
-(for platform detection via `Resolver`) and
+(for platform detection via `Resolver`),
 [`portage-ucp-client`](https://github.com/tomtom87/Portage/tree/main/portage-ucp-client)
-(for the actual buy calls). No single adapter gem is a hard dependency — install
-whichever `portage-ucp-<platform>` gem matches the store you're integrated with,
-if any.
+(for the actual buy calls), and
+[`portage-ucp-journal`](https://github.com/tomtom87/Portage/tree/main/portage-ucp-journal)
+(for `portage-console`'s read-only view of local purchase state — see below).
+No single adapter gem is a hard dependency — install whichever
+`portage-ucp-<platform>` gem matches the store you're integrated with, if any.
 
 ## Installation
 
@@ -312,6 +314,39 @@ already refuses to commit against a merchant.
 Backends that have no credentials sit out; DuckDuckGo is the keyless default
 because it's the only no-key engine with a real API, and its narrowness is the
 price of not scraping.
+
+### Console
+
+`portage-console` is a separate executable — a read-only IRB REPL over the
+three local `~/.portage` stores (design-log §22 item 6): `TransactionLog`
+(reserve/complete records), `OrderLedger` (settled-order snapshots), and, if
+you've wired `journal:` into your own `Dispatcher` (nothing in this gem does
+that for you), the `portage-ucp-journal` gem's `PurchaseJournal`.
+
+```bash
+portage-console
+```
+
+```ruby
+transactions                       # every reserved/completed transaction
+transactions(shop: "your-shop.example")
+find_transaction("idem_key_123")
+transactions_since(Time.now - 86400, shop: "your-shop.example")
+
+orders                             # every settled-order snapshot
+find_order("order_123")
+
+journal                            # empty unless a Dispatcher was built with journal:
+```
+
+Every result is passed through `Portage::Ucp::Observability.redact` before
+it's returned — `payment_token`/`oauth_token`/`Authorization` and the PII
+fields on an order's fulfillment destinations never print, even in a REPL you
+trust. This is deliberately a local REPL, not the admin/web panel design-log
+§16 also describes: a browser is a new place for a token to leak, and the
+process holding a web panel also holds this machine's live platform admin
+credentials in its env — problems a REPL run by whoever already has shell
+access to this machine doesn't have.
 
 ## Development
 
