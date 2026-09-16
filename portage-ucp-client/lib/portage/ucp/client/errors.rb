@@ -23,6 +23,23 @@ module Portage
       # side, not the store's — so callers shouldn't treat it the same as
       # "no native UCP support" the way a 404 does.
       class ManifestShapeError < DiscoveryError; end
+
+      # Raised by Transports::Http when a call is made without
+      # `meta: { agent_profile: <url> }` — real UCP servers (confirmed
+      # against Shopify's 2026-08-25 rollout) fetch and verify this URL
+      # themselves to identify the calling agent, so there's no sane default
+      # to fall back to; better to fail here than pass `meta: nil` through
+      # to a 422 the server explains as `profile_unreachable`.
+      class MissingAgentProfileError < Error; end
+
+      # Raised by Transports::Http for a mutating call this gem can't yet
+      # build the real wire shape for — currently only `complete_checkout`,
+      # whose `checkout.payment.instruments` shape (Apple Pay/Shop
+      # Pay/card-token variants, each with its own required credential
+      # fields) can't be safely guessed without a real payment flow to test
+      # against. Raised instead of sending a best-effort shape that might
+      # silently misbehave with real money on the line.
+      class UnsupportedWireShapeError < Error; end
     end
   end
 end

@@ -6,6 +6,23 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Fixed `Transports::Http` sending every tool call in the flat, unwrapped
+  shape this gem's own Dispatcher/adapters speak — real UCP servers
+  (confirmed live against Shopify's 2026-08-25 rollout) reject it with a 422,
+  since they expect arguments nested under a capability key
+  (`catalog:`/`cart:`/`checkout:`) and a `meta.ucp-agent.profile` URL they
+  fetch themselves to verify the caller's identity. `Http` now builds that
+  real wire shape; `Loopback`/`Stdio` are unchanged, since the former talks
+  to this gem's own Dispatcher (still the flat shape by design) and the
+  latter has no confirmed real-world shape to fix. Callers must now pass
+  `meta: { agent_profile: <url> }`, or `MissingAgentProfileError` explains
+  what's missing instead of a bare 422.
+- Added `MissingAgentProfileError` and `UnsupportedWireShapeError`.
+  `complete_checkout` over HTTP raises the latter rather than guessing at
+  the real payment-instrument shape (Apple Pay/Shop Pay/card-token variants
+  each have distinct required credential fields) with no way to verify it
+  against a real payment flow.
+
 ## [0.3.3] - 2026-09-16
 
 - No behavior change — 0.3.2 was built and pushed with `gem build` run from
