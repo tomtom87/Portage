@@ -3,6 +3,7 @@ require "uri"
 require "json"
 require "portage/ucp"
 require "portage/ucp/client"
+require "portage/ucp/journal"
 require_relative "payment_methods"
 
 module Portage
@@ -127,8 +128,18 @@ module Portage
           Portage::Ucp::Capabilities::CHECKOUT.advertised_for?(adapter)
       end
 
+      # `journal:` closes design-log §37's named gap — `Mcp::Server.build`
+      # (and the `Loopback`/`Client.for_adapter` it sits behind) now forward
+      # a `journal:` kwarg straight to `Dispatcher`, but nothing on this own-
+      # store loopback path ever passed one, so `portage buy` against your
+      # own store settled real transactions/orders while leaving the journal
+      # `nil`. `PurchaseJournal.new`'s own default (`FileStore.new`) is
+      # `~/.portage/journal.jsonl` — the same "real file-backed default"
+      # posture `transaction_log:`/`order_ledger:` already get from
+      # `Dispatcher#initialize`.
       def client_for(adapter)
-        Portage::Ucp::Client.for_adapter(adapter, authenticator: PermissiveAuthenticator.new)
+        Portage::Ucp::Client.for_adapter(adapter, authenticator: PermissiveAuthenticator.new,
+                                                  journal: Portage::Ucp::Journal::PurchaseJournal.new)
       end
 
       def catalog_only_adapter(adapter, platform)
