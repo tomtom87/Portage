@@ -36,7 +36,8 @@ module Portage
       #   from core (§2: core stays dependency-light); a consumer wires
       #   one in from their own app after requiring that gem themselves.
       # @param mandate_trust_keys [Array<Hash>, #call, nil] forwarded to
-      #   Ap2::MandateGuard.validate! as `trusted_keys:`. `nil` by default —
+      #   Ap2::MandateGuard.validate! as `trusted_keys:`. Defaults to
+      #   Configuration#mandate_trusted_keys, which itself has no default —
       #   same reasoning as `journal`: this gem has no AP2 issuer keys of
       #   its own to default to, so an unconfigured Dispatcher gets
       #   shape-only mandate validation, not a silent skip of crypto a
@@ -44,10 +45,16 @@ module Portage
       #   adapter's own key store, or a resolver against the issuing
       #   agent's manifest) passes it here to get Ap2::MandateSignature's
       #   cryptographic check on every dispatch that carries a `mandate`.
+      # @param require_mandate_signature [Boolean] forwarded to
+      #   Ap2::MandateGuard.validate! as `require_signature:`. Defaults to
+      #   Configuration#require_mandate_signature (false) — set true to
+      #   make a dispatch with a `mandate` but no resolvable trust anchor
+      #   raise InvalidMandateError instead of downgrading to shape-only.
       def initialize(adapter:, registry: CapabilityRegistry.default, logger: Portage::Ucp.configuration.logger,
                      shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load,
                      confirmer: Confirmer::Terminal.new, order_ledger: Support::OrderLedger.new, journal: nil,
-                     mandate_trust_keys: nil)
+                     mandate_trust_keys: Portage::Ucp.configuration.mandate_trusted_keys,
+                     require_mandate_signature: Portage::Ucp.configuration.require_mandate_signature)
         @adapter = adapter
         @registry = registry
         @logger = logger
@@ -58,6 +65,7 @@ module Portage
         @order_ledger = order_ledger
         @journal = journal
         @mandate_trust_keys = mandate_trust_keys
+        @require_mandate_signature = require_mandate_signature
       end
 
       # @param correlation_id [String, nil] threaded through to the adapter
@@ -104,7 +112,8 @@ module Portage
         Portage::Ucp::PaymentTokenGuard.validate!(arguments[:payment_token]) if arguments.key?(:payment_token)
         return unless arguments[:mandate]
 
-        Portage::Ucp::Ap2::MandateGuard.validate!(arguments[:mandate], trusted_keys: @mandate_trust_keys)
+        Portage::Ucp::Ap2::MandateGuard.validate!(arguments[:mandate], trusted_keys: @mandate_trust_keys,
+                                                                        require_signature: @require_mandate_signature)
       end
 
       # Outbound counterpart to the above (design-log §33) — every adapter's
