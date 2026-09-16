@@ -2597,3 +2597,29 @@ closes.
 Still open after this: §22 item 5 (sandbox credentials) and item 7's
 scheduler (gated behind item 2's `Configuration#idempotency_provider`
 accessor). Item 6 itself is now fully closed.
+
+## 38. §37's journal-wiring gap, closed (2026-09-16)
+
+`Mcp::Server.build` now takes a `journal:` kwarg (default `nil`, same
+never-`require`d-from-core posture as `Dispatcher`'s own) and forwards it
+straight through to `Dispatcher.new`. `Loopback`/`Client.for_adapter`
+already forwarded `**server_opts` to `Server.build` before this change, so
+naming `journal:` explicitly there (rather than leaving it to fall
+through the splat) is the only new surface — any existing caller already
+passing `journal:` through `Client.for_adapter` picks this up for free.
+
+`Buy#client_for` — the one place `portage-cli`'s own-store loopback path
+builds a session — now passes `journal: Portage::Ucp::Journal::PurchaseJournal.new`.
+`portage-cli` already runtime-depends on `portage-ucp-journal` (`~> 0.1`,
+for `portage-console`'s read-only view, §37), so this is a `require` plus
+one kwarg, not a new dependency. `PurchaseJournal.new`'s own default
+(`FileStore.new`, `~/.portage/journal.jsonl`) gives `portage buy` against
+your own store the same "populates a real file on every loopback buy"
+behavior `transaction_log`/`order_ledger` already had — `journal.jsonl`
+now gets real entries alongside `transactions.json`/`orders.json` instead
+of staying empty.
+
+Native UCP buys (`Buy#native_flow`, no adapter/loopback involved) are
+unaffected — there's no local `Dispatcher` on that path to hand a journal
+to; a remote UCP server's own journal-wiring, if any, is that server's
+call.
