@@ -71,6 +71,9 @@ module Portage
         private_class_method :trust_key!
 
         def self.curve_for!(jwk)
+          kty = jwk["kty"] || jwk[:kty]
+          raise Portage::Ucp::InvalidMandateError, "unsupported key type #{kty.inspect}" unless kty == "EC"
+
           crv = jwk["crv"] || jwk[:crv]
           CURVES.fetch(crv) { raise Portage::Ucp::InvalidMandateError, "unsupported curve #{crv.inspect}" }
         end
