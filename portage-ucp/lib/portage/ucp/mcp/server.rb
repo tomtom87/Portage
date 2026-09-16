@@ -13,12 +13,20 @@ module Portage
         # doesn't need one keyword argument per collaborator.
         Context = Struct.new(:dispatcher, :authenticator, :rate_limiter, :logger, keyword_init: true)
 
+        # @param journal [#record_checkout, nil] forwarded straight to
+        #   `Dispatcher.new` (see its own doc comment) — `nil` by default and
+        #   never `require`d from core (§2), same as `Dispatcher` itself.
+        #   Named here explicitly, rather than left to fall through
+        #   `**server_opts`, so a consumer wiring a real journal through
+        #   `Client.for_adapter`/`Loopback` (both already forward
+        #   `**server_opts` here) has a documented seam to do it at (§37).
         def self.build(adapter:, registry: Portage::Ucp.configuration.registry,
                        authenticator: Portage::Ucp.configuration.authenticator,
                        rate_limiter: Portage::Ucp.configuration.rate_limiter,
-                       logger: Portage::Ucp.configuration.logger, **server_opts)
+                       logger: Portage::Ucp.configuration.logger, journal: nil, **server_opts)
           context = Context.new(
-            dispatcher: Portage::Ucp::Dispatcher.new(adapter: adapter, registry: registry, logger: logger),
+            dispatcher: Portage::Ucp::Dispatcher.new(adapter: adapter, registry: registry, logger: logger,
+                                                     journal: journal),
             authenticator: authenticator, rate_limiter: rate_limiter, logger: logger
           )
           tools = registry.advertised(adapter).flat_map do |capability|
