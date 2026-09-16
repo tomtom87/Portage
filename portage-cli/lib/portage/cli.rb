@@ -9,6 +9,7 @@ require_relative "cli/find"
 require_relative "cli/compare"
 require_relative "cli/history"
 require_relative "cli/payment_methods"
+require_relative "cli/doctor"
 
 module Portage
   # `portage` — the single command-line entrypoint for acting as a shopper's
@@ -37,23 +38,21 @@ module Portage
                                  [--rolling-cap N --rolling-window-seconds N --currency CUR]
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
+             portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
     USAGE
+
+    COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
+                 "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
+                 "doctor" => :run_doctor }.freeze
 
     # @param argv [Array<String>]
     # @return [Integer] process exit code
     def self.run(argv)
       command, *rest = argv
-      case command
-      when "buy" then run_buy(rest)
-      when "find" then run_find(rest)
-      when "compare" then run_compare(rest)
-      when "history" then run_history(rest)
-      when "payment" then run_payment(rest)
-      when "policy" then run_policy(rest)
-      else
-        warn USAGE
-        1
-      end
+      return send(COMMANDS[command], rest) if COMMANDS.key?(command)
+
+      warn USAGE
+      1
     end
 
     # --- find ---
@@ -516,6 +515,37 @@ module Portage
       end
     end
     private_class_method :format_payment_enroll
+
+    # --- doctor ---
+
+    def self.parse_doctor_options(argv)
+      opts = {}
+      OptionParser.new do |parser|
+        parser.on("--require FILE") { |v| opts[:require] = v }
+        parser.on("--adapter CLASS_NAME") { |v| opts[:adapter] = v }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+      opts
+    end
+    private_class_method :parse_doctor_options
+
+    def self.run_doctor(argv)
+      opts = parse_doctor_options(argv)
+      require File.expand_path(opts[:require]) if opts[:require]
+      adapter_class = opts[:adapter] && Object.const_get(opts[:adapter])
+
+      findings = Doctor.new(adapter_class: adapter_class).call
+      puts opts[:json] ? JSON.pretty_generate(findings.map(&:to_h)) : format_doctor(findings)
+      findings.empty? ? 0 : 1
+    end
+    private_class_method :run_doctor
+
+    def self.format_doctor(findings)
+      return "No issues found." if findings.empty?
+
+      findings.map { |f| "[#{f.check}] #{f.message}" }.join("\n")
+    end
+    private_class_method :format_doctor
 
     # --- output ---
 
