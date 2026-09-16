@@ -70,9 +70,22 @@ module Portage
       end
       private_class_method :fetch_manifest
 
+      # Real UCP manifests (confirmed live on Casper, Allbirds, Glossier, and
+      # 34+ other Shopify UCP rollouts as of "2026-08-25") nest everything one
+      # level deeper under a "ucp" key. This gem's own server side
+      # (Portage::Ucp::Manifest) still emits the old flat shape, so both are
+      # supported rather than picking one — see docs/well-known-ucp.md.
+      def self.ucp_section(manifest)
+        manifest["ucp"] || manifest
+      end
+      private_class_method :ucp_section
+
       def self.mcp_endpoint(manifest)
-        service = Array(manifest["services"]).find { |s| s["transport"] == "mcp" }
-        endpoint = service && service["endpoint"]
+        services = ucp_section(manifest)["services"]
+        entries = services.is_a?(Hash) ? services.values.flatten : Array(services)
+        endpoint = entries.select { |s| s["transport"] == "mcp" }
+                          .max_by { |s| s["version"].to_s }
+                          &.fetch("endpoint", nil)
         raise DiscoveryError, "manifest has no mcp service entry to connect to" unless endpoint
 
         endpoint
@@ -80,7 +93,8 @@ module Portage
       private_class_method :mcp_endpoint
 
       def self.capability_names(manifest)
-        Array(manifest["capabilities"]).map { |c| c["name"] }
+        capabilities = ucp_section(manifest)["capabilities"]
+        capabilities.is_a?(Hash) ? capabilities.keys : Array(capabilities).map { |c| c["name"] }
       end
       private_class_method :capability_names
     end
