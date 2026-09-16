@@ -62,6 +62,31 @@ RSpec.describe Portage::Ucp::Support::Idempotency do
     expect(store.include?("key-1")).to be(true)
   end
 
+  it "falls back to Portage::Ucp.configuration.idempotency_provider when no store is injected" do
+    configured_store = Portage::Ucp::Support::Idempotency::MemoryStore.new
+    Portage::Ucp.configure { |c| c.idempotency_provider = configured_store }
+
+    mutator.charge("key-1")
+
+    expect(configured_store.include?("key-1")).to be(true)
+  ensure
+    Portage::Ucp.instance_variable_set(:@configuration, nil)
+  end
+
+  it "prefers an explicitly injected store over Portage::Ucp.configuration.idempotency_provider" do
+    configured_store = Portage::Ucp::Support::Idempotency::MemoryStore.new
+    injected_store = Portage::Ucp::Support::Idempotency::MemoryStore.new
+    Portage::Ucp.configure { |c| c.idempotency_provider = configured_store }
+    mutator.idempotency_store = injected_store
+
+    mutator.charge("key-1")
+
+    expect(injected_store.include?("key-1")).to be(true)
+    expect(configured_store.include?("key-1")).to be(false)
+  ensure
+    Portage::Ucp.instance_variable_set(:@configuration, nil)
+  end
+
   it "runs the block once when two threads race on the same key" do
     ready = Queue.new
     release = Queue.new
