@@ -56,4 +56,37 @@ task :spec do
   end
 end
 
+desc "Build a gem from its own directory and smoke-test that the built " \
+     "package installs and requires cleanly (postmortem for the 0.7.0-line " \
+     "yank: `gem build` run from the workspace root resolved every " \
+     "gemspec's `Dir[\"lib/**/*.rb\"]` against the wrong cwd, so all ten " \
+     "packages shipped with no `lib/` and nobody noticed before pushing)"
+task :release_check, [:gem_dir] do |_t, args|
+  gem_dir = args[:gem_dir]
+  abort "usage: rake release_check[portage-ucp]" unless gem_dir
+  abort "no such gem dir: #{gem_dir}" unless GEMS.include?(gem_dir)
+
+  require "tmpdir"
+  require "fileutils"
+
+  Dir.mktmpdir do |tmp|
+    gem_file = Dir.chdir(gem_dir) do
+      sh "gem build #{gem_dir}.gemspec"
+      built = Dir.glob("#{gem_dir}-*.gem").max_by { |f| File.mtime(f) }
+      abort "gem build produced no .gem file in #{gem_dir}/ — check the gemspec" unless built
+      FileUtils.mv(built, tmp)
+      built
+    end
+
+    install_dir = File.join(tmp, "install")
+    sh "gem install --local --install-dir #{install_dir} #{File.join(tmp, gem_file)}"
+
+    gem_lib = Dir.glob(File.join(install_dir, "gems", "#{gem_dir}-*", "lib")).first
+    abort "installed gem has no lib/ — this is exactly the 0.7.0-line bug" unless gem_lib
+
+    require_name = gem_dir.tr("-", "/")
+    sh "ruby -I #{gem_lib} -e \"require '#{require_name}'\" && echo '#{gem_dir}: require OK'"
+  end
+end
+
 task default: :spec

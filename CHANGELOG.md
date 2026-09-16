@@ -17,7 +17,9 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   the wrong working directory, so every 0.7.0-line package shipped empty
   (no `lib/`). All ten 0.7.0-line versions have been yanked; this release
   repackages the exact same code, correctly, one patch version up from
-  each.
+  each. Release checklist now builds from each gem directory and
+  smoke-tests `require` after install (`rake release_check[gem_dir]`, see
+  README's "Releasing a gem").
 
 ## [0.7.0] - 2026-09-16
 
