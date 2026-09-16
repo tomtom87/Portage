@@ -13,8 +13,9 @@ Gem::Specification.new do |spec|
                      "Search engine which stores might sell something, keep the ones answering " \
                      "/.well-known/ucp, and search their catalogs — documented APIs only, no SERP scraping. " \
                      "Depends on " \
-                     "portage-ucp (for platform detection via Resolver) and portage-ucp-client (for the " \
-                     "actual buy calls); no single adapter gem is a hard dependency."
+                     "portage-ucp (for platform detection via Resolver), portage-ucp-client (for the " \
+                     "actual buy calls), and portage-ucp-journal (for `portage-console`'s read-only view of " \
+                     "local purchase/transaction/order state); no single adapter gem is a hard dependency."
   spec.authors = ["Tom Whitbread"]
   spec.license = "MIT"
   spec.homepage = "https://github.com/tomtom87/Portage/tree/main/portage-cli"
@@ -27,6 +28,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "portage-ucp", "~> 0.6"
   spec.add_dependency "portage-ucp-client", "~> 0.3"
+  spec.add_dependency "portage-ucp-journal", "~> 0.1"
 
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.88"

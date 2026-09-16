@@ -6,6 +6,16 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Added `portage-console` — a read-only IRB REPL over the local
+  `TransactionLog`/`OrderLedger`/`PurchaseJournal` stores (design-log §22
+  item 6, `Portage::Cli::Console`). `transactions`/`find_transaction`/
+  `transactions_since`, `orders`/`find_order`, and `journal` (empty unless a
+  consumer's own `Dispatcher` was built with `journal:` — nothing in this
+  gem wires that up). Every result passes through
+  `Portage::Ucp::Observability.redact`. Deliberately a local REPL, not the
+  admin/web panel design-log §16 also describes — see the README's Console
+  section for why. New runtime dependency on `portage-ucp-journal` (`~> 0.1`).
+
 ## [0.4.1] - 2026-09-15
 
 - No behavior change — widens the `portage-ucp` dependency pin to `~> 0.6`
