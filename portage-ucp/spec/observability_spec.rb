@@ -56,4 +56,44 @@ RSpec.describe Portage::Ucp::Observability do
     logged = JSON.parse(io.string.lines.last)
     expect(logged["quantity"]).to eq(2)
   end
+
+  describe "opt-in OTel span emission" do
+    let(:tracer) { double("tracer") }
+
+    around do |example|
+      previous = Portage::Ucp.configuration.tracer
+      example.run
+      Portage::Ucp.configuration.tracer = previous
+    end
+
+    it "never calls a tracer when none is configured" do
+      Portage::Ucp.configuration.tracer = nil
+
+      expect { described_class.log(logger, "tool_called", capability: "dev.ucp.shopping.cart") }.not_to raise_error
+    end
+
+    it "emits a span with the event name and flattened, already-redacted attributes" do
+      Portage::Ucp.configuration.tracer = tracer
+      allow(tracer).to receive(:in_span).and_yield
+
+      described_class.log(logger, "tool_called",
+                          capability: "dev.ucp.shopping.cart",
+                          arguments: { quantity: 2, payment_token: "tok_live_secret" })
+
+      expect(tracer).to have_received(:in_span).with(
+        "tool_called",
+        attributes: { "capability" => "dev.ucp.shopping.cart", "arguments.quantity" => 2,
+                      "arguments.payment_token" => "[REDACTED]" }
+      )
+    end
+
+    it "stringifies array attributes and drops nil ones, since OTel attributes can't hold either" do
+      Portage::Ucp.configuration.tracer = tracer
+      allow(tracer).to receive(:in_span).and_yield
+
+      described_class.log(logger, "batch", ids: [1, 2], skipped: nil)
+
+      expect(tracer).to have_received(:in_span).with("batch", attributes: { "ids" => %w[1 2] })
+    end
+  end
 end
