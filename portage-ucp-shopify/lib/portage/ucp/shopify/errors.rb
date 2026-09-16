@@ -11,8 +11,14 @@ module Portage
       # rejection (e.g. "line item not found").
       class GraphqlError < Error
         def initialize(errors)
-          @errors = errors
-          super(errors.map { |e| e["message"] }.join("; "))
+          # Normally an array of {"message" => ...} objects, but an
+          # authentication rejection (confirmed live: an expired/invalid
+          # admin token) skips GraphQL's own error shape entirely and sends
+          # a bare string instead — e.g. {"errors":"[API] Invalid API key
+          # or access token..."}. Wrapping it here keeps #message and
+          # #throttled? working either way instead of crashing on `#map`.
+          @errors = errors.is_a?(String) ? [{ "message" => errors }] : errors
+          super(@errors.map { |e| e["message"] }.join("; "))
         end
 
         # Shopify's cost-throttling reports THROTTLED as a top-level error's

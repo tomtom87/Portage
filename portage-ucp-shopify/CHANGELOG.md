@@ -6,6 +6,11 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Fix `GraphqlError` crashing with `NoMethodError` instead of surfacing the
+  real message when Shopify's `errors` field is a bare string rather than
+  the usual array of objects (confirmed live on an expired/invalid admin
+  token).
+
 ## [0.4.1] - 2026-09-15
 
 - No behavior change — widens the `portage-ucp` dependency pin to `~> 0.6`
