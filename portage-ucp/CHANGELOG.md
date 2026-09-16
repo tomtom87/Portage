@@ -4,8 +4,55 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.7.0] - 2026-09-16
 
+- Added `Ap2::MandateSignature` — real ECDSA (P-256/P-384) verification of a
+  `PaymentMandate#signature` against a JWK trust-anchor set (an array of JWKs,
+  or a `#call(kid)` resolver), reusing the same wire conventions as the
+  existing RFC 9421 `Security::Signature`. `MandateGuard.validate!` gains a
+  `require_signature:` (default `false`) fail-closed option — with it set,
+  a mandate that no trust key can verify raises `InvalidMandateError` instead
+  of silently falling back to shape-only validation. `Configuration` gains
+  `mandate_trusted_keys`/`require_mandate_signature` accessors, and
+  `Dispatcher.new` gains matching `mandate_trust_keys:`/
+  `require_mandate_signature:` kwargs. 0.6.0 shipped AP2 mandates shape-only
+  ("no cryptographic verification" — see that entry below); this closes the
+  gap. Also hardens the shape-only path itself: rejects non-EC JWKs before
+  trusting `crv`/`x`/`y`, rescues `ArgumentError` in `decode_base64url` so a
+  malformed base64url value raises `InvalidMandateError` rather than
+  crashing, and stops leaking the raw curve/digest hash into the
+  wrong-length error message.
+- Closed a cross-process idempotency race: `FileStore` gains
+  `#fetch_or_store`, an atomic check-then-set under one `LOCK_EX` (the
+  previous fetch-then-store used two separate lock acquisitions, leaving a
+  window for a duplicate charge). `Idempotency#dedup` now goes through it.
+  `FileStore` persistence now writes to a temp file and `File.rename`s it
+  into place instead of truncating in place, and locks a sidecar `.lock`
+  file rather than the data file itself, so a lock held across a rename
+  can't go stale. A poisoned or truncated data file is now rescued and
+  treated as empty on read instead of permanently breaking every subsequent
+  `portage` invocation. `Configuration` gains `idempotency_provider` so a
+  caller can share one store process-wide instead of every
+  `Idempotency`-including instance getting its own fresh `MemoryStore`.
+  Per-key idempotency locks and `SessionLock`'s per-session locks are now
+  refcounted and reaped after use instead of growing unbounded for the life
+  of a long-running process.
+- Added `Rails::Railtie` and a `rails g portage:ucp:install` generator,
+  guarded so they only load when Rails is already present (the gemspec adds
+  no Rails dependency of its own) — writes a `config/initializers/
+  portage_ucp.rb` stub and mounts the manifest/webhook Rack endpoints with
+  TODO placeholders for a Rails host to fill in.
+- Added opt-in OpenTelemetry span emission: `Configuration#tracer` (`nil` by
+  default, no OTel dependency added). When set to something responding to
+  `#in_span(name, attributes:)`, `Observability.log` also emits a span
+  alongside its existing JSON logging; a no-op otherwise.
+- `Mcp::Server.build` now names `journal:` explicitly rather than leaving it
+  to fall through `**server_opts`, forwarding it straight to
+  `Dispatcher.new` — `Client.for_adapter`/`Loopback` already splatted
+  `server_opts` through, but nothing constructed a `Dispatcher` with a
+  journal regardless of what a caller passed. Closes design-log §37's named
+  gap; see `portage-cli`'s own changelog for the loopback buy path this now
+  lets `portage-cli` wire up.
 - Added `#each_record`/`#all` to `TransactionLog`/`OrderLedger` (and to both
   classes' `Store` abstraction) — read-only enumeration over every stored
   record, additive alongside the existing keyed `#find`/`#completed_since`.
