@@ -23,7 +23,9 @@ module Portage
       REDACTED = "[REDACTED]".freeze
 
       def self.log(logger, event, **fields)
-        logger.info(JSON.generate({ event: event }.merge(redact(fields))))
+        redacted = redact(fields)
+        logger.info(JSON.generate({ event: event }.merge(redacted)))
+        emit_span(event, redacted)
       end
 
       def self.redact(value)
@@ -36,6 +38,44 @@ module Portage
           value
         end
       end
+
+      # Opt-in only — no OTel dependency in the gemspec, so this never fires
+      # unless a consumer sets Configuration#tracer to something responding
+      # to #in_span(name, attributes:), e.g.
+      # `OpenTelemetry.tracer_provider.tracer("portage-ucp")`. The JSON-to-
+      # Logger path above is unconditional and unaffected either way — this
+      # is an additional emitter over the same already-redacted event set,
+      # not a replacement for it.
+      def self.emit_span(event, fields)
+        tracer = Portage::Ucp.configuration.tracer
+        return unless tracer
+
+        # The span exists to record that this event happened, not to wrap
+        # any work of its own — #log is a fire-and-forget instrumentation
+        # call, so there's nothing to put in the block.
+        tracer.in_span(event, attributes: flatten_attributes(fields)) {} # rubocop:disable Lint/EmptyBlock
+      end
+      private_class_method :emit_span
+
+      # OTel span attributes must be a flat String => String/Numeric/Boolean
+      # (or homogeneous array thereof) map — nested hashes aren't valid, so
+      # this dot-joins nested keys instead of shipping them as-is.
+      def self.flatten_attributes(fields, prefix = nil)
+        fields.each_with_object({}) do |(key, value), attrs|
+          full_key = prefix ? "#{prefix}.#{key}" : key.to_s
+          case value
+          when Hash
+            attrs.merge!(flatten_attributes(value, full_key))
+          when Array
+            attrs[full_key] = value.map(&:to_s)
+          when nil
+            next
+          else
+            attrs[full_key] = value
+          end
+        end
+      end
+      private_class_method :flatten_attributes
     end
   end
 end

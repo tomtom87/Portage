@@ -12,6 +12,13 @@ module Portage
                     :business, :signer, :payment_handlers, :signing_keys, :services,
                     :mandate_trusted_keys, :require_mandate_signature
 
+      # Unset by default — the gem has no OTel dependency of its own
+      # (Observability's JSON-to-Logger path needs nothing else). Set to
+      # anything responding to #in_span(name, attributes:) to also emit a
+      # span per Observability.log call, e.g.
+      # `Portage::Ucp.configuration.tracer = OpenTelemetry.tracer_provider.tracer("portage-ucp")`.
+      attr_accessor :tracer
+
       # idempotency_provider has no default set here, unlike the other
       # collaborators above — Support::Idempotency#idempotency_store falls
       # back to a fresh per-instance MemoryStore when this is unset, so
