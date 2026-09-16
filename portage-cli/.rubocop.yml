@@ -19,6 +19,10 @@ Metrics/BlockLength:
 
 Metrics/MethodLength:
   Max: 15
+  # Each write_* method is a literal template being heredoc'd to disk —
+  # length there is the file being scaffolded, not branching logic.
+  Exclude:
+    - "lib/portage/cli/generate/adapter.rb"
 
 Metrics/AbcSize:
   Max: 25
@@ -42,6 +46,10 @@ Metrics/ClassLength:
     # freeze/revoke plus store-discovery, one class per Phase 1's whole
     # payment-method-store algorithm (docs/plans/agentic-payments.md).
     - "lib/portage/cli/payment_methods.rb"
+    # One `write_*` method per scaffolded file (gemspec/Gemfile/Rakefile/
+    # rubocop config/lib entrypoint/version/adapter/spec_helper/conformance
+    # spec) — breadth of one template file each, not a class doing too much.
+    - "lib/portage/cli/generate/adapter.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and
