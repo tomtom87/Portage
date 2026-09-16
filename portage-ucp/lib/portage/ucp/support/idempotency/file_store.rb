@@ -7,8 +7,14 @@ module Portage
         # Cross-process, cross-restart store for the common CLI case: one
         # host, potentially many `portage` invocations, no shared server to
         # hold an in-memory table for them. A single file under `flock`
-        # stands in for that — every read/write acquires the lock so two
-        # processes racing on the same key don't both run the mutation.
+        # stands in for that. `#fetch`/`#store` each acquire the lock for
+        # their own call only, so pairing them (the old `Idempotency#dedup`
+        # shape) leaves a window between the two acquisitions where a second
+        # process can also read NOT_FOUND and also run the mutation — dedup
+        # now goes through `#fetch_or_store` instead, which holds one lock
+        # across the whole check-then-set and is what actually gives two
+        # processes racing on the same key the guarantee that only one of
+        # them runs it.
         #
         # Marshal, not JSON: dedup'd return values are arbitrary adapter
         # domain objects (Data.define value objects, nested structures) that
@@ -40,6 +46,27 @@ module Portage
 
           def include?(key)
             with_lock(File::LOCK_SH) { |data, _file| data.key?(key) }
+          end
+
+          # Atomic check-then-set, unlike calling `fetch` then `store`: those
+          # are two separate `with_lock` acquisitions, so the shared lock is
+          # released between them and a second process can read NOT_FOUND in
+          # the gap and run the same mutation — the exact double-charge §9a
+          # exists to prevent. Holding one `LOCK_EX` across the read, the
+          # block (the actual mutation), and the write closes that window.
+          # Coarser-grained than a per-key lock — this blocks *every* key on
+          # the file while one mutation is in flight, not just this one — but
+          # correctness beats throughput for a single-host CLI process, and
+          # that's the case this store is documented for.
+          def fetch_or_store(key)
+            with_lock(File::LOCK_EX) do |data, file|
+              next data[key] if data.key?(key)
+
+              value = yield
+              data[key] = value
+              persist(data, file)
+              value
+            end
           end
 
           private
