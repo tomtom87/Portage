@@ -61,6 +61,14 @@ module Portage
 
       def discover(url)
         Portage::Ucp::Client.discover(url.to_s)
+      rescue Portage::Ucp::Client::ManifestShapeError => e
+        # The store *is* running UCP — this client just couldn't parse its
+        # manifest. Distinct from a genuine 404/unreachable host below:
+        # falling through silently there would hide a bug in this gem behind
+        # the same "no automated path" message a store with no UCP support
+        # gets, so this warns instead.
+        warn "portage: #{url} serves a UCP manifest this client couldn't parse (#{e.message})"
+        nil
       rescue Portage::Ucp::Client::DiscoveryError
         nil
       end

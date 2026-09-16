@@ -155,6 +155,18 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:message]).to include("visit")
     end
 
+    it "warns (rather than silently swallowing) a manifest this client couldn't parse, then falls through" do
+      allow(Portage::Ucp::Client).to receive(:discover)
+        .and_raise(Portage::Ucp::Client::ManifestShapeError, "manifest has no mcp service entry to connect to")
+      stub_request(:get, "https://shop.example/").to_return(status: 200, body: "<html>hello</html>")
+
+      report = nil
+      expect { report = described_class.new(url: "shop.example", query: "cold").call }
+        .to output(/shop\.example.*couldn't parse/).to_stderr
+
+      expect(report[:source]).to eq("none")
+    end
+
     it "reports a dead end when nothing recognizable is found at all" do
       allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
       stub_request(:get, "https://shop.example/").to_return(status: 200, body: "<html>hello</html>")
