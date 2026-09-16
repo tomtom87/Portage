@@ -39,8 +39,7 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   seller's `Portage::Ucp.configuration`), and wiring a real
   `PurchaseJournal` into `portage buy`'s own-store loopback path — that path
   previously left the journal empty even though `portage-console` above
-  could read one. New runtime dependency on `portage-ucp-journal` (`~> 0.1`,
-  still unpublished — see 0.6.0's entry below).
+  could read one. New runtime dependency on `portage-ucp-journal` (`~> 0.1`).
 - `portage-ucp-shopify` bumps to 0.4.2 for a fix to `GraphqlError` crashing
   instead of surfacing Shopify's real message when `errors` comes back as a
   bare string, plus a new live-store buyer-journey spec.
@@ -50,8 +49,7 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   `portage-ucp` 0.7.0: their previously-published `~> 0.6` pin is
   pessimistic and excludes 0.7.x. `portage-ucp-journal`'s `portage-ucp`
   dependency (development-only, not a runtime dependency) also widens to
-  `~> 0.7` in its gemspec, with no release of its own needed since it
-  remains unpublished.
+  `~> 0.7` in its gemspec, published as 0.1.0.
 
 ## [0.6.0] - 2026-09-15
 
@@ -89,9 +87,9 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   gate (POST + poll, or a caller-supplied `wait:` callback), alongside the
   existing `Terminal`/`AutoApprove` confirmers. See `portage-ucp`'s own
   `CHANGELOG.md`.
-- `portage-ucp-journal` is a new gem (0.1.0, not yet published to
-  RubyGems): a buyer-side purchase journal plus the injectable `Store`
-  abstraction `portage-ucp`'s own `Store`/`FileStore` split now mirrors.
+- `portage-ucp-journal` is a new gem (0.1.0): a buyer-side purchase journal
+  plus the injectable `Store` abstraction `portage-ucp`'s own
+  `Store`/`FileStore` split now mirrors.
 - `portage-cli` bumps to 0.4.1, `portage-ucp-client` to 0.3.1,
   `portage-ucp-shopify` to 0.4.1, and `portage-ucp-wix` to 0.1.1 — pin-only
   releases (no behavior change) so each can install alongside `portage-ucp`
