@@ -50,4 +50,48 @@ RSpec.describe Portage::Ucp::Support::Idempotency::FileStore do
     fresh.store("k2", "order-2")
     expect(store.fetch("k2")).to eq("order-2")
   end
+
+  describe "#fetch_or_store" do
+    it "returns the yielded value and persists it when the key is absent" do
+      expect(store.fetch_or_store("k1") { "computed" }).to eq("computed")
+      expect(store.fetch("k1")).to eq("computed")
+    end
+
+    it "returns the cached value without re-yielding when the key is present" do
+      store.store("k1", "first")
+
+      expect(store.fetch_or_store("k1") { raise "must not run twice" }).to eq("first")
+    end
+
+    it "runs the mutation exactly once across two racing processes (fork)" do
+      skip "fork not supported on this platform" unless Process.respond_to?(:fork)
+
+      pipes = 2.times.map { IO.pipe }
+      readers = pipes.map(&:first)
+      writers = pipes.map(&:last)
+
+      pids = 2.times.map do |i|
+        Process.fork do
+          readers.each(&:close)
+          (writers - [writers[i]]).each(&:close)
+
+          result = described_class.new(path: @path).fetch_or_store("shared-key") do
+            sleep 0.05 # widen the race window past what a real HTTP call would need
+            "ran-in-pid-#{Process.pid}"
+          end
+
+          writers[i].write(result)
+          writers[i].close
+        end
+      end
+
+      writers.each(&:close)
+      results = readers.map(&:read)
+      readers.each(&:close)
+      pids.each { |pid| Process.wait(pid) }
+
+      expect(results.uniq.size).to eq(1), "both processes ran the mutation: #{results.inspect}"
+      expect(store.fetch("shared-key")).to eq(results.first)
+    end
+  end
 end

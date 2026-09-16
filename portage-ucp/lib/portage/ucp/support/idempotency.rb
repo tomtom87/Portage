@@ -37,17 +37,20 @@ module Portage
 
         private
 
-        def dedup(idempotency_key)
+        def dedup(idempotency_key, &block)
           init_idempotency_locks!
 
           key_lock = @idempotency_mutex.synchronize { @idempotency_locks[idempotency_key] ||= Mutex.new }
 
-          key_lock.synchronize do
-            cached = idempotency_store.fetch(idempotency_key)
-            next cached unless cached.equal?(NOT_FOUND)
-
-            idempotency_store.store(idempotency_key, yield)
-          end
+          # `key_lock` only serializes threads inside *this* process — it can't
+          # stop a second `portage` invocation (a second process, its own
+          # Mutex) from racing this one. That's the store's job: `fetch` then
+          # `store` as two separate calls (the old shape here) is two separate
+          # lock acquisitions on `FileStore`, so both processes can observe
+          # NOT_FOUND and both run `yield` — the double-charge §9a exists to
+          # prevent. `fetch_or_store` does the whole check-then-set under one
+          # lock acquisition instead.
+          key_lock.synchronize { idempotency_store.fetch_or_store(idempotency_key, &block) }
         end
 
         def idempotency_store
