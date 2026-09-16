@@ -10,13 +10,26 @@ module Portage
     class Configuration
       attr_accessor :registry, :authenticator, :rate_limiter, :logger,
                     :business, :signer, :payment_handlers, :signing_keys, :services,
-                    :idempotency_provider, :mandate_trusted_keys, :require_mandate_signature
+                    :mandate_trusted_keys, :require_mandate_signature
 
       # idempotency_provider has no default set here, unlike the other
       # collaborators above — Support::Idempotency#idempotency_store falls
       # back to a fresh per-instance MemoryStore when this is unset, so
       # setting it is an opt-in to a shared/process-wide store rather than
       # a default every adapter instance would otherwise get for free.
+      #
+      # WARNING: Support::Idempotency::FileStore#fetch_or_store holds one
+      # flock across the *entire* dedup'd call, including any network I/O
+      # the block does. That's fine for the single-host CLI it's documented
+      # for (one process at a time, effectively), but this attribute is
+      # process-wide Configuration — set FileStore here in a multi-request
+      # server and every checkout across every request/thread serializes
+      # behind that one lock. FileStore also has no TTL/eviction: the
+      # backing file grows forever, one entry per idempotency key ever
+      # seen. Don't set this to FileStore outside a short-lived CLI
+      # process; a long-lived server needs a store with per-key locking
+      # and eviction instead.
+      attr_accessor :idempotency_provider
 
       # mandate_trusted_keys is likewise unset by default (see
       # Dispatcher's mandate_trust_keys doc / Ap2::MandateGuard) — this gem
