@@ -58,6 +58,11 @@ Metrics/ParameterLists:
     # components, created) a spec needs to construct arbitrary test
     # signatures — same rationale, test-fixture side.
     - "spec/support/signing_helper.rb"
+    # Server.build takes one keyword per collaborator it wires into Context/
+    # Dispatcher (registry, authenticator, rate_limiter, logger, journal) —
+    # same one-keyword-per-injectable rationale as dispatcher.rb above, which
+    # journal: (§37) now shares.
+    - "lib/portage/ucp/mcp/server.rb"
 
 Style/HashSlice:
   Enabled: false
