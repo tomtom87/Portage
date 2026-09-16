@@ -7,6 +7,40 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.7.0] - 2026-09-16
+
+- `portage-ucp` bumps to 0.7.0: cryptographic AP2 mandate signature
+  verification (`Ap2::MandateSignature`, real ECDSA against a JWK trust-anchor
+  set, plus a `require_signature:` fail-closed option on `MandateGuard`,
+  closing the gap 0.6.0's shape-only mandate validation left open), a
+  cross-process idempotency race fix (`FileStore#fetch_or_store`, atomic
+  temp-file-plus-rename persistence, a poisoned-file rescue, reaped per-key/
+  per-session locks, and a new `Configuration#idempotency_provider`), a
+  `Rails::Railtie` + `rails g portage:ucp:install` generator, opt-in
+  OpenTelemetry span emission alongside the existing JSON logging, and
+  `Mcp::Server.build(journal:)` — naming the seam `portage-cli` now wires a
+  real journal through (see below) — plus `#each_record`/`#all` on
+  `TransactionLog`/`OrderLedger`. See `portage-ucp`'s own `CHANGELOG.md`.
+- `portage-cli` bumps to 0.5.0 for `portage-console` (a read-only IRB REPL
+  over the local transaction/order/journal stores), `portage generate
+  adapter` (scaffolds a new adapter gem), `portage doctor` (sanity-checks a
+  seller's `Portage::Ucp.configuration`), and wiring a real
+  `PurchaseJournal` into `portage buy`'s own-store loopback path — that path
+  previously left the journal empty even though `portage-console` above
+  could read one. New runtime dependency on `portage-ucp-journal` (`~> 0.1`,
+  still unpublished — see 0.6.0's entry below).
+- `portage-ucp-shopify` bumps to 0.4.2 for a fix to `GraphqlError` crashing
+  instead of surfacing Shopify's real message when `errors` comes back as a
+  bare string, plus a new live-store buyer-journey spec.
+- `portage-ucp-client`, `portage-ucp-wix`, `portage-ucp-bigcommerce`,
+  `-woocommerce`, `-etsy`, `-magento`, and `-instagram` all take pin-only
+  patch releases (no behavior change) so each can install alongside
+  `portage-ucp` 0.7.0: their previously-published `~> 0.6` pin is
+  pessimistic and excludes 0.7.x. `portage-ucp-journal`'s `portage-ucp`
+  dependency (development-only, not a runtime dependency) also widens to
+  `~> 0.7` in its gemspec, with no release of its own needed since it
+  remains unpublished.
+
 ## [0.6.0] - 2026-09-15
 
 - **Fix:** `portage-ucp-woocommerce`, `-bigcommerce`, `-magento`, `-etsy`, and

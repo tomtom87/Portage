@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.4.2] - 2026-09-16
 
 - Fix `GraphqlError` crashing with `NoMethodError` instead of surfacing the
   real message when Shopify's `errors` field is a bare string rather than
@@ -14,6 +14,9 @@ pre-1.0, so APIs may still shift between minor versions.
   product through checkout creation, and retries past a line Storefront
   silently rejects (`quantity: 0`, empty `userErrors`) despite the Admin
   API reporting it available.
+- Widens the `portage-ucp` dependency pin to `~> 0.7` so this gem can
+  install alongside `portage-ucp` 0.7.0 (the pessimistic `~> 0.6` pin
+  published with 0.4.1 excludes it).
 
 ## [0.4.1] - 2026-09-15
 

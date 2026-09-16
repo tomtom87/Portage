@@ -4,17 +4,31 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.5.0] - 2026-09-16
 
 - Added `portage-console` — a read-only IRB REPL over the local
   `TransactionLog`/`OrderLedger`/`PurchaseJournal` stores (design-log §22
   item 6, `Portage::Cli::Console`). `transactions`/`find_transaction`/
-  `transactions_since`, `orders`/`find_order`, and `journal` (empty unless a
-  consumer's own `Dispatcher` was built with `journal:` — nothing in this
-  gem wires that up). Every result passes through
-  `Portage::Ucp::Observability.redact`. Deliberately a local REPL, not the
-  admin/web panel design-log §16 also describes — see the README's Console
-  section for why. New runtime dependency on `portage-ucp-journal` (`~> 0.1`).
+  `transactions_since`, `orders`/`find_order`, and `journal`. Every result
+  passes through `Portage::Ucp::Observability.redact`. Deliberately a local
+  REPL, not the admin/web panel design-log §16 also describes — see the
+  README's Console section for why. New runtime dependency on
+  `portage-ucp-journal` (`~> 0.1`).
+- `Buy#client_for` now passes a real `Portage::Ucp::Journal::PurchaseJournal`
+  (file-backed, `~/.portage/journal.jsonl`) into `Client.for_adapter` — the
+  own-store loopback path used by `portage buy` against your own store now
+  actually records to the purchase journal, closing the gap `portage-console`
+  above depends on: `journal` was empty on this path because nothing passed
+  `journal:` through it (design-log §37/§38).
+- Added `portage generate adapter` — scaffolds a new adapter gem (gemspec,
+  Gemfile, Rakefile, rubocop config, lib entrypoint, version file, an
+  `Adapter` subclass with every capability method stubbed by reflecting off
+  `Portage::Ucp::Adapter`'s real method signatures, and a conformance spec),
+  modeled on `portage-ucp-etsy`.
+- Added `portage doctor` — sanity-checks a seller's
+  `Portage::Ucp.configuration` (authenticator/rate-limiter left at
+  unconfigured fail-safe defaults, no signing keys/payment handlers
+  configured, adapter capabilities only half-implemented).
 
 ## [0.4.1] - 2026-09-15
 
