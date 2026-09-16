@@ -15,7 +15,7 @@ AP2 crypto merged as PR #37).
 | # | Item | Status | Notes |
 |---|------|--------|-------|
 | 1 | `Checkout#links` | ✅ done | §22 handoff, shipped pre-existing |
-| 2 | `idempotency_provider` | 🟡 partial | race fixed §36 (this session); `Configuration` accessor still missing |
+| 2 | `idempotency_provider` | ✅ done | race fixed §36; `Configuration#idempotency_provider` accessor added this session |
 | 3 | §12 observability reconciliation | ✅ done | §23, correlation id + redaction; `event_sink` deliberately dropped |
 | 4 | Inbound signature verification (AP2/UCP) | ✅ done | §31 (RFC 9421) + mandate crypto (PR #37, needs §34 already reconciled by §36) |
 | 5 | Sandbox creds, 6 webmock-only adapters | ⛔ not started | **explicitly deferred by user, do later** |
@@ -23,7 +23,23 @@ AP2 crypto merged as PR #37).
 | 7 | payment_method/saved-address/delete_shopper_data + scheduler | 🟡 partial | §32 shipped the first three. **Scheduler not started**, correctly gated behind item 2 |
 | 8 | `portage compare` (find-it-elsewhere) | ✅ done | §27, `portage-cli/lib/portage/cli/compare.rb` |
 
-## This session (2026-09-16)
+## This session, cont'd (2026-09-16, branch `idempotency-provider-config`)
+
+- Added `Configuration#idempotency_provider`, mirroring `rate_limiter`/
+  `authenticator`: unset by default (unlike those two — deliberately, see
+  code comment) so `Support::Idempotency#idempotency_store` keeps its
+  per-instance `MemoryStore.new` fallback when nothing's configured, and
+  only shares one store process-wide when a consumer opts in via
+  `configure { |c| c.idempotency_provider = ... }`. A naive shared-by-default
+  singleton would have broken test isolation (specs reuse literal keys
+  like `"k1"` ~40x across files) — caught by running the full suite before
+  settling on the opt-in shape.
+  - `portage-ucp/lib/portage/ucp/configuration.rb`
+  - `portage-ucp/lib/portage/ucp/support/idempotency.rb`
+  - `portage-ucp/spec/support/idempotency_spec.rb`
+- Full suite green: 407 examples / 0 failures, rubocop clean (116 files).
+
+## Previous session (2026-09-16)
 
 - Fixed real cross-process race in `Support::Idempotency#dedup`: `fetch`
   then `store` were two separate `FileStore` lock acquisitions, so two
@@ -42,22 +58,17 @@ AP2 crypto merged as PR #37).
 
 ## Next up (not started, in rough dependency order)
 
-1. **`Configuration#idempotency_provider`** — the plumbing item 2 still
-   owes: promote store selection onto `Configuration`, mirror the
-   `rate_limiter`/`authenticator` pattern (`configure { |c| c.rate_limiter = ... }`),
-   so a consumer doesn't have to reach into `idempotency_store=` on every
-   adapter instance individually.
-2. **Scheduler (item 7)** — blocked on (1) being solid: a scheduled
-   purchase runs in a different process than the one that scheduled it.
-   Needs: daemon/runner (none exists — repo is library + stdio exe only),
-   price/stock drift policy at run time (max-price guard, `OutOfStockError`
-   handling, skip/notify/proceed rule).
-3. **Console (item 6's remainder)** — reads the storage layer §33 built,
+1. **Scheduler (item 7)** — item 2's plumbing (`Configuration#idempotency_provider`)
+   is now solid; a scheduled purchase runs in a different process than the
+   one that scheduled it. Needs: daemon/runner (none exists — repo is
+   library + stdio exe only), price/stock drift policy at run time
+   (max-price guard, `OutOfStockError` handling, skip/notify/proceed rule).
+2. **Console (item 6's remainder)** — reads the storage layer §33 built,
    never the logs. Needs its own session auth (separate from
    `Authenticator`, which guards MCP calls not a web UI) and every
    rendered field routed through `Observability.redact`. Localhost-bound
    by default.
-4. **Sandbox credentials, 6 adapters (item 5)** — deferred by user
+3. **Sandbox credentials, 6 adapters (item 5)** — deferred by user
    instruction, pick up later. BigCommerce/Etsy/Instagram/Magento/Wix/
    WooCommerce are webmock-only; `.env.example` has no real values for any
    of them. One at a time, run the §17 conformance kit against each real

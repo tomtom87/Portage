@@ -9,12 +9,17 @@ module Portage
       # — this is that table, now backed by a pluggable store instead of a
       # bare Hash.
       #
-      # Defaults to `MemoryStore` (in-process, lost on restart — the same
-      # durability the old bare Hash had). A consumer that needs dedup to
-      # survive a process restart or be shared across processes (the actual
-      # complaint behind this: a single-host CLI invoked fresh per command,
-      # or a multi-worker server) injects a different store via
-      # `idempotency_store=` — `FileStore` ships for the single-host case;
+      # Defaults to a fresh `MemoryStore` per including instance (in-process,
+      # lost on restart — the same durability the old bare Hash had, and
+      # the same isolation: one adapter instance's dedup table never leaks
+      # into another's). A consumer that needs dedup to survive a process
+      # restart or be shared across processes (the actual complaint behind
+      # this: a single-host CLI invoked fresh per command, or a
+      # multi-worker server) sets `Portage::Ucp.configuration.idempotency_provider`
+      # once via `configure { |c| c.idempotency_provider = ... }` — every
+      # instance that doesn't set its own store via `idempotency_store=`
+      # then shares that one process-wide store instead of each getting its
+      # own in-memory table. `FileStore` ships for the single-host case;
       # Redis/SQLite-backed stores are a consumer's own implementation
       # against the same two-method interface (`#fetch(key)` /
       # `#store(key, value)`).
@@ -54,7 +59,7 @@ module Portage
         end
 
         def idempotency_store
-          @idempotency_store ||= MemoryStore.new
+          @idempotency_store ||= Portage::Ucp.configuration.idempotency_provider || MemoryStore.new
         end
 
         def init_idempotency_locks!
