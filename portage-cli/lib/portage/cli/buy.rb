@@ -79,6 +79,30 @@ module Portage
         else
           catalog_only(session)
         end
+      rescue Portage::Ucp::Client::MissingAgentProfileError, Portage::Ucp::Client::UnsupportedWireShapeError,
+             MCP::Client::RequestHandlerError => e
+        native_flow_error_report(e)
+      end
+
+      def native_flow_error_report(error)
+        case error
+        when Portage::Ucp::Client::MissingAgentProfileError
+          build_report(source: "native_ucp", browse: false, checkout: false,
+                       message: "Set PORTAGE_AGENT_PROFILE to a URL that describes this agent — " \
+                                "#{@uri} verifies it before answering any UCP call.")
+        when Portage::Ucp::Client::UnsupportedWireShapeError
+          build_report(source: "native_ucp", browse: true, checkout: false,
+                       message: "Can't complete checkout on #{@uri} yet: #{error.message}")
+        else
+          # MCP::Client::RequestHandlerError doesn't retain the server's JSON
+          # error body on this path, so this can't quote the server's own
+          # explanation — a common cause is PORTAGE_AGENT_PROFILE not
+          # pointing at a real, JSON agent-profile document the store's UCP
+          # endpoint accepts.
+          build_report(source: "native_ucp", browse: false, checkout: false,
+                       message: "#{@uri} rejected the request (#{error.message}) — if PORTAGE_AGENT_PROFILE " \
+                                "is set, check it points at a real agent-profile document the store accepts.")
+        end
       end
 
       def catalog_only(session)
@@ -187,7 +211,8 @@ module Portage
         end
 
         checkout = session.create_checkout(line_items: [{ product_id: product_id_of(product), quantity: @qty }],
-                                           fulfillment: requested_fulfillment(fulfillment_adapter))
+                                           fulfillment: requested_fulfillment(fulfillment_adapter),
+                                           meta: agent_meta)
         checkout = select_cheapest_shipping(session, checkout) if fulfillment_adapter
         finish_checkout(session, source, products, checkout)
       end
@@ -322,7 +347,15 @@ module Portage
       end
 
       def safe_search(session)
-        CatalogProducts.from(session.search_catalog(query: @query, limit: 10))
+        CatalogProducts.from(session.search_catalog(query: @query, limit: 10, meta: agent_meta))
+      end
+
+      # Real UCP servers fetch this URL to verify the caller's identity
+      # before answering any call (see Transports::Http) — the own-store
+      # loopback path ignores it harmlessly, so it's cheapest to always pass
+      # it rather than branch on which transport `session` happens to be.
+      def agent_meta
+        { agent_profile: ENV.fetch("PORTAGE_AGENT_PROFILE", nil) }
       end
 
       # --- Homepage fetch (used by both the manifest-not-found path and the
