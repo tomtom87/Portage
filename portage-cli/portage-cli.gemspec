@@ -26,7 +26,7 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "portage-ucp", "~> 0.6"
+  spec.add_dependency "portage-ucp", "~> 0.7"
   spec.add_dependency "portage-ucp-client", "~> 0.3"
   spec.add_dependency "portage-ucp-journal", "~> 0.1"
 
