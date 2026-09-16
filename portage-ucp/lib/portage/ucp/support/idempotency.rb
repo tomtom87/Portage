@@ -45,17 +45,20 @@ module Portage
         def dedup(idempotency_key, &block)
           init_idempotency_locks!
 
-          key_lock = @idempotency_mutex.synchronize { @idempotency_locks[idempotency_key] ||= Mutex.new }
-
-          # `key_lock` only serializes threads inside *this* process — it can't
-          # stop a second `portage` invocation (a second process, its own
-          # Mutex) from racing this one. That's the store's job: `fetch` then
-          # `store` as two separate calls (the old shape here) is two separate
-          # lock acquisitions on `FileStore`, so both processes can observe
-          # NOT_FOUND and both run `yield` — the double-charge §9a exists to
-          # prevent. `fetch_or_store` does the whole check-then-set under one
-          # lock acquisition instead.
-          key_lock.synchronize { idempotency_store.fetch_or_store(idempotency_key, &block) }
+          key_lock = checkout_idempotency_lock(idempotency_key)
+          begin
+            # `key_lock` only serializes threads inside *this* process — it can't
+            # stop a second `portage` invocation (a second process, its own
+            # Mutex) from racing this one. That's the store's job: `fetch` then
+            # `store` as two separate calls (the old shape here) is two separate
+            # lock acquisitions on `FileStore`, so both processes can observe
+            # NOT_FOUND and both run `yield` — the double-charge §9a exists to
+            # prevent. `fetch_or_store` does the whole check-then-set under one
+            # lock acquisition instead.
+            key_lock.synchronize { idempotency_store.fetch_or_store(idempotency_key, &block) }
+          ensure
+            checkin_idempotency_lock(idempotency_key)
+          end
         end
 
         def idempotency_store
@@ -68,6 +71,33 @@ module Portage
           INIT_MUTEX.synchronize do
             @idempotency_mutex ||= Mutex.new
             @idempotency_locks ||= {}
+          end
+        end
+
+        # `@idempotency_locks` is per-instance and never bounded otherwise —
+        # a long-lived process (server, not a CLI invoked fresh per command)
+        # would accumulate one Mutex per distinct idempotency key forever.
+        # Refcount each entry instead of leaving it in the table for the
+        # instance's lifetime: checkout bumps the count before handing out
+        # the Mutex, checkin drops it and reaps the entry once nothing still
+        # holds a reference. The refcount, not `Mutex#locked?`, is what makes
+        # this safe — a thread waiting on `key_lock.synchronize` still counts
+        # as holding a reference, so the entry can't be deleted (and a
+        # second, disconnected Mutex created for the same key) while it's
+        # still queued.
+        def checkout_idempotency_lock(idempotency_key)
+          @idempotency_mutex.synchronize do
+            entry = (@idempotency_locks[idempotency_key] ||= { mutex: Mutex.new, refcount: 0 })
+            entry[:refcount] += 1
+            entry[:mutex]
+          end
+        end
+
+        def checkin_idempotency_lock(idempotency_key)
+          @idempotency_mutex.synchronize do
+            entry = @idempotency_locks[idempotency_key]
+            entry[:refcount] -= 1
+            @idempotency_locks.delete(idempotency_key) if entry[:refcount].zero?
           end
         end
       end
