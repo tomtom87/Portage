@@ -21,9 +21,12 @@ module Portage
         def synchronize(session_id, &)
           init_session_locks!
 
-          key_lock = @session_lock_mutex.synchronize { @session_locks[session_id] ||= Mutex.new }
-
-          key_lock.synchronize(&)
+          key_lock = checkout_session_lock(session_id)
+          begin
+            key_lock.synchronize(&)
+          ensure
+            checkin_session_lock(session_id)
+          end
         end
 
         def init_session_locks!
@@ -32,6 +35,29 @@ module Portage
           INIT_MUTEX.synchronize do
             @session_lock_mutex ||= Mutex.new
             @session_locks ||= {}
+          end
+        end
+
+        # Same unbounded-growth problem as Idempotency's per-key locks: one
+        # Mutex per session/cart id, never removed, in a process that outlives
+        # any single session. Refcount instead of `Mutex#locked?` so an entry
+        # is only reaped once no thread — including one still queued on
+        # `key_lock.synchronize` — holds a reference to it; deleting on
+        # `locked?` alone would let a queued waiter end up serialized against
+        # a disconnected Mutex a new caller replaced it with.
+        def checkout_session_lock(session_id)
+          @session_lock_mutex.synchronize do
+            entry = (@session_locks[session_id] ||= { mutex: Mutex.new, refcount: 0 })
+            entry[:refcount] += 1
+            entry[:mutex]
+          end
+        end
+
+        def checkin_session_lock(session_id)
+          @session_lock_mutex.synchronize do
+            entry = @session_locks[session_id]
+            entry[:refcount] -= 1
+            @session_locks.delete(session_id) if entry[:refcount].zero?
           end
         end
       end
