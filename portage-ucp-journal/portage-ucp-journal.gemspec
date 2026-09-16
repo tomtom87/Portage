@@ -18,7 +18,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md"]
   spec.require_paths = ["lib"]
 
-  spec.add_development_dependency "portage-ucp", "~> 0.6"
+  spec.add_development_dependency "portage-ucp", "~> 0.7"
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.88"
   spec.add_development_dependency "yard", "~> 0.9"
