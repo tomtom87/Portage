@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Fixed `buy`/`find` crashing with a raw `Faraday::UnprocessableContentError`
+  against a real UCP store, once manifest parsing succeeded — the actual
+  `search_catalog`/`create_checkout` calls were still built in the wrong
+  wire shape (see `portage-ucp-client`'s Unreleased entry). Both commands
+  now report a clear, actionable message instead: set `PORTAGE_AGENT_PROFILE`
+  when it's missing, or surface the store's rejection cleanly when it's set
+  but not accepted.
+- Added `PORTAGE_AGENT_PROFILE` — required for `find`/`buy` against a real,
+  external UCP store (not your own store via an adapter). No default; see
+  `.env.example`.
+
 ## [0.5.1] - 2026-09-16
 
 - No behavior change — 0.5.0 was built and pushed with `gem build` run from

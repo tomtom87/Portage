@@ -46,6 +46,10 @@ module Portage
         offers = rank(stores.flat_map { |store| offers_for(store) })
         report(candidates: candidates, stores: stores.map { |s| s.slice(:origin, :source, :checkout) },
                offers: offers, message: summary(candidates, stores, offers))
+      rescue Portage::Ucp::Client::MissingAgentProfileError
+        report(candidates: candidates, stores: stores.map { |s| s.slice(:origin, :source, :checkout) },
+               message: "Set PORTAGE_AGENT_PROFILE to a URL that describes this agent — each store " \
+                        "verifies it before answering a catalog search.")
       end
 
       private
@@ -135,10 +139,21 @@ module Portage
       # --- Step 3: ask the survivors what they stock ---
 
       def offers_for(store)
-        products = CatalogProducts.from(store[:session].search_catalog(query: @query, limit: PER_STORE_RESULTS))
+        products = CatalogProducts.from(
+          store[:session].search_catalog(query: @query, limit: PER_STORE_RESULTS, meta: agent_meta)
+        )
         products.filter_map { |product| offer(store, product) }
+      rescue Portage::Ucp::Client::MissingAgentProfileError
+        raise
       rescue StandardError
         []
+      end
+
+      # Real UCP servers fetch this URL to verify the caller's identity
+      # before answering any call (see Transports::Http) — the own-store
+      # loopback path ignores it harmlessly.
+      def agent_meta
+        { agent_profile: ENV.fetch("PORTAGE_AGENT_PROFILE", nil) }
       end
 
       def offer(store, product)
