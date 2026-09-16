@@ -10,6 +10,10 @@ pre-1.0, so APIs may still shift between minor versions.
   real message when Shopify's `errors` field is a bare string rather than
   the usual array of objects (confirmed live on an expired/invalid admin
   token).
+- Add a live-store spec that searches the catalog, buys a random in-stock
+  product through checkout creation, and retries past a line Storefront
+  silently rejects (`quantity: 0`, empty `userErrors`) despite the Admin
+  API reporting it available.
 
 ## [0.4.1] - 2026-09-15
 
