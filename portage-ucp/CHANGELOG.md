@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.8.0] - 2026-09-17
+
+- **Breaking:** `Manifest#to_h` now emits the shape live UCP stores actually
+  serve (confirmed against Shopify's `2026-08-25` rollout) instead of the
+  flat one this gem invented: everything nests under a top-level `ucp`
+  object, `ucp_version` becomes `version`, and `capabilities` is keyed by
+  capability name (`{"dev.ucp.shopping.catalog" => [{version: ...}]}`)
+  rather than an array of `{name:, version:}` hashes. When a signer is
+  configured the signature still covers the manifest body and rides inside
+  the `ucp` object. Anything reading a Portage-served manifest by the old
+  top-level keys needs updating — `Rack::ManifestEndpoint`'s own
+  advertised-payment check and `skills/serve-via-ucp`'s `verify.sh` both
+  did, and are fixed here.
+
 ## [0.7.1] - 2026-09-16
 
 - No behavior change — 0.7.0 was built and pushed with `gem build` run from

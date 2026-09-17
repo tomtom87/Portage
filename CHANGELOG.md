@@ -7,6 +7,44 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.8.0] - 2026-09-17
+
+- `portage-ucp` bumps to 0.8.0 for a **breaking** manifest shape change:
+  `Manifest#to_h` now nests everything under a top-level `ucp` object, renames
+  `ucp_version` to `version`, and keys `capabilities` by capability name,
+  matching what live UCP stores actually serve (confirmed against Shopify's
+  `2026-08-25` rollout across 35+ storefronts) instead of the flat shape this
+  gem invented. Anything reading a Portage-served manifest by the old
+  top-level keys needs updating; `Rack::ManifestEndpoint` and
+  `skills/serve-via-ucp`'s `verify.sh` both did, and are fixed here.
+- `portage-ucp-client` bumps to 0.4.0 for the same lesson on the outbound
+  side: `Transports::Http` was sending every tool call flat and unwrapped, and
+  real stores 422 it — arguments belong nested under a capability key, with a
+  `meta.ucp-agent.profile` URL the store fetches to verify who's calling.
+  `Http` now builds that shape, callers must pass `meta: { agent_profile: }`,
+  and two new errors (`MissingAgentProfileError`, `UnsupportedWireShapeError`)
+  say so plainly rather than letting a bare 422 through. `Loopback`/`Stdio`
+  are unchanged.
+- `portage-cli` bumps to 0.6.0 for `portage generate agent-profile` (writes
+  the UCP agent-identity document the above needs; the CLI's own is checked
+  in and published to a stable URL by a new GitHub Pages workflow, which is
+  where `PORTAGE_AGENT_PROFILE` points by default), clear `find`/`buy`
+  failures when that profile is missing or rejected, and a fix for `buy`
+  sending a catalog product's own id as the purchasable line item — Shopify's
+  cart takes a `ProductVariant` GID, so every live `portage buy` failed with
+  "Invalid id" until now.
+- `portage-ucp-shopify` bumps to 0.4.4, `portage-ucp-journal` to 0.1.1, and
+  `-wix`, `-woocommerce`, `-bigcommerce`, `-magento`, `-etsy`, `-instagram` to
+  0.1.4: pin-only releases, no behavior change, so each installs alongside
+  `portage-ucp` 0.8.0 (their published `~> 0.7` pin is pessimistic and
+  excludes it).
+- Repo: `rake publish_all` builds, smoke-tests, and pushes every gem whose
+  version isn't on rubygems.org yet, in dependency order, reusing
+  `release_check`'s build-from-the-gem's-own-directory verification — the
+  0.7.1 postmortem's checklist, now a task instead of a README paragraph.
+  README gains a CLI quick start and a walkthrough at
+  `docs/cli-usage-tutorial.md`.
+
 ## [0.7.1] - 2026-09-16
 
 - No behavior change in any gem. 0.7.0's `portage-ucp`, `portage-cli`,

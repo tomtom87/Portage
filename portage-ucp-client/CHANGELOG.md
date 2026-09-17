@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.4.0] - 2026-09-17
 
 - Fixed `Transports::Http` sending every tool call in the flat, unwrapped
   shape this gem's own Dispatcher/adapters speak — real UCP servers
@@ -22,6 +22,9 @@ pre-1.0, so APIs may still shift between minor versions.
   the real payment-instrument shape (Apple Pay/Shop Pay/card-token variants
   each have distinct required credential fields) with no way to verify it
   against a real payment flow.
+- Widens the `portage-ucp` dependency pin to `~> 0.8` so this gem installs
+  alongside `portage-ucp` 0.8.0 (the `~> 0.7` pin published with 0.3.3 is
+  pessimistic and excludes it).
 
 ## [0.3.3] - 2026-09-16
 
