@@ -2664,3 +2664,38 @@ dotted key (`mcp/server.rb`). Only the middle one matters for talking to a
 real store; the other two are internal-consistency questions for
 `portage-ucp`'s own server, out of scope here — no evidence a real store
 talks to it (see §22).
+
+## 40. §39's two internal shapes, actually reconciled where it was a real bug (2026-09-17)
+
+Of §39's leftover pair, the `UCP-Agent` HTTP header is untouched — §25
+already names why (`mcp` 0.25.0's `StreamableHTTPTransport` never surfaces
+it to the server, so wiring it means monkeypatching `mcp` internals, not
+something to do as a drive-by here). The other one turned out not to be a
+mere shape mismatch nobody hits: it was silently dropping data on a path
+this repo actually exercises.
+
+`Buy#agent_meta` (`portage-cli/lib/portage/cli/buy.rb`) passes
+`meta: { agent_profile: <url> }` to `Session` regardless of which
+transport is underneath — deliberately transport-agnostic, per Session's
+own doc comment. `Transports::Http` already reads that `agent_profile:`
+key correctly. `Transports::Loopback`, the transport `portage buy` against
+your own store actually uses, didn't — it forwarded `meta` straight
+through as the MCP protocol's `_meta` envelope untouched, and
+`Mcp::Server.agent_profile_for` (§39) only ever reads
+`_meta["ucp-agent.profile"]`/`_meta[:"ucp-agent.profile"]`. Two different
+keys, so every own-store loopback buy silently logged a blank
+`agent_profile` in its `tool_call_received`/`tool_called` events — no
+error, just missing observability data, and easy to miss since the
+existing loopback spec only ever exercised `meta` already keyed
+`"ucp-agent.profile"`, never the `agent_profile:` key `Buy` really sends.
+
+Fix is local to `Loopback#call_tool`: extract `meta[:agent_profile]`/
+`meta["agent_profile"]` and merge it into `_meta` under the server's own
+`"ucp-agent.profile"` key before handing off to `@server.handle`, mirroring
+what `Transports::Http#wire_meta` already does for the real-store wire
+shape. A caller that already passes the server's own key untouched (as
+this gem's specs do) is unaffected — merge only adds the key when the
+`agent_profile:` convention was used. New spec case added alongside the
+existing round-trip test, keyed off `Buy`'s own convention rather than the
+server's, so a future regression here shows up the way it actually would
+in production.
