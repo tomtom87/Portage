@@ -150,12 +150,15 @@ setup, not a bug in your call:
   fetchable — the tool isn't actually missing; something about the calling
   agent isn't authorized to use it. An agent profile with an empty
   `capabilities: {}` is one plausible cause and worth ruling out (fill it in
-  and retest), but confirmed live against billabong.com, filling it in did
-  *not* clear this error — some stores appear to gate real tool calls behind
-  an allowlist of recognized agents independent of what the profile document
-  says. Treat this as "this store hasn't opened automated buying to this
-  agent" and say so, rather than assuming it's your profile content or your
-  call shape.
+  and retest), but confirmed live against both billabong.com and a
+  self-owned Shopify dev store, filling it in did *not* clear this error —
+  it isn't a merchant-side setting either, since owning the store changed
+  nothing. Some stores appear to gate real tool calls behind an allowlist of
+  recognized agents independent of what the profile document says and of
+  who runs the store. Treat this as "this store hasn't opened automated
+  buying to this agent" and say so, rather than assuming it's your profile
+  content or your call shape — see `docs/ucp-tool-gating-investigation.md`
+  in this repo for the full investigation and open next steps.
 - In all three cases: don't retry the call, don't fall back to scraping or
   raw credentials, and don't report it to the shopper as "the store is
   down." Say plainly that this store's automated-buying setup isn't working
