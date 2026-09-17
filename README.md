@@ -10,6 +10,16 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 > **Status**: `0.8.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
+> **Shopify note (Sept 2026)**: real UCP tool calls against live Shopify stores currently hit a
+> platform-side allowlist gate — `search_catalog`, `create_cart`, etc. all come back `Tool not found`
+> once an agent profile is attached, regardless of profile content, store ownership, or wire shape.
+> No public application/waitlist process has been found yet. Agentic shopping against a Shopify
+> store you don't already hold credentials for isn't possible today because of this, independent of
+> anything in this gem. `portage-ucp-shopify` works around it for your **own** store or one you're
+> integrated with by reading/writing through the plain Storefront API instead of Shopify's gated
+> native UCP endpoint — see [docs/ucp-tool-gating-investigation.md](docs/ucp-tool-gating-investigation.md)
+> for the full writeup.
+
 ## Quick start, buying via cli
 
 ```bash
