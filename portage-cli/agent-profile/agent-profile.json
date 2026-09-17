@@ -1,0 +1,19 @@
+{
+  "ucp": {
+    "version": "2026-04-08",
+    "services": {},
+    "capabilities": {},
+    "payment_handlers": {}
+  },
+  "signing_keys": [
+    {
+      "kid": "sfGy6sxgxUM-SjMQc7iYnApJODvzbYqbBsSEvZjQisw",
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "s_FkPSocyuttXsRAndd1YVl63jxG_Yk1re7V3rzcGJY",
+      "y": "5NZe_LGh2uJKqyoq38l0EuSn0ePX8xQ9vL9wxLlOE2c",
+      "use": "sig",
+      "alg": "ES256"
+    }
+  ]
+}
