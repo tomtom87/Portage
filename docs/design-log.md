@@ -2699,3 +2699,69 @@ this gem's specs do) is unaffected — merge only adds the key when the
 existing round-trip test, keyed off `Buy`'s own convention rather than the
 server's, so a future regression here shows up the way it actually would
 in production.
+
+## 41. Two more things found taking the gem for a real test spin (2026-09-17)
+
+Installed `portage-cli`/`portage-ucp-client`/`portage-ucp-shopify` exactly
+as a user would (`gem install`) and ran `find`/`buy --dry-run` against both
+a real Shopify test store (via the own-store adapter path) and the live
+external stores from §37/38/39/40's verified allowlist. Two things surfaced.
+
+**Not new, but confirms the cost of not releasing:** every one of
+§37–§40's fixes is real, merged to `main`, and still sitting under
+`[Unreleased]` in `portage-ucp-client`'s and `portage-cli`'s CHANGELOGs —
+neither gem's `VERSION` was ever bumped past what's actually published
+(0.3.3 / 0.5.1). Running the *installed* gems reproduced exactly what
+those entries describe as already fixed: `find` silently reported "none of
+them speak UCP" for all 12 real, live UCP stores probed (§37/38's nested
+manifest-shape bug), and `portage buy https://casper.com --query mattress
+--dry-run` didn't just fail cleanly — it crashed with a raw, uncaught
+`Portage::Ucp::Client::MissingAgentProfileError` (§39's fix for this,
+`native_flow`'s targeted rescue clause, only exists in git; the published
+`portage-cli` 0.5.1's `native_flow` has no rescue there at all). Rebuilding
+and locally reinstalling both gems from this repo's current `main`
+resolved both — the code is fine, it just was never shipped. No action
+taken here beyond confirming it; whether/when to cut releases is not a
+call this pass makes.
+
+**New:** `portage buy --store <shopify-store> --query "snowboard"
+--dry-run` against the real Shopify test store failed with a swallowed
+`NoMethodError` (`undefined method 'dig' for nil` deep in
+`Buy#select_cheapest_shipping`, only visible with the adapter's own
+rescue removed) — `create_checkout` was silently returning `nil`. Root
+cause: `Buy#full_buy`/`#redirect_checkout` build `line_items` from
+`product_id_of(product)` — the catalog product's own id, the same one
+`--product-id` matches against and `find`/`compare` print. That's correct
+for a backend where "the product" and "the thing you add to a cart" share
+one id, but wrong for Shopify: `portage-ucp-shopify`'s `Adapter#cart_lines`
+sends it straight through as Storefront's `merchandiseId`, which is a
+`ProductVariant` GID, not a `Product` GID (confirmed live: the adapter's
+own conformance spec, `conformance_spec.rb`, already documents this exact
+split as `existing_product_id`/`existing_variant_id` — the CLI just never
+picked the second one). Shopify's Admin API rejected every checkout
+mutation with "Invalid id" as a result. That alone would have been a
+clear error, but `Buy#adapter_flow`'s `rescue LoadError, StandardError`
+(there to keep one broken platform adapter from taking down the whole
+command) also swallowed it into a plain `nil`, surfacing as the generic
+"No automated path" message — indistinguishable from "this platform has
+no adapter at all." Fixed at the call site, not the adapter: a new
+`Buy#line_item_id_of` picks the product's first/default variant id when
+one exists, falling back to the product id otherwise (`#redirect_checkout`
+gets the same treatment against the raw `Portage::Ucp::Product` structs
+`adapter.search_catalog` returns there); `#product_id_of` itself is
+untouched, since `--product-id` still needs to match against the
+catalog-level id `find` shows the caller. `portage-ucp-shopify`'s
+`Adapter#cart_lines` is unchanged — per its own conformance kit
+(`portage-ucp/lib/portage/ucp/rspec.rb`'s `product_id`/`existing_variant_id`
+doc comment), an adapter's cart is entitled to assume the caller already
+sent the id its own cart takes; the first attempt at this fix put the
+resolution in the adapter instead, which is exactly what the conformance
+and live-store specs caught — they already pass a real variant id
+straight through, so resolving it a second time as if it were a product
+id raised `KeyError` against Shopify's Admin API. Confirmed live: `portage
+buy --store <test store> --query snowboard --dry-run` now creates a real
+cart against the test store and reports its total. The
+broad adapter-level rescue is left as-is (the design rationale in
+`Buy#adapter_flow`'s comment still holds for a genuinely unavailable
+adapter) — worth revisiting separately if silently-swallowed adapter
+errors turn out to be a recurring cost.
