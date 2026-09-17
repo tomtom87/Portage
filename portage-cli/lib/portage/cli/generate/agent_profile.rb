@@ -79,16 +79,39 @@ module Portage
           []
         end
 
+        # The four shopping capabilities `Portage::Ucp::Client::Session` always
+        # implements, regardless of transport (loopback/stdio/HTTP) — same
+        # constants `Portage::Ucp::Manifest` reads off a business's `Adapter`
+        # (portage-ucp/lib/portage/ucp/capabilities/*.rb), reused here because
+        # this document describes the agent's own fixed capability set rather
+        # than one Adapter's opted-in subset.
+        AGENT_CAPABILITIES = [
+          Portage::Ucp::Capabilities::CATALOG,
+          Portage::Ucp::Capabilities::CART,
+          Portage::Ucp::Capabilities::CHECKOUT,
+          Portage::Ucp::Capabilities::ORDER
+        ].freeze
+
         def build_document(signing_keys)
           {
             "ucp" => {
               "version" => UCP_VERSION,
               "services" => {},
-              "capabilities" => {},
+              "capabilities" => capability_hash,
               "payment_handlers" => {}
             },
             "signing_keys" => signing_keys
           }
+        end
+
+        # Same shape `Portage::Ucp::Manifest#capability_hash` produces for a
+        # business's `/.well-known/ucp` document — confirmed live (see
+        # docs/agent-profile.md) that a real UCP server treats an empty
+        # `capabilities` here as "this agent can do nothing" and refuses
+        # every tool call with `Tool not found`, even ones `tools/list` just
+        # returned.
+        def capability_hash
+          AGENT_CAPABILITIES.to_h { |capability| [capability.name, [{ "version" => capability.version }]] }
         end
 
         def write_profile(doc)
