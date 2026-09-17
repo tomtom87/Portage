@@ -77,7 +77,7 @@ def build_and_verify_gem(gem_dir)
     end
 
     install_dir = File.join(tmp, "install")
-    sh "gem install --local --install-dir #{install_dir} #{File.join(tmp, gem_file)}"
+    sh "gem install --install-dir #{install_dir} #{File.join(tmp, gem_file)}"
 
     gem_lib = Dir.glob(File.join(install_dir, "gems", "#{gem_dir}-*", "lib")).first
     abort "installed gem has no lib/ — this is exactly the 0.7.0-line bug" unless gem_lib
