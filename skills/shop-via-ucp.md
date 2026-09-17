@@ -147,17 +147,21 @@ setup, not a bug in your call:
   right headers, with no Pages deploy required.
 - **`-32602 Invalid params, "Tool not found: <name>"` for every tool**, even
   ones `tools/list` just confirmed exist, once the profile is wired up and
-  fetchable — the tool isn't actually missing; something about the calling
-  agent isn't authorized to use it. An agent profile with an empty
-  `capabilities: {}` is one plausible cause and worth ruling out (fill it in
-  and retest), but confirmed live against both billabong.com and a
-  self-owned Shopify dev store, filling it in did *not* clear this error —
-  it isn't a merchant-side setting either, since owning the store changed
-  nothing. Some stores appear to gate real tool calls behind an allowlist of
-  recognized agents independent of what the profile document says and of
-  who runs the store. Treat this as "this store hasn't opened automated
-  buying to this agent" and say so, rather than assuming it's your profile
-  content or your call shape — see `docs/ucp-tool-gating-investigation.md`
+  fetchable — the tool isn't actually missing. Confirmed root cause: a
+  platform-side gate on tool *invocation* that Shopify's real UCP rollout
+  applies independent of the agent-profile document's validity/content and
+  independent of who runs the store (reproduces identically against
+  billabong.com and a self-owned Shopify dev store). The proof is
+  `get_order`, which returns an honest `"You are forbidden to make
+  tools/call requests"` for the same session regardless of whether the
+  profile URL is real or garbage — `search_catalog`/`create_cart`/etc. hit
+  the same gate but surface it as this misleading "Tool not found" instead,
+  because the tool is silently missing from this agent's per-session
+  registry. There is no client-side fix: treat this as "this store hasn't
+  opened automated buying to this agent" and say so, rather than assuming
+  it's your profile content or your call shape. Whether Shopify publishes an
+  allowlist/approval process, and whether this is Shopify-specific or
+  protocol-wide, is still open — see `docs/ucp-tool-gating-investigation.md`
   in this repo for the full investigation and open next steps.
 - In all three cases: don't retry the call, don't fall back to scraping or
   raw credentials, and don't report it to the shopper as "the store is
