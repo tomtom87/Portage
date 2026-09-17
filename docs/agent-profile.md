@@ -59,6 +59,16 @@ touches it, to both the Pages site root and the spec's conventional
 above without extra config (HTTPS, no redirect on an exact asset path,
 `Cache-Control: public, max-age=600`).
 
+That workflow needs Actions enabled on the repo (billing/minutes) to ever
+run. Until that's sorted, `.env.example`'s `PORTAGE_AGENT_PROFILE` points at
+`raw.githubusercontent.com/tomtom87/Portage/main/portage-cli/agent-profile/agent-profile.json`
+instead — same checked-in JSON, served straight off the repo with no Pages
+build required. Confirmed live: HTTPS, no redirect, `Cache-Control:
+max-age=300`, `application/json`; a real Shopify store accepted it and got
+past the agent-profile check. Switch back to the Pages URL once Actions is
+enabled — GitHub's CDN caching on raw file serving isn't a documented
+guarantee the way Pages is.
+
 **One-time setup this workflow can't do for you:** Settings → Pages → Build
 and deployment → Source = "GitHub Actions", on this repo. Until that's
 flipped, the workflow runs and uploads an artifact with nothing to deploy
