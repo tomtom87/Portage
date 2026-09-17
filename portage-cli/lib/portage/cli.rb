@@ -11,6 +11,7 @@ require_relative "cli/history"
 require_relative "cli/payment_methods"
 require_relative "cli/doctor"
 require_relative "cli/generate/adapter"
+require_relative "cli/generate/agent_profile"
 
 module Portage
   # `portage` — the single command-line entrypoint for acting as a shopper's
@@ -41,6 +42,7 @@ module Portage
                                  [--allow HOST ...] [--clear-allowlist]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
              portage generate adapter NAME [--dir DIR]
+             portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
     USAGE
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
@@ -552,8 +554,20 @@ module Portage
     # --- generate ---
 
     def self.run_generate(argv)
-      kind, name, *rest = argv
-      unless kind == "adapter" && name
+      kind, *rest = argv
+      case kind
+      when "adapter" then run_generate_adapter(rest)
+      when "agent-profile" then run_generate_agent_profile(rest)
+      else
+        warn USAGE
+        1
+      end
+    end
+    private_class_method :run_generate
+
+    def self.run_generate_adapter(rest)
+      name, *rest = rest
+      unless name
         warn USAGE
         return 1
       end
@@ -564,7 +578,25 @@ module Portage
       puts "Scaffolded #{path}/"
       0
     end
-    private_class_method :run_generate
+    private_class_method :run_generate_adapter
+
+    def self.run_generate_agent_profile(rest)
+      out = "agent-profile.json"
+      key_out = "agent-profile.key.pem"
+      rotate = false
+      OptionParser.new do |parser|
+        parser.on("--out FILE") { |v| out = v }
+        parser.on("--key-out FILE") { |v| key_out = v }
+        parser.on("--rotate") { rotate = true }
+      end.parse!(rest)
+
+      result = Generate::AgentProfile.generate(out: out, key_out: key_out, rotate: rotate)
+      puts "Wrote #{result[:profile_path]} (kid #{result[:kid]})"
+      puts "Wrote private key to #{result[:private_key_path]} — keep this out of version control " \
+           "and off the machine that serves the public profile"
+      0
+    end
+    private_class_method :run_generate_agent_profile
 
     # --- output ---
 
