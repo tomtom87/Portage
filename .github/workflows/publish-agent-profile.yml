@@ -1,0 +1,50 @@
+name: Publish agent profile
+
+# Republishes portage-cli/agent-profile/agent-profile.json — the
+# meta.ucp-agent.profile document real UCP servers (confirmed live against
+# Shopify's 2026-08-25 rollout) fetch to verify this agent's identity before
+# answering any catalog/cart/checkout call. See docs/agent-profile.md for
+# the hosting contract this has to satisfy (HTTPS, no redirects,
+# Cache-Control >= 60s) — GitHub Pages meets all of it without extra config.
+#
+# Deliberately its own workflow, not folded into ci.yml's Pages-less test
+# matrix: this is a deploy, gated on the one file that matters, not on every
+# push to main.
+#
+# One-time setup this workflow depends on but can't do itself: Settings ->
+# Pages -> Build and deployment -> Source = "GitHub Actions", on this repo.
+# Until that's flipped, this workflow runs and uploads an artifact but has
+# nothing to deploy to.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "portage-cli/agent-profile/agent-profile.json"
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site (site root + /.well-known/ucp-agent)
+        run: |
+          mkdir -p _site/.well-known
+          cp portage-cli/agent-profile/agent-profile.json _site/agent-profile.json
+          cp portage-cli/agent-profile/agent-profile.json _site/.well-known/ucp-agent
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
