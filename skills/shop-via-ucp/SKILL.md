@@ -49,5 +49,8 @@ MCP tool calls yourself, following the sequence below exactly.
 6. `tools/call get_order { "order_id": "..." }` if an order id is available, to report
    back tracking/fulfillment info.
 
-Full walkthrough with example payloads: `../shop-via-ucp.md` in this repo (same content,
-framework-neutral prose — read it if you want the fully worked example).
+Full walkthrough with example payloads, plus a troubleshooting section for real
+external UCP stores (missing `PORTAGE_AGENT_PROFILE`, a profile URL the store can't
+fetch, or `Tool not found` on every call once the profile's attached — all confirmed
+live against billabong.com, none of them a bug in your tool call): `../shop-via-ucp.md`
+in this repo.
