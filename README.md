@@ -10,8 +10,55 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 > **Status**: `0.7.1`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
+## Buying as an agent: the `portage` CLI
+
+Everything above is the *merchant* side — exposing a store to shopping agents. If you're
+the agent (or building one) and just want to find and buy things, that's `portage-cli`, a
+single command with no merchant setup required:
+
+```bash
+gem install portage-cli
+```
+
+```bash
+# Search only — never touches payment or checkout, safe to run freely
+portage find --query "usb-c cable" --max-price 20 --json
+
+# Same search-and-buy pipeline as `buy`, but stops before checkout — see the
+# price/path it would take with no charge either way
+portage buy --query "wireless mouse" --max-price 40 --dry-run --json
+
+# Known store URL — skips search, goes straight to its /.well-known/ucp manifest
+portage buy https://some-ucp-store.example --query "hoodie" --yes --payment-token "$TOKEN"
+
+# Your own store, via a platform adapter you already have credentials for
+# (not a stranger's store — see docs/design-log.md for why that boundary is fixed)
+portage buy --store https://your-shop.myshopify.com --query "snowboard" --dry-run
+```
+
+`buy` tries native UCP discovery first (any store serving a real `/.well-known/ucp`
+manifest), then falls back to a platform adapter only when this process already has
+that platform's own credentials (`SHOPIFY_ADMIN_ACCESS_TOKEN`, etc. — see
+[Requirements](#requirements)). `find` covers the no-URL case, `history`/`payment`/
+`policy` manage local purchase history, stored payment tokens, and spend caps. Full
+walkthrough — install, search, dry-run buy, seeding a store allowlist, what to do when
+the free search backend comes back empty — in
+[`docs/cli-usage-tutorial.md`](docs/cli-usage-tutorial.md).
+
+**Pointing an agent at it:** rather than hand-roll prompts, drop the
+[`skills/shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill into your agent's skills
+directory (Claude Code, or anything else that reads the same `SKILL.md` convention). It
+tells the agent to prefer the `portage-ucp-client` gem or the `portage` CLI over raw MCP
+tool calls when either is available, and encodes the guardrails that matter even when
+neither is (discover a manifest before assuming any credential path, treat
+`requires_escalation` as data rather than an error, never let a raw card number reach
+`payment_token`). [`skills/serve-via-ucp`](skills/serve-via-ucp/SKILL.md) is the
+merchant-side counterpart, for pointing an agent at *setting up* a store's own UCP
+endpoint instead.
+
 ## Contents
 
+- [Buying as an agent: the `portage` CLI](#buying-as-an-agent-the-portage-cli)
 - [Installation](#installation)
 - [Usage](#usage)
 - [The gems](#the-gems)
