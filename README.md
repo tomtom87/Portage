@@ -4,44 +4,37 @@
 ![ruby](https://img.shields.io/badge/ruby-%3E%3D%203.2-red)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Model Context Protocol](https://modelcontextprotocol.io)) and **UCP** ([Universal Commerce Protocol](https://ucp.dev)) at once. Open-source, for any Ruby app on any e-commerce stack — not tied to any one merchant's business logic.
+Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Model Context Protocol](https://modelcontextprotocol.io)) and **UCP** ([Universal Commerce Protocol](https://ucp.dev)) at once. Open-source, for any Ruby app on any e-commerce stack, agnostic, versatile and fully customizable for any business logic.
 
-"Portage" — carrying cargo overland between waterways it can't sail directly between — is what this does: carries commerce operations across platforms that don't natively speak UCP or speak to each other.
+"Portage": a conduit for cargo overland between waterways a ship can't sail directly between.
 
 > **Status**: `0.7.1`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
-## Buying as an agent: the `portage` CLI
-
-Everything above is the *merchant* side — exposing a store to shopping agents. If you're
-the agent (or building one) and just want to find and buy things, that's `portage-cli`, a
-single command with no merchant setup required:
+## Quick start, buying via cli
 
 ```bash
 gem install portage-cli
 ```
 
 ```bash
-# Search only — never touches payment or checkout, safe to run freely
+# Search for products — never touches payment or checkout, safe to run freely - by default supports duckduckgo, Google, Brave. 
 portage find --query "usb-c cable" --max-price 20 --json
 
-# Same search-and-buy pipeline as `buy`, but stops before checkout — see the
+# Dry run search-and-buy pipeline, stops before checkout so we can see the
 # price/path it would take with no charge either way
 portage buy --query "wireless mouse" --max-price 40 --dry-run --json
 
-# Known store URL — skips search, goes straight to its /.well-known/ucp manifest
+# Use a URL, skips search, goes straight to its /.well-known/ucp manifest
 portage buy https://some-ucp-store.example --query "hoodie" --yes --payment-token "$TOKEN"
-
-# Your own store, via a platform adapter you already have credentials for
-# (not a stranger's store — see docs/design-log.md for why that boundary is fixed)
-portage buy --store https://your-shop.myshopify.com --query "snowboard" --dry-run
 ```
 
 `buy` tries native UCP discovery first (any store serving a real `/.well-known/ucp`
 manifest), then falls back to a platform adapter only when this process already has
 that platform's own credentials (`SHOPIFY_ADMIN_ACCESS_TOKEN`, etc. — see
 [Requirements](#requirements)). `find` covers the no-URL case, `history`/`payment`/
-`policy` manage local purchase history, stored payment tokens, and spend caps. Full
-walkthrough — install, search, dry-run buy, seeding a store allowlist, what to do when
+`policy` manage local purchase history, stored payment tokens, and spend caps. 
+
+**Full walkthrough** — install, search, dry-run buy, seeding a store allowlist, what to do when
 the free search backend comes back empty — in
 [`docs/cli-usage-tutorial.md`](docs/cli-usage-tutorial.md).
 
@@ -58,7 +51,6 @@ endpoint instead.
 
 ## Contents
 
-- [Buying as an agent: the `portage` CLI](#buying-as-an-agent-the-portage-cli)
 - [Installation](#installation)
 - [Usage](#usage)
 - [The gems](#the-gems)
