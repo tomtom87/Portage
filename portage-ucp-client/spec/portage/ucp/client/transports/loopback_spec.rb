@@ -64,6 +64,19 @@ RSpec.describe Portage::Ucp::Client::Transports::Loopback do
     expect(logged["agent_profile"]).to eq("agent-123")
   end
 
+  it "also threads the `agent_profile:` key Buy#agent_meta actually sends, not just the server's own key" do
+    io = StringIO.new
+    logger = Logger.new(io)
+    logger.formatter = proc { |_severity, _time, _progname, msg| "#{msg}\n" }
+    logged_transport = described_class.new(adapter: adapter, logger: logger)
+    session = Portage::Ucp::Client::Session.new(transport: logged_transport)
+
+    session.search_catalog(query: "cold", meta: { agent_profile: "agent-456" })
+
+    logged = JSON.parse(io.string.lines.first)
+    expect(logged["agent_profile"]).to eq("agent-456")
+  end
+
   it "assigns a fresh JSON-RPC id per call" do
     transport.call_tool(name: "search_catalog", arguments: { query: "cold", limit: 5 })
     transport.call_tool(name: "search_catalog", arguments: { query: "cold", limit: 5 })
