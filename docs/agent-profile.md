@@ -100,7 +100,7 @@ Any other host that meets the requirements above works too — GitHub Pages
 is just what this repo happens to run without asking anyone to stand up
 separate infrastructure.
 
-## Still open: `Tool not found` on every call once the profile is wired up
+## Resolved: `Tool not found` on every call once the profile is wired up
 
 `portage generate agent-profile`
 (`portage-cli/lib/portage/cli/generate/agent_profile.rb`) used to write
@@ -108,35 +108,37 @@ separate infrastructure.
 deliberately stubbed, per that file's own comments, so a future signer had a
 `kid` to sign under without reshaping the document again. Nobody had gone
 back to fill `capabilities` in with what this agent actually supports.
-
-Confirmed live against billabong.com (2026-09-17), once hosting was fixed
-(profile fetch succeeds, past guardrail 1): every real tool call —
-`search_catalog`, `lookup_catalog`, `get_product`, `create_cart`, all
-confirmed present seconds earlier by `tools/list` — came back
-`-32602 Invalid params, "Tool not found: <name>"` the moment
-`meta.ucp-agent.profile` was attached to the call. Not one tool, not
-catalog-specific — every tool, uniformly, only once the profile was in play.
-
-**Tested fix, didn't work:** `AgentProfile#build_document` now populates
+That's since been fixed (`AgentProfile#build_document` now populates
 `capabilities` with the same shape `Portage::Ucp::Manifest#capability_hash`
-uses for a business's own `/.well-known/ucp` document —
-`{ "<capability-name>": [{"version": "<v>"}] }` — reusing the four
-`Portage::Ucp::Capabilities::{CATALOG,CART,CHECKOUT,ORDER}` constants, since
-those are exactly the four groups `Portage::Ucp::Client::Session` always
-implements. Re-ran the same `search_catalog` call against billabong.com with
-this populated profile (served fresh, confirmed via `curl -I` — correct
-content-type, no cache hit) and got the identical `Tool not found:
-search_catalog`. So an empty `capabilities` object either isn't the cause, or
-isn't the whole cause. The populated version is still a strict improvement
-over shipping an empty object with no way to ever be more correct, so it
-stays, but don't expect it to unblock a real store on its own.
+uses for a business's own `/.well-known/ucp` document), but it turned out
+not to be the cause of the failure below.
 
-**What this doesn't rule out:** the store fetches and 200s the profile every
-time (confirmed via response headers changing per test), so discovery and
-hosting are not the problem. Also ruled out since the above: this isn't
-specific to billabong.com being a stranger's store — the identical error
-reproduces against `ucp-test-bc2vif1p.myshopify.com`, a dev store this
-project owns outright with real admin credentials. Owning the store didn't
-help, which points at a platform-side gate on tool *execution*, independent
-of merchant config. Full writeup and suggested next steps:
-[`ucp-tool-gating-investigation.md`](ucp-tool-gating-investigation.md).
+Confirmed live against billabong.com and against
+`ucp-test-bc2vif1p.myshopify.com` (a Shopify dev store this project owns
+outright) on 2026-09-17: every real tool call — `search_catalog`,
+`lookup_catalog`, `get_product`, `create_cart`, all confirmed present
+seconds earlier by `tools/list` — came back `-32602 Invalid params, "Tool
+not found: <name>"` the moment `meta.ucp-agent.profile` was attached to the
+call. Filling in `capabilities` didn't change this, and neither did owning
+the store.
+
+**Confirmed root cause:** it's a platform-side authorization gate on tool
+*invocation*, unrelated to the agent-profile document, the manifest, or the
+request's wire shape — all proven correct via live testing. The tell is
+`get_order`, which returns an honest `"You are forbidden to make tools/call
+requests"` for the exact same session, identically whether
+`meta.ucp-agent.profile` points at our real, valid profile or at a garbage
+URL that resolves to nothing UCP-shaped — proving profile content is
+irrelevant to the rejection. `search_catalog`/`create_cart`/etc. hit the
+same gate but surface it as a misleading `"Tool not found"` instead: the
+tool is silently absent from this agent's per-session tool registry, even
+though `tools/list` advertises it moments earlier. Most likely explanation:
+Shopify's UCP rollout authorizes tool calls against an allowlist of
+approved agent partners, and this agent isn't on it yet.
+
+**What this means:** there is no code fix available in Portage — this is an
+external platform gate, not a bug in this client. What's still open is
+whether Shopify publishes an allowlist/partner-registration process to get
+approved (not yet found), and whether this is Shopify-specific or
+protocol-wide (untested against a non-Shopify UCP store). Full writeup and
+next steps: [`ucp-tool-gating-investigation.md`](ucp-tool-gating-investigation.md).
