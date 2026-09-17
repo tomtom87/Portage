@@ -166,13 +166,170 @@ allowlist-application process, that's the only path to a working
 integration against real Shopify UCP stores; short of that, this client
 is correct and complete, and the failure is entirely external.
 
-**Not yet investigated** (future work, not blocking this doc's
-resolution): whether Shopify's Partner Dashboard exposes an
-application/enrollment flow for this allowlist, and whether a
-non-Shopify UCP store (BigCommerce/WooCommerce/etc.) gates the same way
-or is protocol-compliant without an allowlist — see steps 3 and 4 below,
-still open, now understood to be about *finding the approval process*
-rather than *finding the bug*.
+**Not yet investigated**: whether a non-Shopify UCP store
+(BigCommerce/WooCommerce/etc.) gates the same way or is
+protocol-compliant without an allowlist — see step 4 below.
+
+## Can Portage sidestep the gate by running its own UCP server for a merchant? No.
+
+Investigated 2026-09-17: whether `portage-ucp-shopify`'s existing UCP
+server (currently serving our own store via the Loopback transport,
+backed by that store's Admin API creds) could become an installable
+Shopify app that runs an HTTP UCP server against a **third-party**
+merchant's Admin API after OAuth install, with Shopify routing agent
+traffic to it instead of its own native endpoint.
+
+**Answer: no such mechanism exists.** Shopify's `/.well-known/ucp` and
+native MCP endpoint are platform-served, fixed per-shop URLs
+(`https://{shop}.myshopify.com/api/ucp/mcp` for UCP catalog tools,
+`https://{shop}.myshopify.com/api/mcp` for Storefront MCP) with no
+registration surface an installed app can hook into:
+
+- The full app-extensions reference
+  (shopify.dev/docs/apps/build/app-extensions/list-of-app-extensions,
+  24 extension types: Admin actions/blocks, Checkout UI, Functions, POS
+  UI, Theme app extensions, Flow triggers/actions, Web pixels, Payments,
+  etc.) has nothing for agentic commerce, UCP, MCP, or `/.well-known`
+  registration.
+- No webhook topic or Partner/Developer Dashboard toggle for this
+  either. Shopify's Spring '26 Developer Dashboard update
+  (shopify.com/news/spring-26-edition-dev) covers registering *your
+  agent's* UCP-client profile — the opposite direction, not a way for a
+  merchant's app to register/override their store's own UCP server.
+- One exception, doesn't apply here: Hydrogen (Shopify's headless
+  storefront framework) has a `proxyStandardRoutes` setting letting a
+  merchant who built their own Hydrogen storefront front `/api/mcp`
+  themselves. Only works when the storefront *is* a custom Hydrogen app
+  the merchant built — not a hook a third-party OAuth-installed app can
+  use against an arbitrary existing (non-Hydrogen) store.
+
+**So**: building this would produce a working UCP server, but nothing
+makes Shopify route agent traffic to it instead of its own hosted
+endpoint at that merchant's domain. Dead end — don't build it.
+
+**Allowlist/approval process — found, and it's worse than hoped.** No
+public self-serve application or waitlist exists. Shopify staff
+(`Alan_G`) confirmed on the Shopify Dev community forum
+(community.shopify.dev/t/how-can-a-token-tier-ucp-client-obtain-permission-to-call-complete-checkout/36590):
+> "Direct `complete_checkout` is granted on a case by case basis and
+> there isn't a public application or waitlist for self-serve platforms
+> at the moment."
+
+Token-tier Dev Dashboard credentials don't include checkout-completion
+permission and "isn't something you can add from the scope picker."
+Shopify's suggested workaround is a `continue_url` redirect to the
+merchant's own storefront checkout (or Checkout Kit) — not a real
+programmatic tool-call path. This matches this doc's own live finding
+(`get_order` → explicit "You are forbidden to make tools/call
+requests").
+
+One unverified claim surfaced during search (a "Universal Commerce
+Agent" App Store app that supposedly auto-serves `/.well-known/ucp` on
+install) could not be confirmed to exist — likely a search-summarizer
+hallucination. Real, verifiable App Store apps found (AgentCart,
+AgentReady: UCP & Catalog) only optimize product/catalog data for
+Shopify's *existing* platform-served UCP surface; they don't replace or
+front the endpoint.
+
+**Conclusion for the roadmap fork**: no client-side or app-side
+workaround exists. Only path to real tool-call authority against
+Shopify UCP stores is direct outreach to Shopify for case-by-case
+approval — there is no documented partner-approval workflow to point at
+yet. Building a self-hosted UCP server app is a dead end and should not
+be attempted.
+
+## Workaround found and proven live (2026-09-17)
+
+The gate applies to Shopify's **UCP** MCP endpoint (`/api/ucp/mcp`). Two
+other surfaces on the same store are *not* gated. Both tested live
+against `ucp-test-bc2vif1p.myshopify.com`.
+
+### 1. Storefront MCP (`/api/mcp`) — ungated, but dying
+
+Separate endpoint from `/api/ucp/mcp`, never tested before this pass.
+`initialize`, `tools/list` and `tools/call` all succeed with **no auth,
+no agent profile, no allowlist**:
+
+```
+POST https://<shop>/api/mcp   {"method":"tools/call","params":{"name":"search_shop_policies_and_faqs",...}}
+=> {"result":{"content":[{"text":"[{\"question\":\"Do you allow customers to request...\"}]"}],"isError":false}}
+```
+
+Real data back. No `Tool not found`, no "forbidden". This proves the
+gate is specific to the UCP endpoint, not a store-wide agent policy.
+
+**But it's unusable as a foundation:**
+
+- It carries no catalog tools. Per
+  shopify.dev/docs/apps/build/storefront-mcp/servers/storefront the
+  tools here are `get_cart`, `update_cart`,
+  `search_shop_policies_and_faqs`. Catalog (`search_catalog`,
+  `lookup_catalog`, `get_product`) lives only on the gated
+  `/api/ucp/mcp`.
+- It is past its announced sunset. Response headers carry
+  `deprecation: @1782259200`, `sunset: Mon, 31 Aug 2026 00:00:00 GMT`,
+  `link: <https://shopify.dev/docs/agents>; rel="successor-version"`,
+  and calling `get_cart` returns in-band:
+  > "DEPRECATION NOTICE: This tool is served by the Storefront MCP
+  > server at /api/mcp and will no longer be accessible after August 31,
+  > 2026. Migrate to the UCP-conforming tools at /api/ucp/mcp."
+
+  That date passed 17 days before this test. It still answers, but
+  Shopify is explicitly routing everyone onto the gated endpoint.
+
+So: the ungated MCP surface lacks catalog and is scheduled to die; the
+surface with catalog is gated. Don't build on `/api/mcp`.
+
+### 2. Storefront API — ungated, durable, and enough (recommended)
+
+The whole shopping flow works over the plain **Storefront GraphQL API**
+with a public storefront access token — no MCP, no agent profile, no
+approval. Proven end to end:
+
+- **Catalog**: `{ products(first:5){ nodes{ title availableForSale } } }`
+  returns live products. (Note: Admin API shows `onlineStoreUrl: null`
+  on this store — products are unpublished to Online Store — and the
+  Storefront API serves them anyway.)
+- **Cart**: `cartCreate(input:{lines:[{merchandiseId:..., quantity:1}]})`
+  returns a real cart with `id`, `totalQuantity` and
+  `cost.totalAmount` (`949.95 USD`), `userErrors: []`.
+- **Checkout**: that same cart carries a working `checkoutUrl`
+  (`https://<shop>/cart/c/<token>?key=...`) — hand it to the user and
+  Shopify's own checkout completes the purchase.
+
+This is exactly the `continue_url` handoff Shopify staff recommended in
+the `complete_checkout` thread, except it needs nothing from Shopify:
+the Storefront API is stable, public, documented and not deprecated,
+and `complete_checkout` approval becomes irrelevant because the shopper
+finishes in Shopify's own checkout.
+
+### What this means for the roadmap
+
+Portage does not need Shopify's UCP endpoint at all. `portage-ucp-shopify`
+can back its UCP server with the Storefront API instead of the gated
+native endpoint, and serve catalog + cart + a checkout handoff today.
+
+The one thing still unavailable is *discovery*: Shopify owns
+`/.well-known/ucp` on the merchant's domain (see section above — no
+override mechanism exists), so agents that discover UCP through the
+store domain will keep landing on Shopify's gated endpoint. Agents have
+to be pointed at Portage's endpoint directly. That's a distribution
+problem, not a technical one.
+
+**Untested**: whether a fully-configured production store exposes more
+tools on `/api/mcp` than our dev store did. Probing a third-party store
+(billabong.com) was declined as out of scope for this repo, and our dev
+store lacks an Online Store channel, so the tool inventory seen here may
+not be representative. Doesn't change the conclusion — `/api/mcp` is
+past sunset either way.
+
+Citations: shopify.dev/docs/agents, shopify.dev/docs/agents/profiles,
+shopify.dev/docs/agents/get-started/profile, shopify.engineering/ucp,
+shopify.dev/docs/apps/build/app-extensions,
+shopify.dev/docs/apps/build/app-extensions/list-of-app-extensions,
+shopify.dev/docs/apps/build/storefront-mcp/servers/storefront,
+shopify.com/news/spring-26-edition-dev,
+community.shopify.dev/t/how-can-a-token-tier-ucp-client-obtain-permission-to-call-complete-checkout/36590
 
 ## Reproduction
 
