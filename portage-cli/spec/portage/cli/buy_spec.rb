@@ -45,6 +45,23 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).to have_received(:complete_checkout).with(checkout_id: "chk_1", payment_token: "tok_1")
     end
 
+    it "checks out the product's first variant id, not the product id, when the product has variants" do
+      variant_product = { "id" => "p1", "title" => "Cold Brew",
+                          "variants" => [{ "id" => "v1" }, { "id" => "v2" }] }
+      session = instance_double(
+        Portage::Ucp::Client::Session, advertises?: true,
+                                       search_catalog: { "ucp" => 1, "products" => [variant_product] },
+                                       create_checkout: incomplete_checkout
+      )
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      described_class.new(url: "shop.example", query: "cold").call
+
+      expect(session).to have_received(:create_checkout) do |**kwargs|
+        expect(kwargs[:line_items]).to eq([{ product_id: "v1", quantity: 1 }])
+      end
+    end
+
     it "stops after create_checkout on --dry-run without completing" do
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)

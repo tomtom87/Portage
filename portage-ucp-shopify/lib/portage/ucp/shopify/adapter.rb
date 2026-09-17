@@ -261,6 +261,13 @@ module Portage
           @client.storefront_query(Queries::GET_CART, variables: { id: cart_id })["cart"]
         end
 
+        # `line_items[].product_id` is the conformance kit's overloaded
+        # name (portage-ucp/lib/portage/ucp/rspec.rb) for "whatever id this
+        # adapter's cart takes" — for Shopify that's a ProductVariant GID,
+        # not the parent Product GID (see conformance_spec.rb's
+        # existing_product_id/existing_variant_id split). Callers are
+        # responsible for passing the right one; this adapter doesn't
+        # resolve product -> variant itself (see docs/design-log.md §41).
         def cart_lines(line_items)
           line_items.map { |li| { merchandiseId: li[:product_id], quantity: li[:quantity] } }
         end
