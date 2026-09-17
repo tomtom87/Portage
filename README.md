@@ -10,7 +10,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 > **Status**: `0.7.1`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
-## Quick start, agent buy via `portage` CLI
+## Quick start, buying via cli
 
 ```bash
 gem install portage-cli
