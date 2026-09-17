@@ -51,7 +51,6 @@ endpoint instead.
 
 ## Contents
 
-- [Buying as an agent: the `portage` CLI](#buying-as-an-agent-the-portage-cli)
 - [Installation](#installation)
 - [Usage](#usage)
 - [The gems](#the-gems)
