@@ -56,16 +56,14 @@ task :spec do
   end
 end
 
-desc "Build a gem from its own directory and smoke-test that the built " \
-     "package installs and requires cleanly (postmortem for the 0.7.0-line " \
-     "yank: `gem build` run from the workspace root resolved every " \
-     "gemspec's `Dir[\"lib/**/*.rb\"]` against the wrong cwd, so all ten " \
-     "packages shipped with no `lib/` and nobody noticed before pushing)"
-task :release_check, [:gem_dir] do |_t, args|
-  gem_dir = args[:gem_dir]
-  abort "usage: rake release_check[portage-ucp]" unless gem_dir
-  abort "no such gem dir: #{gem_dir}" unless GEMS.include?(gem_dir)
-
+# Builds a gem from its own directory and smoke-tests that the built package
+# installs and requires cleanly (postmortem for the 0.7.0-line yank: `gem
+# build` run from the workspace root resolved every gemspec's
+# `Dir["lib/**/*.rb"]` against the wrong cwd, so all ten packages shipped
+# with no `lib/` and nobody noticed before pushing). Yields the built gem's
+# path (inside a tmpdir that's cleaned up on return) so callers can push it
+# without re-building.
+def build_and_verify_gem(gem_dir)
   require "tmpdir"
   require "fileutils"
 
@@ -86,6 +84,29 @@ task :release_check, [:gem_dir] do |_t, args|
 
     require_name = gem_dir.tr("-", "/")
     sh "ruby -I #{gem_lib} -e \"require '#{require_name}'\" && echo '#{gem_dir}: require OK'"
+
+    yield File.join(tmp, gem_file)
+  end
+end
+
+desc "Build a gem from its own directory and smoke-test that the built " \
+     "package installs and requires cleanly"
+task :release_check, [:gem_dir] do |_t, args|
+  gem_dir = args[:gem_dir]
+  abort "usage: rake release_check[portage-ucp]" unless gem_dir
+  abort "no such gem dir: #{gem_dir}" unless GEMS.include?(gem_dir)
+
+  build_and_verify_gem(gem_dir) { |_gem_path| }
+end
+
+desc "Build, smoke-test, and push every gem to rubygems.org in dependency " \
+     "order, using the same build_and_verify_gem check as release_check. " \
+     "rubygems MFA requires a fresh OTP per push, so this pauses for input " \
+     "at each `gem push` — run it once and answer the OTP prompt as it comes."
+task :publish_all do
+  GEMS.each do |gem_dir|
+    puts "\n=== #{gem_dir} ==="
+    build_and_verify_gem(gem_dir) { |gem_path| sh "gem push #{gem_path}" }
   end
 end
 
