@@ -122,3 +122,37 @@ For your own store (you already have Adapter credentials, no manifest to discove
 ```ruby
 session = Portage::Ucp::Client.for_adapter(my_adapter)
 ```
+
+## Troubleshooting a real, external UCP store
+
+Confirmed live against billabong.com's native Shopify UCP endpoint
+(2026-09-17). Errors here look like transport failures but are usually
+setup, not a bug in your call:
+
+- **"Set PORTAGE_AGENT_PROFILE..."** — every HTTP-transport call (i.e.
+  anything through `discover`, not `for_adapter`) must carry
+  `meta: { agent_profile: <url> }`, and the store fetches that URL itself
+  before answering. Set the env var and pass it through explicitly —
+  `session.search_catalog(..., meta: { agent_profile: ENV.fetch("PORTAGE_AGENT_PROFILE") })`.
+  `portage-cli`'s own commands do this for you; raw `Session` calls don't.
+- **A 422 "the request is unprocessable" with an empty response body**,
+  right after wiring up `PORTAGE_AGENT_PROFILE`, usually means the profile
+  URL itself failed the store's fetch — most often a `Content-Type` that
+  isn't `application/json`. `raw.githubusercontent.com` serves `.json`
+  files as `text/plain` and fails this silently (no error detail comes back
+  over the wire). Check with `curl -I <profile-url>` — you want `HTTPS`, no
+  `3xx` redirect, `Content-Type: application/json`, and a public
+  `Cache-Control: max-age=60` or higher. `cdn.jsdelivr.net/gh/<owner>/<repo>@<ref>/<path>`
+  is a reliable way to serve a file straight out of a GitHub repo with the
+  right headers, with no Pages deploy required.
+- **`-32602 Invalid params, "Tool not found: <name>"` for every tool**, even
+  ones `tools/list` just confirmed exist, once the profile is wired up and
+  fetchable — this means the profile document itself doesn't declare enough
+  for the store to authorize the call, not that the tool is missing. Check
+  what `capabilities`/`services` your agent-profile JSON actually declares;
+  an empty `{}` there is a common placeholder that some generators ship
+  by default and never gets filled in.
+- In all three cases: don't retry the call, don't fall back to scraping or
+  raw credentials, and don't report it to the shopper as "the store is
+  down." Say plainly that this store's automated-buying setup isn't working
+  yet and, if you can, name which of the three above it looks like.

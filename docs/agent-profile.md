@@ -60,14 +60,29 @@ above without extra config (HTTPS, no redirect on an exact asset path,
 `Cache-Control: public, max-age=600`).
 
 That workflow needs Actions enabled on the repo (billing/minutes) to ever
-run. Until that's sorted, `.env.example`'s `PORTAGE_AGENT_PROFILE` points at
-`raw.githubusercontent.com/tomtom87/Portage/main/portage-cli/agent-profile/agent-profile.json`
-instead — same checked-in JSON, served straight off the repo with no Pages
-build required. Confirmed live: HTTPS, no redirect, `Cache-Control:
-max-age=300`, `application/json`; a real Shopify store accepted it and got
-past the agent-profile check. Switch back to the Pages URL once Actions is
-enabled — GitHub's CDN caching on raw file serving isn't a documented
-guarantee the way Pages is.
+run, and as of 2026-09-17 its last three runs have failed anyway (Pages
+`Source` is set to "GitHub Actions" but nothing has ever deployed to it —
+`https://tomtom87.github.io/Portage/...` still 404s). Until both of those are
+sorted, `.env.example`'s `PORTAGE_AGENT_PROFILE` points at jsdelivr's GitHub
+CDN mirror instead:
+
+```
+https://cdn.jsdelivr.net/gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json
+```
+
+Same checked-in JSON, no Pages build required. **Do not point this at
+`raw.githubusercontent.com`** — confirmed live against billabong.com's real
+Shopify UCP store (2026-09-17): raw.githubusercontent.com serves this exact
+path as `Content-Type: text/plain; charset=utf-8`, which a strict UCP server
+rejects (`profile_malformed`, surfaced by `portage-ucp-client` as a generic
+"tools/call request is unprocessable" 422 with an empty body — there's no
+in-band signal pointing at content-type, so check the profile URL's headers
+by hand with `curl -I` if you see that error). jsdelivr serves the same file
+as `application/json` with no redirect and `Cache-Control: public,
+max-age=604800`, and was confirmed live past the agent-profile check on the
+same store. Switch to the Pages URL once that workflow actually deploys
+something — GitHub's CDN caching on raw/jsdelivr file serving isn't a
+documented guarantee the way Pages is.
 
 **One-time setup this workflow can't do for you:** Settings → Pages → Build
 and deployment → Source = "GitHub Actions", on this repo. Until that's
