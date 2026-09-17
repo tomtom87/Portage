@@ -2623,3 +2623,44 @@ Native UCP buys (`Buy#native_flow`, no adapter/loopback involved) are
 unaffected — there's no local `Dispatcher` on that path to hand a journal
 to; a remote UCP server's own journal-wiring, if any, is that server's
 call.
+
+## 39. `PORTAGE_AGENT_PROFILE` needs something real to point at (2026-09-17)
+
+Real UCP servers 422 (`profile_unreachable`) any catalog/cart/checkout call
+whose `meta.ucp-agent.profile` doesn't resolve to an actual, spec-shaped
+identity document — confirmed live against Shopify. Nothing in this repo
+published one. `portage generate agent-profile` (`portage-cli/lib/portage/
+cli/generate/agent_profile.rb`) now builds it: `{ ucp: { version, services,
+capabilities, payment_handlers }, signing_keys: [...] }`, one P-256 JWK
+whose `kid` is its own RFC 7638 thumbprint, `--rotate` to add a key without
+dropping old ones. See docs/agent-profile.md for the full hosting contract
+and generation/rotation commands.
+
+Deliberately its own class, not a reuse of `Portage::Ucp::Manifest`
+(`manifest.rb`): that builds the *business's* `/.well-known/ucp` document
+and nests `signing_keys` inside its `ucp` envelope; the agent profile is a
+different document (describes the calling *agent*, not the business being
+called) and the spec puts `signing_keys` as a sibling of `ucp` at the
+document root. Visually similar, structurally not interchangeable —
+conflating them would've meant either document lying about its own shape.
+`UCP_VERSION` is reused from `Manifest` rather than redeclared, so the two
+can't drift to different spec versions independently.
+
+Hosting: `.github/workflows/publish-agent-profile.yml` redeploys the
+generated JSON to GitHub Pages (site root + `/.well-known/ucp-agent`) on
+every push to `main` that touches it — meets every hosting requirement the
+spec imposes (HTTPS, no redirects, `Cache-Control: public, max-age>=60`)
+with no extra infra. Requires a one-time repo setting (Pages source =
+GitHub Actions) this workflow can't flip itself; noted in the workflow and
+in docs/agent-profile.md, not done as part of this change.
+
+Also surfaced, not fixed here: this makes *three* different shapes for
+"which URL identifies the calling agent," not two — the spec's own
+`UCP-Agent: profile="..."` HTTP header (RFC 8941), the
+`arguments.meta["ucp-agent"]["profile"]` shape real Shopify stores actually
+expect (what the HTTP transport client now sends, per §37/38's neighboring
+work), and this gem's own server reading a flat `_meta["ucp-agent.profile"]`
+dotted key (`mcp/server.rb`). Only the middle one matters for talking to a
+real store; the other two are internal-consistency questions for
+`portage-ucp`'s own server, out of scope here — no evidence a real store
+talks to it (see §22).
