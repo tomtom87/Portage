@@ -133,12 +133,10 @@ stays, but don't expect it to unblock a real store on its own.
 
 **What this doesn't rule out:** the store fetches and 200s the profile every
 time (confirmed via response headers changing per test), so discovery and
-hosting are not the problem. Left untested — would need a live Shopify
-UCP-partner account to check: whether `search_catalog` et al. are gated
-behind an agent allowlist independent of the profile document's own content
-(i.e. this rollout only answers real tool calls for agents Shopify has
-specifically approved, and any unrecognized caller gets the same generic
-`Tool not found` regardless of what its profile says). If you pick this back
-up, the fastest next step is comparing this against a *different* live UCP
-store (not Shopify) to see if the failure is Shopify-specific or general —
-this repo only tested against billabong.com.
+hosting are not the problem. Also ruled out since the above: this isn't
+specific to billabong.com being a stranger's store — the identical error
+reproduces against `ucp-test-bc2vif1p.myshopify.com`, a dev store this
+project owns outright with real admin credentials. Owning the store didn't
+help, which points at a platform-side gate on tool *execution*, independent
+of merchant config. Full writeup and suggested next steps:
+[`ucp-tool-gating-investigation.md`](ucp-tool-gating-investigation.md).
