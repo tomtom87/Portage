@@ -16,8 +16,15 @@ module Portage
       # advertised_for? simply doesn't advertise dev.ucp.shopping.identity for
       # this adapter — not a 500, just an absent capability.
       #
-      # Catalog and Order are read through the Admin API (Storefront can't
-      # look up an arbitrary order without a customer session). Cart and
+      # Order is read through the Admin API (Storefront can't look up an
+      # arbitrary order without a customer session). Catalog is read through
+      # Storefront so it can only ever surface what a Storefront Cart will
+      # actually accept: Admin's `products` also returns DRAFT/ARCHIVED and
+      # unpublished products, which cartCreate then rejects outright ("The
+      # merchandise with id ... does not exist"), letting an agent find a
+      # product it cannot buy. Storefront returns `null` for those by id and
+      # omits them from search, so the mismatch is impossible by construction
+      # rather than filtered after the fact. Cart and
       # Checkout are read/written through the Storefront API's Cart object —
       # Admin has no "Cart"; a headless checkout is a Storefront Cart plus its
       # `checkoutUrl` payment/completion mutations, not a separate Checkout
@@ -55,19 +62,19 @@ module Portage
         end
 
         def search_catalog(query:, limit:)
-          data = @client.admin_query(Queries.search_catalog_query, variables: { query: query, first: limit })
+          data = @client.storefront_query(Queries.search_catalog_query, variables: { query: query, first: limit })
           products = data.dig("products", "nodes").map { |node| Mapper.product(node) }
           Portage::Ucp::CatalogSearchResult.new(products: products)
         end
 
         def get_product(product_id:)
-          data = @client.admin_query(Queries.product_by_id_query, variables: { id: product_id })
+          data = @client.storefront_query(Queries.product_by_id_query, variables: { id: product_id })
           node = data["product"]
           node && Portage::Ucp::ProductDetail.new(product: Mapper.product(node))
         end
 
         def lookup_catalog(product_ids:)
-          data = @client.admin_query(Queries.products_by_ids_query, variables: { ids: product_ids })
+          data = @client.storefront_query(Queries.products_by_ids_query, variables: { ids: product_ids })
           products = data["nodes"].compact.map { |node| Mapper.product(node) }
           Portage::Ucp::CatalogSearchResult.new(products: products)
         end

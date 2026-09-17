@@ -25,7 +25,7 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
         "variants" => { "nodes" => [
           { "id" => "gid://shopify/ProductVariant/1", "title" => "Default", "availableForSale" => true,
             "sku" => "CB-12", "barcode" => "012345678905",
-            "price" => "5.00", "compareAtPrice" => nil,
+            "price" => { "amount" => "5.00", "currencyCode" => "USD" }, "compareAtPrice" => nil,
             "selectedOptions" => [{ "name" => "Size", "value" => "12oz" }], "image" => nil }
         ] }
       }
@@ -46,6 +46,27 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       expect(variant.sku).to eq("CB-12")
       expect(variant.price).to eq(Portage::Ucp::Price.new(amount: 500, currency: "USD"))
       expect(variant.availability).to eq({ "available" => true })
+    end
+
+    it "omits list_price_range when Storefront reports a zeroed compare-at range rather than nil" do
+      zeroed = node.merge(
+        "compareAtPriceRange" => { "minVariantPrice" => { "amount" => "0.0", "currencyCode" => "USD" },
+                                   "maxVariantPrice" => { "amount" => "0.0", "currencyCode" => "USD" } }
+      )
+
+      expect(described_class.product(zeroed).list_price_range).to be_nil
+    end
+
+    it "keeps list_price_range when a compare-at price is actually set" do
+      discounted = node.merge(
+        "compareAtPriceRange" => { "minVariantPrice" => { "amount" => "7.00", "currencyCode" => "USD" },
+                                   "maxVariantPrice" => { "amount" => "9.00", "currencyCode" => "USD" } }
+      )
+
+      expect(described_class.product(discounted).list_price_range).to eq(
+        Portage::Ucp::PriceRange.new(min: Portage::Ucp::Price.new(amount: 700, currency: "USD"),
+                                     max: Portage::Ucp::Price.new(amount: 900, currency: "USD"))
+      )
     end
 
     it "maps a UPC-length barcode to a UPC-tagged GTIN" do

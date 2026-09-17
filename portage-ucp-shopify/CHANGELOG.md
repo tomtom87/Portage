@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Fixes catalog reads surfacing products that can't be bought. `search_catalog`,
+  `get_product` and `lookup_catalog` now read through the **Storefront** API
+  instead of Admin. Admin's `products` also returns `DRAFT`/`ARCHIVED` and
+  unpublished products, which `cartCreate` then rejects outright ("The
+  merchandise with id ... does not exist"), so an agent could search up a
+  product and fail to buy it. Storefront omits those from search and returns
+  `null` for them by id, so catalog and cart now agree by construction.
+  A consequence worth knowing: catalog no longer needs an Admin token at all
+  — a storefront token alone serves it. Orders still require Admin.
+- **Breaking for anyone calling `Mapper` directly**: `Mapper#scalar_price` is
+  removed and `Mapper#variant` no longer takes a `currency` argument, since
+  Storefront returns variant `price`/`compareAtPrice` as `MoneyV2` objects
+  rather than Admin's bare `Money` scalar. `Mapper#compare_at_price_range`
+  also now treats an all-zero range as absent: Storefront always returns the
+  range object (zeroed) where Admin returned `nil`, and `list_price_range`
+  is meant to be absent rather than zero when no compare-at price is set.
+- Note: Storefront only returns metafields a merchant has exposed to it, so a
+  configured `metadata_field` can come back empty where Admin would have
+  served it.
+
 ## [0.4.4] - 2026-09-17
 
 - No behavior change — widens the `portage-ucp` dependency pin to `~> 0.8`
