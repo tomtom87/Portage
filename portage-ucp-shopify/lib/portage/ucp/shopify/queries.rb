@@ -30,8 +30,8 @@ module Portage
           tags
           priceRange { minVariantPrice { amount currencyCode } maxVariantPrice { amount currencyCode } }
           compareAtPriceRange {
-            minVariantCompareAtPrice { amount currencyCode }
-            maxVariantCompareAtPrice { amount currencyCode }
+            minVariantPrice { amount currencyCode }
+            maxVariantPrice { amount currencyCode }
           }
           featuredMedia: media(first: 1) { nodes { ... on MediaImage { image { url altText width height } } } }
           options(first: 10) { name optionValues { id name } }
@@ -39,8 +39,8 @@ module Portage
           variants(first: 25) {
             nodes {
               id title availableForSale sku barcode
-              price
-              compareAtPrice
+              price { amount currencyCode }
+              compareAtPrice { amount currencyCode }
               selectedOptions { name value }
               image { url altText width height }
               %<variant_metafields>s
@@ -49,8 +49,11 @@ module Portage
         GRAPHQL
 
         # Product-level and variant-level metafields are separate GraphQL
-        # fields with separate cost on Shopify's Admin API (Product#metafields
-        # vs. ProductVariant#metafields) — `scope` picks which configured list
+        # fields with separate cost on Shopify's Storefront API
+        # (Product#metafields vs. ProductVariant#metafields) — note Storefront
+        # only returns a metafield the merchant has exposed to it, so a
+        # configured metadata_field can come back `null` here where the Admin
+        # API would have served it. `scope` picks which configured list
         # to build the identifiers from. Empty when nothing's configured for
         # that scope, so an unconfigured consumer's query is byte-identical to
         # before this fragment existed.
@@ -83,9 +86,10 @@ module Portage
           GRAPHQL
         end
 
-        # Admin API batch-by-GID fetch — `nodes` returns one entry per
+        # Storefront batch-by-GID fetch — `nodes` returns one entry per
         # requested id, in order, `null` for any id that doesn't resolve to a
-        # Product (see Adapter#lookup_catalog's `.compact`).
+        # Product the storefront will serve (see Adapter#lookup_catalog's
+        # `.compact`). A draft or archived product is one such `null`.
         def self.products_by_ids_query
           <<~GRAPHQL
             query ProductsByIds($ids: [ID!]!) {

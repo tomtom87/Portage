@@ -303,6 +303,69 @@ the Storefront API is stable, public, documented and not deprecated,
 and `complete_checkout` approval becomes irrelevant because the shopper
 finishes in Shopify's own checkout.
 
+### Bug found while validating the ungated path
+
+`portage-ucp-shopify`'s Adapter already never touched Shopify's native MCP
+endpoint — it talks straight to Admin + Storefront GraphQL, and
+`Mapper#checkout_links` already hands back the cart's `checkoutUrl` as a
+`resume-checkout` Link. So the "workaround" needed no new transport. But
+running the live buyer-journey spec against it surfaced a real defect:
+
+Catalog is read through the **Admin** API, while the cart those results
+get added to is written through the **Storefront** API. Admin sees
+`DRAFT`/`ARCHIVED` and unpublished products; the Storefront Cart does
+not. `random_purchase_spec` picked "The Draft Snowboard" out of a catalog
+search and `cartCreate` rejected it:
+
+```
+Portage::Ucp::Shopify::UserError:
+  cartCreate userErrors: The merchandise with id
+  gid://shopify/ProductVariant/45662494851119 does not exist.
+```
+
+An agent could search up a product and then be unable to buy it.
+
+**Fixed by moving all three catalog reads (`search_catalog`, `get_product`,
+`lookup_catalog`) onto the Storefront API**, so the catalog and the cart
+now read from the same place and the mismatch is impossible by
+construction rather than filtered after the fact. Verified live through the
+adapter:
+
+```
+get_product(draft)    -> nil
+get_product(archived) -> nil
+get_product(live)     -> The Inventory Not Tracked Snowboard
+lookup_catalog(all 3) -> ["The Inventory Not Tracked Snowboard"]
+search_catalog        -> 16 products, no Draft/Archived
+```
+
+An Admin-side filter (`status:active AND published_status:published`) was
+tried first and rejected: it returned only 13 products where Storefront
+serves 16, i.e. it hid three genuinely sellable products while still
+leaving `get_product`/`lookup_catalog` unscoped, since those take a
+caller-supplied GID and have no query to filter. Storefront is the
+authority on what's purchasable, so reading from it directly is both more
+correct and smaller.
+
+Schema differences this required, all confirmed against the live
+Storefront 2026-04 API rather than assumed:
+
+- variant `price`/`compareAtPrice` are `MoneyV2` objects, not Admin's bare
+  `Money` scalar — so `Mapper#scalar_price` is gone and `currency` no
+  longer has to be threaded down from the parent product.
+- `compareAtPriceRange` uses `minVariantPrice`/`maxVariantPrice`, not
+  Admin's `minVariantCompareAtPrice`/`maxVariantCompareAtPrice`.
+- Storefront always returns `compareAtPriceRange`, **zeroed**, where Admin
+  returned `nil` outright. `Mapper#compare_at_price_range` now treats an
+  all-zero range as absent, preserving the existing "no strikethrough price
+  means the field is absent, not present-and-zero" intent.
+- Storefront only returns metafields the merchant has exposed to it, so a
+  configured `metadata_field` can come back `null` where Admin would have
+  served it. Noted in `Queries.metafields_fragment`.
+
+Bonus: catalog no longer needs an Admin token at all — the verification
+above ran with a storefront token only. Orders still require Admin.
+
 ### What this means for the roadmap
 
 Portage does not need Shopify's UCP endpoint at all. `portage-ucp-shopify`

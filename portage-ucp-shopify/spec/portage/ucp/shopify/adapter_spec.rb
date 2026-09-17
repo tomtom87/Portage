@@ -90,16 +90,16 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
   end
 
   describe "#search_catalog" do
-    it "queries the Admin API and maps results to a Portage::Ucp::CatalogSearchResult" do
-      stub_admin({ data: { products: { nodes: [
-                   { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
-                     priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
-                                   maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
-                     variants: { nodes: [
-                       { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
-                         price: "5.00" }
-                     ] } }
-                 ] } } })
+    it "queries the Storefront API and maps results to a Portage::Ucp::CatalogSearchResult" do
+      stub_storefront({ data: { products: { nodes: [
+                        { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
+                          priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
+                                        maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
+                          variants: { nodes: [
+                            { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
+                              price: { amount: "5.00", currencyCode: "USD" } }
+                          ] } }
+                      ] } } })
 
       result = adapter.search_catalog(query: "brew", limit: 10)
 
@@ -110,11 +110,11 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
 
     it "sends a configured metadata_field's identifier even when configure ran after the gem was required" do
       Portage::Ucp::Shopify.configure { |c| c.metadata_field(:color_hex, metafield: "custom.color_code") }
-      stub_admin({ data: { products: { nodes: [] } } })
+      stub_storefront({ data: { products: { nodes: [] } } })
 
       adapter.search_catalog(query: "brew", limit: 10)
 
-      expect(a_request(:post, "https://test-shop.myshopify.com/admin/api/2026-04/graphql.json")
+      expect(a_request(:post, "https://test-shop.myshopify.com/api/2026-04/graphql.json")
         .with(body: /metafields\(identifiers: \[\{namespace: \\"custom\\", key: \\"color_code\\"\}\]\)/))
         .to have_been_made
     ensure
@@ -123,23 +123,23 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
   end
 
   describe "#lookup_catalog" do
-    it "queries the Admin API via nodes(ids:) and maps results to a Portage::Ucp::CatalogSearchResult" do
-      stub_admin({ data: { nodes: [
-                   { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
-                     priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
-                                   maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
-                     variants: { nodes: [
-                       { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
-                         price: "5.00" }
-                     ] } },
-                   { id: "gid://shopify/Product/2", title: "Espresso", description: "desc", onlineStoreUrl: nil,
-                     priceRange: { minVariantPrice: { amount: "3.00", currencyCode: "USD" },
-                                   maxVariantPrice: { amount: "3.00", currencyCode: "USD" } },
-                     variants: { nodes: [
-                       { id: "gid://shopify/ProductVariant/2", title: "Default", availableForSale: true,
-                         price: "3.00" }
-                     ] } }
-                 ] } })
+    it "queries the Storefront API via nodes(ids:) and maps results to a Portage::Ucp::CatalogSearchResult" do
+      stub_storefront({ data: { nodes: [
+                        { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
+                          priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
+                                        maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
+                          variants: { nodes: [
+                            { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
+                              price: { amount: "5.00", currencyCode: "USD" } }
+                          ] } },
+                        { id: "gid://shopify/Product/2", title: "Espresso", description: "desc", onlineStoreUrl: nil,
+                          priceRange: { minVariantPrice: { amount: "3.00", currencyCode: "USD" },
+                                        maxVariantPrice: { amount: "3.00", currencyCode: "USD" } },
+                          variants: { nodes: [
+                            { id: "gid://shopify/ProductVariant/2", title: "Default", availableForSale: true,
+                              price: { amount: "3.00", currencyCode: "USD" } }
+                          ] } }
+                      ] } })
         .with(body: hash_including("query" => a_string_matching(/query ProductsByIds/),
                                    "variables" => { "ids" => %w[gid://shopify/Product/1
                                                                 gid://shopify/Product/2] }))
@@ -151,16 +151,16 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
     end
 
     it "drops nil nodes for ids that don't resolve to a Product" do
-      stub_admin({ data: { nodes: [
-                   nil,
-                   { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
-                     priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
-                                   maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
-                     variants: { nodes: [
-                       { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
-                         price: "5.00" }
-                     ] } }
-                 ] } })
+      stub_storefront({ data: { nodes: [
+                        nil,
+                        { id: "gid://shopify/Product/1", title: "Cold Brew", description: "desc", onlineStoreUrl: nil,
+                          priceRange: { minVariantPrice: { amount: "5.00", currencyCode: "USD" },
+                                        maxVariantPrice: { amount: "5.00", currencyCode: "USD" } },
+                          variants: { nodes: [
+                            { id: "gid://shopify/ProductVariant/1", title: "Default", availableForSale: true,
+                              price: { amount: "5.00", currencyCode: "USD" } }
+                          ] } }
+                      ] } })
 
       result = adapter.lookup_catalog(product_ids: %w[gid://shopify/Product/missing gid://shopify/Product/1])
 

@@ -30,7 +30,6 @@ module Portage
         end
 
         def product(node)
-          currency = node.dig("priceRange", "minVariantPrice", "currencyCode")
           Portage::Ucp::Product.new(
             id: node["id"],
             handle: node["handle"],
@@ -38,7 +37,7 @@ module Portage
             description: description(node),
             price_range: price_range(node["priceRange"]),
             list_price_range: compare_at_price_range(node["compareAtPriceRange"]),
-            variants: node.dig("variants", "nodes").map { |v| variant(v, description(node), currency) },
+            variants: node.dig("variants", "nodes").map { |v| variant(v, description(node)) },
             options: (node["options"] || []).map { |o| product_option(o) },
             media: product_media(node.dig("featuredMedia", "nodes", 0)),
             tags: node["tags"] || [],
@@ -91,15 +90,20 @@ module Portage
           Portage::Ucp::PriceRange.new(min: price(node["minVariantPrice"]), max: price(node["maxVariantPrice"]))
         end
 
-        # nil when Shopify's compareAtPriceRange itself is nil (no variant
-        # has a compare-at price set) rather than a zeroed-out range —
-        # Product#list_price_range is optional, so "no strikethrough price"
-        # should mean the field is absent, not present-and-zero.
+        # nil rather than a zeroed-out range when no variant has a compare-at
+        # price — Product#list_price_range is optional, so "no strikethrough
+        # price" should mean the field is absent, not present-and-zero.
+        # Storefront always returns the range object, zeroed, where Admin
+        # returned nil outright (confirmed live), so the zero check below is
+        # what actually carries that intent now.
         def compare_at_price_range(node)
           return nil unless node
 
-          Portage::Ucp::PriceRange.new(min: price(node["minVariantCompareAtPrice"]),
-                                       max: price(node["maxVariantCompareAtPrice"]))
+          min = price(node["minVariantPrice"])
+          max = price(node["maxVariantPrice"])
+          return nil if min.amount.zero? && max.amount.zero?
+
+          Portage::Ucp::PriceRange.new(min: min, max: max)
         end
 
         def product_option(node)
@@ -134,24 +138,15 @@ module Portage
         # types/variant.json requires one, so this reuses the product's, same
         # posture as Wix's variant title falling back to its product's (see
         # Portage::Ucp::Wix::Mapper#variant).
-        # `price`/`compareAtPrice` come back as the bare `Money` scalar (a
-        # decimal string, no currency of its own) rather than a MoneyV2
-        # object — confirmed against the live Admin API 2026-04 schema, which
-        # rejects `{ amount currencyCode }` sub-selections on them. `currency`
-        # is the product's own (from priceRange), which every variant shares.
-        def scalar_price(amount, currency)
-          Portage::Ucp::Price.new(amount: Portage::Ucp::Support::Amounts.decimal_to_minor(amount), currency: currency)
-        end
-
-        def variant(node, product_description, currency)
+        def variant(node, product_description)
           Portage::Ucp::Variant.new(
             id: node["id"],
             title: node["title"],
             description: product_description,
-            price: scalar_price(node["price"], currency),
+            price: price(node["price"]),
             sku: node["sku"],
             barcodes: barcodes(node["barcode"]),
-            list_price: node["compareAtPrice"] && scalar_price(node["compareAtPrice"], currency),
+            list_price: node["compareAtPrice"] && price(node["compareAtPrice"]),
             availability: { "available" => node["availableForSale"] },
             options: selected_options(node["selectedOptions"]),
             media: variant_media(node["image"]),
