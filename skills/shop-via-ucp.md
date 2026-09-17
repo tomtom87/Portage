@@ -147,11 +147,15 @@ setup, not a bug in your call:
   right headers, with no Pages deploy required.
 - **`-32602 Invalid params, "Tool not found: <name>"` for every tool**, even
   ones `tools/list` just confirmed exist, once the profile is wired up and
-  fetchable — this means the profile document itself doesn't declare enough
-  for the store to authorize the call, not that the tool is missing. Check
-  what `capabilities`/`services` your agent-profile JSON actually declares;
-  an empty `{}` there is a common placeholder that some generators ship
-  by default and never gets filled in.
+  fetchable — the tool isn't actually missing; something about the calling
+  agent isn't authorized to use it. An agent profile with an empty
+  `capabilities: {}` is one plausible cause and worth ruling out (fill it in
+  and retest), but confirmed live against billabong.com, filling it in did
+  *not* clear this error — some stores appear to gate real tool calls behind
+  an allowlist of recognized agents independent of what the profile document
+  says. Treat this as "this store hasn't opened automated buying to this
+  agent" and say so, rather than assuming it's your profile content or your
+  call shape.
 - In all three cases: don't retry the call, don't fall back to scraping or
   raw credentials, and don't report it to the shopper as "the store is
   down." Say plainly that this store's automated-buying setup isn't working

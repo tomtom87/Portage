@@ -100,10 +100,10 @@ Any other host that meets the requirements above works too — GitHub Pages
 is just what this repo happens to run without asking anyone to stand up
 separate infrastructure.
 
-## Past bug: `capabilities` shipped empty
+## Still open: `Tool not found` on every call once the profile is wired up
 
-Before this fix, `portage generate agent-profile`
-(`portage-cli/lib/portage/cli/generate/agent_profile.rb`) wrote
+`portage generate agent-profile`
+(`portage-cli/lib/portage/cli/generate/agent_profile.rb`) used to write
 `"ucp": { "services": {}, "capabilities": {}, "payment_handlers": {} }` —
 deliberately stubbed, per that file's own comments, so a future signer had a
 `kid` to sign under without reshaping the document again. Nobody had gone
@@ -116,14 +116,29 @@ confirmed present seconds earlier by `tools/list` — came back
 `-32602 Invalid params, "Tool not found: <name>"` the moment
 `meta.ucp-agent.profile` was attached to the call. Not one tool, not
 catalog-specific — every tool, uniformly, only once the profile was in play.
-The store was authorizing each tool call against what the fetched agent
-profile *says it can do*, and an empty `capabilities` object says "nothing".
 
-Fix: `AgentProfile#build_document` now populates `capabilities` with the same
-shape `Portage::Ucp::Manifest#capability_hash` uses for a *business's*
-`/.well-known/ucp` document — `{ "<capability-name>": [{"version": "<v>"}] }`
-— reusing the four `Portage::Ucp::Capabilities::{CATALOG,CART,CHECKOUT,ORDER}`
-constants, since those are exactly the four groups
-`Portage::Ucp::Client::Session` always implements regardless of transport.
-Re-run `portage generate agent-profile --rotate` and re-publish if you
-generated a profile before this fix.
+**Tested fix, didn't work:** `AgentProfile#build_document` now populates
+`capabilities` with the same shape `Portage::Ucp::Manifest#capability_hash`
+uses for a business's own `/.well-known/ucp` document —
+`{ "<capability-name>": [{"version": "<v>"}] }` — reusing the four
+`Portage::Ucp::Capabilities::{CATALOG,CART,CHECKOUT,ORDER}` constants, since
+those are exactly the four groups `Portage::Ucp::Client::Session` always
+implements. Re-ran the same `search_catalog` call against billabong.com with
+this populated profile (served fresh, confirmed via `curl -I` — correct
+content-type, no cache hit) and got the identical `Tool not found:
+search_catalog`. So an empty `capabilities` object either isn't the cause, or
+isn't the whole cause. The populated version is still a strict improvement
+over shipping an empty object with no way to ever be more correct, so it
+stays, but don't expect it to unblock a real store on its own.
+
+**What this doesn't rule out:** the store fetches and 200s the profile every
+time (confirmed via response headers changing per test), so discovery and
+hosting are not the problem. Left untested — would need a live Shopify
+UCP-partner account to check: whether `search_catalog` et al. are gated
+behind an agent allowlist independent of the profile document's own content
+(i.e. this rollout only answers real tool calls for agents Shopify has
+specifically approved, and any unrecognized caller gets the same generic
+`Tool not found` regardless of what its profile says). If you pick this back
+up, the fastest next step is comparing this against a *different* live UCP
+store (not Shopify) to see if the failure is Shopify-specific or general —
+this repo only tested against billabong.com.
