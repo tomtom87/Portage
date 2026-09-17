@@ -99,3 +99,31 @@ PORTAGE_AGENT_PROFILE=https://tomtom87.github.io/Portage/agent-profile.json
 Any other host that meets the requirements above works too — GitHub Pages
 is just what this repo happens to run without asking anyone to stand up
 separate infrastructure.
+
+## Past bug: `capabilities` shipped empty
+
+Before this fix, `portage generate agent-profile`
+(`portage-cli/lib/portage/cli/generate/agent_profile.rb`) wrote
+`"ucp": { "services": {}, "capabilities": {}, "payment_handlers": {} }` —
+deliberately stubbed, per that file's own comments, so a future signer had a
+`kid` to sign under without reshaping the document again. Nobody had gone
+back to fill `capabilities` in with what this agent actually supports.
+
+Confirmed live against billabong.com (2026-09-17), once hosting was fixed
+(profile fetch succeeds, past guardrail 1): every real tool call —
+`search_catalog`, `lookup_catalog`, `get_product`, `create_cart`, all
+confirmed present seconds earlier by `tools/list` — came back
+`-32602 Invalid params, "Tool not found: <name>"` the moment
+`meta.ucp-agent.profile` was attached to the call. Not one tool, not
+catalog-specific — every tool, uniformly, only once the profile was in play.
+The store was authorizing each tool call against what the fetched agent
+profile *says it can do*, and an empty `capabilities` object says "nothing".
+
+Fix: `AgentProfile#build_document` now populates `capabilities` with the same
+shape `Portage::Ucp::Manifest#capability_hash` uses for a *business's*
+`/.well-known/ucp` document — `{ "<capability-name>": [{"version": "<v>"}] }`
+— reusing the four `Portage::Ucp::Capabilities::{CATALOG,CART,CHECKOUT,ORDER}`
+constants, since those are exactly the four groups
+`Portage::Ucp::Client::Session` always implements regardless of transport.
+Re-run `portage generate agent-profile --rotate` and re-publish if you
+generated a profile before this fix.

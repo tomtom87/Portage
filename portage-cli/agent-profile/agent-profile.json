@@ -2,7 +2,28 @@
   "ucp": {
     "version": "2026-04-08",
     "services": {},
-    "capabilities": {},
+    "capabilities": {
+      "dev.ucp.shopping.catalog": [
+        {
+          "version": "1"
+        }
+      ],
+      "dev.ucp.shopping.cart": [
+        {
+          "version": "1"
+        }
+      ],
+      "dev.ucp.shopping.checkout": [
+        {
+          "version": "1"
+        }
+      ],
+      "dev.ucp.shopping.order": [
+        {
+          "version": "1"
+        }
+      ]
+    },
     "payment_handlers": {}
   },
   "signing_keys": [
@@ -12,6 +33,15 @@
       "crv": "P-256",
       "x": "s_FkPSocyuttXsRAndd1YVl63jxG_Yk1re7V3rzcGJY",
       "y": "5NZe_LGh2uJKqyoq38l0EuSn0ePX8xQ9vL9wxLlOE2c",
+      "use": "sig",
+      "alg": "ES256"
+    },
+    {
+      "kid": "x39XjBOYXGZGDhYAVlMXMISxEexbK0jIWZIfczQh7IM",
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "-Rfzfmh18KYHo1fMiC8SVYt8oi5ExePgThsT87ZuNSQ",
+      "y": "aiVl8XUubg7n8Ohs7qSI7VZ87f0Z8gJWlP3gLVwnkQ8",
       "use": "sig",
       "alg": "ES256"
     }
