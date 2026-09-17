@@ -4,12 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.6.0] - 2026-09-17
 
 - Fixed `buy`/`find` crashing with a raw `Faraday::UnprocessableContentError`
   against a real UCP store, once manifest parsing succeeded — the actual
   `search_catalog`/`create_checkout` calls were still built in the wrong
-  wire shape (see `portage-ucp-client`'s Unreleased entry). Both commands
+  wire shape (see `portage-ucp-client` 0.4.0). Both commands
   now report a clear, actionable message instead: set `PORTAGE_AGENT_PROFILE`
   when it's missing, or surface the store's rejection cleanly when it's set
   but not accepted.
@@ -27,6 +27,15 @@ pre-1.0, so APIs may still shift between minor versions.
   otherwise; `--product-id` matching (`#product_id_of`) is unchanged, since
   it still needs to match the catalog-level id `find`/`compare` show the
   caller.
+- Added `portage generate agent-profile`, which writes a real UCP
+  agent-identity document (the JSON a store fetches from the
+  `meta.ucp-agent.profile` URL to decide whether to answer at all).
+  `portage-cli`'s own generated profile is checked in at
+  `agent-profile/agent-profile.json` and published to a stable URL by
+  `.github/workflows/publish-agent-profile.yml`, which is what
+  `PORTAGE_AGENT_PROFILE` defaults to pointing at.
+- Widens the `portage-ucp` pin to `~> 0.8` and the `portage-ucp-client` pin
+  to `~> 0.4` so this gem installs alongside the 0.8.0-line releases.
 
 ## [0.5.1] - 2026-09-16
 

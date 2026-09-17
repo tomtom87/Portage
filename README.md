@@ -8,7 +8,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage": a conduit for cargo overland between waterways a ship can't sail directly between.
 
-> **Status**: `0.7.1`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
+> **Status**: `0.8.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
 ## Quick start, buying via cli
 
