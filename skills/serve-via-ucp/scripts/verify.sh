@@ -15,17 +15,24 @@ body="$(curl -fsS "$URL")" || {
 
 echo "$body" | ruby -rjson -e '
   payload = JSON.parse(STDIN.read)
-  required = %w[ucp_version business services capabilities]
-  missing = required - payload.keys
-  unless missing.empty?
-    warn "Missing required manifest key(s): #{missing.join(", ")}"
+  ucp = payload["ucp"]
+
+  unless ucp.is_a?(Hash)
+    warn "Manifest has no top-level \"ucp\" object — live UCP stores nest everything under it."
     exit 1
   end
 
-  caps = payload["capabilities"] || []
-  puts "ucp_version: #{payload["ucp_version"]}"
-  puts "capabilities advertised: #{caps.map { |c| c["name"] }.join(", ")}"
-  puts "signed: #{payload.key?("signature")}"
+  required = %w[version business services capabilities]
+  missing = required - ucp.keys
+  unless missing.empty?
+    warn "Missing required manifest key(s) under \"ucp\": #{missing.join(", ")}"
+    exit 1
+  end
+
+  caps = ucp["capabilities"] || {}
+  puts "version: #{ucp["version"]}"
+  puts "capabilities advertised: #{caps.keys.join(", ")}"
+  puts "signed: #{ucp.key?("signature")}"
 
   if caps.empty?
     warn "No capabilities advertised at all — check your Adapter overrides at least one method."

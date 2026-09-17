@@ -55,8 +55,8 @@ authenticator should actually check, whether the manifest looks right).
    user explicitly accepts the risk.
 6. **Boot the app** (however this app normally starts — this skill doesn't guess that
    part), then **verify.sh [base-url]** (default `http://localhost:3000`) — curls
-   `/.well-known/ucp` and checks it has `ucp_version`/`business`/`services`/
-   `capabilities` and at least one advertised capability.
+   `/.well-known/ucp` and checks it nests `version`/`business`/`services`/
+   `capabilities` under a top-level `ucp` object, with at least one advertised capability.
 7. **Run the conformance kit** — `scripts/conformance.sh [spec-path]`. Fails loudly
    with a worked example if no spec includes `"a portage adapter"` yet (see
    portage-ucp-etsy's conformance spec in the Portage repo for a real one to copy the
