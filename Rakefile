@@ -99,13 +99,47 @@ task :release_check, [:gem_dir] do |_t, args|
   build_and_verify_gem(gem_dir) { |_gem_path| }
 end
 
-desc "Build, smoke-test, and push every gem to rubygems.org in dependency " \
-     "order, using the same build_and_verify_gem check as release_check. " \
-     "rubygems MFA requires a fresh OTP per push, so this pauses for input " \
-     "at each `gem push` — run it once and answer the OTP prompt as it comes."
+# Version in the gem's own gemspec. Loaded from inside the gem directory so
+# the gemspec's relative `Dir["lib/**/*.rb"]` resolves the way `gem build`
+# will resolve it.
+def gemspec_version(gem_dir)
+  Dir.chdir(gem_dir) { Gem::Specification.load("#{gem_dir}.gemspec").version.to_s }
+end
+
+# Versions already on rubygems.org. A gem nobody has published yet 404s,
+# which is a legitimate "nothing published" answer rather than an error.
+def published_versions(gem_name)
+  require "net/http"
+  require "json"
+
+  response = Net::HTTP.get_response(URI("https://rubygems.org/api/v1/versions/#{gem_name}.json"))
+  return [] if response.is_a?(Net::HTTPNotFound)
+  abort "rubygems.org version lookup for #{gem_name} failed: #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+
+  JSON.parse(response.body).map { |version| version["number"] }
+end
+
+desc "Build, smoke-test, and push every gem whose gemspec version isn't on " \
+     "rubygems.org yet, in dependency order, using the same " \
+     "build_and_verify_gem check as release_check. rubygems MFA requires a " \
+     "fresh OTP per push, so this pauses for input at each `gem push`."
 task :publish_all do
-  GEMS.each do |gem_dir|
-    puts "\n=== #{gem_dir} ==="
+  to_publish = GEMS.reject do |gem_dir|
+    version = gemspec_version(gem_dir)
+    already_published = published_versions(gem_dir).include?(version)
+    puts "#{gem_dir} #{version}: #{already_published ? 'already published, skipping' : 'to publish'}"
+    already_published
+  end
+
+  if to_publish.empty?
+    puts "\nEvery gem's current version is already on rubygems.org — nothing to push."
+    next
+  end
+
+  puts "\n#{to_publish.size} gem(s) to push, so expect #{to_publish.size} MFA prompt(s)."
+
+  to_publish.each do |gem_dir|
+    puts "\n=== #{gem_dir} #{gemspec_version(gem_dir)} ==="
     build_and_verify_gem(gem_dir) { |gem_path| sh "gem push #{gem_path}" }
   end
 end
