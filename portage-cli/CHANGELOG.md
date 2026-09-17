@@ -16,6 +16,17 @@ pre-1.0, so APIs may still shift between minor versions.
 - Added `PORTAGE_AGENT_PROFILE` — required for `find`/`buy` against a real,
   external UCP store (not your own store via an adapter). No default; see
   `.env.example`.
+- Fixed `buy` sending a catalog product's own id as the purchasable line
+  item — correct for a backend where "the product" and "the thing you add
+  to a cart" share one id, but wrong for Shopify (confirmed live: every
+  `portage buy` against a real Shopify test store failed with "Invalid id",
+  since Storefront's cart takes a `ProductVariant` GID, not the parent
+  `Product` GID `search_catalog` returns as `id`). `Buy#full_buy` and
+  `#redirect_checkout` now build `line_items` from a product's first/
+  default variant id when one exists, falling back to the product id
+  otherwise; `--product-id` matching (`#product_id_of`) is unchanged, since
+  it still needs to match the catalog-level id `find`/`compare` show the
+  caller.
 
 ## [0.5.1] - 2026-09-16
 

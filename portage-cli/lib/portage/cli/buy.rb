@@ -188,8 +188,9 @@ module Portage
       def redirect_checkout(adapter, products)
         return nil if products.empty? || !Portage::Ucp::Capabilities::CHECKOUT.advertised_for?(adapter)
 
-        adapter.create_checkout(line_items: [{ product_id: products.first.id, quantity: @qty }],
-                                idempotency_key: "portage-buy-#{products.first.id}")
+        item_id = products.first.variants&.first&.id || products.first.id
+        adapter.create_checkout(line_items: [{ product_id: item_id, quantity: @qty }],
+                                idempotency_key: "portage-buy-#{item_id}")
       rescue StandardError
         nil
       end
@@ -210,7 +211,7 @@ module Portage
                               message: no_match_message)
         end
 
-        checkout = session.create_checkout(line_items: [{ product_id: product_id_of(product), quantity: @qty }],
+        checkout = session.create_checkout(line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
                                            fulfillment: requested_fulfillment(fulfillment_adapter),
                                            meta: agent_meta)
         checkout = select_cheapest_shipping(session, checkout) if fulfillment_adapter
@@ -295,6 +296,20 @@ module Portage
       # way, never a raw Portage::Ucp::Product struct.
       def product_id_of(product)
         product["id"]
+      end
+
+      # `create_checkout`'s `line_items[].product_id` is the conformance
+      # kit's overloaded name (portage-ucp/lib/portage/ucp/rspec.rb) for
+      # "whatever id this adapter's cart actually takes" — for a backend
+      # where a product's variants have their own id (confirmed live on
+      # Shopify: a ProductVariant GID, distinct from the parent Product
+      # GID), that's the first/default variant, not the catalog id
+      # #product_id_of returns for display/--product-id matching. A
+      # product with no variants (or a backend that doesn't distinguish
+      # the two) falls back to the product id unchanged (see
+      # docs/design-log.md §41).
+      def line_item_id_of(product)
+        product["variants"]&.first&.dig("id") || product_id_of(product)
       end
 
       def finish_checkout(session, source, products, checkout)
