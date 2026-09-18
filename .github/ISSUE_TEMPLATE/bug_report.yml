@@ -1,0 +1,95 @@
+name: Bug report
+description: Something in a Portage gem behaves differently from what it documents.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please search existing issues — a 👍 on an open one is ideal.
+
+        **Never paste real credentials, access tokens, payment instruments, or customer PII.**
+        Redact them. If a live store is involved, a redacted request/response shape is what we need.
+
+        For live Shopify stores: real UCP tool calls currently come back `Tool not found` because of a
+        platform-side allowlist gate. See
+        [docs/ucp-tool-gating-investigation.md](https://github.com/tomtom87/Portage/blob/main/docs/ucp-tool-gating-investigation.md)
+        first — that one isn't a Portage bug.
+
+  - type: dropdown
+    id: gem
+    attributes:
+      label: Which gem
+      options:
+        - portage-ucp
+        - portage-ucp-client
+        - portage-cli
+        - portage-ucp-journal
+        - portage-ucp-shopify
+        - portage-ucp-wix
+        - portage-ucp-woocommerce
+        - portage-ucp-bigcommerce
+        - portage-ucp-magento
+        - portage-ucp-etsy
+        - portage-ucp-instagram
+        - Not sure / more than one
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Gem version and Ruby version
+      placeholder: "portage-ucp 0.8.0, Ruby 3.4.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What you ran and what happened
+      description: The command or code, and the outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Exact error text and backtrace
+      description: Paste it verbatim — not a paraphrase. Redact credentials and PII.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        Ideally a failing spec, or a minimal script against `Portage::Ucp::ReferenceAdapter`.
+        A reproduction with no fix attached is still a good contribution.
+      render: ruby
+
+  - type: textarea
+    id: store
+    attributes:
+      label: Live-store detail (if any)
+      description: >
+        Platform, and the request/response shape with credentials, tokens, and PII redacted.
+        Leave blank if this doesn't touch a real store.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: Everything I pasted is free of real credentials, tokens, and customer PII.
+          required: true
