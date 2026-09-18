@@ -1,0 +1,57 @@
+name: Feature or change proposal
+description: A new capability, an API change, or anything bigger than a bugfix.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Portage is pre-`1.0` and tracking a moving spec, so the capability/adapter contract is still
+        settling. Open this before sending a PR for anything bigger than a bugfix.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting
+      description: The situation, not the solution. What are you trying to do that you can't do today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like to see
+      description: Sketch the API or behavior if you have one in mind.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Where this lands
+      options:
+        - Core contract (portage-ucp) — Adapter, capabilities, manifest, schemas
+        - A platform adapter
+        - The CLI (portage-cli)
+        - Client side (portage-ucp-client)
+        - Journal / audit
+        - Docs, skills, or tooling
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: breaking
+    attributes:
+      label: Does this break existing callers?
+      description: >
+        Pre-`1.0` means breaking changes are allowed, not that they go unannounced. Say so if
+        this changes something a consumer already depends on.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: >
+        Including "why not just do X in my own adapter". If this settles a question rather than
+        just implementing one, it may be worth a
+        [design-log](https://github.com/tomtom87/Portage/blob/main/docs/design-log.md) section.

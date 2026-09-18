@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/tomtom87/Portage/security/advisories/new
+    about: Do not open a public issue. Report privately — see SECURITY.md for the trust boundaries Portage assumes.
+  - name: Shopify "Tool not found" on real UCP tool calls
+    url: https://github.com/tomtom87/Portage/blob/main/docs/ucp-tool-gating-investigation.md
+    about: Live Shopify stores hit a platform-side allowlist gate. Read this before filing — it is not a Portage bug.

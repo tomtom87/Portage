@@ -1,0 +1,52 @@
+name: Spec conformance drift
+description: Portage's manifest, schemas, or tool shapes no longer match what UCP or MCP specify.
+labels: ["spec-conformance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A report with the spec citation attached is very useful — it's the difference between
+        "this looks wrong" and a fix someone can make confidently.
+
+  - type: dropdown
+    id: spec
+    attributes:
+      label: Which spec
+      options:
+        - UCP
+        - MCP
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: citation
+    attributes:
+      label: Spec citation
+      description: Link to the exact section or schema, with a version or date if the spec carries one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec-says
+    attributes:
+      label: What the spec says
+      description: Quote the relevant part.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: portage-does
+    attributes:
+      label: What Portage produces or accepts instead
+      description: The actual manifest fragment, schema, or tool shape. Point at the file if you found it.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: What breaks because of the drift
+      description: A real client rejecting the manifest, a tool call failing, or "nothing yet, but it will".

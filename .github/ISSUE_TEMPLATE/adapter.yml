@@ -1,0 +1,62 @@
+name: Platform adapter
+description: Propose a new platform adapter, or report one you've published elsewhere.
+labels: ["adapter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adapters are the most welcome kind of contribution. An adapter you publish as your own gem
+        outside this repo is equally welcome — we'll link it from the README.
+
+        See [Writing a new platform adapter](https://github.com/tomtom87/Portage/blob/main/CONTRIBUTING.md#writing-a-new-platform-adapter).
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "Squarespace Commerce"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is this issue
+      options:
+        - Proposing an adapter I intend to write
+        - Requesting an adapter someone else might write
+        - Announcing an adapter I've published as a separate gem
+    validations:
+      required: true
+
+  - type: input
+    id: api-docs
+    attributes:
+      label: Link to the platform's API docs
+      description: The catalog and checkout surfaces specifically, if they're documented separately.
+
+  - type: checkboxes
+    id: capabilities
+    attributes:
+      label: Capabilities the platform can support
+      description: Only the ones the platform's API can actually back. Unimplemented capabilities stay unadvertised.
+      options:
+        - label: Catalog (`search_catalog`, `get_product`)
+        - label: Cart (`create_cart` and friends)
+        - label: Checkout / payment
+        - label: Order history
+        - label: Not sure yet
+
+  - type: textarea
+    id: auth
+    attributes:
+      label: How the platform authenticates
+      description: >
+        OAuth-only, API keys, per-store tokens? This is usually what decides how hard an adapter is.
+        Do not paste any real credential here.
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Rate limits, wire-shape surprises, a gated endpoint, or a link to your gem if it exists.
