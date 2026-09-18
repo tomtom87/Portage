@@ -363,6 +363,8 @@ Only push to RubyGems once that passes.
 
 Bug reports and pull requests welcome at [tomtom87/Portage](https://github.com/tomtom87/Portage). Since this is pre-`1.0` and still spec-tracking, open an issue to discuss any change bigger than a bugfix before sending a PR — the capability/adapter contract is still settling.
 
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the full workflow — dev setup, the adapter checklist, commit and PR conventions. Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 Run `rake spec` for the gem(s) you touched before opening a PR — CI (`.github/workflows/ci.yml`) runs `rspec`/`rubocop` for every gem on push and PR too, but running it locally first is faster than waiting on the matrix.
 
 A new platform adapter is the most welcome kind of PR: subclass `Portage::Ucp::Adapter` in `portage-ucp` against the target platform's API, following the shape of an existing adapter gem (`portage-ucp-shopify` is the most complete reference), and add it to the gem table above.
