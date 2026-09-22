@@ -158,14 +158,29 @@ module Portage
         env = Portage::Ucp::Resolver.env_for(platform)
         return nil if Portage::Ucp::Resolver.missing_env(platform, env).any?
 
-        adapter = Portage::Ucp::Resolver.build_adapter(platform, env)
+        adapter = begin
+          Portage::Ucp::Resolver.build_adapter(platform, env)
+        rescue LoadError
+          return nil
+        end
+
+        run_adapter_flow(adapter, platform)
+      end
+
+      # Once the adapter gem is installed and the adapter itself is live, a
+      # `StandardError` it raises is a real, actionable failure (e.g. "no
+      # payment_method configured") — surface it instead of falling through
+      # to `dead_end`'s generic "visit it yourself" message, which would hide
+      # it identically to "there's no adapter for this platform at all".
+      def run_adapter_flow(adapter, platform)
         if adapter_supports_checkout?(adapter)
           full_buy(client_for(adapter), source: "adapter:#{platform.name}", fulfillment_adapter: adapter)
         else
           catalog_only_adapter(adapter, platform)
         end
-      rescue LoadError, StandardError
-        nil
+      rescue StandardError => e
+        build_report(source: "adapter:#{platform.name}", browse: false, checkout: false,
+                     message: "#{platform.name} adapter error: #{e.message}")
       end
 
       def adapter_supports_checkout?(adapter)
