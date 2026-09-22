@@ -21,6 +21,54 @@ RSpec.describe Portage::Cli::Buy do
     )
   end
 
+  describe "which URL a dead-end checkout hands the shopper" do
+    def report_for(checkout)
+      session = instance_double(
+        Portage::Ucp::Client::Session, advertises?: true,
+                                       search_catalog: { "ucp" => 1, "products" => [product] },
+                                       create_checkout: checkout
+      )
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      described_class.new(url: "shop.example", query: "cold", yes: true).call
+    end
+
+    # Regression: `links` on a real store holds only policy links — five
+    # third-party Shopify stores checked 2026-09-22 returned refund_policy,
+    # privacy_policy, terms_of_service, shipping_policy and
+    # contact_information, never a checkout link — so taking the first link
+    # with a url handed the shopper a refund policy every time, and
+    # --auto-open opened it.
+    it "prefers continue_url over the policy links a real store puts in links" do
+      checkout = {
+        "id" => "chk_1", "status" => "ready_for_complete", "totals" => [],
+        "links" => [{ "type" => "refund_policy", "url" => "https://shop.example/policies/refund" },
+                    { "type" => "privacy_policy", "url" => "https://shop.example/policies/privacy" }],
+        "continue_url" => "https://shop.example/cart/c/abc123"
+      }
+
+      expect(report_for(checkout)[:checkout_url]).to eq("https://shop.example/cart/c/abc123")
+    end
+
+    it "hands over no URL at all rather than a policy link when continue_url is absent" do
+      checkout = {
+        "id" => "chk_1", "status" => "ready_for_complete", "totals" => [],
+        "links" => [{ "type" => "refund_policy", "url" => "https://shop.example/policies/refund" }]
+      }
+
+      expect(report_for(checkout)[:checkout_url]).to be_nil
+    end
+
+    it "still falls back to a non-policy link for a backend that puts the checkout there" do
+      checkout = {
+        "id" => "chk_1", "status" => "ready_for_complete", "totals" => [],
+        "links" => [{ "type" => "privacy_policy", "url" => "https://shop.example/policies/privacy" },
+                    { "type" => "checkout", "url" => "https://shop.example/checkout/9" }]
+      }
+
+      expect(report_for(checkout)[:checkout_url]).to eq("https://shop.example/checkout/9")
+    end
+  end
+
   describe "a store refusing the call on its own terms" do
     # Regression: this escaped #call as an unhandled ServerError and printed
     # a Ruby backtrace whose message was the server's whole several-kilobyte
