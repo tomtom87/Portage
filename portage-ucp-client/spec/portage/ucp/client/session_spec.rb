@@ -12,6 +12,23 @@ RSpec.describe Portage::Ucp::Client::Session do
       session.search_catalog(query: "brew")
     end
 
+    it "sends a buyer context when one is given" do
+      expect(transport).to receive(:call_tool)
+        .with(name: "search_catalog",
+              arguments: { query: "brew", limit: 20, context: { address_country: "US" } }, meta: nil)
+
+      session.search_catalog(query: "brew", context: { address_country: "US" })
+    end
+
+    # Every existing caller omits context:, and the loopback/stdio transports
+    # splat arguments into an Adapter signature that has no such keyword — so
+    # a nil context has to disappear entirely, not travel as `context: nil`.
+    it "drops the context key entirely when none is given" do
+      expect(transport).to receive(:call_tool).with(name: "get_product", arguments: { product_id: "p1" }, meta: nil)
+
+      session.get_product(product_id: "p1")
+    end
+
     it "get_order takes no idempotency_key either" do
       expect(transport).to receive(:call_tool).with(name: "get_order", arguments: { order_id: "o1" }, meta: nil)
 

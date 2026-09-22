@@ -86,11 +86,33 @@ module Portage
           end
 
           def catalog_body(name, arguments)
-            case name
-            when "get_product" then { "catalog" => { "id" => arguments.fetch(:product_id) } }
-            when "lookup_catalog" then { "catalog" => { "ids" => arguments.fetch(:product_ids) } }
-            when "search_catalog" then { "catalog" => search_catalog_body(arguments) }
-            end
+            body = case name
+                   when "get_product" then { "id" => arguments.fetch(:product_id) }
+                   when "lookup_catalog" then { "ids" => arguments.fetch(:product_ids) }
+                   when "search_catalog" then search_catalog_body(arguments)
+                   end
+            { "catalog" => with_context(body, arguments) }
+          end
+
+          # `context` carries the buyer's locale/currency/region hints the UCP
+          # `context` object is specified for. It looks optional and isn't:
+          # Shopify resolves which market (and therefore which publication and
+          # inventory) a call is scoped to from it, and a cart built without it
+          # comes back with `line_items: []`, zeroed totals, and a
+          # `merchandise_out_of_stock` warning naming a product `search_catalog`
+          # had just reported as `availability.available == true` on the same
+          # store. Confirmed live 2026-09-22: identical `create_cart`, context
+          # added, returns the line item at its real price. So an omitted
+          # context doesn't degrade results, it silently empties the cart.
+          def with_context(body, arguments)
+            context = arguments[:context] || arguments["context"]
+            return body if context.nil? || context.empty?
+
+            body.merge("context" => stringify(context))
+          end
+
+          def stringify(context)
+            context.to_h { |key, value| [key.to_s, value] }
           end
 
           def raise_unsupported_payment_shape
@@ -104,8 +126,17 @@ module Portage
             { "query" => arguments[:query], "pagination" => { "limit" => arguments[:limit] }.compact }.compact
           end
 
+          # `cart_id` on a checkout body is the cart→checkout conversion the
+          # spec's `checkout.cart_id` describes ("the business uses cart
+          # contents and ignores overlapping fields"). Its schema says
+          # `cart_id` alone is enough; the live server disagrees and rejects
+          # that with `Invalid arguments: object at '/checkout' is missing
+          # required properties: line_items` (confirmed live 2026-09-22), so
+          # the line items go out alongside it rather than instead of it.
           def wrap_line_items(wrapper, arguments, id_key:)
             body = { "line_items" => Array(arguments[:line_items]).map { |li| wire_line_item(li) } }
+            body["cart_id"] = arguments[:cart_id] if wrapper == "checkout" && arguments[:cart_id]
+            body = with_context(body, arguments)
             { wrapper => body }.tap { |h| h["id"] = arguments[id_key] if arguments[id_key] }
           end
 

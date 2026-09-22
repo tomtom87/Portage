@@ -77,6 +77,16 @@ RSpec.describe Portage::Ucp::Client::Transports::Loopback do
     expect(logged["agent_profile"]).to eq("agent-456")
   end
 
+  # `context`/`cart_id` are Transports::Http wire concerns. This transport
+  # hands arguments to the Dispatcher, which splats them into an Adapter
+  # method signature that has no such keywords — so they get dropped rather
+  # than raising ArgumentError deep in an adapter.
+  it "drops real-UCP-only arguments before they reach the Dispatcher" do
+    arguments = { query: "brew", limit: 5, context: { currency: "USD" } }
+
+    expect { transport.call_tool(name: "search_catalog", arguments: arguments) }.not_to raise_error
+  end
+
   it "assigns a fresh JSON-RPC id per call" do
     transport.call_tool(name: "search_catalog", arguments: { query: "cold", limit: 5 })
     transport.call_tool(name: "search_catalog", arguments: { query: "cold", limit: 5 })

@@ -12,8 +12,17 @@ module Portage
             @client.connect
           end
 
+          # `context`/`cart_id` are real-UCP wire concerns Session offers for
+          # Transports::Http to nest into a request body. This transport hands
+          # arguments straight to this gem's own Dispatcher, which splats them
+          # into an Adapter method signature that has no such keywords, so
+          # passing them on would be an ArgumentError on every call. Dropped
+          # here rather than branched on in Session, so each transport keeps
+          # owning which arguments it understands.
+          REMOTE_WIRE_ARGUMENTS = %i[context cart_id].freeze
+
           def call_tool(name:, arguments:, meta: nil)
-            response = @client.call_tool(name: name, arguments: arguments, meta: meta)
+            response = @client.call_tool(name: name, arguments: arguments.except(*REMOTE_WIRE_ARGUMENTS), meta: meta)
             ToolResult.extract(response, symbol_keys: false)
           end
         end
