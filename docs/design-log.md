@@ -2868,3 +2868,72 @@ shop a Shopify store. Discovery remains Shopify's — `/.well-known/ucp` on
 the merchant's domain points at their platform-served endpoint, with no
 override for an installed app — which is a distribution problem, not a
 technical one.
+
+## 43. Third-party validation of anonymous UCP, and what it changed (2026-09-22)
+
+§42 fixed the agent profile and confirmed the fix against `catalog.shopify.com`,
+one third-party storefront and this project's dev store. That's three stores,
+all reached the same way, and two of them ours in the sense that matters — we
+knew what was in them. Before releasing on the strength of it, the same flow
+was run against thirteen unrelated live Shopify stores found by probing
+`/.well-known/ucp`, with deliberately hostile inputs.
+
+The headline holds. Discovery, `search_catalog`, `create_cart` and
+`create_checkout` all answer anonymously — no token, no signature, no
+approval — on every store that advertises the capabilities. Multi-line carts
+work: three distinct variants at quantity two each came back as three lines
+with correct per-line and cart totals on every store that had the stock.
+`create_checkout` from a multi-line cart returned `requires_escalation` with
+`dev.shopify.card` and `dev.shopify.shop_pay` handlers advertised, which is
+the documented no-grant outcome and not an error.
+
+Three things the narrow test hadn't shown.
+
+**An omitted `context` has three outcomes, not one.** §42 recorded that it
+empties the cart. Across nine stores: three built a correct cart with no
+context at all, one emptied it, and five priced the cart in the market of the
+*caller's IP address* — this run was from Bangkok, so `kith.com`,
+`glossier.com`, `chubbiesshorts.com`, `mejuri.com` and `thelightyard.co.uk`
+all returned THB totals. The gem always sends a context, so none of this is a
+live bug; it matters because the empty cart is the *easy* case. A cart with a
+plausible total in the wrong currency carries no message saying so, and an
+agent reporting "£990" as "฿44,936" is a worse outcome than one reporting
+nothing. Generalising from one store's failure mode to "the" failure mode is
+the §42 mistake in miniature, which is why this was worth writing down rather
+than just noting the fix still works.
+
+**A context is necessary, not sufficient.** On `mejuri.com`, `create_cart`
+with `US`/`USD` or `GB`/`GBP` returns empty with
+`merchandise_out_of_stock`; the same variant with `CA`/`CAD` carries fine.
+The store simply doesn't publish that product into those markets. Worse,
+its `search_catalog` ignores the context outright — every market asked got
+the same CAD prices at `availability.available == true` — so the search
+result actively misleads about what the cart will accept. `search` and
+`cart` disagreeing about which market a call is in is not something the spec
+forbids or the response signals.
+
+**Server refusals were escaping the CLI as backtraces.** A genuinely
+sold-out variant made `portage buy` die with an unhandled
+`Client::ServerError` whose `#message` was the store's entire several-
+kilobyte `ucp` envelope. The store had answered properly — `messages[]`
+carrying `out_of_stock`/"Sold out", plus a `continue_url` — and all of it was
+thrown away. `ServerError` now parses a JSON error body onto `#payload` and
+exposes `#summary`/`#continue_url`/`#server_messages`, and `Buy#native_flow`
+reports it as a normal outcome with the store's own sentence and link, the
+same posture `requires_escalation` and `PaymentPermissionError` already had.
+The general lesson: the two error paths that got this right were the two
+someone had hit live. The one that hadn't been hit live still had the
+default "raise and hope" handling, in a CLI whose whole job is to be run by
+people.
+
+Hostile inputs behaved: quantity `-1` is a clean `ServerError` naming the
+variant, quantity `0` and an empty `line_items` give an empty cart at
+`status: success`, and a bogus variant GID gives "The merchandise with id
+... does not exist." Two notes without fixes. Quantity is clamped
+per-store with no signal — `999999` came back as 10 on one store, 13 on
+another, and 999999 on a third (a £989,999,010 cart), so nothing between an
+agent and an absurd order but the store's own limits. And `create_cart` is
+not idempotent server-side: the same `idempotency-key` sent twice produced
+two different cart ids on all three stores tested. The client sends the key
+correctly; the guarantee just isn't there to rely on, so no caller should
+treat a retried `create_cart` as safe.

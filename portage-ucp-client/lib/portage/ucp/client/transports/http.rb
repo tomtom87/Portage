@@ -109,8 +109,28 @@ module Portage
           # `merchandise_out_of_stock` warning naming a product `search_catalog`
           # had just reported as `availability.available == true` on the same
           # store. Confirmed live 2026-09-22: identical `create_cart`, context
-          # added, returns the line item at its real price. So an omitted
-          # context doesn't degrade results, it silently empties the cart.
+          # added, returns the line item at its real price.
+          #
+          # A sweep of nine third-party Shopify stores the same day found the
+          # empty cart is only the loudest of three outcomes for an omitted
+          # context. Three stores built a correct cart without one; one
+          # emptied it; five priced it in the market of the *caller's IP*
+          # (a run from Bangkok got THB totals from stores whose shoppers had
+          # asked for nothing of the sort). So an omitted context doesn't
+          # merely degrade results — it produces a valid-shaped cart at the
+          # wrong currency, with nothing on the response saying so, which is
+          # the harder failure to notice of the two.
+          #
+          # Sending one is necessary, not sufficient: the cart is scoped to
+          # the market the context names, so a product the store doesn't
+          # publish into that market drops out with the same
+          # `merchandise_out_of_stock` message (mejuri.com, `US`/`USD` and
+          # `GB`/`GBP` empty, `CA`/`CAD` fine). That store's `search_catalog`
+          # ignored the context entirely and quoted CAD at
+          # `available: true` for every market asked, so the search result
+          # gives a caller no warning. Nothing to fix here — it's the store's
+          # market config — but callers shouldn't read this code as a
+          # guarantee that a context makes carts work.
           def with_context(body, arguments)
             context = arguments[:context] || arguments["context"]
             return body if context.nil? || context.empty?
