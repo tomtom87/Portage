@@ -96,7 +96,7 @@ module Portage
         # cart *is* the checkout, same as Shopify's Cart-as-Checkout, so the
         # adapter tracks status itself and passes it in here, same rationale
         # as `id:` above.
-        def checkout(node, id:, status:, order: nil)
+        def checkout(node, id:, status:, site_url:, order: nil)
           currency = node.dig("totals", "currency_code")
           Portage::Ucp::Checkout.new(
             id: id,
@@ -104,9 +104,19 @@ module Portage
             line_items: (node["items"] || []).map { |n| cart_line_item(n, currency) },
             currency: currency,
             totals: totals(node["totals"] || {}),
-            links: [],
+            links: checkout_links(status: status, site_url: site_url),
             order: order
           )
+        end
+
+        # No Store API field returns the site's actual checkout page URL —
+        # `/checkout/` is WooCommerce's *default* slug, not guaranteed (a
+        # store can rename it). Good-enough-not-exhaustive, same posture as
+        # this adapter's other documented caveats (see README).
+        def checkout_links(status:, site_url:)
+          return [] if status == "completed"
+
+          [Portage::Ucp::Link.new(type: "resume-checkout", url: "#{site_url}/checkout/")]
         end
 
         def cart_line_item(node, _currency)

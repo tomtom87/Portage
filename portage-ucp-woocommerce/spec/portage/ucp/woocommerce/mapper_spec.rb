@@ -84,12 +84,21 @@ RSpec.describe Portage::Ucp::WooCommerce::Mapper do
                                     ])
     end
 
-    it "sets Checkout status and id from the caller, and includes required links" do
-      checkout = described_class.checkout(node, id: "tok_1", status: "completed")
+    it "sets Checkout status and id from the caller, and omits links once completed" do
+      checkout = described_class.checkout(node, id: "tok_1", status: "completed", site_url: "https://shop.example")
 
       expect(checkout.id).to eq("tok_1")
       expect(checkout.status).to eq("completed")
       expect(checkout.links).to eq([])
+    end
+
+    it "emits a resume-checkout link built from site_url while a checkout is still open" do
+      checkout = described_class.checkout(node, id: "tok_1", status: "incomplete", site_url: "https://shop.example")
+
+      expect(checkout.links).to eq([
+                                     Portage::Ucp::Link.new(type: "resume-checkout",
+                                                            url: "https://shop.example/checkout/")
+                                   ])
     end
   end
 

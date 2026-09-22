@@ -94,12 +94,12 @@ module Portage
           dedup(idempotency_key) do
             node = replace_cart_lines(line_items)
             record_checkout_status(@client.cart_token, "incomplete")
-            Mapper.checkout(node, id: @client.cart_token, status: "incomplete")
+            Mapper.checkout(node, id: @client.cart_token, status: "incomplete", site_url: @site_url)
           end
         end
 
         def get_checkout(checkout_id:)
-          Mapper.checkout(fetch_cart_node, id: checkout_id, status: checkout_status(checkout_id))
+          Mapper.checkout(fetch_cart_node, id: checkout_id, status: checkout_status(checkout_id), site_url: @site_url)
         end
 
         # Full replacement, same rationale as #update_cart.
@@ -107,7 +107,7 @@ module Portage
           dedup(idempotency_key) do
             node = replace_cart_lines(line_items)
             record_checkout_status(checkout_id, "incomplete")
-            Mapper.checkout(node, id: checkout_id, status: "incomplete")
+            Mapper.checkout(node, id: checkout_id, status: "incomplete", site_url: @site_url)
           end
         end
 
@@ -121,7 +121,7 @@ module Portage
         def cancel_checkout(checkout_id:, idempotency_key:)
           dedup(idempotency_key) do
             record_checkout_status(checkout_id, "canceled")
-            Mapper.checkout(fetch_cart_node, id: checkout_id, status: "canceled")
+            Mapper.checkout(fetch_cart_node, id: checkout_id, status: "canceled", site_url: @site_url)
           end
         end
 
@@ -173,7 +173,7 @@ module Portage
                                     })
           record_checkout_status(checkout_id, "completed")
           order = build_order_confirmation(data, checkout_id)
-          Mapper.checkout(data, id: checkout_id, status: "completed", order: order)
+          Mapper.checkout(data, id: checkout_id, status: "completed", site_url: @site_url, order: order)
         end
 
         # Same order-received URL pattern as Mapper.order's `permalink_url` —
