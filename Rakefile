@@ -78,8 +78,13 @@ def build_and_verify_gem(gem_dir)
     install_dir = File.join(tmp, "install")
     sh "gem install --install-dir #{install_dir} #{gem_file}"
 
-    gem_lib = Dir.glob(File.join(install_dir, "gems", "#{gem_dir}-*", "lib")).first
-    abort "installed gem has no lib/ — this is exactly the 0.7.0-line bug" unless gem_lib
+    # Pinned to the exact version rather than globbing `#{gem_dir}-*`: for
+    # `portage-ucp` that wildcard also matches a `portage-ucp-client` or
+    # `portage-ucp-journal` installed alongside it as a dependency, and
+    # `.first` could hand the lib/ check a sibling gem — quietly satisfying
+    # the very guard that exists to catch the 0.7.0-line empty-package bug.
+    gem_lib = File.join(install_dir, "gems", "#{gem_dir}-#{gemspec_version(gem_dir)}", "lib")
+    abort "installed gem has no lib/ — this is exactly the 0.7.0-line bug" unless Dir.exist?(gem_lib)
 
     # GEM_HOME/GEM_PATH point at the throwaway install dir so the require
     # resolves the gem's *dependencies* out of it too — `-I <gem>/lib` alone
