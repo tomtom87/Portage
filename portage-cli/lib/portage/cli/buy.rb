@@ -213,7 +213,7 @@ module Portage
 
         checkout = session.create_checkout(line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
                                            fulfillment: requested_fulfillment(fulfillment_adapter),
-                                           meta: agent_meta)
+                                           context: buyer_context, meta: agent_meta)
         checkout = select_cheapest_shipping(session, checkout) if fulfillment_adapter
         finish_checkout(session, source, products, checkout)
       end
@@ -362,7 +362,15 @@ module Portage
       end
 
       def safe_search(session)
-        CatalogProducts.from(session.search_catalog(query: @query, limit: 10, meta: agent_meta))
+        CatalogProducts.from(session.search_catalog(query: @query, limit: 10, context: buyer_context,
+                                                    meta: agent_meta))
+      end
+
+      # A real store resolves which market — and so which inventory and
+      # prices — a call is scoped to from this (see
+      # Portage::Cli::BuyerContext). The loopback/stdio transports drop it.
+      def buyer_context
+        @buyer_context ||= BuyerContext.from_env
       end
 
       # Real UCP servers fetch this URL to verify the caller's identity
