@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.2.1] - Unreleased
+
+- `Mapper.checkout_links`'s `resume-checkout` link now carries the cart
+  token as a `?session=` query parameter, e.g.
+  `<site_url>/checkout/?session=<cart_token>`. Without it, 0.2.0's link
+  landed the shopper on a real checkout page with an *empty* cart: the
+  CLI's cart lives in the Store API's token-based session (the `Cart-Token`
+  header), while `/checkout/` reads the classic cookie-based session —
+  two different rows in `wp_woocommerce_sessions` unless bridged.
+  WooCommerce core already ships that bridge —
+  `WC_Session_Handler#init_session_from_request` accepts the same Cart-
+  Token JWT as `?session=` and clones the guest session's data into a
+  fresh cookie session before the page renders — so this is a one-line
+  fix, not new infrastructure. Confirmed live against the local Docker
+  WooCommerce install (`docs/plans/woocommerce-local-validation.md`'s
+  stack): `--auto-open`'s hand-off now opens a browser straight onto a
+  checkout page with the cart's actual contents, not an empty one.
+
 ## [0.2.0] - 2026-09-22
 
 - `Mapper.checkout` builds a `resume-checkout` link at `<site_url>/checkout/`

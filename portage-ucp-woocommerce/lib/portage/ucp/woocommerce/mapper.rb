@@ -1,3 +1,5 @@
+require "cgi"
+
 module Portage
   module Ucp
     module WooCommerce
@@ -104,7 +106,7 @@ module Portage
             line_items: (node["items"] || []).map { |n| cart_line_item(n, currency) },
             currency: currency,
             totals: totals(node["totals"] || {}),
-            links: checkout_links(status: status, site_url: site_url),
+            links: checkout_links(status: status, site_url: site_url, cart_token: id),
             order: order
           )
         end
@@ -113,10 +115,22 @@ module Portage
         # `/checkout/` is WooCommerce's *default* slug, not guaranteed (a
         # store can rename it). Good-enough-not-exhaustive, same posture as
         # this adapter's other documented caveats (see README).
-        def checkout_links(status:, site_url:)
+        #
+        # The bare URL alone lands on an empty cart: the CLI's cart lives in
+        # the Store API's token-based session (`Cart-Token` header), while
+        # `/checkout/` reads the classic cookie-based session — two separate
+        # rows in `wp_woocommerce_sessions` unless bridged. WooCommerce core
+        # already ships the bridge: `WC_Session_Handler#init_session_from_request`
+        # accepts the same Cart-Token JWT as a `?session=` query param and
+        # clones that guest session's data into a fresh cookie session before
+        # the page renders. Confirmed live (2026-09-22): opening
+        # `<checkout>/?session=<token>` sets `woocommerce_items_in_cart` and
+        # the cart's contents actually appear on the rendered page.
+        def checkout_links(status:, site_url:, cart_token:)
           return [] if status == "completed"
 
-          [Portage::Ucp::Link.new(type: "resume-checkout", url: "#{site_url}/checkout/")]
+          url = "#{site_url}/checkout/?session=#{CGI.escape(cart_token)}"
+          [Portage::Ucp::Link.new(type: "resume-checkout", url: url)]
         end
 
         def cart_line_item(node, _currency)
