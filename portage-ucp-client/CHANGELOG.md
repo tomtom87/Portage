@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.5.0] - 2026-09-22
+
+- `Session#search_catalog`/`#get_product`/`#lookup_catalog`/`#create_cart`/
+  `#update_cart`/`#create_checkout`/`#update_checkout` take a `context:` — the
+  UCP `context` object (`address_country`, `address_region`, `postal_code`,
+  `currency`, `language`) — and `Transports::Http` nests it under the
+  capability key. This reads as optional and isn't: a store resolves which
+  market, and so which publication and inventory, a call is scoped to from it.
+  A cart built without one comes back with `line_items: []`, zeroed totals and
+  a `merchandise_out_of_stock` warning naming a product the same store's
+  `search_catalog` returned as `available` seconds earlier — confirmed live
+  2026-09-22. It failed open, with a plausible wrong answer instead of an
+  error.
+- `Session#create_checkout` takes a `cart_id:`, converting an existing cart
+  into a checkout. `line_items:` stays required: `checkout.cart_id`'s own
+  schema says a cart id alone is enough, and the live server rejects that with
+  `missing required properties: line_items`, so `Transports::Http` sends both.
+- `Transports::Loopback` and `Transports::Stdio` drop `context`/`cart_id`
+  before dispatch. Both hand arguments to this gem's own server, which splats
+  them into an Adapter method signature that has no such keywords.
+
 ## [0.4.0] - 2026-09-17
 
 - Fixed `Transports::Http` sending every tool call in the flat, unwrapped

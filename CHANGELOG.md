@@ -7,6 +7,44 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.8.1] - 2026-09-22
+
+- **Native UCP tool calls against live Shopify stores work.** They were failing
+  with `-32602 Tool not found: <name>` on every catalog/cart/checkout call, and
+  `0.8.0`'s docs concluded that was a platform-side allowlist with no fix
+  available. That was wrong. The cause was this repo's own agent profile:
+  catalog is registered per action (`dev.ucp.shopping.catalog.search`,
+  `dev.ucp.shopping.catalog.lookup`), the profile declared the coarse
+  `dev.ucp.shopping.catalog` — because `Generate::AgentProfile` reused
+  `Portage::Ucp::Capabilities::CATALOG.name`, right for our own server's
+  manifest and wrong for an agent profile — and a server resolves an agent's
+  tool registry from exactly those ids, so it resolved none. Versions were
+  `"1"` where the registry uses spec revisions, and `services` was `{}`, which
+  declares an agent that speaks no service. `portage generate agent-profile`
+  now emits the real ids at `2026-08-25` with the shopping service declared,
+  and the checked-in `portage-cli/agent-profile/agent-profile.json` is
+  regenerated. Verified live, anonymously — no token, no signatures, no
+  approval — against `catalog.shopify.com`, a third-party storefront, and this
+  project's own dev store: search → cart → checkout, stopping at the
+  `continue_url`.
+- **`portage-ucp-client` 0.5.0**: sends the UCP `context` object
+  (`address_country`/`address_region`/`postal_code`/`currency`/`language`) on
+  catalog, cart and checkout calls. Without it a store scopes the call to no
+  market and silently drops every cart line, answering
+  `merchandise_out_of_stock` for a product its own `search_catalog` just
+  returned as available — a plausible wrong answer rather than an error.
+  `Session` takes `context:` on those methods and `cart_id:` on
+  `create_checkout`; `Transports::{Loopback,Stdio}` drop both, since they hand
+  arguments to this gem's own flat-argument server.
+- **`portage-cli` 0.6.1**: new `Portage::Cli::BuyerContext` builds that context
+  from `PORTAGE_SHIP_COUNTRY`/`_REGION`/`_POSTAL_CODE` plus `PORTAGE_CURRENCY`
+  and `PORTAGE_LANGUAGE`, and `buy`/`find` pass it on every call.
+- Docs corrected rather than deleted: `docs/ucp-tool-gating-investigation.md`
+  and `docs/agent-profile.md` now lead with the real cause and keep the
+  original allowlist reasoning below it, including why the `get_order`
+  "forbidden" tell was misread. `complete_checkout` remains genuinely
+  case-by-case; nothing else does.
+
 ## [0.8.0] - 2026-09-17
 
 - `portage-ucp` bumps to 0.8.0 for a **breaking** manifest shape change:
