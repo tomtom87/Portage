@@ -7,6 +7,53 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [0.8.2] - 2026-09-22
+
+- **Anonymous native UCP validated against thirteen unrelated live Shopify
+  stores**, not just `catalog.shopify.com` and this project's own dev store.
+  Discovery, catalog, multi-line carts and checkout all answer with no token,
+  no signature and no approval; a three-variant cart at quantity two returns
+  three correctly-totalled lines, and `create_checkout` from it returns
+  `requires_escalation` with the store's payment handlers, which is the
+  documented no-grant outcome. Design log §43 has the full matrix, including
+  the hostile inputs (negative/zero/absurd quantities, bogus variant ids) and
+  two limits found with no fix: stores clamp quantity silently and by
+  wildly different amounts, and `create_cart` is not idempotent server-side
+  even though the client sends the key.
+- **An omitted UCP `context` has three outcomes, not the one 0.8.1
+  documented.** Of nine stores, three built a correct cart without it, one
+  emptied it, and five priced the cart in the market of the *caller's IP
+  address*. The gem always sends a context, so nothing regressed — but the
+  wrong-currency cart carries no message saying so, which makes it the harder
+  failure of the two, and the docs said only "empties the cart". Sending one
+  is also necessary rather than sufficient: `mejuri.com` empties a `US`/`USD`
+  cart for a product it publishes only to `CA`, while its `search_catalog`
+  ignores the context and reports that product available at CAD prices to
+  every market. `skills/shop-via-ucp.md` now says so.
+- **`portage-cli` 0.6.4 fixes the checkout hand-off pointing at the wrong
+  page.** It handed the shopper the first link in the checkout's `links`,
+  which on every real store is a policy link — the checkout lives at
+  `continue_url`. So the auto-open added in 0.8.1 opened the merchant's
+  refund policy. Found by running the flow against third-party stores rather
+  than the dev store, which is the only reason it surfaced before release.
+- **`portage-cli` 0.6.3 / `portage-ucp-client` 0.6.1**: a store's own refusal
+  (out of stock, a rejected line) is reported with the store's sentence and
+  `continue_url` instead of crashing `portage buy` with a backtrace holding
+  the store's entire error envelope. `Client::ServerError` gained
+  `#payload`/`#summary`/`#continue_url`/`#server_messages`.
+- `portage-cli` now requires `portage-ucp-client ~> 0.6`; it was pinned
+  `~> 0.5` while calling a constant added in 0.6.0.
+- `rake release_check` and `rake publish_all` were broken for every gem with
+  a portage dependency — the require smoke-test put only the gem's own `lib/`
+  on the load path, so verifying a build failed with `cannot load such file
+  -- portage/ucp` against a package that was in fact fine. It now runs that
+  require with `GEM_HOME`/`GEM_PATH` pointed at the throwaway install dir.
+- jsdelivr caches `@main` for a week, so for days after 0.8.1 the CDN kept
+  serving the *old* agent profile — reproducing 0.8.1's own `Tool not found`
+  bug against correct code in the repo. Purged, and both `.env.example` and
+  `docs/agent-profile.md` now say to purge after every profile change (or to
+  pin `@<sha>`).
+
 ## [0.8.1] - 2026-09-22
 
 - **Native UCP tool calls against live Shopify stores work.** They were failing
