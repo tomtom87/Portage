@@ -18,6 +18,13 @@ pre-1.0, so APIs may still shift between minor versions.
   opened it and `--notify-webhook` posted it. Now reads `continue_url`
   first, and the `links` fallback skips policy/contact entries rather than
   handing over a wrong URL.
+- `adapter_flow` rescued `LoadError` and `StandardError` identically,
+  returning `nil` either way — correct once the adapter gem genuinely isn't
+  installed, wrong once it's live and its own call actually failed. A live
+  adapter's `StandardError` (e.g. "no payment_method configured on this
+  Adapter") now comes back as its own report instead of the generic "no
+  automated path" dead end, distinguishable from "no adapter for this
+  platform" by `source`.
 
 ## [0.6.3] - 2026-09-22
 

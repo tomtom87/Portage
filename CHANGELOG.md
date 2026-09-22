@@ -43,6 +43,31 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   `#payload`/`#summary`/`#continue_url`/`#server_messages`.
 - `portage-cli` now requires `portage-ucp-client ~> 0.6`; it was pinned
   `~> 0.5` while calling a constant added in 0.6.0.
+- **`portage-ucp-woocommerce` 0.2.0 / `portage-ucp` 0.8.1**: same third-party
+  validation pass found WooCommerce's hand-off, completion and error
+  reporting genuinely broken, not just untested. `Mapper.checkout` always
+  built `links: []`, so the checkout hand-off couldn't fire on this backend
+  at all; `Resolver`'s WooCommerce entry never threaded `payment_method` or
+  `billing_address` through to the adapter, so `complete_checkout` failed
+  with neither configured even when both env vars were set; and the Store
+  API's `/checkout` 400s without a `billing_address` UCP's own
+  `complete_checkout` interface has no parameter for. `Mapper.checkout` now
+  takes a required `site_url:` keyword — **breaking for anyone calling
+  `Mapper` directly**.
+- **`portage-cli`'s `adapter_flow` was hiding a live adapter's own error.**
+  It rescued `LoadError` and `StandardError` identically, so a real,
+  actionable failure from an installed adapter (e.g. "no payment_method
+  configured on this Adapter") surfaced as the same generic "no automated
+  path" dead end as a platform with no adapter installed at all. Found
+  while validating the WooCommerce fixes above.
+- **`portage-ucp-shopify` 0.5.0** fixes catalog reads surfacing products
+  that can't be bought: `search_catalog`/`get_product`/`lookup_catalog` now
+  read through the Storefront API instead of Admin, which also returns
+  `DRAFT`/`ARCHIVED` and unpublished products that `cartCreate` then
+  rejects outright. **Breaking for anyone calling `Mapper` directly**:
+  `Mapper#scalar_price` is removed and `Mapper#variant` no longer takes a
+  `currency` argument, since Storefront returns money as `MoneyV2` objects
+  rather than Admin's bare scalar.
 - `rake release_check` and `rake publish_all` were broken for every gem with
   a portage dependency — the require smoke-test put only the gem's own `lib/`
   on the load path, so verifying a build failed with `cannot load such file

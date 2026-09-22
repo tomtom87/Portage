@@ -18,14 +18,29 @@ Update/replace operations (`update_cart`, `update_checkout`) are full-replacemen
 
 Unlike Shopify/Wix, there's no `AccessTokenFetcher` — WooCommerce Admin keys are static, generated once in wp-admin (WooCommerce → Settings → Advanced → REST API), with nothing to exchange or expire.
 
-## ⚠️ Unverified against a live site
+## ⚠️ Verified against a local install
 
-Built from WooCommerce's documented REST/Store API shapes, not run against a real site yet. Before relying on this in production, confirm:
+Run against a throwaway Docker WooCommerce (WP 7.1.1 + WooCommerce 11.1.1, TLS via a local Caddy reverse proxy — see `docs/plans/woocommerce-local-validation.md` for the full setup and test ladder). What actually held up, and what didn't:
 
-- **`#complete_checkout`** — posts `payment_method` + `payment_data` to the Store API's `/checkout` endpoint. `payment_method` must match an installed, enabled WC gateway id, and the `payment_data` key a gateway expects (`payment_data_key:`, default `"token"`) is gateway-specific — Stripe's block-based gateway and PayPal's don't necessarily read the same key. Needs confirming against a live site with a real gateway installed.
-- **Variable product variants** — `Mapper.variant`'s title is built by joining `attributes[].option`; not verified against a real variable product's actual attribute shape.
-- **Order fulfillment** — WooCommerce core has no per-line-item fulfillment tracking (that's a shipment-tracking-plugin concern), so every order line is given the same coarse status derived from the order's own top-level `status`, not a real per-line signal.
-- **Store API checkout response shape** — assumed to carry the same `items`/`totals` shape as the Cart response, plus `order_id`. Not confirmed live.
+**Confirmed working:**
+- Admin REST Basic Auth, `Client#store_request`'s `Cart-Token`/`Nonce` session threading across `create_cart` → `update_cart` → `create_checkout` → `get_checkout`, and `Resolver.detect_platform` all work exactly as coded — against a real store, not just WebMock stubs.
+- `POST /cart/add-item` accepts a variable product's variation id directly as `id` — no separate `variation` param needed, confirmed live.
+- `Mapper.variant`'s `attributes[].option` join produces correct titles (e.g. `"Blue / Yes"`) against a real variable product.
+- Store API money fields map to correct minor units through `Mapper`.
+
+**Fixed since this pass:**
+
+1. **Hand-off now fires on WooCommerce.** `Mapper.checkout` builds a `resume-checkout` link at `<site_url>/checkout/` (WooCommerce's default slug — a store that's renamed its checkout page gets a dead link) for any non-completed checkout, so `Buy#checkout_url_of`/`#hand_off` have something to work with instead of bailing early on `links: []`.
+2. **`Resolver` now threads `payment_method`/`billing_address` through to the adapter.** Its WooCommerce entry was missing both from its `env:` map, so `complete_checkout` failed with no gateway or address configured even when `WOOCOMMERCE_PAYMENT_METHOD`/`WOOCOMMERCE_BILLING_ADDRESS` were set.
+3. **`portage buy`'s `adapter_flow` no longer hides a live adapter's own error.** It rescued `LoadError` and `StandardError` identically, so a real, actionable failure (e.g. "no payment_method configured on this Adapter") surfaced as the same generic "no automated path" dead end as an adapter that isn't installed at all. A `StandardError` past that point now comes back as its own report, distinguishable by `source`.
+4. **`submit_checkout` now supplies `billing_address`.** `POST /wc/store/v1/checkout` 400s without one; there's no UCP `complete_checkout` parameter for it, so — same stopgap posture as `payment_method` — the adapter takes one fixed `billing_address` hash at construction time via `WOOCOMMERCE_BILLING_ADDRESS` (JSON, Store API field names), not per-checkout. Fine for a single-buyer-per-process, wrong the moment something needs a different address per checkout.
+
+**Remaining gaps, still unfixed:**
+
+1. **`requires_escalation` is unreachable here.** The Woo adapter only ever records `incomplete`/`completed`/`canceled` — there's no path to that status on this backend at all.
+2. **A dry run does not write to the purchase journal**, contrary to earlier assumption. `PurchaseJournal#record_checkout` only fires from `Dispatcher`'s `complete_checkout` settle point — a dry run only ever reaches `create_checkout`, so `~/.portage/journal.jsonl` is untouched. Confirmed by running two dry runs and finding no journal file created at all.
+
+Also worth knowing: WooCommerce's Basic Auth for the Admin API only activates when `is_ssl()` is true (`WC_REST_Authentication#authenticate`) — over plain HTTP it silently falls through to OAuth1 query-param signing instead, which this client doesn't implement. A local HTTP-only install will get a generic `401 woocommerce_rest_cannot_view`, not an auth-scheme error; put TLS in front (even a local self-signed proxy) before debugging keys.
 
 ## Installation
 
@@ -40,7 +55,7 @@ bundle install
 
 ## Setup
 
-You need a site URL, an Admin REST API consumer key/secret pair (wp-admin → WooCommerce → Settings → Advanced → REST API — grant Read/Write), your store's currency (the Admin product resource doesn't return one), and — only if you'll call `complete_checkout` — the WC payment gateway id you want to submit orders through.
+You need a site URL, an Admin REST API consumer key/secret pair (wp-admin → WooCommerce → Settings → Advanced → REST API — grant Read/Write), your store's currency (the Admin product resource doesn't return one), and — only if you'll call `complete_checkout` — the WC payment gateway id you want to submit orders through and a `billing_address` the Store API's `/checkout` endpoint requires.
 
 ```ruby
 require "portage/ucp/woocommerce"
@@ -55,7 +70,9 @@ adapter = Portage::Ucp::WooCommerce::Adapter.new(
   client: client,
   site_url: "https://your-shop.example.com",
   currency: "USD",
-  payment_method: "stripe_cc" # only required for #complete_checkout
+  payment_method: "stripe_cc", # only required for #complete_checkout
+  billing_address: { "first_name" => "...", "address_1" => "...", "city" => "...",
+                      "postcode" => "...", "country" => "..." } # only required for #complete_checkout
 )
 ```
 
