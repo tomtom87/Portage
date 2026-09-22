@@ -15,14 +15,15 @@ module Portage
             @next_id = 0
           end
 
-          # `context`/`cart_id` are real-UCP wire concerns Session offers for
-          # Transports::Http to nest into a request body. This transport hands
-          # arguments straight to this gem's own Dispatcher, which splats them
-          # into an Adapter method signature that has no such keywords, so
-          # passing them on would be an ArgumentError on every call. Dropped
-          # here rather than branched on in Session, so each transport keeps
-          # owning which arguments it understands.
-          REMOTE_WIRE_ARGUMENTS = %i[context cart_id].freeze
+          # `context`/`cart_id`/`handler_id`/`credential_type` are real-UCP
+          # wire concerns Session offers for Transports::Http to nest into a
+          # request body. This transport hands arguments straight to this
+          # gem's own Dispatcher, which splats them into an Adapter method
+          # signature that has no such keywords, so passing them on would be
+          # an ArgumentError on every call. Dropped here rather than branched
+          # on in Session, so each transport keeps owning which arguments it
+          # understands.
+          REMOTE_WIRE_ARGUMENTS = %i[context cart_id handler_id credential_type].freeze
 
           def call_tool(name:, arguments:, meta: nil)
             @next_id += 1

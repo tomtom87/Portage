@@ -40,6 +40,18 @@ module Portage
       # against. Raised instead of sending a best-effort shape that might
       # silently misbehave with real money on the line.
       class UnsupportedWireShapeError < Error; end
+
+      # Raised by Transports::Http when a `complete_checkout` call is refused
+      # because this client's token lacks checkout-completion permission on
+      # the store, or the merchant hasn't enabled this agent's channel (see
+      # docs/ucp-tool-gating-investigation.md — that's the one thing genuinely
+      # gated in native UCP, granted case by case, no scope picker). Distinct
+      # from ServerError (a malformed/declined request the server understood
+      # and rejected on its own terms) and from UnsupportedWireShapeError (a
+      # handler this client can't build a request for at all) — callers that
+      # want to fall back to the checkout's own continue_url should rescue
+      # this specifically rather than pattern-matching ServerError#message.
+      class PaymentPermissionError < Error; end
     end
   end
 end

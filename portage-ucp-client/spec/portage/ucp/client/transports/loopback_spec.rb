@@ -87,6 +87,20 @@ RSpec.describe Portage::Ucp::Client::Transports::Loopback do
     expect { transport.call_tool(name: "search_catalog", arguments: arguments) }.not_to raise_error
   end
 
+  # FakeAdapter#complete_checkout (mirroring the real Adapter signatures)
+  # takes checkout_id:/payment_token:/idempotency_key: only — handler_id:/
+  # credential_type: are Transports::Http-only wire concerns Session offers,
+  # so they must be dropped before a complete_checkout reaches the
+  # Dispatcher or it'd be an ArgumentError deep in the adapter. Not exercised
+  # end-to-end here: Mcp::Server.build never forwards a confirmer: override
+  # to Dispatcher, so a real complete_checkout over this transport always
+  # gets Dispatcher's default Confirmer::Terminal, which blocks on stdin —
+  # exactly the "Confirmer::AutoApprove is for specs only" guardrail this
+  # repo calls out, with no seam here to satisfy it from.
+  it "lists handler_id/credential_type as dropped, same as context/cart_id" do
+    expect(described_class::REMOTE_WIRE_ARGUMENTS).to include(:handler_id, :credential_type)
+  end
+
   it "assigns a fresh JSON-RPC id per call" do
     transport.call_tool(name: "search_catalog", arguments: { query: "cold", limit: 5 })
     transport.call_tool(name: "search_catalog", arguments: { query: "cold", limit: 5 })

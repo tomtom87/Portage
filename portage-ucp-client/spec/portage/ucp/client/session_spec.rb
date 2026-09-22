@@ -83,6 +83,28 @@ RSpec.describe Portage::Ucp::Client::Session do
 
       session.complete_checkout(checkout_id: "chk_1", payment_token: "tok_opaque", idempotency_key: "k1")
     end
+
+    it "omits handler_id/credential_type entirely when the caller doesn't give them" do
+      expect(transport).to receive(:call_tool) do |name:, arguments:, **|
+        expect(name).to eq("complete_checkout")
+        expect(arguments).not_to have_key(:handler_id)
+        expect(arguments).not_to have_key(:credential_type)
+      end
+
+      session.complete_checkout(checkout_id: "chk_1", payment_token: "tok_opaque", idempotency_key: "k1")
+    end
+
+    it "forwards handler_id/credential_type when the caller supplies them" do
+      expect(transport).to receive(:call_tool).with(
+        name: "complete_checkout",
+        arguments: { checkout_id: "chk_1", payment_token: "tok_opaque", idempotency_key: "k1",
+                     handler_id: "dev.shopify.card", credential_type: "dev.shopify.card_token" },
+        meta: nil
+      )
+
+      session.complete_checkout(checkout_id: "chk_1", payment_token: "tok_opaque", idempotency_key: "k1",
+                                handler_id: "dev.shopify.card", credential_type: "dev.shopify.card_token")
+    end
   end
 
   describe "#create_checkout / #update_checkout fulfillment:" do

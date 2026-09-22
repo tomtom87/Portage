@@ -99,10 +99,19 @@ module Portage
                                   **(fulfillment ? { fulfillment: fulfillment } : {}))
         end
 
-        def complete_checkout(checkout_id:, payment_token:, idempotency_key: nil, meta: nil)
+        # `handler_id:`/`credential_type:` only matter to Transports::Http
+        # (see #complete_checkout_body there) — the loopback/stdio transports
+        # splat straight into an Adapter signature with no such keywords, so
+        # both are dropped there like `context:`/`cart_id:` (their own
+        # REMOTE_WIRE_ARGUMENTS). Left nil, Http assumes the one handler it
+        # knows how to build a request for (the card handler).
+        def complete_checkout(checkout_id:, payment_token:, idempotency_key: nil, handler_id: nil,
+                              credential_type: nil, meta: nil)
           Portage::Ucp::PaymentTokenGuard.validate!(payment_token)
           call("complete_checkout", meta: meta, checkout_id: checkout_id, payment_token: payment_token,
-                                    idempotency_key: idempotency_key)
+                                    idempotency_key: idempotency_key,
+                                    **(handler_id ? { handler_id: handler_id } : {}),
+                                    **(credential_type ? { credential_type: credential_type } : {}))
         end
 
         def cancel_checkout(checkout_id:, idempotency_key: nil, meta: nil)

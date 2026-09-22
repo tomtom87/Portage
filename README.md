@@ -17,9 +17,12 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 > (`dev.ucp.shopping.catalog.search`, `.catalog.lookup`), which resolved to zero catalog tools
 > server-side and surfaced as `Tool not found`. Native UCP now works against any Shopify store —
 > discovery, catalog, cart and checkout, at Shopify's *anonymous* auth tier, with no token, no
-> signatures and no approval. The only case-by-case restriction is `complete_checkout`; without it
-> the shopper finishes at the `continue_url` every cart and checkout response carries. See
-> [docs/ucp-tool-gating-investigation.md](docs/ucp-tool-gating-investigation.md) for the live
+> signatures and no approval. The only case-by-case restriction is `complete_checkout`, granted
+> per client/merchant with no public application — `portage-ucp-client` now builds the real
+> `checkout.payment.instruments[]` wire shape for it (card handler), so the call works the moment
+> a grant exists; without one, the shopper finishes at the `continue_url` every cart and checkout
+> response carries, which `portage-cli`'s `buy` reports as a normal outcome rather than an error.
+> See [docs/ucp-tool-gating-investigation.md](docs/ucp-tool-gating-investigation.md) for the live
 > evidence and for the second bug found underneath it (a missing UCP `context` object silently
 > emptying carts).
 

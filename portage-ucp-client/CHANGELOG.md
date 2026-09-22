@@ -4,6 +4,34 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.6.0] - 2026-09-22
+
+- `Transports::Http` now builds `checkout.payment.instruments[]` for
+  `complete_checkout` against the card handler (`dev.shopify.card`) instead
+  of unconditionally raising `UnsupportedWireShapeError`. Top level carries
+  `id`/`checkout`; the instrument carries `id`/`handler_id`/`type`/
+  `credential: { token:, type: }`, per the schema pulled live from
+  `tools/list` 2026-09-22. `credential.type` (`dev.shopify.card_token`)
+  follows the payment-handler-guide's reverse-DNS-plus-`_token` convention
+  but is **not confirmed against a live response** — `complete_checkout` has
+  never actually been called (no grant to test against; see
+  `docs/ucp-tool-gating-investigation.md`). A `handler_id:` other than the
+  card handler still raises `UnsupportedWireShapeError`, now naming the
+  handler.
+- `Session#complete_checkout` takes optional `handler_id:`/`credential_type:`
+  to override the above; both are dropped by `Transports::{Loopback,Stdio}`
+  same as `context:`/`cart_id:`, since neither means anything to an Adapter
+  method signature.
+- New `Client::PaymentPermissionError`, distinct from `ServerError` (a
+  malformed/declined request) and `UnsupportedWireShapeError` (a handler
+  this client can't build a request for). `Transports::Http` raises it when
+  a `complete_checkout` refusal looks permission-shaped — going by the
+  *pattern* of Shopify's other confirmed permission error
+  (`get_order`'s `"You are forbidden to make tools/call requests"`) and the
+  community-thread description of what's gated on `complete_checkout`
+  (checkout-completion permission on the token, the merchant's channel
+  enabled). This pattern match is also unconfirmed live.
+
 ## [0.5.0] - 2026-09-22
 
 - `Session#search_catalog`/`#get_product`/`#lookup_catalog`/`#create_cart`/
