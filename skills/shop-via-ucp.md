@@ -170,6 +170,30 @@ setup, not a bug in your call:
   `currency`/`address_region`/`postal_code`/`language` when you know them,
   on catalog, cart and checkout calls alike. Don't report this to the
   shopper as "out of stock" — it isn't.
+
+  Sending a context is necessary but **not sufficient**, so the same symptom
+  can survive it: the cart is scoped to whatever market your context names,
+  and if the store doesn't publish that product into that market the lines
+  drop again with the identical message. Confirmed across nine third-party
+  Shopify stores, 2026-09-22 — on mejuri.com, `create_cart` with a `US`/`USD`
+  or `GB`/`GBP` context came back empty and "already sold out", while the
+  same variant with `CA`/`CAD` carried fine. Worse, `search_catalog` on that
+  store ignored the context outright: it answered every market with the same
+  CAD prices and `availability.available == true`, so nothing in the search
+  result hinted the product was unreachable from the context being used. So
+  treat the search result's `availability` as advisory, and read
+  `merchandise_out_of_stock` on a just-searched item as "wrong market,
+  probably" first and genuine stock second — try the store's home market
+  (the currency its catalog quotes in) before telling the shopper anything.
+
+  Omitting the context does not always empty the cart, either — the other two
+  outcomes are worse to debug because the response looks fine. Of the nine
+  stores, three built a correct cart with no context at all, one emptied it,
+  and five silently priced it in the market of the *caller's IP address*
+  (a run from Bangkok got THB carts from `kith.com`, `glossier.com`,
+  `chubbiesshorts.com`, `mejuri.com` and `thelightyard.co.uk`). A cart whose
+  total is in a currency the shopper never mentioned is a valid-shaped wrong
+  answer, and no message on the response says so.
 - **`"You are forbidden to make tools/call requests"` on `get_order`, or a
   refusal on `complete_checkout`** — these two are real permission
   boundaries, not the registry miss above. Orders needs a Dev Dashboard
