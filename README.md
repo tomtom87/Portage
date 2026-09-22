@@ -10,12 +10,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 > **Status**: `0.8.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
-> **Shopify**: native UCP works against any Shopify store — discovery, catalog, cart and
-> checkout — at Shopify's *anonymous* auth tier: no token, no signatures, no approval. The one
-> restriction is `complete_checkout`, granted per client/merchant. With a grant, the call works
-> as-is. Without one, the shopper finishes in the browser at the `continue_url` that every cart
-> and checkout response carries, which `portage-cli`'s `buy` reports as a normal outcome rather
-> than an error.
+> **Shopify**: the gem talks to any Shopify store out of box (browse products, cart, checkout, no setup needed). Just one thing needs opt-in: auto-completing checkout. Without it, you'll finish payment in browser via a link the gem spits out. 
 
 ## Quick start, buying via cli
 
