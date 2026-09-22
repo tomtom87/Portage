@@ -27,9 +27,15 @@ module Portage
       # Same-looking key material, structurally different document — not
       # interchangeable, so this doesn't subclass or reuse Manifest.
       #
-      # `Portage::Ucp::Manifest::UCP_VERSION` is reused as-is (not
-      # redeclared) so the two documents can never drift to different spec
-      # versions by accident.
+      # The version here is deliberately *not* reused from
+      # `Portage::Ucp::Manifest::UCP_VERSION`, unlike an earlier revision of
+      # this class. Those two versions answer different questions: the
+      # manifest's says which spec revision *this gem's own server* implements
+      # for the businesses it serves, while an agent profile's says which
+      # revision the agent speaks to *whichever remote store it dials*. A
+      # store on a newer rollout than our server-side support (Shopify's
+      # `2026-08-25` endpoints, today) negotiates against the profile, so
+      # pinning the profile to the server's revision under-declared us.
       #
       # Rotation is the future-proofing this exists for: re-running with
       # `rotate: true` keeps every key already published (so a request
@@ -38,9 +44,48 @@ module Portage
       # drops a key — retiring one is a deliberate, separate edit once
       # nothing signs with it any more.
       class AgentProfile
-        UCP_VERSION = Portage::Ucp::Manifest::UCP_VERSION
+        UCP_VERSION = "2026-08-25".freeze
+
+        SHOPPING_SERVICE = "dev.ucp.shopping".freeze
 
         Key = Struct.new(:kid, :jwk, :private_pem, keyword_init: true)
+
+        # The capability identifiers a real UCP server resolves an incoming
+        # agent's tool registry from. These are NOT
+        # `Portage::Ucp::Capabilities::{CATALOG,CART,...}.name`, which an
+        # earlier revision of this class reused, and that reuse is what broke
+        # every live tool call for a month (see
+        # docs/ucp-tool-gating-investigation.md):
+        #
+        # - Catalog is registered per *action*
+        #   (`dev.ucp.shopping.catalog.search`, `.catalog.lookup`), not as one
+        #   coarse `dev.ucp.shopping.catalog`. A profile declaring only the
+        #   coarse name resolves to zero catalog tools, and the server then
+        #   answers `search_catalog` with `-32602 Tool not found:
+        #   search_catalog` — despite `tools/list` having advertised it
+        #   seconds earlier, and with no hint that the profile is the reason.
+        #   `Portage::Ucp::Capabilities::CATALOG` keeps the coarse name
+        #   because that's the right shape for *our own* server's manifest,
+        #   where one Capability object owns all three actions; the two
+        #   registries simply don't line up, so this document spells its own
+        #   ids out rather than deriving them.
+        # - Cart/Checkout/Order are registered at the root name, so those do
+        #   match — spelled out here anyway, so the whole declared set reads
+        #   from one place.
+        # - Versions are spec revisions (`2026-08-25`), not the `"1"` that
+        #   `Capability#version` carries.
+        #
+        # Live-verified 2026-09-22 against `catalog.shopify.com/api/ucp/mcp`
+        # and two per-shop endpoints: the granular ids answer `search_catalog`
+        # with real products at the anonymous tier (no token, no allowlist),
+        # the coarse id answers `Tool not found` on the same connection.
+        CAPABILITY_IDS = %w[
+          dev.ucp.shopping.catalog.search
+          dev.ucp.shopping.catalog.lookup
+          dev.ucp.shopping.cart
+          dev.ucp.shopping.checkout
+          dev.ucp.shopping.order
+        ].freeze
 
         # @param out [String] path to write the public profile JSON document
         # @param key_out [String] path to write the new private key's PEM —
@@ -79,24 +124,11 @@ module Portage
           []
         end
 
-        # The four shopping capabilities `Portage::Ucp::Client::Session` always
-        # implements, regardless of transport (loopback/stdio/HTTP) — same
-        # constants `Portage::Ucp::Manifest` reads off a business's `Adapter`
-        # (portage-ucp/lib/portage/ucp/capabilities/*.rb), reused here because
-        # this document describes the agent's own fixed capability set rather
-        # than one Adapter's opted-in subset.
-        AGENT_CAPABILITIES = [
-          Portage::Ucp::Capabilities::CATALOG,
-          Portage::Ucp::Capabilities::CART,
-          Portage::Ucp::Capabilities::CHECKOUT,
-          Portage::Ucp::Capabilities::ORDER
-        ].freeze
-
         def build_document(signing_keys)
           {
             "ucp" => {
               "version" => UCP_VERSION,
-              "services" => {},
+              "services" => service_hash,
               "capabilities" => capability_hash,
               "payment_handlers" => {}
             },
@@ -104,14 +136,19 @@ module Portage
           }
         end
 
-        # Same shape `Portage::Ucp::Manifest#capability_hash` produces for a
-        # business's `/.well-known/ucp` document — confirmed live (see
-        # docs/agent-profile.md) that a real UCP server treats an empty
-        # `capabilities` here as "this agent can do nothing" and refuses
-        # every tool call with `Tool not found`, even ones `tools/list` just
-        # returned.
+        # Was `{}`. A server negotiating capabilities intersects its own
+        # service list with the profile's, so an empty `services` declares an
+        # agent that speaks no service at all — same class of under-declaration
+        # as the coarse capability ids above.
+        def service_hash
+          { SHOPPING_SERVICE => [{ "version" => UCP_VERSION,
+                                   "spec" => "https://ucp.dev/#{UCP_VERSION}/specification/overview",
+                                   "transport" => "mcp",
+                                   "schema" => "https://ucp.dev/#{UCP_VERSION}/services/shopping/mcp.openrpc.json" }] }
+        end
+
         def capability_hash
-          AGENT_CAPABILITIES.to_h { |capability| [capability.name, [{ "version" => capability.version }]] }
+          CAPABILITY_IDS.to_h { |id| [id, [{ "version" => UCP_VERSION }]] }
         end
 
         def write_profile(doc)
