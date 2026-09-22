@@ -123,7 +123,16 @@ def published_versions(gem_name)
   require "net/http"
   require "json"
 
-  response = Net::HTTP.get_response(URI("https://rubygems.org/api/v1/versions/#{gem_name}.json"))
+  # `Cache-Control: no-cache` because the plain request is served by a CDN that
+  # will happily hand back a body missing the newest versions — observed
+  # returning a stale 6-version list for portage-ucp-client while 0.6.1 was
+  # already live, five calls running, before clearing. A stale read makes a
+  # published gem look unpublished, so `publish_all` burns an MFA prompt and
+  # then dies on rubygems rejecting the duplicate push mid-run.
+  uri = URI("https://rubygems.org/api/v1/versions/#{gem_name}.json")
+  response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+    http.request(Net::HTTP::Get.new(uri, "Cache-Control" => "no-cache", "Accept" => "application/json"))
+  end
   return [] if response.is_a?(Net::HTTPNotFound)
   abort "rubygems.org version lookup for #{gem_name} failed: #{response.code}" unless response.is_a?(Net::HTTPSuccess)
 
