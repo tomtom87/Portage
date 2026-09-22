@@ -311,6 +311,43 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:checkout]).to be true
     end
 
+    it "falls through to the generic dead end when the adapter gem isn't installed" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
+      stub_request(:get, "https://shop.example/")
+        .to_return(status: 200, body: '<script src="https://cdn.shopify.com/x.js"></script>')
+
+      platform = Portage::Ucp::Resolver::PLATFORMS.find { |p| p.name == "Shopify" }
+      allow(Portage::Ucp::Resolver).to receive_messages(detect_platform: platform,
+                                                        env_for: { shop_domain: "shop.example" }, missing_env: [])
+      allow(Portage::Ucp::Resolver).to receive(:build_adapter).and_raise(LoadError, "cannot load such file")
+
+      report = described_class.new(url: "shop.example", query: "cold").call
+
+      expect(report[:source]).to eq("none")
+      expect(report[:message]).to include("visit")
+    end
+
+    it "surfaces a live adapter's own error instead of the generic dead end" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
+      stub_request(:get, "https://shop.example/")
+        .to_return(status: 200, body: '<script src="https://cdn.shopify.com/x.js"></script>')
+
+      platform = Portage::Ucp::Resolver::PLATFORMS.find { |p| p.name == "Shopify" }
+      allow(Portage::Ucp::Resolver).to receive_messages(detect_platform: platform,
+                                                        env_for: { shop_domain: "shop.example" }, missing_env: [])
+      adapter = double("adapter")
+      allow(Portage::Ucp::Resolver).to receive(:build_adapter).and_return(adapter)
+      allow(Portage::Ucp::Capabilities::CART).to receive(:advertised_for?).with(adapter).and_return(true)
+      allow(Portage::Ucp::Capabilities::CHECKOUT).to receive(:advertised_for?).with(adapter)
+                                                                              .and_raise("no payment_method configured on this Adapter")
+
+      report = described_class.new(url: "shop.example", query: "cold").call
+
+      expect(report[:source]).to eq("adapter:Shopify")
+      expect(report[:checkout]).to be false
+      expect(report[:message]).to include("no payment_method configured on this Adapter")
+    end
+
     it "unwraps a CatalogSearchResult struct from the own-store catalog-only adapter path" do
       allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
       stub_request(:get, "https://shop.example/")
