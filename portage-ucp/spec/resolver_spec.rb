@@ -68,13 +68,44 @@ RSpec.describe Portage::Ucp::Resolver do
 
     it "threads payment_method through to Adapter.new" do
       namespace = Class.new
-      namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, keyword_init: true))
+      namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, :billing_address,
+                                               keyword_init: true))
       client = Object.new
       env = { site_url: "https://shop.example", currency: "USD", payment_method: "cod" }
 
       adapter = woocommerce.build_adapter.call(namespace, client, env)
 
       expect(adapter.payment_method).to eq("cod")
+    end
+
+    it "reads WOOCOMMERCE_BILLING_ADDRESS as a completion-only, non-required env var" do
+      expect(woocommerce.env[:billing_address]).to eq("WOOCOMMERCE_BILLING_ADDRESS")
+      expect(woocommerce.required).not_to include(:billing_address)
+    end
+
+    it "parses billing_address from JSON and threads it through to Adapter.new" do
+      namespace = Class.new
+      namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, :billing_address,
+                                               keyword_init: true))
+      client = Object.new
+      env = { site_url: "https://shop.example", currency: "USD",
+              billing_address: '{"first_name":"Ada","city":"Erie"}' }
+
+      adapter = woocommerce.build_adapter.call(namespace, client, env)
+
+      expect(adapter.billing_address).to eq({ "first_name" => "Ada", "city" => "Erie" })
+    end
+
+    it "leaves billing_address nil when the env var is unset" do
+      namespace = Class.new
+      namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, :billing_address,
+                                               keyword_init: true))
+      client = Object.new
+      env = { site_url: "https://shop.example", currency: "USD" }
+
+      adapter = woocommerce.build_adapter.call(namespace, client, env)
+
+      expect(adapter.billing_address).to be_nil
     end
   end
 end

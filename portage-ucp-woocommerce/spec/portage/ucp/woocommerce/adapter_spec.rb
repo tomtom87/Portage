@@ -5,9 +5,11 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
     Portage::Ucp::WooCommerce::Client.new(site_url: "https://shop.example.com", consumer_key: "ck",
                                           consumer_secret: "cs")
   end
+  let(:billing_address) { { "first_name" => "Ada", "address_1" => "1 Main St", "city" => "Erie",
+                            "postcode" => "16501", "country" => "US" } }
   let(:adapter) do
     described_class.new(client: client, site_url: "https://shop.example.com", currency: "USD",
-                        payment_method: "stripe_cc")
+                        payment_method: "stripe_cc", billing_address: billing_address)
   end
 
   let(:cart_response) do
@@ -153,10 +155,11 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
   end
 
   describe "#complete_checkout" do
-    it "posts payment_method/payment_data to the Store API checkout endpoint" do
+    it "posts payment_method/payment_data/billing_address to the Store API checkout endpoint" do
       stub = stub_request(:post, "https://shop.example.com/wp-json/wc/store/v1/checkout")
              .with(body: { payment_method: "stripe_cc",
-                           payment_data: [{ key: "token", value: "tok_abc123" }] }.to_json)
+                           payment_data: [{ key: "token", value: "tok_abc123" }],
+                           billing_address: billing_address }.to_json)
              .to_return(status: 200, body: cart_response.merge("order_id" => 99, "order_key" => "wc_order_x").to_json)
 
       checkout = adapter.complete_checkout(checkout_id: "tok_1", payment_token: "tok_abc123",
@@ -172,11 +175,21 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
     end
 
     it "raises when no payment_method is configured on the Adapter" do
-      bare_adapter = described_class.new(client: client, site_url: "https://shop.example.com", currency: "USD")
+      bare_adapter = described_class.new(client: client, site_url: "https://shop.example.com", currency: "USD",
+                                         billing_address: billing_address)
 
       expect do
         bare_adapter.complete_checkout(checkout_id: "tok_1", payment_token: "tok_abc123", idempotency_key: "k1")
       end.to raise_error(Portage::Ucp::WooCommerce::Error, /no payment_method configured/)
+    end
+
+    it "raises when no billing_address is configured on the Adapter" do
+      bare_adapter = described_class.new(client: client, site_url: "https://shop.example.com", currency: "USD",
+                                         payment_method: "stripe_cc")
+
+      expect do
+        bare_adapter.complete_checkout(checkout_id: "tok_1", payment_token: "tok_abc123", idempotency_key: "k1")
+      end.to raise_error(Portage::Ucp::WooCommerce::Error, /no billing_address configured/)
     end
   end
 
