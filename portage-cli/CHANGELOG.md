@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.6.1] - 2026-09-22
+
+- `portage generate agent-profile` emits the capability identifiers a UCP
+  server actually resolves an agent's tool registry from. It was emitting
+  `dev.ucp.shopping.catalog` — reusing `Portage::Ucp::Capabilities::CATALOG
+  .name`, which is correct for a business's own manifest, where one Capability
+  owns all three catalog actions, and wrong here: the registry is per action
+  (`dev.ucp.shopping.catalog.search`, `dev.ucp.shopping.catalog.lookup`). A
+  profile declaring the coarse name resolved to zero catalog tools, and stores
+  reported that as `-32602 Tool not found: search_catalog` seconds after
+  `tools/list` advertised it. Versions are now spec revisions (`2026-08-25`)
+  rather than `"1"`, and `ucp.services` declares the shopping service instead
+  of being left `{}`. The checked-in
+  `agent-profile/agent-profile.json` is regenerated, existing signing keys
+  kept. See `docs/ucp-tool-gating-investigation.md`.
+- New `Portage::Cli::BuyerContext` builds the UCP `context` object from
+  `PORTAGE_SHIP_COUNTRY`/`PORTAGE_SHIP_REGION`/`PORTAGE_SHIP_POSTAL_CODE`,
+  `PORTAGE_CURRENCY` and `PORTAGE_LANGUAGE`. `buy` and `find` send it on every
+  catalog and checkout call — without it a real store builds an empty cart and
+  calls it sold out. Partial by design, unlike `ShippingProfile`, which stays
+  all-or-nothing because a half-filled address can't be submitted.
+
 ## [0.6.0] - 2026-09-17
 
 - Fixed `buy`/`find` crashing with a raw `Faraday::UnprocessableContentError`
