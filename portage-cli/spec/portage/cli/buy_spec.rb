@@ -72,13 +72,17 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).not_to have_received(:complete_checkout)
     end
 
-    it "reports a purchase can't complete without a payment token even with --yes" do
-      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
+    it "reports no payment token even with --yes, with the checkout_url as a fallback" do
+      checkout = incomplete_checkout.merge(
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
+      )
+      session = fake_session(advertises_checkout: true, checkout: checkout)
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
 
       report = described_class.new(url: "shop.example", query: "cold", yes: true).call
 
       expect(report[:message]).to include("--payment-token")
+      expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
       expect(session).not_to have_received(:complete_checkout)
     end
 
@@ -104,7 +108,95 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:message]).to include("requires buyer escalation")
       expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
+      expect(report[:handoff]).to eq(url: "https://shop.example/checkout/chk_1", opened: false,
+                                     notified: false, notify_error: nil)
       expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "reports a permission-denied completion as a normal outcome, via continue_url" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout.merge(
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
+      ))
+      allow(session).to receive(:complete_checkout)
+        .and_raise(Portage::Ucp::Client::PaymentPermissionError, "no checkout-completion grant")
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+
+      expect(report[:message]).to include("isn't yet granted permission")
+      expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
+      expect(report[:checkout_status]).to eq("ready_for_complete")
+      expect(report[:handoff]).to eq(url: "https://shop.example/checkout/chk_1", opened: false,
+                                     notified: false, notify_error: nil)
+    end
+
+    it "auto-opens the checkout_url on a dead end when --auto-open is given" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout.merge(
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
+      ))
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      allow_any_instance_of(Portage::Cli::CheckoutHandoff).to receive(:system).and_return(true)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, auto_open: true).call
+
+      expect(report[:handoff]).to include(url: "https://shop.example/checkout/chk_1", opened: true)
+    end
+
+    it "posts to the configured webhook on a dead end and reports notified: true" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout.merge(
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
+      ))
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      stub = stub_request(:post, "https://hooks.example/x")
+             .with(body: hash_including("event" => "checkout_handoff", "reason" => "no_payment_token",
+                                        "checkout_url" => "https://shop.example/checkout/chk_1"))
+             .to_return(status: 200, body: "{}")
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true,
+                                   notify_webhook: "https://hooks.example/x").call
+
+      expect(report[:handoff]).to include(notified: true, notify_error: nil)
+      expect(stub).to have_been_requested
+    end
+
+    it "doesn't raise when the webhook POST fails, and surfaces notify_error on the report" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout.merge(
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
+      ))
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      stub_request(:post, "https://hooks.example/x").to_return(status: 500, body: "{}")
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true,
+                                   notify_webhook: "https://hooks.example/x").call
+
+      expect(report[:handoff][:notified]).to be false
+      expect(report[:handoff][:notify_error]).to include("500")
+    end
+
+    it "never attempts a webhook request when no notify webhook is configured" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout.merge(
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
+      ))
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      described_class.new(url: "shop.example", query: "cold", yes: true).call
+
+      expect(a_request(:post, /.*/)).not_to have_been_made
+    end
+
+    it "never auto-opens on --dry-run even when escalation hits and --auto-open is given" do
+      escalation = { "id" => "chk_1", "status" => "requires_escalation",
+                     "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }],
+                     "totals" => [] }
+      session = fake_session(advertises_checkout: true, checkout: escalation)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      allow(Portage::Cli::CheckoutHandoff).to receive(:new)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, dry_run: true,
+                                   auto_open: true).call
+
+      expect(report[:handoff]).to be_nil
+      expect(Portage::Cli::CheckoutHandoff).not_to have_received(:new)
     end
 
     it "unwraps search_catalog's wire envelope instead of treating it as the product list" do
