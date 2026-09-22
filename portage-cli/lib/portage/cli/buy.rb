@@ -93,7 +93,7 @@ module Portage
           catalog_only(session)
         end
       rescue Portage::Ucp::Client::MissingAgentProfileError, Portage::Ucp::Client::UnsupportedWireShapeError,
-             MCP::Client::RequestHandlerError => e
+             Portage::Ucp::Client::ServerError, MCP::Client::RequestHandlerError => e
         native_flow_error_report(e)
       end
 
@@ -106,6 +106,8 @@ module Portage
         when Portage::Ucp::Client::UnsupportedWireShapeError
           build_report(source: "native_ucp", browse: true, checkout: false,
                        message: "Can't complete checkout on #{@uri} yet: #{error.message}")
+        when Portage::Ucp::Client::ServerError
+          server_error_report(error)
         else
           # MCP::Client::RequestHandlerError doesn't retain the server's JSON
           # error body on this path, so this can't quote the server's own
@@ -116,6 +118,28 @@ module Portage
                        message: "#{@uri} rejected the request (#{error.message}) — if PORTAGE_AGENT_PROFILE " \
                                 "is set, check it points at a real agent-profile document the store accepts.")
         end
+      end
+
+      # A store refusing a cart/checkout call on its own terms — out of stock,
+      # a line it won't accept, a cart that expired — is an answer, not a
+      # crash. This used to escape `#call` as an unhandled ServerError,
+      # printing a Ruby backtrace whose "message" was the server's entire
+      # several-kilobyte `ucp` envelope (confirmed live 2026-09-22: a
+      # genuinely sold-out variant on a Shopify store). Report the server's
+      # own sentence instead, and hand back the `continue_url` it supplied so
+      # the shopper has somewhere to go — same posture as
+      # #escalation_report/#permission_denied_report.
+      #
+      # Deliberately not routed through #hand_off: that fires the auto-open
+      # and webhook side effects, which belong to a checkout this agent
+      # actually built. There's no checkout here — the call that failed is
+      # what would have created one.
+      def server_error_report(error)
+        url = error.continue_url
+        build_report(
+          source: "native_ucp", browse: true, checkout: false, checkout_url: url,
+          message: "#{@uri} couldn't complete this: #{error.summary}#{url && " — finish it at #{url}"}"
+        )
       end
 
       def catalog_only(session)
@@ -158,8 +182,8 @@ module Portage
         env = Portage::Ucp::Resolver.env_for(platform)
         return nil if Portage::Ucp::Resolver.missing_env(platform, env).any?
 
-        adapter = begin
-          Portage::Ucp::Resolver.build_adapter(platform, env)
+        begin
+          adapter = Portage::Ucp::Resolver.build_adapter(platform, env)
         rescue LoadError
           return nil
         end

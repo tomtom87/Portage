@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.6.3] - 2026-09-22
+
+- A store refusing a cart or checkout call on its own terms — out of stock,
+  a line it won't take, an expired cart — is reported as a normal outcome
+  carrying the store's own sentence and its `continue_url`, instead of
+  escaping `Buy#call` as an unhandled `Client::ServerError`. It printed a
+  Ruby backtrace whose "message" was the store's entire several-kilobyte
+  `ucp` error envelope; confirmed live 2026-09-22 against a genuinely
+  sold-out variant. Same posture `requires_escalation` and
+  `PaymentPermissionError` already had.
+- Requires `portage-ucp-client ~> 0.6` (was `~> 0.5`), which is what
+  `Buy#complete`'s `rescue Client::PaymentPermissionError` has actually
+  needed since 0.6.2 — that constant landed in client 0.6.0, and a `rescue`
+  naming a missing constant raises `NameError` over the top of whatever
+  error it was meant to catch.
+
 ## [0.6.2] - 2026-09-22
 
 - `Buy#complete` treats a `Client::PaymentPermissionError` from
