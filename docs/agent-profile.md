@@ -102,43 +102,51 @@ separate infrastructure.
 
 ## Resolved: `Tool not found` on every call once the profile is wired up
 
-`portage generate agent-profile`
-(`portage-cli/lib/portage/cli/generate/agent_profile.rb`) used to write
-`"ucp": { "services": {}, "capabilities": {}, "payment_handlers": {} }` —
-deliberately stubbed, per that file's own comments, so a future signer had a
-`kid` to sign under without reshaping the document again. Nobody had gone
-back to fill `capabilities` in with what this agent actually supports.
-That's since been fixed (`AgentProfile#build_document` now populates
-`capabilities` with the same shape `Portage::Ucp::Manifest#capability_hash`
-uses for a business's own `/.well-known/ucp` document), but it turned out
-not to be the cause of the failure below.
+**The profile was the cause after all**, contrary to what this section said
+between 2026-09-17 and 2026-09-22. It is not a platform allowlist. The
+capability identifiers the profile declared were wrong, and a UCP server
+resolves an agent's tool registry from exactly those.
 
-Confirmed live against billabong.com and against
-`ucp-test-bc2vif1p.myshopify.com` (a Shopify dev store this project owns
-outright) on 2026-09-17: every real tool call — `search_catalog`,
-`lookup_catalog`, `get_product`, `create_cart`, all confirmed present
-seconds earlier by `tools/list` — came back `-32602 Invalid params, "Tool
-not found: <name>"` the moment `meta.ucp-agent.profile` was attached to the
-call. Filling in `capabilities` didn't change this, and neither did owning
-the store.
+Catalog is registered per action — `dev.ucp.shopping.catalog.search` and
+`dev.ucp.shopping.catalog.lookup` — not as one coarse
+`dev.ucp.shopping.catalog`. `AgentProfile` declared the coarse name (it
+reused `Portage::Ucp::Capabilities::CATALOG.name`, which is correct for
+*our own server's* manifest, where one Capability object owns all three
+catalog actions). A profile declaring only the coarse name resolves to zero
+catalog tools, and the server answers `search_catalog` with `-32602 Tool not
+found: search_catalog` — seconds after `tools/list` advertised it, with
+nothing in the error pointing at the profile. Versions were `"1"` where the
+registry uses spec revisions, and `services` was left `{}`, which declares
+an agent that speaks no service at all.
 
-**Confirmed root cause:** it's a platform-side authorization gate on tool
-*invocation*, unrelated to the agent-profile document, the manifest, or the
-request's wire shape — all proven correct via live testing. The tell is
-`get_order`, which returns an honest `"You are forbidden to make tools/call
-requests"` for the exact same session, identically whether
-`meta.ucp-agent.profile` points at our real, valid profile or at a garbage
-URL that resolves to nothing UCP-shaped — proving profile content is
-irrelevant to the rejection. `search_catalog`/`create_cart`/etc. hit the
-same gate but surface it as a misleading `"Tool not found"` instead: the
-tool is silently absent from this agent's per-session tool registry, even
-though `tools/list` advertises it moments earlier. Most likely explanation:
-Shopify's UCP rollout authorizes tool calls against an allowlist of
-approved agent partners, and this agent isn't on it yet.
+Verified live 2026-09-22 against `catalog.shopify.com/api/ucp/mcp` and two
+per-shop endpoints, anonymously — no Dev Dashboard token, no signatures, no
+approval of any kind:
 
-**What this means:** there is no code fix available in Portage — this is an
-external platform gate, not a bug in this client. What's still open is
-whether Shopify publishes an allowlist/partner-registration process to get
-approved (not yet found), and whether this is Shopify-specific or
-protocol-wide (untested against a non-Shopify UCP store). Full writeup and
-next steps: [`ucp-tool-gating-investigation.md`](ucp-tool-gating-investigation.md).
+- profile declaring `dev.ucp.shopping.catalog.search`/`.lookup` →
+  `search_catalog` returns real products
+- profile declaring coarse `dev.ucp.shopping.catalog` → `Tool not found:
+  search_catalog`, same endpoint, same connection
+- no profile → `invalid_profile_url`; unreachable profile →
+  `profile_unreachable`
+
+The `get_order` tell that this section previously read as proof of an
+allowlist is something narrower: Orders genuinely does require a Dev
+Dashboard token carrying `read_global_api_orders`, so it is forbidden at the
+anonymous tier no matter what the profile says. Catalog, Cart and Checkout
+build/edit tools are all available at that tier per
+[Shopify's own auth tiers](https://shopify.dev/docs/agents/profiles/auth-and-rate-limiting).
+Reading one capability's real permission error as the explanation for
+another capability's registry miss is what sent the whole investigation down
+the allowlist path.
+
+The one thing that *is* gated case-by-case is `complete_checkout`, which
+needs both checkout permission on a token and the merchant having your
+agent's channel enabled. `continue_url` — a link the shopper finishes in the
+store's own checkout — is the supported path without it, and every cart and
+checkout response carries one.
+
+**What this means:** the fix was in this client. See
+[`ucp-tool-gating-investigation.md`](ucp-tool-gating-investigation.md) for
+the full trail, including the localization-context bug found underneath this
+one.

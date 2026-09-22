@@ -49,8 +49,16 @@ MCP tool calls yourself, following the sequence below exactly.
 6. `tools/call get_order { "order_id": "..." }` if an order id is available, to report
    back tracking/fulfillment info.
 
+Every catalog, cart and checkout call should carry a `context`
+(`address_country`, and `currency`/`address_region`/`postal_code`/`language` when known).
+It looks optional and isn't: a store resolves which market — and so which inventory — the
+call is scoped to from it, and a cart built without one comes back with no line items and a
+`merchandise_out_of_stock` warning for a product the same store's `search_catalog` just
+reported as available.
+
 Full walkthrough with example payloads, plus a troubleshooting section for real
 external UCP stores (missing `PORTAGE_AGENT_PROFILE`, a profile URL the store can't
-fetch, or `Tool not found` on every call once the profile's attached — all confirmed
-live against billabong.com, none of them a bug in your tool call): `../shop-via-ucp.md`
+fetch, or `Tool not found` on every call once the profile's attached — which means the
+profile declares capability ids the store's registry doesn't have, not that you lack
+access; see `../../docs/ucp-tool-gating-investigation.md`): `../shop-via-ucp.md`
 in this repo.
