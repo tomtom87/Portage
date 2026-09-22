@@ -57,4 +57,24 @@ RSpec.describe Portage::Ucp::Resolver do
       expect { described_class.build_adapter(shopify, env) }.to raise_error(LoadError)
     end
   end
+
+  describe "WooCommerce platform" do
+    let(:woocommerce) { described_class::PLATFORMS.find { |p| p.name == "WooCommerce" } }
+
+    it "reads WOOCOMMERCE_PAYMENT_METHOD as a completion-only, non-required env var" do
+      expect(woocommerce.env[:payment_method]).to eq("WOOCOMMERCE_PAYMENT_METHOD")
+      expect(woocommerce.required).not_to include(:payment_method)
+    end
+
+    it "threads payment_method through to Adapter.new" do
+      namespace = Class.new
+      namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, keyword_init: true))
+      client = Object.new
+      env = { site_url: "https://shop.example", currency: "USD", payment_method: "cod" }
+
+      adapter = woocommerce.build_adapter.call(namespace, client, env)
+
+      expect(adapter.payment_method).to eq("cod")
+    end
+  end
 end
