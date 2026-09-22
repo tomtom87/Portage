@@ -1,12 +1,12 @@
 # portage-ucp-shopify
 
-Shopify adapter for [`portage-ucp`](../portage-ucp). Implements `Portage::Ucp::Adapter` against Shopify's Admin (catalog, order) and Storefront (cart, checkout) GraphQL APIs. Generic only — no merchant-specific business logic. Plain `Net::HTTP`, no `shopify_api` runtime dependency.
+Shopify adapter for [`portage-ucp`](../portage-ucp). Implements `Portage::Ucp::Adapter` against Shopify's Storefront (catalog, cart, checkout) and Admin (order) GraphQL APIs. Generic only — no merchant-specific business logic. Plain `Net::HTTP`, no `shopify_api` runtime dependency.
 
 ## What it covers
 
 | UCP capability | Backing Shopify API | Notes |
 |---|---|---|
-| `dev.ucp.shopping.catalog` | Admin | `search_catalog`, `get_product` |
+| `dev.ucp.shopping.catalog` | Storefront | `search_catalog`, `get_product`, `lookup_catalog` — Storefront since 0.5.0, so a read can only ever surface what a Storefront `Cart` will actually accept (Admin also returns `DRAFT`/`ARCHIVED` and unpublished products, which `cartCreate` then rejects) |
 | `dev.ucp.shopping.cart` | Storefront (Cart) | `get_cart`, `create_cart`, `update_cart`, `cancel_cart` |
 | `dev.ucp.shopping.checkout` | Storefront (same Cart object) | `create_checkout`, `get_checkout`, `update_checkout`, `complete_checkout`, `cancel_checkout` |
 | `dev.ucp.shopping.order` | Admin | `get_order`, `cancel_order`, `refund_order`, `request_return` (gem-side extension beyond the real UCP spec — see below) |
@@ -31,7 +31,7 @@ bundle install
 
 ## Setup
 
-You need a shop domain plus an Admin API access token (for catalog/order) and a Storefront API access token (for cart/checkout). Either capability can be used alone if you only pass the token it needs.
+You need a shop domain plus a Storefront API access token (for catalog/cart/checkout) and an Admin API access token (for order). Either capability can be used alone if you only pass the token it needs.
 
 ```ruby
 require "portage/ucp/shopify"
