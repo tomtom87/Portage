@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp-client
   specs:
-    portage-ucp-client (0.5.0)
+    portage-ucp-client (0.6.0)
       faraday (>= 2.0)
       mcp (~> 0.24)
       portage-ucp (~> 0.8)

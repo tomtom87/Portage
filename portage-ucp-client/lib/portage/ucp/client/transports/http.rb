@@ -1,4 +1,5 @@
 require_relative "../errors"
+require_relative "http/complete_checkout_wire_shape"
 
 module Portage
   module Ucp
@@ -22,6 +23,8 @@ module Portage
         # into that real wire format before the request goes out — Loopback
         # and Stdio are untouched.
         class Http
+          include CompleteCheckoutWireShape
+
           # Actions whose one identifying argument becomes a top-level `id`.
           ID_ARG = {
             "get_cart" => :cart_id, "cancel_cart" => :cart_id,
@@ -51,6 +54,10 @@ module Portage
             wire["meta"] = wire_meta(meta, idempotency_key)
             response = @client.call_tool(name: name, arguments: wire)
             ToolResult.extract(response, symbol_keys: false)
+          rescue ServerError, MCP::Client::RequestHandlerError => e
+            raise permission_error(e) if name == "complete_checkout" && permission_refusal?(e.message)
+
+            raise
           end
 
           private
@@ -72,15 +79,15 @@ module Portage
           end
 
           def wire_arguments(name, arguments)
+            idempotency_key = arguments[:idempotency_key] || arguments["idempotency_key"]
             arguments = arguments.dup
             arguments.delete(:idempotency_key)
 
+            return complete_checkout_body(arguments, idempotency_key) if name == "complete_checkout"
             return { "id" => arguments.fetch(ID_ARG[name]) } if ID_ARG.key?(name)
             return catalog_body(name, arguments) if CATALOG_ACTIONS.include?(name)
             return wrap_line_items("cart", arguments, id_key: :cart_id) if CART_ACTIONS.include?(name)
             return wrap_line_items("checkout", arguments, id_key: :checkout_id) if CHECKOUT_ACTIONS.include?(name)
-
-            raise_unsupported_payment_shape if name == "complete_checkout"
 
             arguments
           end
@@ -113,13 +120,6 @@ module Portage
 
           def stringify(context)
             context.to_h { |key, value| [key.to_s, value] }
-          end
-
-          def raise_unsupported_payment_shape
-            raise UnsupportedWireShapeError,
-                  "complete_checkout isn't wired to the real payment-instrument shape yet — " \
-                  "checkout.payment.instruments varies by handler (card/apple-pay/shop-pay) and hasn't " \
-                  "been verified against a real payment flow"
           end
 
           def search_catalog_body(arguments)

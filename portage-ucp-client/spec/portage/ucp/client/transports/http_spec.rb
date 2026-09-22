@@ -150,11 +150,75 @@ RSpec.describe Portage::Ucp::Client::Transports::Http do
     )
   end
 
-  it "raises UnsupportedWireShapeError for complete_checkout" do
-    expect do
+  describe "complete_checkout" do
+    it "builds checkout.payment.instruments[] for the card handler, with idempotency-key in meta" do
       transport.call_tool(name: "complete_checkout",
-                          arguments: { checkout_id: "co1", payment_token: "tok" }, meta: agent_meta)
-    end.to raise_error(Portage::Ucp::Client::UnsupportedWireShapeError)
+                          arguments: { checkout_id: "co1", payment_token: "tok", idempotency_key: "k1" },
+                          meta: agent_meta)
+
+      expect(mcp_client).to have_received(:call_tool).with(
+        name: "complete_checkout",
+        arguments: {
+          "id" => "co1",
+          "checkout" => { "payment" => { "instruments" => [
+            { "id" => "instrument-k1", "handler_id" => "dev.shopify.card", "type" => "card",
+              "credential" => { "token" => "tok", "type" => "dev.shopify.card_token" } }
+          ] } },
+          "meta" => wire_meta.merge("idempotency-key" => "k1")
+        }
+      )
+    end
+
+    it "lets the caller override handler_id/credential_type for the card handler" do
+      transport.call_tool(
+        name: "complete_checkout",
+        arguments: { checkout_id: "co1", payment_token: "tok", idempotency_key: "k1",
+                     handler_id: "dev.shopify.card", credential_type: "custom_type" },
+        meta: agent_meta
+      )
+
+      expect(mcp_client).to have_received(:call_tool) do |name:, arguments:|
+        expect(name).to eq("complete_checkout")
+        instrument = arguments.dig("checkout", "payment", "instruments", 0)
+        expect(instrument["credential"]).to eq("token" => "tok", "type" => "custom_type")
+      end
+    end
+
+    it "raises UnsupportedWireShapeError naming an unsupported handler, without calling the server" do
+      expect(mcp_client).not_to receive(:call_tool)
+
+      expect do
+        transport.call_tool(name: "complete_checkout",
+                            arguments: { checkout_id: "co1", payment_token: "tok", idempotency_key: "k1",
+                                         handler_id: "apple-pay" },
+                            meta: agent_meta)
+      end.to raise_error(Portage::Ucp::Client::UnsupportedWireShapeError, /apple-pay/)
+    end
+
+    it "wraps a permission-shaped ServerError as PaymentPermissionError" do
+      allow(mcp_client).to receive(:call_tool).and_return(
+        { "result" => { "isError" => true,
+                        "content" => [{ "type" => "text", "text" => "checkout-completion not granted" }] } }
+      )
+
+      expect do
+        transport.call_tool(name: "complete_checkout",
+                            arguments: { checkout_id: "co1", payment_token: "tok", idempotency_key: "k1" },
+                            meta: agent_meta)
+      end.to raise_error(Portage::Ucp::Client::PaymentPermissionError, /checkout-completion not granted/)
+    end
+
+    it "leaves an unrelated ServerError (e.g. a malformed request) unwrapped" do
+      allow(mcp_client).to receive(:call_tool).and_return(
+        { "result" => { "isError" => true, "content" => [{ "type" => "text", "text" => "Invalid arguments" }] } }
+      )
+
+      expect do
+        transport.call_tool(name: "complete_checkout",
+                            arguments: { checkout_id: "co1", payment_token: "tok", idempotency_key: "k1" },
+                            meta: agent_meta)
+      end.to raise_error(Portage::Ucp::Client::ServerError, "Invalid arguments")
+    end
   end
 
   it "raises ServerError when the response reports isError" do
