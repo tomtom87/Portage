@@ -10,15 +10,18 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 > **Status**: `0.8.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
-> **Shopify note (Sept 2026)**: real UCP tool calls against live Shopify stores currently hit a
-> platform-side allowlist gate — `search_catalog`, `create_cart`, etc. all come back `Tool not found`
-> once an agent profile is attached, regardless of profile content, store ownership, or wire shape.
-> No public application/waitlist process has been found yet. Agentic shopping against a Shopify
-> store you don't already hold credentials for isn't possible today because of this, independent of
-> anything in this gem. `portage-ucp-shopify` works around it for your **own** store or one you're
-> integrated with by reading/writing through the plain Storefront API instead of Shopify's gated
-> native UCP endpoint — see [docs/ucp-tool-gating-investigation.md](docs/ucp-tool-gating-investigation.md)
-> for the full writeup.
+> **Shopify note (Sept 2026)**: an earlier version of this README said real UCP tool calls
+> against live Shopify stores hit a platform-side allowlist. That was wrong, and is fixed as of
+> `0.8.1`. The cause was this gem's own agent profile declaring a coarse
+> `dev.ucp.shopping.catalog` capability where the registry uses per-action ids
+> (`dev.ucp.shopping.catalog.search`, `.catalog.lookup`), which resolved to zero catalog tools
+> server-side and surfaced as `Tool not found`. Native UCP now works against any Shopify store —
+> discovery, catalog, cart and checkout, at Shopify's *anonymous* auth tier, with no token, no
+> signatures and no approval. The only case-by-case restriction is `complete_checkout`; without it
+> the shopper finishes at the `continue_url` every cart and checkout response carries. See
+> [docs/ucp-tool-gating-investigation.md](docs/ucp-tool-gating-investigation.md) for the live
+> evidence and for the second bug found underneath it (a missing UCP `context` object silently
+> emptying carts).
 
 ## Quick start, buying via cli
 

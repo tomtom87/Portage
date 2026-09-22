@@ -1,9 +1,134 @@
 # Investigation: `Tool not found` on every real UCP tool call
 
-**RESOLVED (live-confirmed) 2026-09-17.** Root cause: a platform-side
-authorization gate on tool *invocation*, independent of manifest,
-profile, meta placement, or schema — see "Confirmed root cause" below.
-Kept the chronological trail beneath for whoever needs the reasoning.
+**CORRECTED 2026-09-22. The 2026-09-17 conclusion below was wrong.**
+
+There is no allowlist. The agent profile declared capability identifiers
+that don't exist in the registry a UCP server resolves an agent's tool
+set from, so the server resolved zero catalog tools and reported the
+miss as `Tool not found`. Fixed in
+`Portage::Cli::Generate::AgentProfile::CAPABILITY_IDS`.
+
+Catalog is registered per action — `dev.ucp.shopping.catalog.search`,
+`dev.ucp.shopping.catalog.lookup` — not as one coarse
+`dev.ucp.shopping.catalog`. The profile declared the coarse name,
+because it reused `Portage::Ucp::Capabilities::CATALOG.name`, which is
+right for *our own server's* manifest (one Capability object there owns
+all three catalog actions) and wrong for an agent profile. Versions were
+`"1"` rather than spec revisions, and `services` was `{}`.
+
+Proven live 2026-09-22, anonymously — no token, no signatures, no
+approval — three profiles against the same endpoint on the same
+connection:
+
+```
+POST https://catalog.shopify.com/api/ucp/mcp   tools/call search_catalog
+  profile declaring dev.ucp.shopping.catalog.search + .catalog.lookup  -> 200, 10 products
+  profile declaring dev.ucp.shopping.catalog (coarse, what we sent)    -> Tool not found: search_catalog
+  a third-party profile also declaring the coarse name                 -> Tool not found: search_catalog
+  no profile at all                                                    -> invalid_profile_url
+  profile URL that resolves to nothing                                 -> profile_unreachable
+```
+
+Then end to end against a store this project does not own
+(`www.billabong.com` -> `billabong-us-o5.myshopify.com/api/ucp/mcp`):
+`tools/list` returns all thirteen tools to an anonymous caller,
+`search_catalog` returns 290KB of live products with variant GIDs,
+prices and availability, and `create_cart` returns a real cart with a
+`continue_url`. And against our own dev store
+(`ucp-test-bc2vif1p.myshopify.com`), the exact call this document was
+opened about: `search_catalog` -> 10 products; `create_cart` -> a cart
+holding the line item at `94995 USD`; `create_checkout` -> a checkout
+with `status: "incomplete"`, its totals, its outstanding requirements
+(contact method, delivery address) and a `continue_url`. Stopped there
+deliberately — `complete_checkout` was never called and nothing was
+bought.
+
+## Why the 2026-09-17 reasoning went wrong
+
+Worth keeping, because the mistake was subtle and the evidence looked
+conclusive.
+
+The load-bearing tell was `get_order` returning an honest `"You are
+forbidden to make tools/call requests"` while `search_catalog` returned
+`Tool not found` on the same session. That was read as one gate
+surfacing inconsistently across capability domains. It is in fact two
+different things:
+
+- **`get_order` really is forbidden** at the anonymous tier. Orders
+  needs a Dev Dashboard token carrying `read_global_api_orders`. That
+  error was accurate and had nothing to do with catalog.
+- **`search_catalog` was a registry miss** caused by our own profile.
+
+Reading the first as the explanation for the second turned a client-side
+bug into an imagined platform policy. The profile-content test that
+seemed to rule the profile out — real profile vs. garbage URL producing
+different errors — only ever proved the server *fetches* the profile. It
+never varied the one thing that mattered: which capability ids the
+profile declared. Both profiles tested declared the same wrong ones.
+
+Shopify's [auth and rate limiting](https://shopify.dev/docs/agents/profiles/auth-and-rate-limiting)
+documents three tiers, and the anonymous one — "no credentials or
+signatures provided" — carries Catalog, Cart and Checkout build/edit
+tools. That was available to read throughout and would have contradicted
+the allowlist theory.
+
+## What is genuinely gated
+
+`complete_checkout`, and only that. It needs both checkout permission on
+the client's token and the merchant having your agent's channel enabled
+on their shop, granted case by case with no public application or
+waitlist ([Alan_G, 2026-09-02](https://community.shopify.dev/t/how-can-a-token-tier-ucp-client-obtain-permission-to-call-complete-checkout/36590)).
+The supported path without it is `continue_url`: the shopper finishes in
+the merchant's own checkout. Every cart and checkout response carries
+one, so a full browse -> select -> cart -> checkout -> hand-off flow
+works today with no Shopify involvement at all.
+
+## Second bug, found underneath the first
+
+Once tool calls worked, `create_cart` returned `line_items: []`, zeroed
+totals, and:
+
+```
+"code": "merchandise_out_of_stock",
+"content": "The product 'The Inventory Not Tracked Snowboard' is already sold out."
+```
+
+for a variant `search_catalog` had just returned as
+`availability.available == true` on the same store, seconds earlier.
+
+Cause: the UCP `context` object (`address_country`, `address_region`,
+`postal_code`, `currency`, `language`) was never sent. A store resolves
+which market — and therefore which publication and which inventory — a
+call is scoped to from it. Without one, the cart is scoped to no market
+and every line silently drops. The spec calls context "provisional
+hints ... unsupported hints may be ignored without error", which reads
+as decorative and isn't.
+
+Same `create_cart`, context added, nothing else changed:
+
+```
+"line_items": [ { "quantity": 1, ... } ],
+"totals": [ { "type": "total", "amount": 94995, "display_text": "Total" } ]
+```
+
+Fixed by threading a `context:` through `Session` and
+`Transports::Http` (`#with_context`), built from `PORTAGE_SHIP_*` /
+`PORTAGE_CURRENCY` / `PORTAGE_LANGUAGE` by
+`Portage::Cli::BuyerContext`. Note this failed *open*, in the worst way:
+a plausible-looking "sold out" answer rather than an error, which would
+have read as the merchant's stock problem rather than our bug.
+
+One more live-only discrepancy: `checkout.cart_id`'s schema says a
+`cart_id` alone is enough to convert a cart into a checkout ("the
+business uses cart contents and ignores overlapping fields"). The server
+rejects that with `Invalid arguments: object at '/checkout' is missing
+required properties: line_items`, so `Transports::Http` sends both.
+
+---
+
+Everything below is the original 2026-09-17 investigation, kept verbatim
+for the reasoning trail. **Its conclusions about an allowlist are
+superseded by the above.**
 
 ## The problem
 
