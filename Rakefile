@@ -65,19 +65,18 @@ end
 # without re-building.
 def build_and_verify_gem(gem_dir)
   require "tmpdir"
-  require "fileutils"
 
   Dir.mktmpdir do |tmp|
-    gem_file = Dir.chdir(gem_dir) do
-      sh "gem build #{gem_dir}.gemspec"
-      built = Dir.glob("#{gem_dir}-*.gem").max_by { |f| File.mtime(f) }
-      abort "gem build produced no .gem file in #{gem_dir}/ — check the gemspec" unless built
-      FileUtils.mv(built, tmp)
-      built
-    end
+    # --output writes the package straight into the tmpdir. Building into the
+    # gem's own directory and moving it afterwards left a window where a
+    # killed process stranded a `.gem` in the source tree — invisible to `git
+    # status`, since `.gitignore` ignores `*.gem`.
+    gem_file = File.join(tmp, "#{gem_dir}.gem")
+    Dir.chdir(gem_dir) { sh "gem build #{gem_dir}.gemspec --output #{gem_file}" }
+    abort "gem build produced no .gem file for #{gem_dir} — check the gemspec" unless File.exist?(gem_file)
 
     install_dir = File.join(tmp, "install")
-    sh "gem install --install-dir #{install_dir} #{File.join(tmp, gem_file)}"
+    sh "gem install --install-dir #{install_dir} #{gem_file}"
 
     gem_lib = Dir.glob(File.join(install_dir, "gems", "#{gem_dir}-*", "lib")).first
     abort "installed gem has no lib/ — this is exactly the 0.7.0-line bug" unless gem_lib
@@ -92,7 +91,7 @@ def build_and_verify_gem(gem_dir)
     sh "GEM_HOME=#{install_dir} GEM_PATH=#{install_dir} ruby -I #{gem_lib} -e " \
        "\"require '#{require_name}'\" && echo '#{gem_dir}: require OK'"
 
-    yield File.join(tmp, gem_file)
+    yield gem_file
   end
 end
 
