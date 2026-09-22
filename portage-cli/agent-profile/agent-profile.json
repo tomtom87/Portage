@@ -1,26 +1,40 @@
 {
   "ucp": {
-    "version": "2026-04-08",
-    "services": {},
-    "capabilities": {
-      "dev.ucp.shopping.catalog": [
+    "version": "2026-08-25",
+    "services": {
+      "dev.ucp.shopping": [
         {
-          "version": "1"
+          "version": "2026-08-25",
+          "spec": "https://ucp.dev/2026-08-25/specification/overview",
+          "transport": "mcp",
+          "schema": "https://ucp.dev/2026-08-25/services/shopping/mcp.openrpc.json"
+        }
+      ]
+    },
+    "capabilities": {
+      "dev.ucp.shopping.catalog.search": [
+        {
+          "version": "2026-08-25"
+        }
+      ],
+      "dev.ucp.shopping.catalog.lookup": [
+        {
+          "version": "2026-08-25"
         }
       ],
       "dev.ucp.shopping.cart": [
         {
-          "version": "1"
+          "version": "2026-08-25"
         }
       ],
       "dev.ucp.shopping.checkout": [
         {
-          "version": "1"
+          "version": "2026-08-25"
         }
       ],
       "dev.ucp.shopping.order": [
         {
-          "version": "1"
+          "version": "2026-08-25"
         }
       ]
     },
