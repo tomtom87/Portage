@@ -82,8 +82,15 @@ def build_and_verify_gem(gem_dir)
     gem_lib = Dir.glob(File.join(install_dir, "gems", "#{gem_dir}-*", "lib")).first
     abort "installed gem has no lib/ — this is exactly the 0.7.0-line bug" unless gem_lib
 
+    # GEM_HOME/GEM_PATH point at the throwaway install dir so the require
+    # resolves the gem's *dependencies* out of it too — `-I <gem>/lib` alone
+    # only puts this one gem on the load path, so every gem with a portage
+    # dependency failed here with "cannot load such file -- portage/ucp"
+    # even though the package was fine. `-I` stays as the belt to the
+    # gem_lib check's braces.
     require_name = gem_dir.tr("-", "/")
-    sh "ruby -I #{gem_lib} -e \"require '#{require_name}'\" && echo '#{gem_dir}: require OK'"
+    sh "GEM_HOME=#{install_dir} GEM_PATH=#{install_dir} ruby -I #{gem_lib} -e " \
+       "\"require '#{require_name}'\" && echo '#{gem_dir}: require OK'"
 
     yield File.join(tmp, gem_file)
   end
