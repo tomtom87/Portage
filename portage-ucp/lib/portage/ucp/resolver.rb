@@ -39,14 +39,16 @@ module Portage
           namespace: "WooCommerce",
           markers: [/woocommerce/i, %r{wp-content/plugins/woocommerce}i],
           env: { site_url: "WOOCOMMERCE_SITE_URL", consumer_key: "WOOCOMMERCE_CONSUMER_KEY",
-                 consumer_secret: "WOOCOMMERCE_CONSUMER_SECRET", currency: "WOOCOMMERCE_CURRENCY" },
+                 consumer_secret: "WOOCOMMERCE_CONSUMER_SECRET", currency: "WOOCOMMERCE_CURRENCY",
+                 payment_method: "WOOCOMMERCE_PAYMENT_METHOD" },
           required: %i[site_url consumer_key consumer_secret],
           build_client: lambda { |ns, env|
             ns::Client.new(site_url: env.fetch(:site_url), consumer_key: env.fetch(:consumer_key),
                            consumer_secret: env.fetch(:consumer_secret))
           },
           build_adapter: lambda { |ns, client, env|
-            ns::Adapter.new(client: client, site_url: env.fetch(:site_url), currency: env.fetch(:currency, "USD"))
+            ns::Adapter.new(client: client, site_url: env.fetch(:site_url), currency: env.fetch(:currency, "USD"),
+                            payment_method: env[:payment_method])
           }
         ),
         Platform.new(
