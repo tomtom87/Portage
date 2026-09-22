@@ -140,7 +140,8 @@ module Portage
 
       def offers_for(store)
         products = CatalogProducts.from(
-          store[:session].search_catalog(query: @query, limit: PER_STORE_RESULTS, meta: agent_meta)
+          store[:session].search_catalog(query: @query, limit: PER_STORE_RESULTS,
+                                         context: BuyerContext.from_env, meta: agent_meta)
         )
         products.filter_map { |product| offer(store, product) }
       rescue Portage::Ucp::Client::MissingAgentProfileError
