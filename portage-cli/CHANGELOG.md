@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.6.2] - 2026-09-22
+
+- `Buy#complete` treats a `Client::PaymentPermissionError` from
+  `complete_checkout` (this agent not yet granted checkout-completion on the
+  store) as a normal outcome rather than a failure — same posture as
+  `requires_escalation`: the report carries the checkout's `continue_url`
+  so the shopper can finish on the merchant's own checkout page.
+- Every dead-end `buy` outcome that hands a shopper a `checkout_url`
+  (`requires_escalation`, permission denied, no `--payment-token`) can now
+  auto-open that link in the shopper's browser and/or POST it to a webhook,
+  instead of leaving it as inert text/JSON. Both off by default; opt in with
+  `--auto-open`/`--notify-webhook <url>`, `PORTAGE_AUTO_OPEN_CHECKOUT`/
+  `PORTAGE_NOTIFY_WEBHOOK_URL`, or `~/.portage/config.json`
+  (`auto_open_checkout`/`notify_webhook_url`), in that precedence order.
+  Never fires on `--dry-run`. Best-effort throughout: a failed open or POST
+  never fails the buy, and surfaces instead as `handoff: {opened:,
+  notified:, notify_error:}` on the report. New `CheckoutHandoff`, `Notifier`,
+  and `Config` classes; `portage-ucp` core is untouched.
+
 ## [0.6.1] - 2026-09-22
 
 - `portage generate agent-profile` emits the capability identifiers a UCP

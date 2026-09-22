@@ -5,6 +5,8 @@ require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/journal"
 require_relative "payment_methods"
+require_relative "checkout_handoff"
+require_relative "notifier"
 
 module Portage
   module Cli
@@ -27,7 +29,16 @@ module Portage
       #   whatever the catalog search happens to rank first — how `portage
       #   find` hands a picked offer over without the ranking being guessed
       #   twice.
-      def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil)
+      # @param auto_open [Boolean, nil] per-invocation override for whether a
+      #   dead-end checkout_url auto-opens in the shopper's browser — nil
+      #   (the default) defers to PORTAGE_AUTO_OPEN_CHECKOUT / config.json
+      #   (see CheckoutHandoff).
+      # @param notify_webhook [String, nil] per-invocation override for the
+      #   webhook URL a dead-end checkout_url is POSTed to — nil (the
+      #   default) defers to PORTAGE_NOTIFY_WEBHOOK_URL / config.json (see
+      #   Notifier).
+      def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
+                     auto_open: nil, notify_webhook: nil)
         raw = url.to_s.strip
         raw = "https://#{raw}" unless raw =~ %r{\Ahttps?://}i
         @uri = URI.parse(raw)
@@ -37,6 +48,8 @@ module Portage
         @yes = yes
         @dry_run = dry_run
         @product_id = product_id
+        @auto_open = auto_open
+        @notify_webhook = notify_webhook
       end
 
       def call
@@ -324,13 +337,65 @@ module Portage
       def complete(session, source, products, checkout)
         @payment_token ||= PaymentMethods.default
         unless @payment_token
-          return checkout_report(source, products, checkout,
-                                 message: "No --payment-token given, and no default payment method on file — " \
-                                          "run `portage payment enroll` or pass --payment-token.")
+          url = checkout_url_of(checkout)
+          return checkout_report(
+            source, products, checkout,
+            checkout_url: url, handoff: hand_off(checkout, reason: "no_payment_token", source: source),
+            message: "No --payment-token given, and no default payment method on file — run " \
+                     "`portage payment enroll` or pass --payment-token, or visit the link to " \
+                     "finish this checkout yourself."
+          )
         end
 
         completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: @payment_token)
         checkout_report(source, products, completed, message: "Purchased.")
+      rescue Portage::Ucp::Client::PaymentPermissionError
+        permission_denied_report(source, products, checkout)
+      end
+
+      # Same posture as #escalation_report: a completion this agent isn't
+      # granted permission for is a normal outcome, not a failure — the
+      # shopper finishes on the merchant's own continue_url/checkout link,
+      # same hand-off requires_escalation already uses (see
+      # Client::PaymentPermissionError).
+      def permission_denied_report(source, products, checkout)
+        url = checkout_url_of(checkout)
+        checkout_report(
+          source, products, checkout,
+          checkout_url: url, handoff: hand_off(checkout, reason: "permission_denied", source: source),
+          message: "This agent isn't yet granted permission to complete checkout on this store — " \
+                   "visit the link to finish it yourself."
+        )
+      end
+
+      # Never fires on --dry-run (a dry run creates a real checkout but never
+      # attempts completion — auto-opening/notifying over a preview run would
+      # be actively wrong), and never fires without a checkout_url to hand
+      # off. Best-effort: a failed open or failed webhook POST never raises
+      # out of #call (see CheckoutHandoff, Notifier), so the checkout itself
+      # — created, or correctly escalated — stays the outcome of record
+      # either way.
+      def hand_off(checkout, reason:, source:)
+        url = checkout_url_of(checkout)
+        return nil if @dry_run || url.nil?
+
+        opened = CheckoutHandoff.new(auto_open: @auto_open).call(url)
+        error = notifier.call(event: "checkout_handoff", reason: reason, checkout_url: url,
+                              checkout_id: checkout["id"], source: source, totals: checkout["totals"])
+        { url: url, opened: opened, notified: notifier.enabled? && error.nil?, notify_error: error }
+      end
+
+      def notifier
+        @notifier ||= Notifier.new(webhook_url: @notify_webhook)
+      end
+
+      # Every checkout that can't be finished by this process — no
+      # permission, no token, or an explicit requires_escalation — hands off
+      # through the same `links` field rather than leaving the shopper at a
+      # dead end. `find { |l| l["url"] }` rather than a `"type" == "checkout"`
+      # match since not every backend's link entries name a type.
+      def checkout_url_of(checkout)
+        checkout["links"]&.find { |l| l["url"] }&.fetch("url", nil)
       end
 
       def confirmed?
@@ -338,9 +403,12 @@ module Portage
       end
 
       def escalation_report(source, products, checkout)
-        checkout_report(source, products, checkout,
-                        checkout_url: checkout["links"]&.find { |l| l["url"] }&.fetch("url", nil),
-                        message: "Checkout requires buyer escalation — visit the link to complete it.")
+        url = checkout_url_of(checkout)
+        checkout_report(
+          source, products, checkout,
+          checkout_url: url, handoff: hand_off(checkout, reason: "requires_escalation", source: source),
+          message: "Checkout requires buyer escalation — visit the link to complete it."
+        )
       end
 
       def dry_run_report(source, products, checkout)
@@ -355,10 +423,10 @@ module Portage
       # wants to see (id/status/totals) onto the report, rather than nesting
       # the raw hash under a key that'd collide with the boolean `checkout:`
       # field the output struct already reserves (§ output shape).
-      def checkout_report(source, products, checkout, message:, checkout_url: nil)
+      def checkout_report(source, products, checkout, message:, checkout_url: nil, handoff: nil)
         build_report(source: source, browse: true, checkout: true, products: products, message: message,
                      checkout_url: checkout_url, checkout_id: checkout["id"], checkout_status: checkout["status"],
-                     totals: checkout["totals"])
+                     totals: checkout["totals"], handoff: handoff)
       end
 
       def safe_search(session)

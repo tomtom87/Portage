@@ -28,10 +28,10 @@ Metrics/AbcSize:
   Max: 25
 
 # Buy's initializer is one keyword per CLI flag (url, query, qty,
-# payment_token, yes, dry_run, product_id) — a flat option list, not a
-# signature that wants an options object built for it.
+# payment_token, yes, dry_run, product_id, auto_open, notify_webhook) — a
+# flat option list, not a signature that wants an options object built for it.
 Metrics/ParameterLists:
-  Max: 7
+  Max: 9
 
 # Buy implements the full discover -> homepage-fallback -> platform-detect ->
 # adapter-fallback algorithm end to end in one class on purpose (§ PLAN.md's

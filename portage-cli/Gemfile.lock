@@ -23,7 +23,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-cli (0.6.1)
+    portage-cli (0.6.2)
       portage-ucp (~> 0.8)
       portage-ucp-client (~> 0.5)
       portage-ucp-journal (~> 0.1)

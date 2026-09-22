@@ -22,7 +22,8 @@ module Portage
   module Cli
     USAGE = <<~USAGE.freeze
       usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
-                                [--product-id ID] [--yes] [--dry-run] [--json]
+                                [--product-id ID] [--yes] [--dry-run]
+                                [--auto-open|--no-auto-open] [--notify-webhook URL] [--json]
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
@@ -233,6 +234,8 @@ module Portage
         parser.on("--product-id ID") { |v| buy[:product_id] = v }
         parser.on("--yes") { buy[:yes] = true }
         parser.on("--dry-run") { buy[:dry_run] = true }
+        parser.on("--[no-]auto-open") { |v| buy[:auto_open] = v }
+        parser.on("--notify-webhook URL") { |v| buy[:notify_webhook] = v }
         parser.on("--json") { parsed[:json] = true }
         add_search_options(parser, buy, parsed)
       end
@@ -605,9 +608,17 @@ module Portage
       lines = ["#{report[:message]} (source: #{report[:source]})"]
       report[:products].each { |p| lines << "  - #{product_line(p)}" }
       lines << "  checkout: #{report[:checkout_url]}" if report[:checkout_url]
+      lines.concat(format_handoff(report[:handoff])) if report[:handoff]
       lines.join("\n")
     end
     private_class_method :format_report
+
+    def self.format_handoff(handoff)
+      lines = ["  opened in browser: #{handoff[:opened]}", "  notified: #{handoff[:notified]}"]
+      lines << "  notify error: #{handoff[:notify_error]}" if handoff[:notify_error]
+      lines
+    end
+    private_class_method :format_handoff
 
     def self.product_line(product)
       product.respond_to?(:title) ? "#{product.id}: #{product.title}" : "#{product['id']}: #{product['title']}"
