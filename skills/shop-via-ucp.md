@@ -147,23 +147,40 @@ setup, not a bug in your call:
   right headers, with no Pages deploy required.
 - **`-32602 Invalid params, "Tool not found: <name>"` for every tool**, even
   ones `tools/list` just confirmed exist, once the profile is wired up and
-  fetchable — the tool isn't actually missing. Confirmed root cause: a
-  platform-side gate on tool *invocation* that Shopify's real UCP rollout
-  applies independent of the agent-profile document's validity/content and
-  independent of who runs the store (reproduces identically against
-  billabong.com and a self-owned Shopify dev store). The proof is
-  `get_order`, which returns an honest `"You are forbidden to make
-  tools/call requests"` for the same session regardless of whether the
-  profile URL is real or garbage — `search_catalog`/`create_cart`/etc. hit
-  the same gate but surface it as this misleading "Tool not found" instead,
-  because the tool is silently missing from this agent's per-session
-  registry. There is no client-side fix: treat this as "this store hasn't
-  opened automated buying to this agent" and say so, rather than assuming
-  it's your profile content or your call shape. Whether Shopify publishes an
-  allowlist/approval process, and whether this is Shopify-specific or
-  protocol-wide, is still open — see `docs/ucp-tool-gating-investigation.md`
-  in this repo for the full investigation and open next steps.
-- In all three cases: don't retry the call, don't fall back to scraping or
+  fetchable — the tool isn't actually missing, and this is your profile, not
+  the store's permissions. A server resolves an agent's tool registry from
+  the capability ids the profile declares, and a declared id that isn't in
+  the registry resolves to no tools at all, reported as a lookup miss. The
+  trap is catalog: it is registered per action —
+  `dev.ucp.shopping.catalog.search` and `dev.ucp.shopping.catalog.lookup` —
+  so a profile declaring a coarse `dev.ucp.shopping.catalog` gets zero
+  catalog tools. Cart, checkout and order are declared at the root name.
+  Versions are spec revisions (`2026-08-25`), not `"1"`, and `ucp.services`
+  must declare the shopping service rather than being left `{}`. This repo
+  got all three wrong for a month and misread the result as a platform
+  allowlist; `docs/ucp-tool-gating-investigation.md` has the full trail.
+- **A cart that comes back empty and calls itself sold out** — `create_cart`
+  returns `status: "success"` with `line_items: []`, zeroed totals, and a
+  `merchandise_out_of_stock` warning naming a product `search_catalog`
+  reported as `availability.available == true` seconds earlier. You didn't
+  send a `context`. A store resolves which market — and so which
+  publication and which inventory — the call is scoped to from it, and
+  without one the call is scoped to no market and every line silently
+  drops. Send `address_country` at minimum, plus
+  `currency`/`address_region`/`postal_code`/`language` when you know them,
+  on catalog, cart and checkout calls alike. Don't report this to the
+  shopper as "out of stock" — it isn't.
+- **`"You are forbidden to make tools/call requests"` on `get_order`, or a
+  refusal on `complete_checkout`** — these two are real permission
+  boundaries, not the registry miss above. Orders needs a Dev Dashboard
+  token carrying `read_global_api_orders`. `complete_checkout` needs both
+  checkout permission on the token and the merchant having your agent's
+  channel enabled, granted case by case. Catalog, cart and checkout
+  build/edit tools need none of that. For completion without that grant,
+  hand the shopper the `continue_url` carried on every cart and checkout
+  response and let them finish in the merchant's own checkout — that is the
+  supported path, not a workaround.
+- For any of these: don't retry the call, don't fall back to scraping or
   raw credentials, and don't report it to the shopper as "the store is
   down." Say plainly that this store's automated-buying setup isn't working
-  yet and, if you can, name which of the three above it looks like.
+  yet and, if you can, name which of the above it looks like.
