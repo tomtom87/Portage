@@ -84,6 +84,25 @@ same store. Switch to the Pages URL once that workflow actually deploys
 something — GitHub's CDN caching on raw/jsdelivr file serving isn't a
 documented guarantee the way Pages is.
 
+**Purge jsdelivr after every change to `agent-profile.json`.** That
+`max-age=604800` applies to the `@main` alias, so for up to a week after a
+profile change the CDN keeps handing servers the *old* document. The failure
+that produces is not a cosmetic staleness — it is the `Tool not found`
+registry miss §42 is about, reproducing against correct code in the repo.
+Confirmed 2026-09-22, days after the capability-id fix landed and was pushed
+to `main`: `raw.githubusercontent.com` served the per-action ids while
+`cdn.jsdelivr.net/gh/...@main/...` still served the coarse
+`dev.ucp.shopping.catalog` with `services: []`. One line fixes it:
+
+```sh
+curl -s https://purge.jsdelivr.net/gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json
+```
+
+Pinning `@<full-sha>` instead of `@main` avoids the whole class of problem —
+jsdelivr treats a sha path as immutable and can't serve a stale one — at the
+cost of updating `.env.example` on every profile change. Either is fine; what
+isn't fine is assuming a push to `main` is live.
+
 **One-time setup this workflow can't do for you:** Settings → Pages → Build
 and deployment → Source = "GitHub Actions", on this repo. Until that's
 flipped, the workflow runs and uploads an artifact with nothing to deploy
