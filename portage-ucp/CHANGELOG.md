@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.8.1] - 2026-09-22
+
+- `Resolver`'s WooCommerce platform entry threads `payment_method`/
+  `billing_address` from `WOOCOMMERCE_PAYMENT_METHOD`/`WOOCOMMERCE_BILLING_ADDRESS`
+  through to `Adapter.new`. It previously built the client and adapter
+  without either, so `complete_checkout` failed with no gateway or address
+  configured even when both env vars were set — the resolver's `env:` map
+  simply never named them.
+
 ## [0.8.0] - 2026-09-17
 
 - **Breaking:** `Manifest#to_h` now emits the shape live UCP stores actually

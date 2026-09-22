@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.2.0] - 2026-09-22
+
+- `Mapper.checkout` builds a `resume-checkout` link at `<site_url>/checkout/`
+  for any non-completed checkout, instead of always emitting `links: []`.
+  Without it, `Buy#checkout_url_of` returned `nil` and `Buy#hand_off` bailed
+  out before it ran — confirmed live: the `no_payment_token` dead end
+  reported `checkout_url: null` and `handoff: null`. `/checkout/` is
+  WooCommerce's default slug, not guaranteed; a store that's renamed its
+  checkout page gets a dead link. **Breaking for anyone calling `Mapper`
+  directly**: `Mapper.checkout` now takes a required `site_url:` keyword.
+- `Adapter.new` takes a `billing_address:` keyword (a Store API-shaped
+  hash), supplied at construction from `WOOCOMMERCE_BILLING_ADDRESS` (JSON)
+  by the `exe/portage-ucp-woocommerce` script. The Store API's `/checkout`
+  endpoint 400s without one ("Missing parameter(s): billing_address"),
+  confirmed live right after `payment_method` was wired through. UCP's
+  `Adapter#complete_checkout` interface has no buyer-address parameter, and
+  threading one through every adapter gem is a bigger change than this gem
+  alone should make — same one-fixed-value-per-process stopgap as
+  `payment_method`, and wrong the moment something needs a different
+  address per checkout.
+
 ## [0.1.4] - 2026-09-17
 
 - No behavior change — widens the `portage-ucp` dependency pin to `~> 0.8`

@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.8.0)
+    portage-ucp (0.8.1)
       base64 (~> 0.2)
       json_schemer (~> 2.5)
       mcp (~> 0.24)
@@ -10,7 +10,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-woocommerce (0.1.4)
+    portage-ucp-woocommerce (0.2.0)
       portage-ucp (~> 0.8)
 
 GEM
