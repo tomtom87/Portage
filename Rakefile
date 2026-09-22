@@ -1,3 +1,5 @@
+require "English"
+
 # Root aggregate task only — each gem still owns its own tests/lint
 # independently (own Gemfile.lock, own bundle, no shared state), matching
 # README's "Development" section. This just saves typing out the same
@@ -110,6 +112,19 @@ task :release_check, [:gem_dir] do |_t, args|
   build_and_verify_gem(gem_dir) { |_gem_path| }
 end
 
+# Uncommitted or untracked changes under a gem's own directory. `gem build`
+# packages the live working tree rather than a git export, so a stray
+# `lib/portage/scratch.rb` ships silently — the gemspec's `Dir["lib/**/*.rb"]`
+# can't tell it from a committed file. Scoped to the gem directory on purpose:
+# untracked scratch under `docs/` or `tmp/` can't reach a package, so it
+# shouldn't block a release.
+def working_tree_changes(gem_dir)
+  output = `git status --porcelain -- #{gem_dir}`
+  abort "git status failed for #{gem_dir}" unless $CHILD_STATUS.success?
+
+  output.lines.map(&:chomp)
+end
+
 # Version in the gem's own gemspec. Loaded from inside the gem directory so
 # the gemspec's relative `Dir["lib/**/*.rb"]` resolves the way `gem build`
 # will resolve it.
@@ -154,6 +169,14 @@ task :publish_all do
   if to_publish.empty?
     puts "\nEvery gem's current version is already on rubygems.org — nothing to push."
     next
+  end
+
+  dirty = to_publish.to_h { |gem_dir| [gem_dir, working_tree_changes(gem_dir)] }.reject { |_, changes| changes.empty? }
+
+  unless dirty.empty?
+    report = dirty.map { |gem_dir, changes| "#{gem_dir}:\n#{changes.map { |line| "  #{line}" }.join("\n")}" }
+    abort "Refusing to publish from a dirty working tree — `gem build` packages " \
+          "what's on disk, so these would ship as-is:\n#{report.join("\n")}"
   end
 
   puts "\n#{to_publish.size} gem(s) to push, so expect #{to_publish.size} MFA prompt(s)."
