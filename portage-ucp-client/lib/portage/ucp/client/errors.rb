@@ -8,7 +8,51 @@ module Portage
       # `isError: true` — e.g. an AuthenticationError/RateLimitExceededError/
       # RawPanRejectedError the server side surfaced. `#message` is the text
       # content the server returned, not a generic string.
-      class ServerError < Error; end
+      #
+      # On a real UCP server that text is frequently the whole error document
+      # rather than a sentence — Shopify answers an out-of-stock `create_cart`
+      # with its entire `ucp` envelope (every capability, every payment
+      # handler) plus a two-word `messages[].content` of "Sold out" (confirmed
+      # live 2026-09-22). Raising that as a several-kilobyte `#message` is
+      # accurate and useless to anything that has to show it to a person, so
+      # `#payload` carries the parsed document when the text is JSON, and the
+      # readers below pull out the parts a caller actually wants. They return
+      # nil/[] rather than raising for a server whose text isn't JSON — this
+      # is an error path, and failing to parse an error is not worth a second
+      # error.
+      class ServerError < Error
+        attr_reader :payload
+
+        def initialize(message = nil, payload: nil)
+          super(message)
+          @payload = payload
+        end
+
+        # The server's own human-readable explanations, most specific first —
+        # `messages[]` entries carry `content`, `code` and `severity`.
+        def server_messages
+          Array(payload && payload["messages"]).filter_map do |m|
+            next unless m.is_a?(Hash)
+
+            { code: m["code"], content: m["content"], severity: m["severity"] }.compact
+          end
+        end
+
+        # One line fit to print: the server's message content joined, falling
+        # back to the raw text when there's no structured document to read.
+        def summary
+          contents = server_messages.filter_map { |m| m[:content] }
+          return message if contents.empty?
+
+          contents.join("; ")
+        end
+
+        # Where a shopper can finish by hand — present on Shopify's cart and
+        # checkout errors, which is exactly when a CLI wants to offer it.
+        def continue_url
+          payload && payload["continue_url"]
+        end
+      end
 
       # Raised by .discover when the manifest can't be fetched at all: the URL
       # 404s, the host refuses the connection, or the body isn't valid JSON.
