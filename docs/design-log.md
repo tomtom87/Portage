@@ -2765,3 +2765,106 @@ broad adapter-level rescue is left as-is (the design rationale in
 `Buy#adapter_flow`'s comment still holds for a genuinely unavailable
 adapter) — worth revisiting separately if silently-swallowed adapter
 errors turn out to be a recurring cost.
+
+## 42. §39–41's "platform allowlist" was our own agent profile (2026-09-22)
+
+The conclusion §39–41 and `ucp-tool-gating-investigation.md` reached — that
+Shopify gates UCP tool invocation behind an allowlist of approved agent
+partners, and that no client-side fix existed — was wrong. It cost a month
+and redirected `portage-ucp-shopify` onto the Storefront API as the only
+viable path. The real cause was in `Generate::AgentProfile`.
+
+A UCP server resolves an incoming agent's tool registry from the capability
+ids its profile declares. Catalog is registered per action —
+`dev.ucp.shopping.catalog.search`, `dev.ucp.shopping.catalog.lookup` — not
+as one coarse `dev.ucp.shopping.catalog`. We declared the coarse name,
+because that class reused `Portage::Ucp::Capabilities::CATALOG.name`. The
+reuse looked like exactly the right move: one constant, no drift between the
+manifest we serve and the profile we send, and the class's own comments said
+so. But the two documents index different registries. Our manifest has one
+Capability object owning all three catalog actions, which is correct there;
+the profile needs the per-action ids. Sharing a constant across two
+registries that merely look alike is the mistake worth remembering. Also:
+versions were `"1"` where the registry uses spec revisions, and `services`
+was `{}`, left stubbed for a future signer, which declares an agent that
+speaks no service at all.
+
+Two lessons about the investigation itself, which is the part that actually
+went wrong — the bug was cheap once seen.
+
+**One capability's honest error was read as another's.** `get_order`
+returned `"You are forbidden to make tools/call requests"` while
+`search_catalog` on the same session returned `Tool not found`. That read as
+one gate surfacing inconsistently across domains, and the inconsistency
+itself felt like evidence — an allowlist implemented as a registry filter in
+one place and an explicit check in another. It was two unrelated things.
+Orders genuinely needs a token carrying `read_global_api_orders`, so that
+error was accurate and told us nothing about catalog.
+
+**The test that cleared the profile didn't test the profile.** Real profile
+versus a garbage URL produced different errors, which proved the server
+fetches and validates the document — and that proof was then treated as
+proof the document's *content* was fine. It never varied the one field that
+mattered. Both profiles declared the same wrong capability ids. When a test
+is meant to exonerate something, check that it varies the part under
+suspicion, not merely that it involves it.
+
+Shopify's `docs/agents/profiles/auth-and-rate-limiting` documents an
+anonymous tier — "no credentials or signatures provided" — carrying catalog,
+cart and checkout build/edit tools. It was available to read the whole time
+and contradicts the allowlist theory outright. Reading the vendor's own
+permission model before inferring a permission model would have ended this
+in an afternoon.
+
+### The bug underneath
+
+With tool calls working, `create_cart` returned `status: "success"` and an
+empty cart: `line_items: []`, zeroed totals, `merchandise_out_of_stock`
+naming a variant `search_catalog` had returned as available seconds before.
+The UCP `context` object (`address_country`, `address_region`,
+`postal_code`, `currency`, `language`) was never sent, and a store resolves
+which market — and so which publication and which inventory — a call is
+scoped to from it. The spec calls context "provisional hints ... unsupported
+hints may be ignored without error", which reads as decorative.
+
+This failed open, in the worst available way: a plausible wrong answer, not
+an error. "Already sold out" reads as the merchant's stock problem. Nothing
+in the response suggested the caller had omitted something. Worth watching
+for elsewhere in this protocol — an optional-looking field whose absence
+produces a valid-shaped, wrong result rather than a rejection.
+
+Fixed by threading `context:` through `Session` and `Transports::Http`,
+built from `PORTAGE_SHIP_*`/`PORTAGE_CURRENCY`/`PORTAGE_LANGUAGE` by the new
+`Portage::Cli::BuyerContext`. That's deliberately not a method on
+`ShippingProfile`, despite reading three of the same env vars: an address is
+all-or-nothing because a half-filled one can't be submitted, while a context
+is specified as partial and a country alone resolves a market. Opposite
+completeness rules, so they stay separate objects.
+
+`Transports::{Loopback,Stdio}` drop `context`/`cart_id` before dispatch —
+they hand arguments to our own flat-argument server, which splats them into
+an Adapter signature with no such keywords. Dropped per transport rather
+than branched on in `Session`, so each transport keeps owning which
+arguments it understands.
+
+One further schema-versus-server discrepancy: `checkout.cart_id`'s schema
+says a cart id alone converts a cart into a checkout ("the business uses
+cart contents and ignores overlapping fields"). The live server rejects that
+with `missing required properties: line_items`, so both go out.
+
+### What's actually gated
+
+`complete_checkout`, and nothing else. It needs checkout permission on the
+client's token *and* the merchant having the agent's channel enabled,
+granted case by case with no public application. The supported path without
+it is the `continue_url` on every cart and checkout response — the shopper
+finishes in the merchant's own checkout. So browse → select → cart →
+checkout → hand-off works against any Shopify store today, credential-free.
+
+`portage-ucp-shopify`'s Storefront path stays: still right for a merchant
+who hands us their credentials, still the only way to serve their catalog
+through *our* server. What changed is that it's no longer the only way to
+shop a Shopify store. Discovery remains Shopify's — `/.well-known/ucp` on
+the merchant's domain points at their platform-served endpoint, with no
+override for an installed app — which is a distribution problem, not a
+technical one.
