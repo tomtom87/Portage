@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.6.1] - 2026-09-22
+
+- `ServerError` carries the parsed error document on `#payload` when the
+  server's text content is JSON, with `#summary`, `#continue_url` and
+  `#server_messages` readers over it. A real UCP server answers an
+  out-of-stock `create_cart` with its whole `ucp` envelope — every
+  capability, every payment handler — wrapped around a two-word
+  `messages[].content` of "Sold out", so `#message` alone is several
+  kilobytes of JSON and unusable by anything that has to show it to a
+  person. `#message` is unchanged; the readers are additive, and return
+  nil/`[]` for a refusal whose text isn't JSON.
+
 ## [0.6.0] - 2026-09-22
 
 - `Transports::Http` now builds `checkout.payment.instruments[]` for
