@@ -21,6 +21,51 @@ RSpec.describe Portage::Cli::Buy do
     )
   end
 
+  describe "a store refusing the call on its own terms" do
+    # Regression: this escaped #call as an unhandled ServerError and printed
+    # a Ruby backtrace whose message was the server's whole several-kilobyte
+    # error envelope. Confirmed live 2026-09-22 against a genuinely sold-out
+    # variant on a Shopify store.
+    it "reports the server's own message and continue_url instead of raising" do
+      body = JSON.generate(
+        "ucp" => { "status" => "error" },
+        "messages" => [{ "type" => "error", "code" => "out_of_stock", "content" => "Sold out",
+                         "severity" => "unrecoverable" }],
+        "continue_url" => "https://shop.example/"
+      )
+      session = instance_double(
+        Portage::Ucp::Client::Session, advertises?: true,
+                                       search_catalog: { "ucp" => 1, "products" => [product] }
+      )
+      allow(session).to receive(:create_checkout)
+        .and_raise(Portage::Ucp::Client::ServerError.new(body, payload: JSON.parse(body)))
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold").call
+
+      expect(report[:source]).to eq("native_ucp")
+      expect(report[:checkout]).to be false
+      expect(report[:checkout_url]).to eq("https://shop.example/")
+      expect(report[:message]).to include("Sold out").and include("https://shop.example/")
+      expect(report[:message]).not_to include("out_of_stock")
+    end
+
+    it "falls back to the raw text for a refusal that isn't a JSON document" do
+      session = instance_double(
+        Portage::Ucp::Client::Session, advertises?: true,
+                                       search_catalog: { "ucp" => 1, "products" => [product] }
+      )
+      allow(session).to receive(:create_checkout)
+        .and_raise(Portage::Ucp::Client::ServerError, "rate limited")
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold").call
+
+      expect(report[:message]).to include("rate limited")
+      expect(report[:checkout_url]).to be_nil
+    end
+  end
+
   describe "native UCP, cart+checkout advertised" do
     it "creates a checkout and reports it awaiting confirmation without --yes" do
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
@@ -338,8 +383,8 @@ RSpec.describe Portage::Cli::Buy do
       adapter = double("adapter")
       allow(Portage::Ucp::Resolver).to receive(:build_adapter).and_return(adapter)
       allow(Portage::Ucp::Capabilities::CART).to receive(:advertised_for?).with(adapter).and_return(true)
-      allow(Portage::Ucp::Capabilities::CHECKOUT).to receive(:advertised_for?).with(adapter)
-                                                                              .and_raise("no payment_method configured on this Adapter")
+      allow(Portage::Ucp::Capabilities::CHECKOUT).to receive(:advertised_for?)
+        .with(adapter).and_raise("no payment_method configured on this Adapter")
 
       report = described_class.new(url: "shop.example", query: "cold").call
 
