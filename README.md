@@ -10,21 +10,12 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 > **Status**: `0.8.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
-> **Shopify note (Sept 2026)**: an earlier version of this README said real UCP tool calls
-> against live Shopify stores hit a platform-side allowlist. That was wrong, and is fixed as of
-> `0.8.1`. The cause was this gem's own agent profile declaring a coarse
-> `dev.ucp.shopping.catalog` capability where the registry uses per-action ids
-> (`dev.ucp.shopping.catalog.search`, `.catalog.lookup`), which resolved to zero catalog tools
-> server-side and surfaced as `Tool not found`. Native UCP now works against any Shopify store —
-> discovery, catalog, cart and checkout, at Shopify's *anonymous* auth tier, with no token, no
-> signatures and no approval. The only case-by-case restriction is `complete_checkout`, granted
-> per client/merchant with no public application — `portage-ucp-client` now builds the real
-> `checkout.payment.instruments[]` wire shape for it (card handler), so the call works the moment
-> a grant exists; without one, the shopper finishes at the `continue_url` every cart and checkout
-> response carries, which `portage-cli`'s `buy` reports as a normal outcome rather than an error.
-> See [docs/ucp-tool-gating-investigation.md](docs/ucp-tool-gating-investigation.md) for the live
-> evidence and for the second bug found underneath it (a missing UCP `context` object silently
-> emptying carts).
+> **Shopify**: native UCP works against any Shopify store — discovery, catalog, cart and
+> checkout — at Shopify's *anonymous* auth tier: no token, no signatures, no approval. The one
+> restriction is `complete_checkout`, granted per client/merchant. With a grant, the call works
+> as-is. Without one, the shopper finishes in the browser at the `continue_url` that every cart
+> and checkout response carries, which `portage-cli`'s `buy` reports as a normal outcome rather
+> than an error.
 
 ## Quick start, buying via cli
 
