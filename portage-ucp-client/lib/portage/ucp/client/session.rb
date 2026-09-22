@@ -38,22 +38,35 @@ module Portage
           capabilities&.include?(capability_name)
         end
 
-        def search_catalog(query:, limit: 20,
+        # `context:` is the UCP `context` object — buyer locale hints
+        # (`address_country`, `address_region`, `postal_code`, `currency`,
+        # `language`). Optional on paper, effectively required against a real
+        # store: see Transports::Http#with_context for what a store does with
+        # a cart built without one. Ignored by the loopback/stdio transports,
+        # which talk to this gem's own flat-argument server.
+        def search_catalog(query:, limit: 20, context: nil,
                            meta: nil)
-          call("search_catalog", meta: meta, query: query, limit: limit)
+          call("search_catalog", meta: meta, query: query, limit: limit, context: context)
         end
 
-        def get_product(product_id:, meta: nil) = call("get_product", meta: meta, product_id: product_id)
-        def lookup_catalog(product_ids:, meta: nil) = call("lookup_catalog", meta: meta, product_ids: product_ids)
+        def get_product(product_id:, context: nil, meta: nil)
+          call("get_product", meta: meta, product_id: product_id, context: context)
+        end
+
+        def lookup_catalog(product_ids:, context: nil, meta: nil)
+          call("lookup_catalog", meta: meta, product_ids: product_ids, context: context)
+        end
 
         def get_cart(cart_id:, meta: nil) = call("get_cart", meta: meta, cart_id: cart_id)
 
-        def create_cart(line_items:, idempotency_key: nil, meta: nil)
-          call("create_cart", meta: meta, line_items: line_items, idempotency_key: idempotency_key)
+        def create_cart(line_items:, idempotency_key: nil, context: nil, meta: nil)
+          call("create_cart", meta: meta, line_items: line_items, idempotency_key: idempotency_key,
+                              context: context)
         end
 
-        def update_cart(cart_id:, line_items:, idempotency_key: nil, meta: nil)
-          call("update_cart", meta: meta, cart_id: cart_id, line_items: line_items, idempotency_key: idempotency_key)
+        def update_cart(cart_id:, line_items:, idempotency_key: nil, context: nil, meta: nil)
+          call("update_cart", meta: meta, cart_id: cart_id, line_items: line_items,
+                              idempotency_key: idempotency_key, context: context)
         end
 
         def cancel_cart(cart_id:, idempotency_key: nil, meta: nil)
@@ -66,16 +79,23 @@ module Portage
         # (a Portage::Ucp::CheckoutFulfillment for loopback). Over stdio/HTTP
         # it would need a JSON wire shape this gem doesn't build yet, so
         # callers on those transports should leave it nil.
-        def create_checkout(line_items:, idempotency_key: nil, fulfillment: nil, meta: nil)
+        # `cart_id:` converts an existing cart into a checkout rather than
+        # re-listing its contents from scratch — HTTP only (see
+        # Transports::Http#wrap_line_items); `line_items:` stays required
+        # because the live server rejects a `cart_id`-only body.
+        def create_checkout(line_items:, idempotency_key: nil, fulfillment: nil, cart_id: nil, context: nil,
+                            meta: nil)
           call("create_checkout", meta: meta, line_items: line_items, idempotency_key: idempotency_key,
+                                  context: context, **(cart_id ? { cart_id: cart_id } : {}),
                                   **(fulfillment ? { fulfillment: fulfillment } : {}))
         end
 
         def get_checkout(checkout_id:, meta: nil) = call("get_checkout", meta: meta, checkout_id: checkout_id)
 
-        def update_checkout(checkout_id:, line_items:, idempotency_key: nil, fulfillment: nil, meta: nil)
+        def update_checkout(checkout_id:, line_items:, idempotency_key: nil, fulfillment: nil, context: nil,
+                            meta: nil)
           call("update_checkout", meta: meta, checkout_id: checkout_id, line_items: line_items,
-                                  idempotency_key: idempotency_key,
+                                  idempotency_key: idempotency_key, context: context,
                                   **(fulfillment ? { fulfillment: fulfillment } : {}))
         end
 
@@ -106,6 +126,7 @@ module Portage
         private
 
         def call(action, meta: nil, **arguments)
+          arguments.delete(:context) if arguments[:context].nil?
           arguments[:idempotency_key] ||= SecureRandom.uuid if MUTATING_ACTIONS.include?(action)
           @transport.call_tool(name: action, arguments: arguments, meta: meta)
         end
