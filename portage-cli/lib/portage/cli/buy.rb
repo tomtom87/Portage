@@ -52,6 +52,9 @@ module Portage
         @notify_webhook = notify_webhook
       end
 
+      # Link `type`s that are never the checkout — see #checkout_url_of.
+      POLICY_LINK_TYPES = /policy|policies|terms|contact|privacy|legal|imprint/i
+
       def call
         session = discover(@uri)
         return native_flow(session) if session
@@ -429,12 +432,34 @@ module Portage
       end
 
       # Every checkout that can't be finished by this process — no
-      # permission, no token, or an explicit requires_escalation — hands off
-      # through the same `links` field rather than leaving the shopper at a
-      # dead end. `find { |l| l["url"] }` rather than a `"type" == "checkout"`
-      # match since not every backend's link entries name a type.
+      # permission, no token, or an explicit requires_escalation — hands the
+      # shopper a URL rather than leaving them at a dead end.
+      #
+      # `continue_url` first, because on a real store it is the only field
+      # that ever holds the checkout. This used to be
+      # `links.find { |l| l["url"] }` on the reasoning that not every
+      # backend's link entries name a type — but live UCP stores put nothing
+      # *except* policy links in `links`: five third-party Shopify stores
+      # checked 2026-09-22 returned `refund_policy`, `privacy_policy`,
+      # `terms_of_service`, `shipping_policy`, `contact_information` and
+      # nothing else, with the checkout at `continue_url` every time. So the
+      # old "first link with a url" handed the shopper a refund policy on
+      # every real store, `--auto-open` opened it, and `--notify-webhook`
+      # posted it.
+      #
+      # The `links` fallback stays for backends whose checkout genuinely
+      # lives there, but skips anything named as a policy or contact link:
+      # for a hand-off, no URL is a better answer than the wrong one, since
+      # the report and the message both then say there's nowhere to go
+      # instead of pointing somewhere useless.
       def checkout_url_of(checkout)
-        checkout["links"]&.find { |l| l["url"] }&.fetch("url", nil)
+        checkout["continue_url"] || checkout_link_url(checkout)
+      end
+
+      def checkout_link_url(checkout)
+        Array(checkout["links"])
+          .reject { |l| l["type"].to_s.match?(POLICY_LINK_TYPES) }
+          .find { |l| l["url"] }&.fetch("url", nil)
       end
 
       def confirmed?

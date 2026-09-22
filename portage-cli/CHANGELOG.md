@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.6.4] - 2026-09-22
+
+- **Every dead-end hand-off pointed the shopper at the store's refund
+  policy.** `#checkout_url_of` took the first entry in the checkout's
+  `links` with a url, on the reasoning that not every backend types its
+  link entries. Live UCP stores put nothing *but* policy links there:
+  five third-party Shopify stores checked 2026-09-22 returned
+  `refund_policy`, `privacy_policy`, `terms_of_service`, `shipping_policy`
+  and `contact_information`, and never a checkout link — the checkout is
+  always at `continue_url`. So `requires_escalation`, permission-denied and
+  no-payment-token reports all handed over a policy page, `--auto-open`
+  opened it and `--notify-webhook` posted it. Now reads `continue_url`
+  first, and the `links` fallback skips policy/contact entries rather than
+  handing over a wrong URL.
+
 ## [0.6.3] - 2026-09-22
 
 - A store refusing a cart or checkout call on its own terms — out of stock,
