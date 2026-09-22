@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Documentation only, no code change. Confirmed live (2026-09-22) that the
+  `resume-checkout` link `Mapper.checkout_links` builds from
+  `Cart#checkoutUrl` lands on a *populated* checkout in a cold browser with no
+  cookies — Shopify carries cart identity in the URL (`/cart/c/<cart-id>?key=…`),
+  so it needs none of the `?session=<cart_token>` bridging
+  `portage-ucp-woocommerce` had to add for WooCommerce's split Store-API/cookie
+  sessions. See the README's "Checkout hand-off needs no session bridging"
+  section for what was and wasn't covered by that pass.
+
 ## [0.5.0] - 2026-09-22
 
 - Fixes catalog reads surfacing products that can't be bought. `search_catalog`,

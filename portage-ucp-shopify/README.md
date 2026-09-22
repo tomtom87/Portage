@@ -18,6 +18,26 @@ Update/replace operations (`update_cart`, `update_checkout`) are full-replacemen
 
 `cancel_order`, `refund_order`, and `request_return` cancel via `orderCancel`, refund via `suggestedRefund` + `refundCreate`, and request a return via `returnCreate`, respectively — each re-fetches the order afterwards rather than trusting the mutation's own payload, and the result shows up as an appended `Portage::Ucp::Adjustment` on `Order#adjustments` (type `cancellation`/`refund`/`return`). These three aren't in the real UCP spec's order lifecycle (get-only today) — they're a deliberate extension of the existing `dev.ucp.shopping.order` capability rather than a new top-level family, since it's the same resource as `get_order`.
 
+## Checkout hand-off needs no session bridging (confirmed live, 2026-09-22)
+
+**Confirmed working:** the `resume-checkout` link this adapter hands back opens on a *populated* checkout in a cold browser — no cookie, no session bridging, no extra query param. This is the failure mode `portage-ucp-woocommerce` had to fix with `?session=<cart_token>` (WooCommerce serves `/checkout/` from a classic cookie session that knows nothing about the Store API's token session), and Shopify is immune to it by construction: the cart identity lives *in* the URL.
+
+`Mapper.checkout_links` emits `node["checkoutUrl"]` exactly as the Storefront API returned it on `cartCreate`/`cartLinesAdd` — nothing between the mutation and the link rewrites, re-signs or regenerates it.
+
+What was checked live, against `thelightyard.co.uk` (`adorable-eclairage.myshopify.com`), one in-stock IP44 wall light at £625.00:
+
+- A Shopify cart-scoped checkout URL has the form `https://<domain>/cart/c/<cart-id>?key=<hash>` — both the cart id and the authenticating key are in the URL.
+- Fetched with **no cookie jar at all**, it 302s onto `https://<primary-domain>/checkouts/cn/<cart-id>/<locale>` and renders the real checkout: the correct variant ("CLASSIC MOROCCAN GOLD LEAF BATHROOM WALL LIGHT IP44 — BRUSHED BRASS"), a `Subtotal` row of £625.00 and a £625.00 order total. No "empty cart", no redirect to the store root.
+
+Scope of that check, stated plainly, because it is not a clean end-to-end run of this gem:
+
+- It exercised the URL over the **native UCP** path (`create_checkout` → `continue_url`), not this adapter's own Storefront `cartCreate`. That is the path `portage buy` actually takes against any Shopify store serving `/.well-known/ucp` — `Portage::Cli::Buy#call` only falls through to `adapter_flow` when UCP discovery fails. The two produce the same artifact: the UCP response's own `checkout.id` came back as `gid://shopify/Checkout/<cart-id>?key=…`, the same cart id and key as the URL.
+- A cookie-free `curl` is a *stricter* test than `--auto-open` into the shopper's real browser, which could mask a session bug with cookies it already holds.
+- The repo's own dev store (`ucp-test-bc2vif1p.myshopify.com`) could not be used: its Online Store channel is locked, so the Storefront API refuses every query ("Online Store channel is locked") regardless of token.
+
+Not covered by this pass: `resume_url` (the `SubmitFailed` 3DS/decline URL that `checkout_links` prefers over `checkoutUrl`) is still unconfirmed live — it needs a real declined payment to produce one.
+
+
 ## Installation
 
 ```ruby
