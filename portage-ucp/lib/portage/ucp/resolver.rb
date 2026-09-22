@@ -1,3 +1,5 @@
+require "json"
+
 module Portage
   module Ucp
     # Shared platform-detection + adapter-building logic for anything that
@@ -40,7 +42,7 @@ module Portage
           markers: [/woocommerce/i, %r{wp-content/plugins/woocommerce}i],
           env: { site_url: "WOOCOMMERCE_SITE_URL", consumer_key: "WOOCOMMERCE_CONSUMER_KEY",
                  consumer_secret: "WOOCOMMERCE_CONSUMER_SECRET", currency: "WOOCOMMERCE_CURRENCY",
-                 payment_method: "WOOCOMMERCE_PAYMENT_METHOD" },
+                 payment_method: "WOOCOMMERCE_PAYMENT_METHOD", billing_address: "WOOCOMMERCE_BILLING_ADDRESS" },
           required: %i[site_url consumer_key consumer_secret],
           build_client: lambda { |ns, env|
             ns::Client.new(site_url: env.fetch(:site_url), consumer_key: env.fetch(:consumer_key),
@@ -48,7 +50,8 @@ module Portage
           },
           build_adapter: lambda { |ns, client, env|
             ns::Adapter.new(client: client, site_url: env.fetch(:site_url), currency: env.fetch(:currency, "USD"),
-                            payment_method: env[:payment_method])
+                            payment_method: env[:payment_method],
+                            billing_address: env[:billing_address] && JSON.parse(env[:billing_address]))
           }
         ),
         Platform.new(

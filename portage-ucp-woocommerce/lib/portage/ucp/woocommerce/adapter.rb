@@ -30,6 +30,19 @@ module Portage
       # with a real gateway installed — same "needs confirming against a
       # live store" posture as Portage::Ucp::Shopify::Adapter's own payment
       # step.
+      #
+      # IMPORTANT CAVEAT #2: the Store API's `/checkout` endpoint also
+      # requires `billing_address` (confirmed live: a 400 naming it as
+      # missing without one). UCP's `Adapter#complete_checkout` interface
+      # has no buyer-address parameter at all, and threading one through
+      # every adapter gem is a bigger, cross-cutting change than this gem
+      # alone should make unilaterally — so, same posture as
+      # `payment_method` above, this is a WooCommerce-specific stopgap:
+      # supply one fixed `billing_address` hash at construction time
+      # (Store API field names, e.g. `first_name`/`address_1`/`postcode`),
+      # not per-checkout. Fine for the single-buyer-per-process shape this
+      # adapter already assumes (see `payment_method`'s own doc), wrong for
+      # anything that needs a different billing address per checkout.
       class Adapter < Portage::Ucp::Adapter
         # The Store API takes no idempotency key natively, so §9a dedup comes
         # from Support::Idempotency's in-process table.
@@ -43,13 +56,15 @@ module Portage
         # than an empty body, which UCP's reads report as nil.
         include Portage::Ucp::Support::NotFound
 
-        def initialize(client:, site_url:, currency:, payment_method: nil, payment_data_key: "token")
+        def initialize(client:, site_url:, currency:, payment_method: nil, payment_data_key: "token",
+                       billing_address: nil)
           super()
           @client = client
           @site_url = site_url.chomp("/")
           @currency = currency
           @payment_method = payment_method
           @payment_data_key = payment_data_key
+          @billing_address = billing_address
         end
 
         def search_catalog(query:, limit:)
@@ -166,10 +181,12 @@ module Portage
         # than a confirmed gateway-specific shape.
         def submit_checkout(checkout_id, payment_token)
           raise Portage::Ucp::WooCommerce::Error, "no payment_method configured on this Adapter" unless @payment_method
+          raise Portage::Ucp::WooCommerce::Error, "no billing_address configured on this Adapter" unless @billing_address
 
           data = @client.store_post("/checkout", {
                                       payment_method: @payment_method,
-                                      payment_data: [{ key: @payment_data_key, value: payment_token }]
+                                      payment_data: [{ key: @payment_data_key, value: payment_token }],
+                                      billing_address: @billing_address
                                     })
           record_checkout_status(checkout_id, "completed")
           order = build_order_confirmation(data, checkout_id)
