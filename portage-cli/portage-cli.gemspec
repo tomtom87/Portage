@@ -29,7 +29,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "portage-ucp", "~> 0.9"
-  spec.add_dependency "portage-ucp-client", "~> 0.6"
+  spec.add_dependency "portage-ucp-client", "~> 0.6", ">= 0.6.2"
   spec.add_dependency "portage-ucp-journal", "~> 0.1"
 
   spec.add_development_dependency "rspec", "~> 3.13"

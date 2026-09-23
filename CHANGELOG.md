@@ -38,6 +38,16 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   `Support::Totals.amount` joins them, replacing the `type == "total"`
   lookup copied across `portage-cli`, `Dispatcher` and `ReferenceAdapter`.
   No adapter gem had its own copy.
+- **Version bumps for gems whose code changed after their last publish.**
+  `publish_all` skips any version already on rubygems.org, so
+  `portage-ucp-client` 0.6.1, `portage-cli` 0.6.4 and
+  `portage-ucp-woocommerce` 0.2.0 would have been skipped with newer code
+  sitting unreleased. `portage-ucp-webmcp` would also have installed
+  against the published client 0.6.1, which lacks
+  `Transports::UcpWireShape`, and failed on `require`. They are now
+  `portage-ucp-client` 0.6.2, `portage-cli` 0.7.0 and
+  `portage-ucp-woocommerce` 0.2.1. `portage-cli` and `portage-ucp-webmcp`
+  require `portage-ucp-client >= 0.6.2`.
 
 ## [0.8.2] - 2026-09-22
 

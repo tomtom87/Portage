@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.7.0] - 2026-09-23
 
 - **The decision layer is wired in.** `buy`/`find` make their judgment
   calls through the same rules `portage-ucp-decision` wraps. Ranking,

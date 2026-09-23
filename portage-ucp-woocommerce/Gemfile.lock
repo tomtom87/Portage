@@ -10,7 +10,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-woocommerce (0.2.0)
+    portage-ucp-woocommerce (0.2.1)
       portage-ucp (~> 0.8)
 
 GEM
