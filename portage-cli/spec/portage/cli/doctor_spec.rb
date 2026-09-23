@@ -11,7 +11,7 @@ RSpec.describe Portage::Cli::Doctor do
   end
 
   it "flags every collaborator still at its unconfigured default" do
-    with_env("JEV_API_KEY" => nil) do
+    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => nil) do
       findings = described_class.new.call
 
       expect(findings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
@@ -33,10 +33,16 @@ RSpec.describe Portage::Cli::Doctor do
   end
 
   it "flags a missing JEV_API_KEY with a link to get one" do
-    with_env("JEV_API_KEY" => nil) do
+    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => nil) do
       finding = described_class.new.call.find { |f| f.check == "jev_api_key" }
 
       expect(finding.message).to include("console.typesafe.ai")
+    end
+  end
+
+  it "accepts TYPESAFE_API_KEY in place of JEV_API_KEY, since ModelBackends::Jev falls back to it" do
+    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => "test-key") do
+      expect(described_class.new.call.map(&:check)).not_to include("jev_api_key")
     end
   end
 

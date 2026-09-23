@@ -19,7 +19,8 @@ not a hosted API) — see `examples/laya_bridge.py` and set
 `LAYA_BRIDGE_SCRIPT`; a missing or broken bridge raises
 `BackendNotConfiguredError`/`BackendError` with a message naming the exact
 problem (unset, path doesn't exist, `LAYA_PYTHON` not on PATH, non-zero exit,
-invalid JSON). `ModelBackends::Jev` reads `JEV_API_KEY`, and — since it's the
+invalid JSON). `ModelBackends::Jev` reads `JEV_API_KEY` (falling back to
+`TYPESAFE_API_KEY`, TypeSafe's own name for it), and — since it's the
 one with no opt-in step, just a key — a missing one is also flagged by
 `portage doctor`/`portage configure`/`portage setup`. Laya stays optional and
 silent in `doctor` on purpose: unlike Jev it has no default "everyone needs
@@ -42,6 +43,26 @@ require "portage/ucp/decision"
 Portage::Ucp::Decision::EscalationPolicy.call(checkout_status: checkout.status)
 # => #<data Verdict escalate=true, reason=:requires_escalation>
 ```
+
+`ConfidenceGate.via_backend` gates on the answer, not just on the model's
+certainty. A noul (the default) gates on its yes-probability, so phrase the
+question so "yes" means "safe to proceed". A choice or score needs
+`proceed_on:`, because its `confidence` says how sure the model is of
+whichever answer it gave:
+
+```ruby
+jev = Portage::Ucp::Decision::ModelBackends::Jev.new
+
+Portage::Ucp::Decision::ConfidenceGate.via_backend(
+  backend: jev, state: checkout.to_json, question: "next_step", threshold: 0.8,
+  instructions: "What should the agent do with this checkout?",
+  type: "choice", criteria: { "proceed" => nil, "escalate" => nil }, proceed_on: "proceed"
+)
+# => #<data Verdict proceed=false, confidence=0.99, threshold=0.8>  (Jev chose "escalate")
+```
+
+A score takes a Range: `type: "score", criteria: %w[low medium high],
+proceed_on: 0..0.5`.
 
 ## Development
 

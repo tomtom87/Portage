@@ -60,12 +60,14 @@ module Portage
       # same posture as signing_keys/payment_handlers above, so it shows up
       # in the one place a fresh setup is checked rather than only failing
       # the first time something actually calls ConfidenceGate.via_backend.
+      # TYPESAFE_API_KEY counts too: ModelBackends::Jev falls back to it.
       def jev_api_key_finding
-        return unless ENV.fetch("JEV_API_KEY", nil).to_s.strip.empty?
+        return unless %w[JEV_API_KEY TYPESAFE_API_KEY].all? { |key| ENV.fetch(key, nil).to_s.strip.empty? }
 
         Finding.new(check: "jev_api_key",
-                    message: "JEV_API_KEY is not set — confidence gating via Jev (TypeSafe AI) will raise " \
-                             "BackendNotConfiguredError until it is. Get a key at https://console.typesafe.ai.")
+                    message: "JEV_API_KEY is not set (nor TYPESAFE_API_KEY) — confidence gating via Jev " \
+                             "(TypeSafe AI) will raise BackendNotConfiguredError until it is. Get a key at " \
+                             "https://console.typesafe.ai.")
       end
 
       def payment_handlers_finding
