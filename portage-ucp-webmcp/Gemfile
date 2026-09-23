@@ -1,0 +1,6 @@
+source "https://rubygems.org"
+
+gemspec
+
+gem "portage-ucp", path: "../portage-ucp"
+gem "portage-ucp-client", path: "../portage-ucp-client"
