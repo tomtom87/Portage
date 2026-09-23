@@ -16,6 +16,11 @@ module Portage
           # name in the registry. TYPESAFE_API_KEY — the name TypeSafe's own
           # docs and SDKs use — is read as a fallback, so a key already set up
           # for TypeSafe works here without being copied to a second name.
+          # Seconds. A confidence check sits in front of a checkout the
+          # shopper is waiting on; Net::HTTP's defaults would stall it for up
+          # to two minutes on a hung connection.
+          OPEN_TIMEOUT = 5
+          TIMEOUT = 15
           ENV_KEY = "JEV_API_KEY".freeze
           FALLBACK_ENV_KEY = "TYPESAFE_API_KEY".freeze
 
@@ -26,25 +31,34 @@ module Portage
           def initialize(api_key: self.class.env_api_key, model: DEFAULT_MODEL, connection: nil)
             @api_key = api_key
             @model = model
-            @connection = connection || Faraday.new(url: BASE_URL)
+            @connection = connection ||
+                          Faraday.new(url: BASE_URL, request: { open_timeout: OPEN_TIMEOUT, timeout: TIMEOUT })
           end
 
-          def configured? = !@api_key.to_s.strip.empty?
+          def configured? = configuration_problem.nil?
+
+          # @return [String, nil] why this backend can't answer yet, or nil
+          #   when it can — same contract as Laya#configuration_problem.
+          def configuration_problem
+            return nil unless @api_key.to_s.strip.empty?
+
+            "#{ENV_KEY} is not set (nor #{FALLBACK_ENV_KEY}) — get a key at https://console.typesafe.ai " \
+              "and set #{ENV_KEY}"
+          end
 
           # @param state [String] the text (or JSON-serialized context) to
           #   evaluate — a checkout, an offer list, a merchant signal.
           # @param questions [Hash{String => Question}]
           # @return [Hash{String => Answer}]
           def ask(state:, questions:)
-            unless configured?
-              raise Portage::Ucp::Decision::BackendNotConfiguredError,
-                    "#{ENV_KEY} is not set (nor #{FALLBACK_ENV_KEY}) — get a key at " \
-                    "https://console.typesafe.ai and set #{ENV_KEY}"
-            end
+            problem = configuration_problem
+            raise Portage::Ucp::Decision::BackendNotConfiguredError, problem if problem
 
             response = post(state, questions)
             raise_for_status!(response)
-            parse(JSON.parse(response.body))
+            ModelBackends.parse_answers(response.body, source: "Jev")
+          rescue Faraday::Error => e
+            raise Portage::Ucp::Decision::BackendError, "Jev request failed: #{e.class}: #{e.message}"
           end
 
           private
@@ -62,15 +76,7 @@ module Portage
             return if response.status.between?(200, 299)
 
             raise Portage::Ucp::Decision::BackendError,
-                  "Jev request failed: #{response.status} #{response.body}"
-          end
-
-          def parse(body)
-            body.fetch("answers").transform_values do |answer|
-              Answer.new(type: answer["type"], confidence: answer["confidence"],
-                         value: answer["choice"] || answer["score"] || answer["noul"],
-                         probabilities: answer["probabilities"])
-            end
+                  "Jev request failed: #{response.status} #{response.body.to_s[0, 300]}"
           end
         end
       end

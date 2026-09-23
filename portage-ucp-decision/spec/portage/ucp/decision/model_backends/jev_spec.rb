@@ -61,4 +61,22 @@ RSpec.describe Portage::Ucp::Decision::ModelBackends::Jev do
     expect { backend.ask(state: "help!", questions: { "urgency" => question }) }
       .to raise_error(Portage::Ucp::Decision::BackendError, /500/)
   end
+
+  it "raises BackendError, not a Faraday error, when the request can't be made" do
+    stub_request(:post, described_class::BASE_URL).to_timeout
+
+    backend = described_class.new(api_key: "test-key")
+
+    expect { backend.ask(state: "help!", questions: { "urgency" => question }) }
+      .to raise_error(Portage::Ucp::Decision::BackendError, /Jev request failed/)
+  end
+
+  it "raises BackendError, not JSON::ParserError, on a 2xx that isn't an answers body" do
+    stub_request(:post, described_class::BASE_URL).to_return(status: 200, body: "<html>maintenance</html>")
+
+    backend = described_class.new(api_key: "test-key")
+
+    expect { backend.ask(state: "help!", questions: { "urgency" => question }) }
+      .to raise_error(Portage::Ucp::Decision::BackendError, /Jev returned an unreadable answer/)
+  end
 end

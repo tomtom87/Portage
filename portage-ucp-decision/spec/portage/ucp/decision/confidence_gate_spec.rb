@@ -81,5 +81,11 @@ RSpec.describe Portage::Ucp::Decision::ConfidenceGate do
       expect { gate(type: "choice", criteria: { "proceed" => nil }, proceed_on: "proceed") }
         .to raise_error(Portage::Ucp::Decision::BackendError, /no confidence/)
     end
+
+    it "raises BackendError, not KeyError, when the backend leaves the question unanswered" do
+      allow(backend).to receive(:ask).and_return({})
+
+      expect { gate }.to raise_error(Portage::Ucp::Decision::BackendError, /no answer for "q"/)
+    end
   end
 end
