@@ -68,7 +68,13 @@
       body: JSON.stringify({ jsonrpc: "2.0", id: ++nextId, method: "tools/call", params: params }),
       signal: options && options.signal
     }).then(function (response) {
-      return response.json().then(function (body) {
+      // A proxy or error page in front of the endpoint answers HTML, not
+      // JSON-RPC. Name the endpoint and status rather than letting the
+      // agent see a bare "Unexpected token '<'".
+      return Promise.resolve().then(function () { return response.json(); }).catch(function () {
+        throw new Error("tools/call to " + config.endpoint + " returned a non-JSON response (" +
+                        response.status + ")");
+      }).then(function (body) {
         if (body && body.error) {
           var detail = body.error.data ? ": " + body.error.data : "";
           throw new Error((body.error.message || "tools/call failed (" + response.status + ")") + detail);
