@@ -1,8 +1,13 @@
 # System One decision layer (Jev / Layla)
 
-**Status:** proposed, not yet built. Nothing in this doc exists in code today —
-it names a layer this repo currently implements piecemeal (§ Context) and
-proposes consolidating it, not a report of shipped work.
+**Status:** first skeleton built — `portage-ucp-decision` (new gem). All four
+responsibilities below exist as typed decisions; ranking and the policy-check
+wrapper carry real logic, escalation only branches on the literal
+`requires_escalation` status, and confidence gating is backed by two
+swappable model backends (`ModelBackends::Jev`, `ModelBackends::Laya`) rather
+than left abstract. Still not wired into the agent loop, `portage-cli`, or
+`skills/shop-via-ucp.md` — those keep their current scattered logic until a
+caller actually switches over.
 
 **Driver:** the agent loop, the transport (`WebMCP`/MCP/native UCP), and the
 commerce backend (`Adapter`) each have a clear owner in this repo already.
@@ -82,20 +87,32 @@ shape.
   escalate/proceed verdict with a reason, a confidence score, a policy
   pass/fail — testable independent of any one transport or command.
 
-## Open questions (unresolved, not decided here)
+## Open questions
 
-- Where does this live — a new gem (`portage-ucp-decision`?) alongside
-  `portage-ucp-client`, or a module inside `portage-ucp-client` itself? Naming
-  precedent elsewhere in this repo (`Portage::Ucp::*`) suggests it should not
-  invent unrelated branding inside the gem's own namespace even if "Jev" /
-  "Layla" is the product-facing name for it.
-- Confidence gating needs a defined scale and source — model-reported
-  confidence, a heuristic over signals (price variance, stock volatility,
-  merchant history), or both — none evaluated yet.
+- ~~Where does this live~~ **Resolved:** a new gem, `portage-ucp-decision`,
+  alongside `portage-ucp-client` — `Portage::Ucp::Decision::*`, no unrelated
+  branding inside the namespace.
+- ~~Confidence gating needs a defined scale and source~~ **Resolved for the
+  model-reported half:** `Decision::ModelBackends::Jev` (TypeSafe AI's hosted
+  "System One Model" — the name this doc's title borrowed — `docs.typesafe.ai`,
+  `POST https://api.typesafe.ai/v1/systemone`, `JEV_API_KEY` env var) and
+  `Decision::ModelBackends::Laya` (`huggingface.co/convaiinnovations/laya`, an
+  open-weights local model with no hosted API — this gem shells out to a
+  configurable external command, `LAYA_INFER_COMMAND`, that speaks the same
+  request/response JSON both backends share; wiring an actual Python bridge
+  around Laya's HuggingFace weights is left to the caller). Both flow through
+  `ConfidenceGate.via_backend`. `portage doctor` (aliased `configure`/`setup`)
+  flags a missing `JEV_API_KEY`. The heuristic-over-signals half (price
+  variance, stock volatility, merchant history) is still unevaluated.
 - Relationship to `Confirmer` (`portage-ucp/lib/portage/ucp/confirmer.rb`):
   does confidence gating replace binary confirmation, sit in front of it
   (only ask for confirmation when confidence is low), or run independently?
   Unresolved.
 - Risk signals (new, under "simple policy checks") — what a signal even is
   here (merchant age, TLS/manifest-signing status per §9, prior escalation
-  rate) is unresearched.
+  rate) is unresearched. `PolicyCheck#call`'s `risk_signals:` parameter is
+  accepted but not yet checked.
+- Ambiguous-signal escalation (§ Responsibilities 2 — a merchant surfacing a
+  mismatch that isn't literally `requires_escalation`) is also still
+  unresolved; `EscalationPolicy#call`'s `signals:` parameter is likewise
+  accepted but not yet checked.

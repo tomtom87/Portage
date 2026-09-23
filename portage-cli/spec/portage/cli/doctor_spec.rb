@@ -11,10 +11,12 @@ RSpec.describe Portage::Cli::Doctor do
   end
 
   it "flags every collaborator still at its unconfigured default" do
-    findings = described_class.new.call
+    with_env("JEV_API_KEY" => nil) do
+      findings = described_class.new.call
 
-    expect(findings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
-                                                     "payment_handlers")
+      expect(findings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
+                                                       "payment_handlers", "jev_api_key")
+    end
   end
 
   it "clears a finding once its collaborator is configured" do
@@ -25,7 +27,17 @@ RSpec.describe Portage::Cli::Doctor do
       config.payment_handlers = [{ name: "stripe" }]
     end
 
-    expect(described_class.new.call).to be_empty
+    with_env("JEV_API_KEY" => "test-key") do
+      expect(described_class.new.call).to be_empty
+    end
+  end
+
+  it "flags a missing JEV_API_KEY with a link to get one" do
+    with_env("JEV_API_KEY" => nil) do
+      finding = described_class.new.call.find { |f| f.check == "jev_api_key" }
+
+      expect(finding.message).to include("console.typesafe.ai")
+    end
   end
 
   it "flags a capability implemented on some but not all of its actions" do

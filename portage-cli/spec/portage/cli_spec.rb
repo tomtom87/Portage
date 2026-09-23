@@ -292,6 +292,22 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "configure/setup aliases" do
+    %w[configure setup].each do |alias_name|
+      it "routes #{alias_name} to the same command as doctor" do
+        captured = nil
+        allow(Portage::Cli::Doctor).to receive(:new) { |**opts|
+          captured = opts
+          instance_double(Portage::Cli::Doctor, call: [])
+        }
+
+        capture_stdout { described_class.run([alias_name, "--adapter", "Portage::Ucp::Adapter"]) }
+
+        expect(captured).to include(adapter_class: Portage::Ucp::Adapter)
+      end
+    end
+  end
+
   def capture_stdout
     old = $stdout
     $stdout = StringIO.new
