@@ -14,25 +14,34 @@ RSpec.describe Portage::Cli::History do
   end
 
   it "round-trips a purchase through the file" do
-    history.record_purchase(url: "https://shop.example", query: "cold", checkout: true,
-                            checkout_status: "completed", message: "Purchased.", products: ["p1: Cold Brew"])
+    history.record_purchase(url: "https://shop.example", query: "cold", outcome: "purchased", source: "native_ucp",
+                            checkout_id: "chk_1", checkout_status: "completed", total: 1200, currency: "USD",
+                            items: [{ "id" => "v1", "title" => "Cold Brew", "quantity" => 2 }], message: "Purchased.")
 
     entry = history.purchases.first
-    expect(entry).to include("url" => "https://shop.example", "query" => "cold",
-                             "checkout_status" => "completed", "products" => ["p1: Cold Brew"])
+    expect(entry).to include("url" => "https://shop.example", "query" => "cold", "outcome" => "purchased",
+                             "checkout_id" => "chk_1", "checkout_status" => "completed", "total" => 1200,
+                             "items" => [{ "id" => "v1", "title" => "Cold Brew", "quantity" => 2 }])
   end
 
   it "round-trips a search through the file" do
     history.record_search(query: "cold", offer_count: 3, message: "Found 3 offer(s).")
 
     expect(history.searches.first).to include("query" => "cold", "offer_count" => 3)
+    expect(history.searches.first).not_to have_key("url")
+  end
+
+  it "records the store on a search made by a buy that never reached checkout" do
+    history.record_search(query: "cold", url: "https://shop.example", offer_count: 0, message: "No match.")
+
+    expect(history.searches.first).to include("url" => "https://shop.example")
   end
 
   it "keeps only the most recent MAX_ENTRIES purchases" do
     h = history
     (described_class::MAX_ENTRIES + 5).times do |i|
-      h.record_purchase(url: "https://shop.example", query: "q#{i}", checkout: true,
-                        checkout_status: nil, message: "ok")
+      h.record_purchase(url: "https://shop.example", query: "q#{i}", outcome: "purchased",
+                        message: "ok")
     end
 
     expect(h.purchases.length).to eq(described_class::MAX_ENTRIES)
@@ -48,8 +57,8 @@ RSpec.describe Portage::Cli::History do
 
   it "clears only the requested kind" do
     h = history
-    h.record_purchase(url: "https://shop.example", query: "cold", checkout: true,
-                      checkout_status: nil, message: "ok")
+    h.record_purchase(url: "https://shop.example", query: "cold", outcome: "purchased",
+                      message: "ok")
     h.record_search(query: "cold", offer_count: 1, message: "ok")
 
     h.clear(kind: "purchases")
@@ -60,8 +69,8 @@ RSpec.describe Portage::Cli::History do
 
   it "clears both kinds when no kind is given" do
     h = history
-    h.record_purchase(url: "https://shop.example", query: "cold", checkout: true,
-                      checkout_status: nil, message: "ok")
+    h.record_purchase(url: "https://shop.example", query: "cold", outcome: "purchased",
+                      message: "ok")
     h.record_search(query: "cold", offer_count: 1, message: "ok")
 
     h.clear

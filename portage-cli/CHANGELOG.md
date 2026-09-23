@@ -11,8 +11,7 @@ pre-1.0, so APIs may still shift between minor versions.
   `buy`/`find` make their judgment calls through it. When it isn't,
   built-in fallbacks give the same answers. Every checkout report carries
   the verdicts under `decisions:` (`escalation`, `policy`, and
-  `confidence` when enabled). `portage doctor` only asks for
-  `JEV_API_KEY` when the gem is installed.
+  `confidence` when enabled).
   - `find` ranks offers with `OfferRanking`. The order is unchanged.
   - `buy` decides escalation with `EscalationPolicy`. When a checkout both
     requires escalation and mismatches the request under
@@ -38,6 +37,44 @@ pre-1.0, so APIs may still shift between minor versions.
   still buys exactly that product.
 - `doctor` accepts `TYPESAFE_API_KEY` in place of `JEV_API_KEY`, matching
   `portage-ucp-decision`'s Jev backend.
+- **An agent couldn't tell a held purchase from a bought one without reading
+  prose.** `decisions:` only covers the three gates, so a missing payment
+  token, a permission-denied store, a dry run or a missing `--yes` all
+  showed `escalate: false, allowed: true`. Every `buy` report now carries
+  `outcome` (`purchased`, `no_payment_token`, `policy_blocked`, ... — the
+  full list is in the README), and the text output leads with it as
+  `[outcome]`. Checkout reports also carry `items`, what the checkout
+  actually holds, alongside `products`, the search results.
+- **History recorded the wrong things.**
+  - A purchase entry listed all ten search results, not what was bought,
+    and had no way to tell a completed purchase from a dry run or a held
+    one. Entries now carry `outcome`, `items`, `total`/`currency`,
+    `checkout_id`, `source`, and the `checkout_url` for anything not
+    completed.
+  - A `buy` whose search matched nothing was logged as a purchase. It's now
+    a search at that store, as are browse-only and dead-end buys, which
+    weren't logged anywhere.
+  - The search behind a `buy` with no URL wasn't logged at all.
+- **Checkout hand-off webhooks.** The body now includes the report's
+  `message`, the `store` and the shopper's `query`, so a Slack/Zapier relay
+  can post it without a lookup. A plain-text 2xx (Slack's `ok`) was
+  reported as a failed delivery, because the reply was parsed as JSON; any
+  2xx now counts. The POST times out after 5s instead of stalling the buy
+  for up to two minutes.
+- **The confidence gate could crash a buy after the checkout existed.** Only
+  `Decision::Error` was rescued, so a backend's timeout, parse error or
+  missing binary escaped as a backtrace with no report, hand-off or history
+  entry. Any failure now holds the purchase like a low score does.
+- **The spend policy failed open on a checkout with no total.** PolicyGuard
+  skips both caps without an amount, so `buy --yes` completed past a
+  configured cap while reporting `allowed: true`. It's now denied as
+  `total_unknown` whenever a cap is set.
+- `doctor` checks the confidence backend you selected
+  (`PORTAGE_DECISION_BACKEND`): the gem missing, an unknown name, a missing
+  `JEV_API_KEY` or Laya bridge, or a bad `PORTAGE_MIN_CONFIDENCE`. It no
+  longer asks for `JEV_API_KEY` when no backend is selected.
+- The no-buyer-context warning names every variable it reads and says to
+  set at least `PORTAGE_SHIP_COUNTRY`.
 
 ## [0.6.4] - 2026-09-22
 

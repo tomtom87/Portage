@@ -1,5 +1,5 @@
 require "portage/ucp"
-require_relative "decisions"
+require_relative "confidence_check"
 
 module Portage
   module Cli
@@ -25,7 +25,7 @@ module Portage
           rate_limiter_finding,
           signing_keys_finding,
           payment_handlers_finding,
-          jev_api_key_finding,
+          decision_backend_finding,
           *capability_findings
         ].compact
       end
@@ -56,22 +56,19 @@ module Portage
         Finding.new(check: "signing_keys", message: "No signing_keys configured — the manifest ships unsigned.")
       end
 
-      # portage-ucp-decision's ModelBackends::Jev (docs/plans/
-      # system-one-decision-layer.md) reads this at call time; flagged here,
-      # same posture as signing_keys/payment_handlers above, so it shows up
-      # in the one place a fresh setup is checked rather than only failing
-      # the first time something actually calls ConfidenceGate.via_backend.
-      # TYPESAFE_API_KEY counts too: ModelBackends::Jev falls back to it.
-      # Skipped when the optional gem isn't installed: nothing would read
-      # the key.
-      def jev_api_key_finding
-        return unless Decisions.available?
-        return unless %w[JEV_API_KEY TYPESAFE_API_KEY].all? { |key| ENV.fetch(key, nil).to_s.strip.empty? }
-
-        Finding.new(check: "jev_api_key",
-                    message: "JEV_API_KEY is not set (nor TYPESAFE_API_KEY) — confidence gating via Jev " \
-                             "(TypeSafe AI) will raise BackendNotConfiguredError until it is. Get a key at " \
-                             "https://console.typesafe.ai.")
+      # The confidence gate's backend, checked only once one is selected
+      # (PORTAGE_DECISION_BACKEND): the gate is off by default, and a
+      # missing key for a backend nobody chose is noise. Once one is
+      # selected, anything short of ready holds every `--yes` purchase, so
+      # it's flagged here rather than first surfacing mid-checkout. Covers
+      # the gem not being installed, an unknown backend name, a missing
+      # JEV_API_KEY, a missing Laya bridge, and a bad PORTAGE_MIN_CONFIDENCE.
+      def decision_backend_finding
+        problem = ConfidenceCheck.new.configuration_problem
+        problem && Finding.new(check: "decision_backend",
+                               message: "#{problem} — until then every `portage buy --yes` is held for the shopper.")
+      rescue ArgumentError => e
+        Finding.new(check: "decision_backend", message: e.message)
       end
 
       def payment_handlers_finding

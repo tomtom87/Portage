@@ -9,6 +9,13 @@ module Portage
     # history list` can answer "what did I already look for" and "what did I
     # already buy" without re-running anything, and `portage history clear`
     # can wipe either or both.
+    #
+    # A purchase entry is one checkout `portage buy` created, whatever came
+    # of it: `outcome` is the report's own (`purchased`, `dry_run`,
+    # `policy_blocked`, ...), so "what did I already buy" is the entries
+    # whose outcome is `purchased`, and every other entry still carries the
+    # `checkout_url` to finish it by hand. Entries written before `outcome`
+    # existed have only `checkout_status` and `message`.
     class History
       PATH = File.join(Dir.home, ".portage", "history.json").freeze
       MAX_ENTRIES = 200
@@ -18,14 +25,24 @@ module Portage
         @now = now.to_i
       end
 
-      def record_purchase(url:, query:, checkout:, message:, checkout_status: nil, products: [])
-        append("purchases", { "url" => url, "query" => query, "checkout" => checkout,
-                              "checkout_status" => checkout_status, "message" => message,
-                              "products" => products, "at" => @now })
+      # @param items [Array<Hash>] what the checkout holds (`id`, `title`,
+      #   `quantity`), not the search results it was picked from.
+      # @param total [Integer, nil] minor units of `currency`.
+      # rubocop:disable Metrics/ParameterLists -- all keywords; one entry's fields
+      def record_purchase(url:, query:, outcome:, message:, source: nil, checkout_id: nil, checkout_status: nil,
+                          checkout_url: nil, total: nil, currency: nil, items: [])
+        # rubocop:enable Metrics/ParameterLists
+        append("purchases", { "url" => url, "query" => query, "outcome" => outcome, "source" => source,
+                              "checkout_id" => checkout_id, "checkout_status" => checkout_status,
+                              "checkout_url" => checkout_url, "total" => total, "currency" => currency,
+                              "items" => items, "message" => message, "at" => @now })
       end
 
-      def record_search(query:, offer_count:, message:)
-        append("searches", { "query" => query, "offer_count" => offer_count, "message" => message, "at" => @now })
+      # @param url [String, nil] the store, for a `portage buy` that never
+      #   reached a checkout there; nil for a cross-store `portage find`.
+      def record_search(query:, offer_count:, message:, url: nil)
+        append("searches", { "query" => query, "url" => url, "offer_count" => offer_count, "message" => message,
+                             "at" => @now }.compact)
       end
 
       def purchases(limit: MAX_ENTRIES) = store["purchases"].last(limit)

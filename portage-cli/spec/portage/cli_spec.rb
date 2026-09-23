@@ -222,37 +222,66 @@ RSpec.describe Portage::Cli do
       expect(h).to have_received(:record_search).with(query: "cold", offer_count: 0, message: "none")
     end
 
-    it "records a purchase only when the report reached checkout" do
+    it "records every buy that created a checkout as a purchase, with its outcome and what it holds" do
       h = stub_history
       allow(h).to receive(:record_purchase)
-      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: report))
+      held = report.merge(outcome: "policy_blocked", checkout_id: "chk_1", checkout_status: "ready_for_complete",
+                          checkout_url: "https://shop.example/c/1", currency: "USD",
+                          totals: [{ "type" => "total", "amount" => 1200 }],
+                          items: [{ id: "v1", title: "Cold Brew", quantity: 1 }])
+      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: held))
 
       capture_stdout { described_class.run(["buy", "shop.example", "--query", "cold"]) }
 
-      expect(h).to have_received(:record_purchase).with(hash_including(url: "https://shop.example", query: "cold"))
+      expect(h).to have_received(:record_purchase).with(
+        hash_including(url: "https://shop.example", query: "cold", outcome: "policy_blocked", checkout_id: "chk_1",
+                       checkout_url: "https://shop.example/c/1", total: 1200, currency: "USD",
+                       items: [{ "id" => "v1", "title" => "Cold Brew", "quantity" => 1 }])
+      )
     end
 
-    it "does not record a purchase for a browse-only report" do
+    it "records a buy that never reached a checkout as a search at that store, not a purchase" do
       h = stub_history
       allow(h).to receive(:record_purchase)
-      dead_end = report.merge(checkout: false)
-      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: dead_end))
+      allow(h).to receive(:record_search)
+      no_match = report.merge(outcome: "no_match", message: "No product matched \"cold\".")
+      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: no_match))
 
       capture_stdout { described_class.run(["buy", "shop.example", "--query", "cold"]) }
 
       expect(h).not_to have_received(:record_purchase)
+      expect(h).to have_received(:record_search).with(query: "cold", url: "https://shop.example", offer_count: 1,
+                                                      message: "No product matched \"cold\".")
+    end
+
+    it "records the search behind a buy with no url" do
+      allow(Portage::Cli::Find).to receive(:new)
+        .and_return(instance_double(Portage::Cli::Find, call: { query: "cold", offers: [], message: "none" }))
+      h = stub_history
+      allow(h).to receive(:record_search)
+
+      capture_stdout { described_class.run(["buy", "--query", "cold"]) }
+
+      expect(h).to have_received(:record_search).with(query: "cold", offer_count: 0, message: "none")
     end
 
     it "lists purchases and searches" do
       h = stub_history
-      allow(h).to receive(:purchases).and_return([{ "url" => "https://shop.example", "query" => "cold",
-                                                    "checkout_status" => "completed", "message" => "Purchased.",
-                                                    "at" => 0 }])
+      allow(h).to receive(:purchases).and_return(
+        [{ "url" => "https://shop.example", "query" => "cold", "outcome" => "low_confidence",
+           "checkout_url" => "https://shop.example/c/1", "total" => 1200, "currency" => "USD",
+           "items" => [{ "id" => "v1", "title" => "Cold Brew", "quantity" => 2 }], "at" => 0 },
+         { "url" => "https://old.example", "query" => "tea", "checkout_status" => "completed", "at" => 0 }]
+      )
       allow(h).to receive(:searches).and_return([{ "query" => "cold", "offer_count" => 1, "at" => 0 }])
 
       output = capture_stdout { expect(described_class.run(["history"])).to eq(0) }
 
-      expect(output).to include("Purchases:", "https://shop.example", "Searches:", "\"cold\"")
+      expect(output).to include("Purchases:", "Searches:", "\"cold\"")
+      expect(output).to include("low_confidence — https://shop.example (cold) — Cold Brew x2 — 12.00 USD — " \
+                                "https://shop.example/c/1")
+      # An entry recorded before `outcome` existed still lists.
+      expect(output).to include("completed — https://old.example (tea)")
     end
 
     it "filters to just purchases or searches" do

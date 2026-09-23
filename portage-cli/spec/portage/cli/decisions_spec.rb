@@ -60,6 +60,14 @@ RSpec.describe Portage::Cli::Decisions do
           it "denies over the cap" do
             expect(check).to eq(allowed: false, reason: :per_transaction_cap_exceeded)
           end
+
+          it "denies a checkout with no total, rather than skipping the cap" do
+            expect(check(amount: nil)).to eq(allowed: false, reason: :total_unknown)
+          end
+        end
+
+        it "allows a checkout with no total when no cap is configured" do
+          expect(check(amount: nil)).to eq(allowed: true, reason: nil)
         end
 
         context "with a merchant allowlist" do

@@ -65,6 +65,12 @@ RSpec.describe Portage::Cli::Notifier do
       expect(stub).to have_been_requested
     end
 
+    it "treats any 2xx as delivered, including a plain-text body like Slack's `ok`" do
+      stub_request(:post, webhook_url).to_return(status: 200, body: "ok", headers: { "Content-Type" => "text/plain" })
+
+      expect(described_class.new(webhook_url: webhook_url, config: config).call(payload)).to be_nil
+    end
+
     it "doesn't raise on a failed POST, and returns the failure message" do
       stub_request(:post, webhook_url).to_return(status: 500, body: '{"error":"boom"}')
 
@@ -79,6 +85,14 @@ RSpec.describe Portage::Cli::Notifier do
       result = described_class.new(webhook_url: webhook_url, config: config).call(payload)
 
       expect(result).to include("getaddrinfo failed")
+    end
+
+    it "gives up on a webhook that doesn't answer, instead of stalling the hand-off" do
+      stub_request(:post, webhook_url).to_timeout
+
+      result = described_class.new(webhook_url: webhook_url, config: config).call(payload)
+
+      expect(result).to start_with("webhook POST failed")
     end
   end
 end

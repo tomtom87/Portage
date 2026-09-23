@@ -167,10 +167,15 @@ abandoned carts on someone else's site; left out of scope for now.
 
 ### History
 
-Every `find` (and `buy`, once it reaches a search) and every `buy` that
-reaches checkout is logged locally to `~/.portage/history.json` — most recent
-200 entries each, purchases and searches kept separately. Browse-only `buy`
-reports (no checkout reached) aren't logged as purchases.
+Every `portage buy` that creates a checkout is logged locally to
+`~/.portage/history.json` as a purchase, whatever came of it. Each entry
+carries the report's `outcome` (`purchased`, `dry_run`, `policy_blocked`,
+...), what the checkout held (`items`), its `total`, and, when it wasn't
+completed, the `checkout_url` to finish it. "What did I already buy" is
+the entries whose `outcome` is `purchased`. A `buy` that never reached a
+checkout (no match, browse-only, a dead end) is logged as a search at that
+store instead, as is every `find`, `compare`, and the search behind a
+`buy` with no URL. The most recent 200 entries of each are kept.
 
 ```bash
 portage history                       # both lists, most recent last
@@ -272,9 +277,32 @@ gem install portage-ucp-decision   # only needed for the confidence gate
 
 Without it, built-in fallbacks give the same ranking, escalation and policy
 answers, and the policy check still runs (it needs only `portage-ucp`). The
-confidence gate is the one feature that needs the gem. Every checkout report
-carries the verdicts under `decisions:`, so a script or agent loop can branch
-on data rather than on the message text:
+confidence gate is the one feature that needs the gem.
+
+Every `portage buy` report carries an `outcome`, so a script or agent loop
+can branch on data rather than on the message text. The text output leads
+with the same value, as `[outcome]`.
+
+| `outcome` | Meaning | `checkout_url`? |
+| --- | --- | --- |
+| `purchased` | Completed. | no |
+| `needs_confirmation` | Checkout ready; rerun with `--yes`. | no |
+| `dry_run` | Checkout created, `--dry-run` stopped it. | no |
+| `requires_escalation` | The store wants the shopper to finish. | yes |
+| `checkout_mismatch` | Checkout differs from the request (`PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`). | yes |
+| `no_payment_token` | No `--payment-token` and no default payment method. | yes |
+| `policy_blocked` | Your spend policy denied it; `decisions.policy.reason` says why. | yes |
+| `low_confidence` | The confidence gate held it. | yes |
+| `permission_denied` | The store doesn't let this agent complete checkout. | yes |
+| `store_refused` | The store refused a cart/checkout call (e.g. sold out). | when the store gave one |
+| `no_match` | Nothing in the store's results matched. | no |
+| `browse_only` | The store has a catalog but no UCP checkout. | when an adapter offers a link |
+| `agent_profile_missing`, `request_rejected`, `unsupported_wire_shape` | Native UCP setup problems; the message names the fix. | no |
+| `adapter_error`, `adapter_misconfigured` | Your own-store adapter failed; the message quotes it. | no |
+| `dead_end` | No UCP and no adapter for this store. | no |
+
+Checkout reports also carry `items` (what the checkout holds, as opposed to
+`products`, the search results) and the verdicts under `decisions:`:
 
 ```json
 "decisions": {
@@ -302,10 +330,18 @@ on data rather than on the message text:
   answer, or naming a backend without `portage-ucp-decision` installed,
   because the gate fails closed. `jev` needs `JEV_API_KEY`; `laya`
   needs `LAYA_BRIDGE_SCRIPT` (see `portage-ucp-decision`'s README).
+  `portage doctor` flags whichever of these is missing for the selected
+  backend.
+- **policy** also denies a checkout with no `total` line as
+  `total_unknown` whenever a spend cap is set, rather than skipping the cap.
 
 A blocked or held purchase hands the checkout off the same way an escalation
 does (`checkout_url`, plus `--auto-open`/`--notify-webhook` if set). The
-shopper can finish it themselves. `portage find`'s offer order comes from
+shopper can finish it themselves. The webhook body is JSON: `event`
+(`checkout_handoff`), `reason` (the report's `outcome`), `message` (the
+report's own sentence), `store`, `query`, `checkout_url`, `checkout_id`,
+`source`, `totals` and `warnings`. Any 2xx counts as delivered; the POST
+gives up after 5 seconds and reports `notify_error` instead. `portage find`'s offer order comes from
 `OfferRanking`: buyable first, then cheapest, then unpriced.
 
 ### Shipping address (own-store checkouts only)

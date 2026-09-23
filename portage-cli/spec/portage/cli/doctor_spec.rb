@@ -11,11 +11,11 @@ RSpec.describe Portage::Cli::Doctor do
   end
 
   it "flags every collaborator still at its unconfigured default" do
-    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => nil) do
+    with_env("PORTAGE_DECISION_BACKEND" => nil) do
       findings = described_class.new.call
 
       expect(findings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
-                                                       "payment_handlers", "jev_api_key")
+                                                       "payment_handlers")
     end
   end
 
@@ -27,29 +27,53 @@ RSpec.describe Portage::Cli::Doctor do
       config.payment_handlers = [{ name: "stripe" }]
     end
 
-    with_env("JEV_API_KEY" => "test-key") do
+    with_env("PORTAGE_DECISION_BACKEND" => "jev", "JEV_API_KEY" => "test-key") do
       expect(described_class.new.call).to be_empty
     end
   end
 
-  it "flags a missing JEV_API_KEY with a link to get one" do
-    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => nil) do
-      finding = described_class.new.call.find { |f| f.check == "jev_api_key" }
-
-      expect(finding.message).to include("console.typesafe.ai")
+  describe "the confidence gate's backend" do
+    def decision_finding(env)
+      with_env({ "JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => nil, "PORTAGE_MIN_CONFIDENCE" => nil }.merge(env)) do
+        described_class.new.call.find { |f| f.check == "decision_backend" }
+      end
     end
-  end
 
-  it "doesn't ask for JEV_API_KEY when portage-ucp-decision isn't installed" do
-    allow(Portage::Cli::Decisions).to receive(:available?).and_return(false)
-    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => nil) do
-      expect(described_class.new.call.map(&:check)).not_to include("jev_api_key")
+    it "says nothing when no backend is selected, even with no JEV_API_KEY" do
+      expect(decision_finding("PORTAGE_DECISION_BACKEND" => nil)).to be_nil
     end
-  end
 
-  it "accepts TYPESAFE_API_KEY in place of JEV_API_KEY, since ModelBackends::Jev falls back to it" do
-    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => "test-key") do
-      expect(described_class.new.call.map(&:check)).not_to include("jev_api_key")
+    it "flags a missing JEV_API_KEY once jev is selected, with a link to get one" do
+      finding = decision_finding("PORTAGE_DECISION_BACKEND" => "jev")
+
+      expect(finding.message).to include("JEV_API_KEY", "console.typesafe.ai", "held for the shopper")
+    end
+
+    it "accepts TYPESAFE_API_KEY in place of JEV_API_KEY, since ModelBackends::Jev falls back to it" do
+      expect(decision_finding("PORTAGE_DECISION_BACKEND" => "jev", "TYPESAFE_API_KEY" => "test-key")).to be_nil
+    end
+
+    it "flags laya selected with no bridge configured" do
+      finding = decision_finding("PORTAGE_DECISION_BACKEND" => "laya", "LAYA_BRIDGE_SCRIPT" => nil,
+                                 "LAYA_INFER_COMMAND" => nil)
+
+      expect(finding.message).to include("LAYA_BRIDGE_SCRIPT")
+    end
+
+    it "flags an unknown backend name" do
+      expect(decision_finding("PORTAGE_DECISION_BACKEND" => "nope").message).to include("unknown", "jev, laya")
+    end
+
+    it "flags a backend selected without portage-ucp-decision installed" do
+      allow(Portage::Cli::Decisions).to receive(:available?).and_return(false)
+
+      expect(decision_finding("PORTAGE_DECISION_BACKEND" => "jev").message).to include("gem install")
+    end
+
+    it "flags a bad PORTAGE_MIN_CONFIDENCE" do
+      finding = decision_finding("PORTAGE_DECISION_BACKEND" => "jev", "PORTAGE_MIN_CONFIDENCE" => "high")
+
+      expect(finding.message).to include("between 0.0 and 1.0")
     end
   end
 
