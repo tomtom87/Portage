@@ -137,6 +137,27 @@ RSpec.describe Portage::Ucp::WebMcp::Transport do
       expect(bridge.calls.size).to eq(1)
     end
 
+    # A fake clock: each bridge call takes 0.3s, each sleep takes what it
+    # asks for, and nothing else moves time.
+    it "keeps every retry and sleep inside the one reregister_wait: deadline" do
+      bridge.register("get_cart").drop_for("get_cart", misses: 99)
+      patient = described_class.new(bridge: bridge, reregister_wait: 1.0)
+      now = 0.0
+      sleep_ends = []
+      allow(patient).to receive(:monotonic_now) { now }
+      allow(patient).to receive(:sleep) { |seconds| sleep_ends << (now += seconds) }
+      allow(bridge).to receive(:execute_tool).and_wrap_original do |original, *args|
+        now += 0.3
+        original.call(*args)
+      end
+
+      expect { patient.call_tool(name: "get_cart", arguments: { cart_id: "c1" }) }
+        .to raise_error(Portage::Ucp::WebMcp::ToolNotFoundError)
+      expect(sleep_ends.max).to be <= 1.0
+      expect(now).to be <= 1.0 + 0.3
+      expect(bridge.calls.size).to eq(3)
+    end
+
     it "caches the tool list until refresh!" do
       bridge.register("get_cart") { {} }
       2.times { transport.call_tool(name: "get_cart", arguments: { cart_id: "c" }) }

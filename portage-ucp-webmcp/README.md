@@ -200,7 +200,26 @@ something the consumer can list.
 - **Re-registration.** Some pages drop all their tools and register them again
   while they re-render. A call to a tool that vanished that way waits up to
   `reregister_wait:` (default 2 seconds) for it to come back, then retries.
-  The call never ran the first time, so the retry is safe.
+  The call never ran the first time, so the retry is safe. The wait blocks
+  the calling thread; see "Timeouts" below.
+
+### Timeouts
+
+Two limits bound an outbound call, and both block the thread that made it:
+
+- **The browser driver's own timeout** bounds each round trip to the page.
+  `ScriptEvaluator.ferrum(page, timeout: 30)` passes its `timeout:` (default
+  30 seconds) to `evaluate_async`. Playwright and Selenium use the page's or
+  driver's own script timeout, so set it there. A driver that times out
+  raises, and the error surfaces as `BridgeError`.
+- **`reregister_wait:`** (default 2 seconds, `WebMcp.connect(...,
+  reregister_wait:)`) bounds the wait for a tool the page dropped mid-call.
+  It's a plain `sleep`, polling every 0.25 seconds. One monotonic deadline
+  covers the whole call: it's set before the first attempt, a retry never
+  resets it, the retried calls count against it, and no sleep runs past it.
+  A miss costs at most `reregister_wait:` plus the one driver round trip in
+  flight when it expires. Pass `reregister_wait: 0` to fail on the first
+  miss, or make the call off a thread that can't afford to block.
 
 ### Shopify storefronts
 
@@ -236,7 +255,7 @@ still catch them.
 
 | Error | When |
 |---|---|
-| `WebMcp::BridgeError` | The page has no WebMCP surface, the driver failed, or the result couldn't be read. |
+| `WebMcp::BridgeError` | The page has no WebMCP surface, the driver failed, or the result couldn't be read. It quotes at most 300 characters of the driver's own error. |
 | `WebMcp::ToolNotFoundError` | No page tool answers the action. `#available` lists what the page registers. |
 | `Client::ServerError` | The tool ran and failed: `isError`, or the page's tool threw. |
 

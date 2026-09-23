@@ -58,6 +58,17 @@ RSpec.describe Portage::Ucp::WebMcp::Bridges::ScriptEvaluator do
     expect { wrong_type.list_tools }.to raise_error(Portage::Ucp::WebMcp::BridgeError, /Integer/)
   end
 
+  # A Selenium failure's message can carry the whole DOM or a stack trace;
+  # quoting all of it would flood an agent's context.
+  it "quotes at most DETAIL_LIMIT characters of the driver's own error" do
+    failing = described_class.new(evaluate: ->(_) { raise IOError, "x" * 5_000 })
+
+    expect { failing.list_tools }.to raise_error(Portage::Ucp::WebMcp::BridgeError) { |e|
+      expect(e.message).to include("x" * described_class::DETAIL_LIMIT, "(5000 chars)")
+      expect(e.message.length).to be < described_class::DETAIL_LIMIT + 100
+    }
+  end
+
   it "requires a callable" do
     expect { described_class.new(evaluate: "js") }.to raise_error(ArgumentError)
   end

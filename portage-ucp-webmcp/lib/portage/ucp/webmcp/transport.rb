@@ -75,6 +75,13 @@ module Portage
         # page now says isn't registered is that gap, not a missing tool, and
         # the call never ran, so wait for it and send the call again. Past
         # `reregister_wait:` it's reported like any other miss.
+        #
+        # The wait is a plain `sleep`, so it blocks the calling thread (see
+        # the README's "Timeouts"). One monotonic deadline covers the whole
+        # call: it's set before the first attempt, a retry never resets it,
+        # the retried bridge calls count against it, and no sleep runs past
+        # it. So a miss costs at most `reregister_wait:` plus the one bridge
+        # call in flight when it expires.
         def execute(action, tool_name, input)
           deadline = monotonic_now + @reregister_wait
           begin
@@ -82,7 +89,7 @@ module Portage
           rescue ToolNotFoundError
             raise(refresh!.then { not_found(action, [tool_name]) }) if monotonic_now >= deadline
 
-            sleep(REREGISTER_POLL)
+            sleep((deadline - monotonic_now).clamp(0, REREGISTER_POLL))
             retry
           end
         end

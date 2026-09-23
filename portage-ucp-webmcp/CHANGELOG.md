@@ -35,3 +35,11 @@ pre-1.0, so APIs may still shift between minor versions.
   `ToolNotFoundError` for a tool it had just found. Confirmed live on
   Shopify storefronts, whose own `add_to_cart` tool leaves the page with no
   tools for about 500ms.
+  - The wait is a blocking `sleep`, now documented under the README's
+    "Timeouts". Its one deadline covers the whole call, and the last poll
+    no longer sleeps past it: a 0.25s poll started 0.1s before the deadline
+    now sleeps 0.1s.
+- `ScriptEvaluator`'s `BridgeError` quotes at most 300 characters of the
+  driver's own error (and of an unreadable reply), the same cap
+  `portage-ucp-decision` uses for Jev. A Selenium failure can carry a DOM
+  dump or a stack trace, which used to land whole in an agent's context.
