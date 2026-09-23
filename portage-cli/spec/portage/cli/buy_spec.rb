@@ -114,6 +114,53 @@ RSpec.describe Portage::Cli::Buy do
     end
   end
 
+  # Regression: the top search hit and its first variant were bought
+  # unconditionally, so a sold-out top hit dead-ended on "Sold out" with
+  # in-stock matches right below it (allbirds.com, billabong.com, 2026-09-23).
+  describe "which product and variant it checks out" do
+    def variant(id, available)
+      { "id" => id, "availability" => { "available" => available } }
+    end
+
+    def checked_out_id(products, **options)
+      session = instance_double(Portage::Ucp::Client::Session, advertises?: true,
+                                                               search_catalog: { "products" => products },
+                                                               create_checkout: incomplete_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      described_class.new(url: "shop.example", query: "cold", **options).call
+      ids = []
+      expect(session).to have_received(:create_checkout) { |line_items:, **| ids << line_items.first[:product_id] }
+      ids.first
+    end
+
+    it "skips a sold-out top hit for the first product with stock" do
+      sold_out = { "id" => "p1", "variants" => [variant("v1", false)] }
+      in_stock = { "id" => "p2", "variants" => [variant("v2", true)] }
+
+      expect(checked_out_id([sold_out, in_stock])).to eq("v2")
+    end
+
+    it "takes the first in-stock variant over a sold-out first variant" do
+      product = { "id" => "p1", "variants" => [variant("v1", false), variant("v2", true)] }
+
+      expect(checked_out_id([product])).to eq("v2")
+    end
+
+    it "falls back to the top hit when nothing reports stock, so the store still answers" do
+      products = [{ "id" => "p1", "variants" => [variant("v1", false)] },
+                  { "id" => "p2", "variants" => [variant("v2", false)] }]
+
+      expect(checked_out_id(products)).to eq("v1")
+    end
+
+    it "still buys exactly the --product-id asked for, sold out or not" do
+      sold_out = { "id" => "p1", "variants" => [variant("v1", false)] }
+      in_stock = { "id" => "p2", "variants" => [variant("v2", true)] }
+
+      expect(checked_out_id([in_stock, sold_out], product_id: "p1")).to eq("v1")
+    end
+  end
+
   describe "native UCP, cart+checkout advertised" do
     it "creates a checkout and reports it awaiting confirmation without --yes" do
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)

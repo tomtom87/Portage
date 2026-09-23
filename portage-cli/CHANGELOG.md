@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- **`buy` checked out sold-out items when in-stock matches were right
+  there.** It took the top search hit and its first variant unconditionally,
+  so a sold-out top hit dead-ended on the store's "Sold out" refusal
+  (allbirds.com and billabong.com, 2026-09-23). It now takes the first hit
+  with stock, and that product's first in-stock variant. When nothing
+  reports stock it still falls back to the top hit, and `--product-id`
+  still buys exactly that product.
+- `doctor` accepts `TYPESAFE_API_KEY` in place of `JEV_API_KEY`, matching
+  `portage-ucp-decision`'s Jev backend.
+
 ## [0.6.4] - 2026-09-22
 
 - **Every dead-end hand-off pointed the shopper at the store's refund
