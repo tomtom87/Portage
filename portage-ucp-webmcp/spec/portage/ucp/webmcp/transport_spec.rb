@@ -119,6 +119,24 @@ RSpec.describe Portage::Ucp::WebMcp::Transport do
         }
     end
 
+    it "waits out a page dropping and re-registering its tools, then sends the call again" do
+      bridge.register("get_cart") { { "id" => "c1" } }.drop_for("get_cart", misses: 2)
+      allow(transport).to receive(:sleep)
+
+      expect(transport.call_tool(name: "get_cart", arguments: { cart_id: "c1" })).to eq("id" => "c1")
+      expect(bridge.calls.size).to eq(3)
+      expect(transport).to have_received(:sleep).with(described_class::REREGISTER_POLL).twice
+    end
+
+    it "gives up with ToolNotFoundError once reregister_wait: runs out" do
+      bridge.register("get_cart").drop_for("get_cart", misses: 99)
+      impatient = described_class.new(bridge: bridge, reregister_wait: 0)
+
+      expect { impatient.call_tool(name: "get_cart", arguments: { cart_id: "c1" }) }
+        .to raise_error(Portage::Ucp::WebMcp::ToolNotFoundError, /get_cart/)
+      expect(bridge.calls.size).to eq(1)
+    end
+
     it "caches the tool list until refresh!" do
       bridge.register("get_cart") { {} }
       2.times { transport.call_tool(name: "get_cart", arguments: { cart_id: "c" }) }

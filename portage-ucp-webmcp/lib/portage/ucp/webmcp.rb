@@ -10,6 +10,7 @@ require_relative "webmcp/rack/call_endpoint"
 require_relative "webmcp/rack/script_endpoint"
 require_relative "webmcp/rack/app"
 require_relative "webmcp/bridges/script_evaluator"
+require_relative "webmcp/jsonable"
 require_relative "webmcp/transport"
 
 module Portage
@@ -36,7 +37,7 @@ module Portage
       #   session.search_catalog(query: "mug")
       #
       # @param transport_options [Hash] forwarded to Transport (prefix:,
-      #   tool_names:, wire:).
+      #   tool_names:, wire:, reregister_wait:).
       def self.connect(bridge: nil, evaluate: nil, capabilities: nil, **transport_options)
         bridge ||= Bridges::ScriptEvaluator.new(evaluate: evaluate) if evaluate
         raise ArgumentError, "connect requires either bridge: or evaluate:" unless bridge
