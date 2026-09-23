@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Fix: the loopback and stdio transports dropped `cart_id` from every call,
+  so `get_cart`, `update_cart` and `cancel_cart` always failed with
+  "Missing required arguments: cart_id". `cart_id` is a real-UCP wire
+  argument only on `create_checkout` (the cart-to-checkout conversion), and
+  now only that call drops it. The shared rule is
+  `Transports::LocalArguments`.
+- The UCP wire reshaping in `Transports::Http` moved to
+  `Transports::UcpWireShape`, so other transports can build the same body.
+  `portage-ucp-webmcp` uses it for UCP-shaped page tools. There is no
+  behavior change for `Http`.
+
 ## [0.6.1] - 2026-09-22
 
 - `ServerError` carries the parsed error document on `#payload` when the
