@@ -12,13 +12,18 @@ module Portage
         class Jev
           BASE_URL = "https://api.typesafe.ai/v1/systemone".freeze
           DEFAULT_MODEL = "jev-latest".freeze
-          # This gem's own name for the credential — TypeSafe's docs call it
-          # TYPESAFE_API_KEY; portage-ucp-decision uses JEV_API_KEY instead so
-          # `portage doctor`/`portage configure` has one clearly-named thing
-          # to check for, matching this backend's own name in the registry.
+          # This gem's own name for the credential, matching this backend's
+          # name in the registry. TYPESAFE_API_KEY — the name TypeSafe's own
+          # docs and SDKs use — is read as a fallback, so a key already set up
+          # for TypeSafe works here without being copied to a second name.
           ENV_KEY = "JEV_API_KEY".freeze
+          FALLBACK_ENV_KEY = "TYPESAFE_API_KEY".freeze
 
-          def initialize(api_key: ENV.fetch(ENV_KEY, nil), model: DEFAULT_MODEL, connection: nil)
+          def self.env_api_key
+            [ENV_KEY, FALLBACK_ENV_KEY].map { |key| ENV.fetch(key, nil).to_s.strip }.find { |key| !key.empty? }
+          end
+
+          def initialize(api_key: self.class.env_api_key, model: DEFAULT_MODEL, connection: nil)
             @api_key = api_key
             @model = model
             @connection = connection || Faraday.new(url: BASE_URL)
@@ -33,7 +38,8 @@ module Portage
           def ask(state:, questions:)
             unless configured?
               raise Portage::Ucp::Decision::BackendNotConfiguredError,
-                    "#{ENV_KEY} is not set — get a key at https://console.typesafe.ai and set #{ENV_KEY}"
+                    "#{ENV_KEY} is not set (nor #{FALLBACK_ENV_KEY}) — get a key at " \
+                    "https://console.typesafe.ai and set #{ENV_KEY}"
             end
 
             response = post(state, questions)
