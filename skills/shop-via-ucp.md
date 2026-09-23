@@ -175,7 +175,9 @@ with the detail in `confidence.error`). Don't infer
 success from `decisions:` alone: a missing payment token or a
 permission-denied store holds a purchase without any gate saying no.
 `items:` is what the checkout holds, and `products:` is only the search
-results. The full list of outcomes is in `portage-cli`'s README.
+results. `invalid_option` means the command line itself was refused and
+nothing ran; fix the flag `message` names. The full list of outcomes is in
+`portage-cli`'s README.
 
 ## Troubleshooting a real, external UCP store
 

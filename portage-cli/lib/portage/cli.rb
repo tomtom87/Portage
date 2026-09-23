@@ -164,6 +164,8 @@ module Portage
       return 1 unless parsed
 
       url = parsed[:buy][:url] || parsed[:store]
+      parsed[:confidence_check] = confidence_check(parsed, url)
+      return 1 unless parsed[:confidence_check]
       return execute_buy(parsed, url) if url
 
       buy_from_search(parsed)
@@ -204,9 +206,7 @@ module Portage
     private_class_method :prompt_for_offer
 
     def self.execute_buy(parsed, url, product_id: nil)
-      options = parsed[:buy].merge(url: url, confidence_check: confidence_check(parsed[:confidence]))
-      return 1 unless options[:confidence_check]
-
+      options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check])
       options[:product_id] ||= product_id
       report = Buy.new(**options).call
       record_buy(report, options[:query])
@@ -215,16 +215,32 @@ module Portage
     end
     private_class_method :execute_buy
 
-    # Built before the buy starts, so a bad --min-confidence or
-    # PORTAGE_MIN_CONFIDENCE stops the run up front rather than after a
+    # Built before the buy starts (and before the search, when there's no
+    # URL), so a bad --min-confidence, or a bad PORTAGE_MIN_CONFIDENCE with
+    # a backend enabled, stops the run up front rather than after a
     # checkout already exists.
-    def self.confidence_check(opts)
-      ConfidenceCheck.new(**opts)
+    def self.confidence_check(parsed, url)
+      ConfidenceCheck.new(**parsed[:confidence])
     rescue ArgumentError => e
-      warn e.message
-      nil
+      invalid_buy_option(e.message, url: url, json: parsed[:json])
     end
     private_class_method :confidence_check
+
+    # A buy refused before it started. Under --json that's a report like
+    # any other, with outcome `invalid_option`, so an agent loop reading
+    # stdout gets JSON rather than nothing and a line on stderr.
+    # @return [nil]
+    def self.invalid_buy_option(message, url:, json:)
+      unless json
+        warn message
+        return nil
+      end
+
+      puts JSON.pretty_generate(url: url, checkout_url: nil, products: [], warnings: [], source: "none",
+                                outcome: "invalid_option", browse: false, checkout: false, message: message)
+      nil
+    end
+    private_class_method :invalid_buy_option
 
     # A buy that created a checkout is a purchase entry, whatever its
     # outcome. One that never got that far (no match, browse-only, dead end,
@@ -251,16 +267,23 @@ module Portage
     end
     private_class_method :report_total
 
+    # A flag OptionParser can't read (`--min-confidence high`, `--qty two`,
+    # an unknown flag) is refused the same way as an out-of-range
+    # threshold. `--json` is looked for up front, since parsing stops at
+    # the bad flag and may never reach it.
     def self.parse_buy_options(argv)
       url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
       buy = { url: url, qty: 1, yes: false, dry_run: false }
       parsed = { buy: buy, find: {}, confidence: {} }
+      json = argv.include?("--json")
       buy_option_parser(buy, parsed).parse!(argv)
       buy[:query] ||= ""
       return parsed if url || !buy[:query].strip.empty?
 
       warn USAGE
       nil
+    rescue OptionParser::ParseError => e
+      invalid_buy_option(e.message, url: url, json: json)
     end
     private_class_method :parse_buy_options
 

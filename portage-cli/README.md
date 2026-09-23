@@ -109,12 +109,17 @@ portage policy set [--per-transaction-cap N --currency CUR]
 - `--decision-backend` — opt into the confidence gate (see "Decisions" below):
   `jev` or `laya`. Defaults to `PORTAGE_DECISION_BACKEND`; unset means off.
 - `--min-confidence` — the gate's threshold, `0.0`–`1.0`. Defaults to
-  `PORTAGE_MIN_CONFIDENCE`, then `0.8`.
+  `PORTAGE_MIN_CONFIDENCE`, then `0.8`. The flag is always checked; the env
+  var is read (and checked) only while a backend is selected, so a stale
+  value can't block a buy that doesn't use the gate.
 - `--json` — machine-readable report instead of the human-readable summary.
 
 Exits `0` when a checkout completed (or a dry-run/browse/search resolved
 successfully), `1` otherwise — including the "no native manifest, no adapter
-credentials" dead-end case, so it's scriptable in CI.
+credentials" dead-end case, so it's scriptable in CI. A flag that can't be
+used (an unreadable value, an out-of-range threshold) stops the buy before
+anything runs: on stderr normally, or as a JSON report with `outcome:
+"invalid_option"` under `--json`.
 
 ### Compare
 
@@ -302,6 +307,7 @@ with the same value, as `[outcome]`.
 | `agent_profile_missing`, `request_rejected`, `unsupported_wire_shape` | Native UCP setup problems; the message names the fix. | no |
 | `adapter_error`, `adapter_misconfigured` | Your own-store adapter failed; the message quotes it. | no |
 | `dead_end` | No UCP and no adapter for this store. | no |
+| `invalid_option` | A flag was refused before the buy started (`--json` only); `message` says which. | no |
 
 Checkout reports also carry `items` (what the checkout holds, as opposed to
 `products`, the search results) and the verdicts under `decisions:`:
