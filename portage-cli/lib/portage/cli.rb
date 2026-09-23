@@ -23,7 +23,8 @@ module Portage
     USAGE = <<~USAGE.freeze
       usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
                                 [--product-id ID] [--yes] [--dry-run]
-                                [--auto-open|--no-auto-open] [--notify-webhook URL] [--json]
+                                [--auto-open|--no-auto-open] [--notify-webhook URL]
+                                [--decision-backend jev|laya] [--min-confidence N] [--json]
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
@@ -197,7 +198,9 @@ module Portage
     private_class_method :prompt_for_offer
 
     def self.execute_buy(parsed, url, product_id: nil)
-      options = parsed[:buy].merge(url: url)
+      options = parsed[:buy].merge(url: url, confidence_check: confidence_check(parsed[:confidence]))
+      return 1 unless options[:confidence_check]
+
       options[:product_id] ||= product_id
       report = Buy.new(**options).call
       record_purchase(report, options[:query]) if report[:checkout]
@@ -205,6 +208,17 @@ module Portage
       report[:checkout] || report[:browse] ? 0 : 1
     end
     private_class_method :execute_buy
+
+    # Built before the buy starts, so a bad --min-confidence or
+    # PORTAGE_MIN_CONFIDENCE stops the run up front rather than after a
+    # checkout already exists.
+    def self.confidence_check(opts)
+      ConfidenceCheck.new(**opts)
+    rescue ArgumentError => e
+      warn e.message
+      nil
+    end
+    private_class_method :confidence_check
 
     # Only checkout attempts land here — a browse-only report never reached a
     # checkout, so it belongs to search history, not purchase history.
@@ -220,7 +234,7 @@ module Portage
     def self.parse_buy_options(argv)
       url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
       buy = { url: url, qty: 1, yes: false, dry_run: false }
-      parsed = { buy: buy, find: {} }
+      parsed = { buy: buy, find: {}, confidence: {} }
       buy_option_parser(buy, parsed).parse!(argv)
       buy[:query] ||= ""
       return parsed if url || !buy[:query].strip.empty?
@@ -241,9 +255,18 @@ module Portage
         parser.on("--notify-webhook URL") { |v| buy[:notify_webhook] = v }
         parser.on("--json") { parsed[:json] = true }
         add_search_options(parser, buy, parsed)
+        add_confidence_options(parser, parsed[:confidence])
       end
     end
     private_class_method :buy_option_parser
+
+    # The opt-in confidence gate in front of a `--yes` completion (see
+    # ConfidenceCheck) — both default to their PORTAGE_* env vars.
+    def self.add_confidence_options(parser, confidence)
+      parser.on("--decision-backend NAME") { |v| confidence[:backend] = v }
+      parser.on("--min-confidence N", Float) { |v| confidence[:threshold] = v }
+    end
+    private_class_method :add_confidence_options
 
     # `--query` feeds both halves: it's the store search when there's no URL
     # and the catalog search once a store is settled, so it's registered once
@@ -615,9 +638,17 @@ module Portage
       Array(report[:warnings]).each { |w| lines << "  warning: #{w}" }
       lines << "  checkout: #{report[:checkout_url]}" if report[:checkout_url]
       lines.concat(format_handoff(report[:handoff])) if report[:handoff]
+      lines.concat(format_decisions(report[:decisions])) if report[:decisions]&.any?
       lines.join("\n")
     end
     private_class_method :format_report
+
+    def self.format_decisions(decisions)
+      decisions.map do |name, verdict|
+        "  decision #{name}: #{verdict.compact.map { |key, value| "#{key}=#{value}" }.join(' ')}"
+      end
+    end
+    private_class_method :format_decisions
 
     def self.format_handoff(handoff)
       lines = ["  opened in browser: #{handoff[:opened]}", "  notified: #{handoff[:notified]}"]

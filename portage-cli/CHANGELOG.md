@@ -6,6 +6,24 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **The decision layer is wired in.** `portage-cli` now depends on
+  `portage-ucp-decision`, and `buy`/`find` make their judgment calls
+  through it. Every checkout report carries the verdicts under
+  `decisions:` (`escalation`, `policy`, and `confidence` when enabled).
+  - `find` ranks offers with `OfferRanking`. The order is unchanged.
+  - `buy` decides escalation with `EscalationPolicy`. When a checkout both
+    requires escalation and mismatches the request under
+    `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`, it now reports the store's
+    escalation, not the mismatch. Both hand off the checkout.
+  - `buy --yes` now checks your spend policy with `PolicyCheck` before
+    completing, on remote native-UCP stores too. Before, only the
+    own-store flow's in-process `Dispatcher` enforced it, so a remote
+    store never saw your caps, allowlist or token scopes. A blocked
+    purchase hands off the checkout.
+  - New opt-in confidence gate: `--decision-backend jev|laya` /
+    `PORTAGE_DECISION_BACKEND`, with a threshold from `--min-confidence` /
+    `PORTAGE_MIN_CONFIDENCE` (default `0.8`). A low score or a backend
+    that can't answer holds the purchase and hands off the checkout.
 - **`buy` checked out sold-out items when in-stock matches were right
   there.** It took the top search hit and its first variant unconditionally,
   so a sold-out top hit dead-ended on the store's "Sold out" refusal

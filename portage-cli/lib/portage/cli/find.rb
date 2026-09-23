@@ -1,6 +1,7 @@
 require "uri"
 require "portage/ucp"
 require "portage/ucp/client"
+require "portage/ucp/decision"
 
 require_relative "search_backends"
 require_relative "probe_cache"
@@ -166,13 +167,18 @@ module Portage
           amount: amount, currency: currency, url: field(product, "url") }
       end
 
-      # Buyable first, then cheapest, then unpriced. Sorting on price alone
+      # Buyable first, then cheapest, then unpriced — decided by
+      # Decision::OfferRanking (docs/plans/system-one-decision-layer.md
+      # § Responsibilities 1) so an agent loop ranking its own candidate list
+      # gets the same order this command prints. Sorting on price alone
       # would float a browse-only store above one you can actually check out
       # from, which is the wrong answer to "buy me this".
       def rank(offers)
-        offers.sort_by do |offer|
-          [offer[:checkout] ? 0 : 1, offer[:amount] ? 0 : 1, offer[:amount] || 0]
+        candidates = offers.map do |offer|
+          Portage::Ucp::Decision::OfferRanking::Candidate.new(offer: offer, buyable: offer[:checkout],
+                                                              amount: offer[:amount])
         end
+        Portage::Ucp::Decision::OfferRanking.call(candidates).map(&:offer)
       end
 
       # --- Shapes ---
