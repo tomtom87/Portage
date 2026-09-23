@@ -96,7 +96,7 @@ RSpec.describe Portage::Ucp::Resolver do
       expect(adapter.billing_address).to eq({ "first_name" => "Ada", "city" => "Erie" })
     end
 
-    it "leaves billing_address nil when the env var is unset" do
+    it "leaves billing_address nil when neither the env var nor PORTAGE_SHIP_* is set" do
       namespace = Class.new
       namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, :billing_address,
                                                keyword_init: true))
@@ -106,6 +106,41 @@ RSpec.describe Portage::Ucp::Resolver do
       adapter = woocommerce.build_adapter.call(namespace, client, env)
 
       expect(adapter.billing_address).to be_nil
+    end
+
+    it "raises a clear ArgumentError, not a raw JSON::ParserError, on malformed WOOCOMMERCE_BILLING_ADDRESS" do
+      namespace = Class.new
+      namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, :billing_address,
+                                               keyword_init: true))
+      client = Object.new
+      env = { site_url: "https://shop.example", currency: "USD", billing_address: "{not json" }
+
+      expect { woocommerce.build_adapter.call(namespace, client, env) }
+        .to raise_error(ArgumentError, /WOOCOMMERCE_BILLING_ADDRESS must be valid JSON/)
+    end
+
+    it "falls back to PORTAGE_SHIP_* env, mapped to Store API field names, when WOOCOMMERCE_BILLING_ADDRESS is unset" do
+      namespace = Class.new
+      namespace.const_set(:Adapter, Struct.new(:client, :site_url, :currency, :payment_method, :billing_address,
+                                               keyword_init: true))
+      client = Object.new
+      env = { site_url: "https://shop.example", currency: "USD" }
+
+      begin
+        ENV["PORTAGE_SHIP_FIRST_NAME"] = "Ada"
+        ENV["PORTAGE_SHIP_STREET"] = "1 Erie Ave"
+        ENV["PORTAGE_SHIP_CITY"] = "Erie"
+        ENV["PORTAGE_SHIP_COUNTRY"] = "US"
+
+        adapter = woocommerce.build_adapter.call(namespace, client, env)
+
+        expect(adapter.billing_address).to eq({ "first_name" => "Ada", "address_1" => "1 Erie Ave",
+                                                "city" => "Erie", "country" => "US" })
+      ensure
+        %w[PORTAGE_SHIP_FIRST_NAME PORTAGE_SHIP_STREET PORTAGE_SHIP_CITY PORTAGE_SHIP_COUNTRY].each do |var|
+          ENV.delete(var)
+        end
+      end
     end
   end
 end
