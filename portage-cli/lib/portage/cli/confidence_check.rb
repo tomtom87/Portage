@@ -1,5 +1,5 @@
 require "json"
-require "portage/ucp/decision"
+require_relative "decisions"
 
 module Portage
   module Cli
@@ -23,8 +23,10 @@ module Portage
     #
     # Fails closed. An unknown backend name, a backend that isn't configured
     # (no JEV_API_KEY, no Laya bridge), or a backend call that fails all hold
-    # the purchase, the same as a low score does. Once a caller has asked
-    # for a confidence check, the check never passing is not "no opinion".
+    # the purchase, the same as a low score does. So does naming a backend
+    # without portage-ucp-decision installed: the backends live in that
+    # optional gem. Once a caller has asked for a confidence check, the
+    # check never passing is not "no opinion".
     class ConfidenceCheck
       BACKEND_ENV = "PORTAGE_DECISION_BACKEND".freeze
       THRESHOLD_ENV = "PORTAGE_MIN_CONFIDENCE".freeze
@@ -42,9 +44,10 @@ module Portage
       #   defers to PORTAGE_DECISION_BACKEND.
       # @param threshold [Float, nil] 0.0..1.0; nil defers to
       #   PORTAGE_MIN_CONFIDENCE, then DEFAULT_THRESHOLD.
-      # @param resolver [#call] builds a backend from its name — injectable
-      #   so specs never reach a real model.
-      def initialize(backend: nil, threshold: nil, resolver: Portage::Ucp::Decision::ModelBackends.method(:resolve))
+      # @param resolver [#call, nil] builds a backend from its name —
+      #   injectable so specs never reach a real model. nil means
+      #   ModelBackends.resolve, looked up only once a backend is needed.
+      def initialize(backend: nil, threshold: nil, resolver: nil)
         @backend_name = presence(backend) || presence(ENV.fetch(BACKEND_ENV, nil))
         @threshold = parse_threshold(threshold || presence(ENV.fetch(THRESHOLD_ENV, nil)) || DEFAULT_THRESHOLD)
         @resolver = resolver
@@ -60,9 +63,10 @@ module Portage
       #   the backend couldn't answer.
       def call(state)
         return nil unless enabled?
+        return not_installed_verdict unless Decisions.available?
 
         verdict = Portage::Ucp::Decision::ConfidenceGate.via_backend(
-          backend: @resolver.call(@backend_name), state: JSON.generate(state), question: QUESTION,
+          backend: resolve_backend, state: JSON.generate(state), question: QUESTION,
           instructions: INSTRUCTIONS, threshold: @threshold
         )
         verdict.to_h.merge(backend: @backend_name)
@@ -71,6 +75,16 @@ module Portage
       end
 
       private
+
+      def resolve_backend
+        (@resolver || Portage::Ucp::Decision::ModelBackends.method(:resolve)).call(@backend_name)
+      end
+
+      def not_installed_verdict
+        { proceed: false, confidence: nil, threshold: @threshold, backend: @backend_name,
+          error: "portage-ucp-decision is not installed — `gem install portage-ucp-decision` to use " \
+                 "the #{@backend_name} confidence check." }
+      end
 
       def presence(value)
         value = value.to_s.strip

@@ -6,8 +6,12 @@ the policy-check wrapper (plus a `risk_signals:` gate), escalation (literal
 `requires_escalation` plus an ambiguous-signal case), and confidence gating
 via two swappable model backends (`ModelBackends::Jev`, `ModelBackends::Laya`).
 
-**Wired in:** `portage-cli` depends on the gem. `Find#rank` goes through
-`OfferRanking`. `Buy` decides escalation with `EscalationPolicy`, checks the
+**Wired in, as an optional plugin:** `portage-cli` does not depend on the
+gem, so the core and CLI stay light. `Cli::Decisions` loads it when it's
+installed and falls back to built-in copies of the same rules when it isn't.
+`decisions_spec` runs both paths against the same cases. The policy check
+calls core `PolicyGuard` either way. Only the confidence gate needs the gem.
+With it installed, `Find#rank` goes through `OfferRanking`. `Buy` decides escalation with `EscalationPolicy`, checks the
 buyer's policy with `PolicyCheck` before every `--yes` completion, and runs
 `ConfidenceGate` in front of that completion when a backend is named
 (`Cli::ConfidenceCheck`). Every checkout report carries the verdicts under

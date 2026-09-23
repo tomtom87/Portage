@@ -1,4 +1,5 @@
 require "portage/ucp"
+require_relative "decisions"
 
 module Portage
   module Cli
@@ -61,7 +62,10 @@ module Portage
       # in the one place a fresh setup is checked rather than only failing
       # the first time something actually calls ConfidenceGate.via_backend.
       # TYPESAFE_API_KEY counts too: ModelBackends::Jev falls back to it.
+      # Skipped when the optional gem isn't installed: nothing would read
+      # the key.
       def jev_api_key_finding
+        return unless Decisions.available?
         return unless %w[JEV_API_KEY TYPESAFE_API_KEY].all? { |key| ENV.fetch(key, nil).to_s.strip.empty? }
 
         Finding.new(check: "jev_api_key",

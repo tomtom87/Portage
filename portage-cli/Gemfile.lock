@@ -33,7 +33,6 @@ PATH
     portage-cli (0.6.4)
       portage-ucp (~> 0.8)
       portage-ucp-client (~> 0.6)
-      portage-ucp-decision (~> 0.1)
       portage-ucp-journal (~> 0.1)
 
 GEM

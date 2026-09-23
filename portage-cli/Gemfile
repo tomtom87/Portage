@@ -4,5 +4,8 @@ gemspec
 
 gem "portage-ucp", path: "../portage-ucp"
 gem "portage-ucp-client", path: "../portage-ucp-client"
+# Optional at runtime (not in the gemspec), but in the dev bundle so the
+# suite covers the installed path. decisions_spec stubs it out for the
+# fallback path.
 gem "portage-ucp-decision", path: "../portage-ucp-decision"
 gem "portage-ucp-journal", path: "../portage-ucp-journal"
