@@ -35,6 +35,14 @@ RSpec.describe Portage::Cli::CheckoutHandoff do
       end
     end
 
+    it "falls through an exported-but-empty env var to config.json" do
+      config.set("auto_open_checkout", true)
+
+      with_env("PORTAGE_AUTO_OPEN_CHECKOUT" => "") do
+        expect(described_class.new(config: config).auto_open?).to be true
+      end
+    end
+
     it "prefers an explicit override over both the env var and config.json" do
       config.set("auto_open_checkout", false)
 

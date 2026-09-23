@@ -35,6 +35,9 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   lockfile pins `portage-ucp` 0.9.0. `portage buy`'s `decisions:` verdicts
   now report string reasons in-process as well as in `--json`, and
   `confidence` gained a `reason` alongside its `error` detail.
+  `Support::Totals.amount` joins them, replacing the `type == "total"`
+  lookup copied across `portage-cli`, `Dispatcher` and `ReferenceAdapter`.
+  No adapter gem had its own copy.
 
 ## [0.8.2] - 2026-09-22
 

@@ -230,8 +230,7 @@ module Portage
         # `Total#amount` is a bare integer minor-unit amount (the parent
         # object's `currency` applies), not a Money struct — see
         # value_objects.rb's Total/Item comments.
-        total = Array(result.totals).find { |t| t.type == "total" }
-        total&.amount
+        Support::Totals.amount(result.totals)
       end
 
       def settled_currency(result)

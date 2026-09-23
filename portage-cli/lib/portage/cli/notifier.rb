@@ -2,6 +2,7 @@ require "net/http"
 require "json"
 require "uri"
 require_relative "config"
+require_relative "setting"
 
 module Portage
   module Cli
@@ -14,7 +15,7 @@ module Portage
     # speaks HTTP.
     #
     # Default off. Precedence for the webhook URL (open decision #1,
-    # resolved, same shape as CheckoutHandoff's auto-open toggle): a
+    # resolved, same Setting as CheckoutHandoff's auto-open toggle): a
     # per-invocation `webhook_url:` override (portage buy --notify-webhook)
     # beats PORTAGE_NOTIFY_WEBHOOK_URL, which beats ~/.portage/config.json's
     # "notify_webhook_url" (Config).
@@ -32,12 +33,7 @@ module Portage
       end
 
       def webhook_url
-        return @override unless @override.nil?
-
-        env = ENV.fetch(ENV_VAR, nil)
-        return env unless env.nil? || env.empty?
-
-        @config.get(CONFIG_KEY)
+        Setting.resolve(override: @override, env: ENV_VAR, config: @config, config_key: CONFIG_KEY)
       end
 
       def enabled? = !webhook_url.to_s.empty?
