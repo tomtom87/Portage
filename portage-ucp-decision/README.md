@@ -14,7 +14,7 @@ calls that were scattered across skill instructions, `portage-cli`, and
 - `Portage::Ucp::Decision::ConfidenceGate` — proceed unattended above a
   threshold.
 - `Portage::Ucp::Decision::PolicyCheck` — a typed wrapper around
-  `Portage::Ucp::PolicyGuard.check!`, plus a `risk_signals:` gate.
+  `Portage::Ucp::PolicyGuard.check!`.
 
 The ranking, escalation and policy rules live in `portage-ucp` core, and
 these three wrap them as `Verdict`s. `portage-cli` calls the core modules
@@ -43,13 +43,10 @@ backend `PORTAGE_DECISION_BACKEND` selects, and says nothing when none is
 selected.
 
 `EscalationPolicy` branches on the literal `requires_escalation` status plus
-an ambiguous-signal case (`signals: {warnings:, mismatch:}`). `ConfidenceGate`
-compares a score it's handed (`.call`) or gets one from a model backend
-(`.via_backend`, `ModelBackends::Jev`/`ModelBackends::Laya`). `PolicyCheck`'s
-`risk_signals:` denies on any truthy named signal — the mechanism is real,
-but nothing in this repo computes an actual merchant-age/TLS/escalation-rate
-signal yet, so that's still the caller's job. See the plan doc's "Open
-questions" section for what's still unresolved.
+an ambiguous-signal case (`signals: {warnings:}`, any warning escalates).
+`ConfidenceGate` compares a score it's handed (`.call`) or gets one from a
+model backend (`.via_backend`, `ModelBackends::Jev`/`ModelBackends::Laya`).
+See the plan doc's "Open questions" section for what's still unresolved.
 
 ## Usage
 
@@ -60,25 +57,43 @@ Portage::Ucp::Decision::EscalationPolicy.call(checkout_status: checkout.status)
 # => #<data Verdict escalate=true, reason=:requires_escalation>
 ```
 
-`ConfidenceGate.via_backend` gates on the answer, not just on the model's
-certainty. A noul (the default) gates on its yes-probability, so phrase the
-question so "yes" means "safe to proceed". A choice or score needs
-`proceed_on:`, because its `confidence` says how sure the model is of
-whichever answer it gave:
+`ConfidenceGate.via_backend` asks one yes/no ("noul") question and gates on
+the probability the backend answered yes, so phrase the question so "yes"
+means "safe to proceed":
 
 ```ruby
 jev = Portage::Ucp::Decision::ModelBackends::Jev.new
 
 Portage::Ucp::Decision::ConfidenceGate.via_backend(
-  backend: jev, state: checkout.to_json, question: "next_step", threshold: 0.8,
-  instructions: "What should the agent do with this checkout?",
-  type: "choice", criteria: { "proceed" => nil, "escalate" => nil }, proceed_on: "proceed"
+  backend: jev, state: checkout.to_json, question: "safe_to_complete", threshold: 0.8,
+  instructions: "Answer yes only if this checkout is safe to complete without a person reviewing it."
 )
-# => #<data Verdict proceed=false, confidence=0.99, threshold=0.8>  (Jev chose "escalate")
+# => #<data Verdict proceed=false, confidence=0.37, threshold=0.8>
 ```
 
-A score takes a Range: `type: "score", criteria: %w[low medium high],
-proceed_on: 0..0.5`.
+## What this gem leaves out, and why
+
+These were in the first skeleton and were removed before 0.1.0 was
+published, because nothing called them:
+
+- **Choice and score questions in `ConfidenceGate`** (`type:`, `criteria:`,
+  `proceed_on:`). A choice's or score's `confidence` says how sure the model
+  is of whichever answer it gave, so a confident "escalate" clears the
+  threshold; `proceed_on:` was needed just to stop that. A noul's
+  yes-probability is the one number that means "safe to proceed", and it's
+  the only question `portage buy` asks. To use a choice or score, call the
+  backend's `#ask` yourself and read the `Answer`.
+- **`ModelBackends::Answer#probabilities`.** Parsed from the reply but read
+  by nothing.
+- **`EscalationPolicy`'s `mismatch:` signal.** `warnings:` covers it: pass
+  a one-line description of the mismatch.
+- **`EscalationPolicy::ESCALATING_STATUSES`.** It only ever held
+  `requires_escalation`, which is `Portage::Ucp::Support::Escalation::STATUS`.
+- **`PolicyCheck`'s `risk_signals:`, and the `decision:` field on its
+  `Verdict`.** Nothing computes a risk signal yet (merchant age,
+  TLS/manifest signing, escalation rate), and `decision:` repeated
+  `allowed`/`reason`. A caller with its own signal can deny before calling
+  `PolicyCheck`.
 
 ## Development
 

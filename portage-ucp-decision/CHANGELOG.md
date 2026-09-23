@@ -10,7 +10,17 @@ pre-1.0, so APIs may still shift between minor versions.
   `portage-ucp`'s `Support::OfferRanking` and `Support::Escalation`, the
   way `PolicyCheck` already delegated to `PolicyGuard`. Their `Verdict`s
   and signatures are unchanged. Requires `portage-ucp ~> 0.9`.
-
+- **Removed surface nothing called**, before the first publish (the README's
+  "What this gem leaves out" says why for each). **Breaking** against the
+  0.1.0 skeleton:
+  - `ConfidenceGate.via_backend` asks a noul only. `type:`, `criteria:` and
+    `proceed_on:` are gone. A choice or score answer now raises
+    `BackendError` ("carried no probability") rather than gating.
+  - `ModelBackends::Answer#probabilities`.
+  - `EscalationPolicy`'s `signals: {mismatch:}` and
+    `EscalationPolicy::ESCALATING_STATUSES`.
+  - `PolicyCheck`'s `risk_signals:` and `Verdict#decision`. The `Verdict`
+    is now `allowed`, `reason`.
 - **A backend failure could escape as a raw exception.** Jev let
   `Faraday::Error`, `JSON::ParserError` (a non-JSON 2xx) and `KeyError` (no
   `answers`) through, Laya let `Errno::ENOENT` (a missing

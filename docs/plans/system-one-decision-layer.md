@@ -2,9 +2,9 @@
 
 **Status:** built — `portage-ucp-decision` (new gem). All four
 responsibilities below exist as typed decisions with real logic: ranking,
-the policy-check wrapper (plus a `risk_signals:` gate), escalation (literal
-`requires_escalation` plus an ambiguous-signal case), and confidence gating
-via two swappable model backends (`ModelBackends::Jev`, `ModelBackends::Laya`).
+the policy-check wrapper, escalation (literal `requires_escalation` plus an
+ambiguous-signal case), and confidence gating via two swappable model
+backends (`ModelBackends::Jev`, `ModelBackends::Laya`).
 
 **Wired in, as an optional plugin:** `portage-cli` does not depend on the
 gem, so the core and CLI stay light. The ranking, escalation and policy
@@ -16,8 +16,8 @@ the CLI answers the same way with or without the gem. Only the confidence
 gate needs the gem. `Find#rank` ranks through core. `Buy` decides escalation
 through core, checks the buyer's policy with `PolicyGuard` before every
 `--yes` completion, and runs `ConfidenceGate` in front of that completion
-when a backend is named (`Cli::ConfidenceCheck`). Every checkout report carries the verdicts under
-`decisions:`. The agent loop's instructions (`skills/shop-via-ucp.md`,
+when a backend is named (`Cli::ConfidenceCheck`). Every checkout report
+carries the verdicts under `decisions:`. The agent loop's instructions (`skills/shop-via-ucp.md`,
 `skills/shop-via-ucp/SKILL.md`) call the same four decisions for raw
 `portage-ucp-client` sessions and branch on `decisions:` when they shell out
 to `portage buy --json`. `Buy` still owns the delivery side (`CheckoutHandoff`,
@@ -79,10 +79,8 @@ shape.
    policy_guard.rb`, `policy.rb`) already cover per-transaction cap, rolling
    cap, velocity, and merchant allowlist, wired into `Dispatcher`.
    `Decision::PolicyCheck` calls `PolicyGuard.check!` rather than
-   reimplementing that, and adds risk signals as a caller-supplied
-   `Hash{Symbol => Boolean}` gate alongside it (§ Open questions — the
-   mechanism is built, the signals themselves are still uncomputed anywhere
-   in this repo).
+   reimplementing that. Risk signals are still open (§ Open questions):
+   nothing in this repo computes one yet.
 
 ## Why a layer, not more Adapter methods or more CLI branches
 
@@ -141,16 +139,15 @@ shape.
   `portage buy` now records remote completions there too (shop = merchant
   host), so both limits see remote spend. The loopback path is left to
   `Dispatcher`, so nothing is counted twice.
-- ~~Risk signals~~ **Mechanism resolved, computation still open:**
-  `PolicyCheck#call`'s `risk_signals:` now denies on any truthy named
-  signal (`{merchant_too_new: true}` → `reason: :risk_signal_triggered`).
-  What a signal even is here — merchant age, TLS/manifest-signing status per
-  §9, prior escalation rate — is still unresearched: nothing under
-  `Portage::Ucp::Support` computes merchant trust/history, so producing an
-  actual signal value stays the caller's job.
+- Risk signals — **still open.** A `risk_signals:` mechanism on
+  `PolicyCheck` (deny on any truthy named signal) was built and then removed
+  before the gem was published, because nothing computes a signal to feed
+  it. What a signal even is here — merchant age, TLS/manifest-signing status
+  per §9, prior escalation rate — is still unresearched: nothing under
+  `Portage::Ucp::Support` computes merchant trust/history. Add the mechanism
+  back alongside the first real signal.
 - ~~Ambiguous-signal escalation~~ **Resolved:** `EscalationPolicy#call`'s
-  `signals:` now escalates on `mismatch: true` or a non-empty `warnings:`
-  array — the same `warnings: [String]` vocabulary the not-yet-merged
+  `signals:` now escalates on a non-empty `warnings:` array — the same `warnings: [String]` vocabulary the not-yet-merged
   `82631bf Fix escalation reporting and surface checkout mismatches`
   (branch `feature/escalation-buyer-context-hardening`) puts on `Buy`'s
   report, so wiring that branch's `reconcile_checkout` output straight into

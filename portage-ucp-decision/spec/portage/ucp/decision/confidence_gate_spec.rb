@@ -27,9 +27,9 @@ RSpec.describe Portage::Ucp::Decision::ConfidenceGate do
                                      .and_return({ "q" => answer })
     end
 
-    def gate(**)
+    def gate
       described_class.via_backend(backend: backend, state: "checkout", question: "q",
-                                  instructions: "Safe to complete unattended?", threshold: 0.8, **)
+                                  instructions: "Safe to complete unattended?", threshold: 0.8)
     end
 
     def answer(**) = Portage::Ucp::Decision::ModelBackends::Answer.new(**)
@@ -47,39 +47,21 @@ RSpec.describe Portage::Ucp::Decision::ConfidenceGate do
       expect(gate.proceed).to be(false)
     end
 
-    it "proceeds on a choice only when the chosen option matches proceed_on: at or above the threshold" do
-      answering(answer(type: "choice", confidence: 0.9, value: "proceed"))
+    it "asks the backend a noul question" do
+      answering(answer(type: "noul", confidence: nil, value: 0.9))
+      gate
 
-      expect(gate(type: "choice", criteria: { "proceed" => nil, "escalate" => nil }, proceed_on: "proceed").proceed)
-        .to be(true)
+      expect(backend).to have_received(:ask) do |questions:, **|
+        expect(questions.fetch("q")).to have_attributes(type: "noul", instructions: "Safe to complete unattended?")
+      end
     end
 
-    it "doesn't proceed on a confident choice of the wrong option" do
-      answering(answer(type: "choice", confidence: 0.95, value: "escalate"))
+    # A confident answer of the wrong kind must never clear the threshold:
+    # a choice's `confidence` is certainty, not a yes-probability.
+    it "raises BackendError when the answer carries no yes-probability to gate on" do
+      answering(answer(type: "choice", confidence: 0.99, value: "escalate"))
 
-      verdict = gate(type: "choice", criteria: { "proceed" => nil, "escalate" => nil }, proceed_on: "proceed")
-
-      expect(verdict).to have_attributes(proceed: false, confidence: 0.95)
-    end
-
-    it "matches a score against a Range proceed_on:" do
-      answering(answer(type: "score", confidence: 0.83, value: 0.11))
-
-      expect(gate(type: "score", criteria: %w[low medium high], proceed_on: 0..0.5).proceed).to be(true)
-    end
-
-    it "requires proceed_on: for a choice or score, before asking the backend" do
-      allow(backend).to receive(:ask)
-
-      expect { gate(type: "choice", criteria: { "a" => nil }) }.to raise_error(ArgumentError, /proceed_on:/)
-      expect(backend).not_to have_received(:ask)
-    end
-
-    it "raises BackendError when the answer carries nothing to gate on" do
-      answering(answer(type: "choice", confidence: nil, value: "proceed"))
-
-      expect { gate(type: "choice", criteria: { "proceed" => nil }, proceed_on: "proceed") }
-        .to raise_error(Portage::Ucp::Decision::BackendError, /no confidence/)
+      expect { gate }.to raise_error(Portage::Ucp::Decision::BackendError, /no probability/)
     end
 
     it "raises BackendError, not KeyError, when the backend leaves the question unanswered" do
