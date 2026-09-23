@@ -28,6 +28,16 @@ RSpec.describe Portage::Ucp::Client::Transports::Stdio do
     expect(result).to eq({ "id" => "o1" })
   end
 
+  it "keeps cart_id on cart reads, where it is the Adapter's own keyword" do
+    allow(mcp_client).to receive(:call_tool).with(name: "get_cart", arguments: { cart_id: "c1" }, meta: nil)
+                                            .and_return({ "result" => { "structuredContent" => { "id" => "c1" } } })
+
+    result = described_class.new(command: "portage-ucp-server").call_tool(name: "get_cart",
+                                                                          arguments: { cart_id: "c1" })
+
+    expect(result).to eq({ "id" => "c1" })
+  end
+
   it "forwards a caller-supplied meta hash to the underlying MCP::Client" do
     allow(mcp_client).to receive(:call_tool)
       .with(name: "get_order", arguments: { order_id: "o1" }, meta: { "ucp-agent.profile" => "agent-1" })
