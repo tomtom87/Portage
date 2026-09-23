@@ -123,6 +123,43 @@ For your own store (you already have Adapter credentials, no manifest to discove
 session = Portage::Ucp::Client.for_adapter(my_adapter)
 ```
 
+## Making the judgment calls with portage-ucp-decision
+
+Picking an offer, deciding to hand off, and deciding whether a spend is
+allowed are decisions, not steps in the tool-call sequence. If
+`portage-ucp-decision` is available, make them through it rather than by
+eye. Each call returns a typed verdict you can log and branch on:
+
+```ruby
+require "portage/ucp/decision"
+D = Portage::Ucp::Decision
+
+# Which offer? Buyable first, then cheapest, then unpriced.
+ranked = D::OfferRanking.call(offers.map { |o| D::OfferRanking::Candidate.new(offer: o, buyable: o[:checkout], amount: o[:amount]) })
+
+# Hand off or keep going? Guardrail 2, as code. Pass any mismatch you
+# noticed between the checkout and the request as warnings.
+verdict = D::EscalationPolicy.call(checkout_status: checkout["status"], signals: { warnings: warnings })
+# verdict.escalate -> surface the checkout's continue_url to the human and stop.
+
+# Is this spend allowed by the shopper's own policy? Run it before
+# complete_checkout. A remote store's server never sees the shopper's policy.
+policy = D::PolicyCheck.call(amount: total, currency: checkout["currency"], merchant: store_host,
+                             token_ref: Portage::Ucp::Support::TokenRef.for(token))
+# policy.allowed == false -> don't complete; tell the human policy.reason.
+```
+
+Before completing a purchase without asking the human, you can also gate on
+a model's confidence (`D::ConfidenceGate.via_backend`, with
+`D::ModelBackends::Jev` or `Laya`). Treat a low score or a backend error as
+"ask the human", never as "proceed".
+
+If you shell out to `portage buy --json` instead, it makes these same calls
+for you and reports the verdicts under `decisions:`. Branch on
+`decisions.escalation.escalate`, `decisions.policy.allowed`, and
+`decisions.confidence.proceed`, not on the `message` text. Any of them
+stopping the purchase comes with a `checkout_url` to hand the human.
+
 ## Troubleshooting a real, external UCP store
 
 Confirmed live against billabong.com's native Shopify UCP endpoint
