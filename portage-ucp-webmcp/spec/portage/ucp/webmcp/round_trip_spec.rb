@@ -105,6 +105,25 @@ RSpec.describe "WebMCP round trip", :node do
     expect(session.search_catalog(query: "mug")["products"]).not_to be_empty
   end
 
+  context "behind a proxy that answers the call with an HTML error page" do
+    let(:rack_app) do
+      mounted = Portage::Ucp::WebMcp::Rack::App.new(catalog: catalog, registrar_options: registrar_options)
+      proxy = lambda do |env|
+        next mounted.call(env) unless env["REQUEST_METHOD"] == "POST"
+
+        [502, { "content-type" => "text/html" }, ["<html>Bad Gateway</html>"]]
+      end
+      Rack::Builder.new { map("/ucp") { run proxy } }
+    end
+
+    it "names the endpoint and status, not a JSON parse error" do
+      load_page
+
+      expect { session.search_catalog(query: "mug") }
+        .to raise_error(Portage::Ucp::Client::ServerError, /non-JSON response \(502\)/)
+    end
+  end
+
   context "with a prefix, for a page with WebMCP tools of its own" do
     let(:catalog_options) { { prefix: "acme." } }
 

@@ -7,6 +7,9 @@ pre-1.0, so APIs may still shift between minor versions.
 ## [0.1.0] - Unreleased
 
 - Initial release. WebMCP as a transport to the existing `Adapter` contract.
+- The registrar reports a non-JSON reply from its endpoint (a proxy's HTML
+  error page) as `tools/call to <endpoint> returned a non-JSON response
+  (<status>)`, rather than a bare `Unexpected token '<'`.
 - Inbound (merchant side): `ToolCatalog` derives the tools a page registers
   from `Portage::Ucp::Mcp::Server`'s own tools/list. It adds readable
   descriptions, typed parameter schemas and WebMCP annotations.
