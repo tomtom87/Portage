@@ -40,6 +40,13 @@ RSpec.describe Portage::Cli::Doctor do
     end
   end
 
+  it "doesn't ask for JEV_API_KEY when portage-ucp-decision isn't installed" do
+    allow(Portage::Cli::Decisions).to receive(:available?).and_return(false)
+    with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => nil) do
+      expect(described_class.new.call.map(&:check)).not_to include("jev_api_key")
+    end
+  end
+
   it "accepts TYPESAFE_API_KEY in place of JEV_API_KEY, since ModelBackends::Jev falls back to it" do
     with_env("JEV_API_KEY" => nil, "TYPESAFE_API_KEY" => "test-key") do
       expect(described_class.new.call.map(&:check)).not_to include("jev_api_key")

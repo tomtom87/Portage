@@ -262,10 +262,19 @@ limits bound to one enrolled card) are set via `portage payment enroll
 
 ### Decisions
 
-`portage buy` makes its judgment calls through `portage-ucp-decision`
-(`docs/plans/system-one-decision-layer.md`), and every checkout report carries
-the verdicts under `decisions:`, so a script or agent loop can branch on data
-rather than on the message text:
+`portage buy` and `portage find` make their judgment calls through
+`portage-ucp-decision` (`docs/plans/system-one-decision-layer.md`) when it's
+installed. It's an optional plugin, not a dependency:
+
+```bash
+gem install portage-ucp-decision   # only needed for the confidence gate
+```
+
+Without it, built-in fallbacks give the same ranking, escalation and policy
+answers, and the policy check still runs (it needs only `portage-ucp`). The
+confidence gate is the one feature that needs the gem. Every checkout report
+carries the verdicts under `decisions:`, so a script or agent loop can branch
+on data rather than on the message text:
 
 ```json
 "decisions": {
@@ -290,7 +299,8 @@ rather than on the message text:
   and is safe to complete unattended. It sends the query, merchant,
   quantity, line items, totals and warnings, never the payment token. A
   score below the threshold holds the purchase. So does a backend that can't
-  answer, because the gate fails closed. `jev` needs `JEV_API_KEY`; `laya`
+  answer, or naming a backend without `portage-ucp-decision` installed,
+  because the gate fails closed. `jev` needs `JEV_API_KEY`; `laya`
   needs `LAYA_BRIDGE_SCRIPT` (see `portage-ucp-decision`'s README).
 
 A blocked or held purchase hands the checkout off the same way an escalation

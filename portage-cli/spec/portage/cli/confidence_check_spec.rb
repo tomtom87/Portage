@@ -70,6 +70,14 @@ RSpec.describe Portage::Cli::ConfidenceCheck do
     expect(verdict[:error]).to include("JEV_API_KEY is not set")
   end
 
+  it "fails closed, naming the gem, when a backend is named but portage-ucp-decision isn't installed" do
+    allow(Portage::Cli::Decisions).to receive(:available?).and_return(false)
+    verdict = described_class.new(backend: "jev", resolver: ->(_name) { raise "must not resolve" }).call({})
+
+    expect(verdict).to include(proceed: false, backend: "jev")
+    expect(verdict[:error]).to include("gem install portage-ucp-decision")
+  end
+
   it "rejects a threshold outside 0.0..1.0" do
     expect { described_class.new(backend: "jev", threshold: 1.5) }.to raise_error(ArgumentError, /between 0.0 and 1.0/)
   end

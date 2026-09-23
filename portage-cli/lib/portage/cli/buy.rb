@@ -4,8 +4,8 @@ require "json"
 require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/journal"
-require "portage/ucp/decision"
 require_relative "payment_methods"
+require_relative "decisions"
 require_relative "confidence_check"
 require_relative "checkout_handoff"
 require_relative "notifier"
@@ -463,14 +463,14 @@ module Portage
 
       def finish_checkout(session, source, products, checkout, warnings = [])
         escalation = decide_escalation(checkout, warnings)
-        return escalated_report(source, products, checkout, warnings, escalation) if escalation.escalate
+        return escalated_report(source, products, checkout, warnings, escalation) if escalation[:escalate]
         return dry_run_report(source, products, checkout, warnings) if @dry_run
         return confirmation_needed_report(source, products, checkout, warnings) unless confirmed?
 
         complete(session, source, products, checkout, warnings)
       end
 
-      # Hand off vs. keep going is Decision::EscalationPolicy's call
+      # Hand off vs. keep going is Decisions.escalation's call
       # (docs/plans/system-one-decision-layer.md § Responsibilities 2): a
       # literal `requires_escalation` status always escalates. A mismatch
       # from #reconcile_checkout escalates only under
@@ -479,14 +479,14 @@ module Portage
       # The verdict lands on the report's `decisions:` so an agent loop can
       # branch on it rather than on the message text.
       def decide_escalation(checkout, warnings)
-        signals = abort_on_mismatch? ? { warnings: warnings } : {}
-        verdict = Portage::Ucp::Decision::EscalationPolicy.call(checkout_status: checkout["status"], signals: signals)
-        @decisions[:escalation] = verdict.to_h
+        verdict = Decisions.escalation(checkout_status: checkout["status"],
+                                       warnings: abort_on_mismatch? ? warnings : [])
+        @decisions[:escalation] = verdict
         verdict
       end
 
       def escalated_report(source, products, checkout, warnings, verdict)
-        return mismatch_report(source, products, checkout, warnings) if verdict.reason == :mismatch
+        return mismatch_report(source, products, checkout, warnings) if verdict[:reason] == :mismatch
 
         escalation_report(source, products, checkout, warnings)
       end
@@ -507,7 +507,7 @@ module Portage
         # used to report "Purchased." unconditionally regardless of
         # `completed["status"]`, silently misreporting an escalation as a
         # successful purchase.
-        return escalation_report(source, products, completed, warnings) if decide_escalation(completed, []).escalate
+        return escalation_report(source, products, completed, warnings) if decide_escalation(completed, [])[:escalate]
 
         checkout_report(source, products, completed, warnings: warnings, message: "Purchased.")
       rescue Portage::Ucp::Client::PaymentPermissionError
@@ -518,7 +518,7 @@ module Portage
       # the first one that held the purchase.
       def held_report(source, products, checkout, warnings)
         policy = decide_policy(checkout)
-        return policy_blocked_report(source, products, checkout, warnings, policy) unless policy.allowed
+        return policy_blocked_report(source, products, checkout, warnings, policy) unless policy[:allowed]
 
         confidence = decide_confidence(checkout, warnings)
         return nil if confidence.nil? || confidence[:proceed]
@@ -527,7 +527,9 @@ module Portage
       end
 
       # The buyer's own spend policy (`portage policy set`), checked through
-      # Decision::PolicyCheck before any completion is attempted.
+      # Decisions.policy before any completion is attempted. That check
+      # needs only portage-ucp core, so it runs with or without the
+      # optional decision gem.
       # Dispatcher runs PolicyGuard as well, but only in-process. A remote
       # native-UCP store's Dispatcher belongs to the merchant, not to this
       # buyer, so without this check the buyer's caps, allowlist and token
@@ -540,11 +542,9 @@ module Portage
       # add to it yet, so for a remote store those two limits see only
       # own-store spend.
       def decide_policy(checkout)
-        verdict = Portage::Ucp::Decision::PolicyCheck.call(
-          amount: checkout_total(checkout), currency: checkout["currency"], merchant: @uri.host,
-          token_ref: Portage::Ucp::Support::TokenRef.for(@payment_token)
-        )
-        @decisions[:policy] = { allowed: verdict.allowed, reason: verdict.reason }
+        verdict = Decisions.policy(amount: checkout_total(checkout), currency: checkout["currency"],
+                                   merchant: @uri.host, token_ref: Portage::Ucp::Support::TokenRef.for(@payment_token))
+        @decisions[:policy] = verdict
         verdict
       end
 
@@ -570,7 +570,7 @@ module Portage
       def policy_blocked_report(source, products, checkout, warnings, verdict)
         url = checkout_url_of(checkout)
         handoff = hand_off(checkout, reason: "policy_blocked", source: source)
-        message = "Blocked by your spend policy (#{verdict.reason}) — not completed. Review it with " \
+        message = "Blocked by your spend policy (#{verdict[:reason]}) — not completed. Review it with " \
                   "`portage policy show`, or visit the link to finish this checkout yourself."
         checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
                                                     handoff: handoff, message: message)
