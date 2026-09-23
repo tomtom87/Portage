@@ -50,8 +50,7 @@ module Portage
           },
           build_adapter: lambda { |ns, client, env|
             ns::Adapter.new(client: client, site_url: env.fetch(:site_url), currency: env.fetch(:currency, "USD"),
-                            payment_method: env[:payment_method],
-                            billing_address: env[:billing_address] && JSON.parse(env[:billing_address]))
+                            payment_method: env[:payment_method], billing_address: woocommerce_billing_address(env))
           }
         ),
         Platform.new(
@@ -133,6 +132,45 @@ module Portage
         client = platform.build_client.call(namespace, env)
         platform.build_adapter.call(namespace, client, env)
       end
+
+      # WOOCOMMERCE_BILLING_ADDRESS wins when set (raises ArgumentError, not
+      # a raw JSON::ParserError, on malformed JSON — callers building an
+      # adapter from env expect a config error to name what's wrong).
+      # Otherwise falls back to the same PORTAGE_SHIP_* env `portage buy`
+      # already reads for shipping (Portage::Cli::ShippingProfile) mapped to
+      # WooCommerce's Store API billing_address field names, so a shopper
+      # who already set a shipping profile doesn't also have to hand-build a
+      # separate JSON blob just for WooCommerce's stopgap billing_address
+      # (see Adapter's class-level CAVEAT #2). Returns nil when neither is
+      # configured — #submit_checkout already raises a clear error for that.
+      def self.woocommerce_billing_address(env)
+        return parse_woocommerce_billing_address(env[:billing_address]) if env[:billing_address]
+
+        address = WOOCOMMERCE_BILLING_FROM_SHIP_ENV.filter_map do |var, key|
+          value = ENV.fetch(var, nil)
+          [key, value] if value && !value.empty?
+        end.to_h
+        address.empty? ? nil : address
+      end
+
+      def self.parse_woocommerce_billing_address(raw)
+        JSON.parse(raw)
+      rescue JSON::ParserError => e
+        raise ArgumentError, "WOOCOMMERCE_BILLING_ADDRESS must be valid JSON: #{e.message}"
+      end
+
+      # Same env vars as Portage::Cli::ShippingProfile::ENV_VARS, mapped to
+      # WooCommerce's Store API billing_address keys (first_name/last_name/
+      # address_1/address_2/city/state/postcode/country/phone) rather than
+      # required here as a gem dependency on portage-cli.
+      WOOCOMMERCE_BILLING_FROM_SHIP_ENV = {
+        "PORTAGE_SHIP_FIRST_NAME" => "first_name", "PORTAGE_SHIP_LAST_NAME" => "last_name",
+        "PORTAGE_SHIP_STREET" => "address_1", "PORTAGE_SHIP_EXTENDED" => "address_2",
+        "PORTAGE_SHIP_CITY" => "city", "PORTAGE_SHIP_REGION" => "state",
+        "PORTAGE_SHIP_POSTAL_CODE" => "postcode", "PORTAGE_SHIP_COUNTRY" => "country",
+        "PORTAGE_SHIP_PHONE" => "phone"
+      }.freeze
+      private_constant :WOOCOMMERCE_BILLING_FROM_SHIP_ENV
     end
   end
 end

@@ -34,6 +34,7 @@ Run against a throwaway Docker WooCommerce (WP 7.1.1 + WooCommerce 11.1.1, TLS v
 2. **`Resolver` now threads `payment_method`/`billing_address` through to the adapter.** Its WooCommerce entry was missing both from its `env:` map, so `complete_checkout` failed with no gateway or address configured even when `WOOCOMMERCE_PAYMENT_METHOD`/`WOOCOMMERCE_BILLING_ADDRESS` were set.
 3. **`portage buy`'s `adapter_flow` no longer hides a live adapter's own error.** It rescued `LoadError` and `StandardError` identically, so a real, actionable failure (e.g. "no payment_method configured on this Adapter") surfaced as the same generic "no automated path" dead end as an adapter that isn't installed at all. A `StandardError` past that point now comes back as its own report, distinguishable by `source`.
 4. **`submit_checkout` now supplies `billing_address`.** `POST /wc/store/v1/checkout` 400s without one; there's no UCP `complete_checkout` parameter for it, so — same stopgap posture as `payment_method` — the adapter takes one fixed `billing_address` hash at construction time via `WOOCOMMERCE_BILLING_ADDRESS` (JSON, Store API field names), not per-checkout. Fine for a single-buyer-per-process, wrong the moment something needs a different address per checkout.
+5. **Hardened `Resolver`'s WooCommerce wiring.** Malformed `WOOCOMMERCE_BILLING_ADDRESS` JSON used to raise a raw `JSON::ParserError` straight out of `portage buy` (uncaught — `adapter_flow` only rescued `LoadError` around `build_adapter`); it now raises a clear `ArgumentError` naming the var, and `adapter_flow` reports it as an actionable "adapter misconfigured" outcome instead of crashing. `WOOCOMMERCE_BILLING_ADDRESS` also no longer has to be hand-built separately — when unset, `Resolver` derives it from the same `PORTAGE_SHIP_*` env `portage buy` already reads for shipping, mapped to the Store API's billing field names.
 
 **Remaining gaps, still unfixed:**
 
@@ -55,7 +56,7 @@ bundle install
 
 ## Setup
 
-You need a site URL, an Admin REST API consumer key/secret pair (wp-admin → WooCommerce → Settings → Advanced → REST API — grant Read/Write), your store's currency (the Admin product resource doesn't return one), and — only if you'll call `complete_checkout` — the WC payment gateway id you want to submit orders through and a `billing_address` the Store API's `/checkout` endpoint requires.
+You need a site URL, an Admin REST API consumer key/secret pair (wp-admin → WooCommerce → Settings → Advanced → REST API — grant Read/Write), your store's currency (the Admin product resource doesn't return one), and — only if you'll call `complete_checkout` — the WC payment gateway id you want to submit orders through and a `billing_address` the Store API's `/checkout` endpoint requires. Via `Resolver` (i.e. `portage buy`), `billing_address` doesn't have to be its own JSON blob: set `WOOCOMMERCE_BILLING_ADDRESS` to override, or leave it unset and it's built from `PORTAGE_SHIP_*` (the same env `portage buy` reads for shipping) mapped to the Store API's field names.
 
 ```ruby
 require "portage/ucp/woocommerce"

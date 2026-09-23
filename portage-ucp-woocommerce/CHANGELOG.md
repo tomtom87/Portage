@@ -21,6 +21,12 @@ pre-1.0, so APIs may still shift between minor versions.
   WooCommerce install (`docs/plans/woocommerce-local-validation.md`'s
   stack): `--auto-open`'s hand-off now opens a browser straight onto a
   checkout page with the cart's actual contents, not an empty one.
+- `Resolver`'s WooCommerce `billing_address` is hardened: malformed
+  `WOOCOMMERCE_BILLING_ADDRESS` JSON now raises a clear `ArgumentError`
+  (previously a raw, uncaught `JSON::ParserError` out of `portage buy`),
+  and when the env var is unset it falls back to the same `PORTAGE_SHIP_*`
+  env `portage buy` reads for shipping, mapped to the Store API's billing
+  field names, instead of leaving `billing_address` unset.
 
 ## [0.2.0] - 2026-09-22
 
