@@ -5,8 +5,10 @@ RSpec.describe Portage::Ucp::WooCommerce::Adapter do
     Portage::Ucp::WooCommerce::Client.new(site_url: "https://shop.example.com", consumer_key: "ck",
                                           consumer_secret: "cs")
   end
-  let(:billing_address) { { "first_name" => "Ada", "address_1" => "1 Main St", "city" => "Erie",
-                            "postcode" => "16501", "country" => "US" } }
+  let(:billing_address) do
+    { "first_name" => "Ada", "address_1" => "1 Main St", "city" => "Erie",
+      "postcode" => "16501", "country" => "US" }
+  end
   let(:adapter) do
     described_class.new(client: client, site_url: "https://shop.example.com", currency: "USD",
                         payment_method: "stripe_cc", billing_address: billing_address)

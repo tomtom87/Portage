@@ -181,7 +181,10 @@ module Portage
         # than a confirmed gateway-specific shape.
         def submit_checkout(checkout_id, payment_token)
           raise Portage::Ucp::WooCommerce::Error, "no payment_method configured on this Adapter" unless @payment_method
-          raise Portage::Ucp::WooCommerce::Error, "no billing_address configured on this Adapter" unless @billing_address
+          unless @billing_address
+            raise Portage::Ucp::WooCommerce::Error,
+                  "no billing_address configured on this Adapter"
+          end
 
           data = @client.store_post("/checkout", {
                                       payment_method: @payment_method,
