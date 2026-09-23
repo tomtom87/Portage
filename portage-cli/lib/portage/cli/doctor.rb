@@ -24,6 +24,7 @@ module Portage
           rate_limiter_finding,
           signing_keys_finding,
           payment_handlers_finding,
+          jev_api_key_finding,
           *capability_findings
         ].compact
       end
@@ -52,6 +53,19 @@ module Portage
         return unless Array(config.signing_keys).empty?
 
         Finding.new(check: "signing_keys", message: "No signing_keys configured — the manifest ships unsigned.")
+      end
+
+      # portage-ucp-decision's ModelBackends::Jev (docs/plans/
+      # system-one-decision-layer.md) reads this at call time; flagged here,
+      # same posture as signing_keys/payment_handlers above, so it shows up
+      # in the one place a fresh setup is checked rather than only failing
+      # the first time something actually calls ConfidenceGate.via_backend.
+      def jev_api_key_finding
+        return unless ENV.fetch("JEV_API_KEY", nil).to_s.strip.empty?
+
+        Finding.new(check: "jev_api_key",
+                    message: "JEV_API_KEY is not set — confidence gating via Jev (TypeSafe AI) will raise " \
+                             "BackendNotConfiguredError until it is. Get a key at https://console.typesafe.ai.")
       end
 
       def payment_handlers_finding

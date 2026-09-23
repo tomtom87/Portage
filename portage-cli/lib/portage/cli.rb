@@ -43,13 +43,16 @@ module Portage
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
+             portage configure [--require FILE] [--adapter CLASS_NAME] [--json]  (alias for doctor)
+             portage setup [--require FILE] [--adapter CLASS_NAME] [--json]      (alias for doctor)
              portage generate adapter NAME [--dir DIR]
              portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
     USAGE
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
-                 "doctor" => :run_doctor, "generate" => :run_generate }.freeze
+                 "doctor" => :run_doctor, "configure" => :run_doctor, "setup" => :run_doctor,
+                 "generate" => :run_generate }.freeze
 
     # @param argv [Array<String>]
     # @return [Integer] process exit code

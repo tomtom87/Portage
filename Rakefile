@@ -9,6 +9,7 @@ GEMS = %w[
   portage-ucp-journal
   portage-ucp-client
   portage-ucp-webmcp
+  portage-ucp-decision
   portage-cli
   portage-ucp-shopify
   portage-ucp-wix
