@@ -598,6 +598,8 @@ module Portage
       puts "Wrote #{result[:profile_path]} (kid #{result[:kid]})"
       puts "Wrote private key to #{result[:private_key_path]} — keep this out of version control " \
            "and off the machine that serves the public profile"
+      puts "Next: commit #{result[:profile_path]}, then, once it's on main, run " \
+           "`bundle exec rake agent_profile:purge` from the repo root — see docs/agent-profile.md."
       0
     end
     private_class_method :run_generate_agent_profile
