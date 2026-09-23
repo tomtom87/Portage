@@ -1,0 +1,88 @@
+require "json"
+require "portage/ucp/decision"
+
+module Portage
+  module Cli
+    # The confidence gate (docs/plans/system-one-decision-layer.md
+    # § Responsibilities 3) as `portage buy` uses it: one yes/no question put
+    # to a Decision::ModelBackends backend right before an unattended
+    # (`--yes`) completion — "is this checkout what the shopper asked for,
+    # and safe to complete without a person looking at it?"
+    #
+    # Default off. Nothing asks a model anything unless a backend is named,
+    # via `--decision-backend NAME` or PORTAGE_DECISION_BACKEND (`jev` or
+    # `laya`, Decision::ModelBackends::REGISTRY's keys). The threshold comes
+    # from `--min-confidence N` or PORTAGE_MIN_CONFIDENCE, else
+    # DEFAULT_THRESHOLD.
+    #
+    # This answers the plan's open question about how the gate relates to
+    # `Confirmer`: it runs in front of the completion, after `--yes` and the
+    # local PolicyCheck, and never in place of either. A low score holds the
+    # purchase and hands the checkout to the shopper. It never
+    # auto-approves anything `--yes` wouldn't already have allowed.
+    #
+    # Fails closed. An unknown backend name, a backend that isn't configured
+    # (no JEV_API_KEY, no Laya bridge), or a backend call that fails all hold
+    # the purchase, the same as a low score does. Once a caller has asked
+    # for a confidence check, the check never passing is not "no opinion".
+    class ConfidenceCheck
+      BACKEND_ENV = "PORTAGE_DECISION_BACKEND".freeze
+      THRESHOLD_ENV = "PORTAGE_MIN_CONFIDENCE".freeze
+      DEFAULT_THRESHOLD = 0.8
+      QUESTION = "safe_to_complete".freeze
+      # Phrased so "yes" means "proceed": a noul answer's value is the
+      # probability of yes, and that is what ConfidenceGate thresholds.
+      INSTRUCTIONS = "The state is a checkout an agent built on a shopper's behalf: the shopper's search " \
+                     "query, the merchant, the requested quantity, the checkout's line items and totals, and " \
+                     "any warnings about where the checkout differs from the request. Answer yes only if the " \
+                     "checkout clearly matches what the shopper asked for and is safe to complete without a " \
+                     "person reviewing it first.".freeze
+
+      # @param backend [String, nil] a ModelBackends::REGISTRY key; nil
+      #   defers to PORTAGE_DECISION_BACKEND.
+      # @param threshold [Float, nil] 0.0..1.0; nil defers to
+      #   PORTAGE_MIN_CONFIDENCE, then DEFAULT_THRESHOLD.
+      # @param resolver [#call] builds a backend from its name — injectable
+      #   so specs never reach a real model.
+      def initialize(backend: nil, threshold: nil, resolver: Portage::Ucp::Decision::ModelBackends.method(:resolve))
+        @backend_name = presence(backend) || presence(ENV.fetch(BACKEND_ENV, nil))
+        @threshold = parse_threshold(threshold || presence(ENV.fetch(THRESHOLD_ENV, nil)) || DEFAULT_THRESHOLD)
+        @resolver = resolver
+      end
+
+      attr_reader :threshold
+
+      def enabled? = !@backend_name.nil?
+
+      # @param state [Hash] JSON-serializable. Never pass it a payment token.
+      # @return [Hash, nil] nil when disabled. Otherwise `proceed:`,
+      #   `confidence:`, `threshold:`, and `backend:`, plus `error:` when
+      #   the backend couldn't answer.
+      def call(state)
+        return nil unless enabled?
+
+        verdict = Portage::Ucp::Decision::ConfidenceGate.via_backend(
+          backend: @resolver.call(@backend_name), state: JSON.generate(state), question: QUESTION,
+          instructions: INSTRUCTIONS, threshold: @threshold
+        )
+        verdict.to_h.merge(backend: @backend_name)
+      rescue Portage::Ucp::Decision::Error => e
+        { proceed: false, confidence: nil, threshold: @threshold, backend: @backend_name, error: e.message }
+      end
+
+      private
+
+      def presence(value)
+        value = value.to_s.strip
+        value.empty? ? nil : value
+      end
+
+      def parse_threshold(raw)
+        value = Float(raw, exception: false)
+        return value if value&.between?(0.0, 1.0)
+
+        raise ArgumentError, "confidence threshold must be a number between 0.0 and 1.0, got #{raw.inspect}"
+      end
+    end
+  end
+end

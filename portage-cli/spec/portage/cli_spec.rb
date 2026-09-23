@@ -48,6 +48,36 @@ RSpec.describe Portage::Cli do
       expect(JSON.parse(output)["source"]).to eq("native_ucp")
     end
 
+    it "builds Buy's confidence check from --decision-backend and --min-confidence" do
+      captured = nil
+      allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+        captured = opts
+        instance_double(Portage::Cli::Buy, call: report)
+      }
+
+      capture_stdout { described_class.run(%w[buy shop.example --decision-backend jev --min-confidence 0.9]) }
+
+      expect(captured[:confidence_check]).to be_enabled
+      expect(captured[:confidence_check].threshold).to eq(0.9)
+    end
+
+    it "refuses to start a buy with an out-of-range --min-confidence" do
+      allow(Portage::Cli::Buy).to receive(:new)
+
+      expect { expect(described_class.run(%w[buy shop.example --min-confidence 2])).to eq(1) }
+        .to output(/between 0.0 and 1.0/).to_stderr
+      expect(Portage::Cli::Buy).not_to have_received(:new)
+    end
+
+    it "prints the report's decision verdicts" do
+      decided = report.merge(decisions: { policy: { allowed: false, reason: :merchant_not_allowlisted } })
+      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: decided))
+
+      output = capture_stdout { described_class.run(%w[buy shop.example]) }
+
+      expect(output).to include("decision policy: allowed=false reason=merchant_not_allowlisted")
+    end
+
     it "returns 0 when the report has browse or checkout, 1 otherwise" do
       allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: report))
       expect(described_class.run(%w[buy shop.example])).to eq(0)

@@ -4,7 +4,9 @@ require "json"
 require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/journal"
+require "portage/ucp/decision"
 require_relative "payment_methods"
+require_relative "confidence_check"
 require_relative "checkout_handoff"
 require_relative "notifier"
 
@@ -37,8 +39,12 @@ module Portage
       #   webhook URL a dead-end checkout_url is POSTed to — nil (the
       #   default) defers to PORTAGE_NOTIFY_WEBHOOK_URL / config.json (see
       #   Notifier).
+      # @param confidence_check [ConfidenceCheck, nil] the opt-in confidence
+      #   gate in front of an unattended completion. nil (the default) builds
+      #   one from PORTAGE_DECISION_BACKEND / PORTAGE_MIN_CONFIDENCE, which is
+      #   a no-op when no backend is named.
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
-                     auto_open: nil, notify_webhook: nil)
+                     auto_open: nil, notify_webhook: nil, confidence_check: nil)
         raw = url.to_s.strip
         raw = "https://#{raw}" unless raw =~ %r{\Ahttps?://}i
         @uri = URI.parse(raw)
@@ -50,6 +56,8 @@ module Portage
         @product_id = product_id
         @auto_open = auto_open
         @notify_webhook = notify_webhook
+        @confidence_check = confidence_check
+        @decisions = {}
       end
 
       # Link `type`s that are never the checkout — see #checkout_url_of.
@@ -293,8 +301,6 @@ module Portage
         checkout = select_cheapest_shipping(session, checkout) if fulfillment_adapter
 
         warnings = reconcile_checkout(product, checkout)
-        return mismatch_report(source, products, checkout, warnings) if warnings.any? && abort_on_mismatch?
-
         finish_checkout(session, source, products, checkout, warnings)
       end
 
@@ -456,17 +462,44 @@ module Portage
       end
 
       def finish_checkout(session, source, products, checkout, warnings = [])
-        status = checkout["status"]
-        return escalation_report(source, products, checkout, warnings) if status == "requires_escalation"
+        escalation = decide_escalation(checkout, warnings)
+        return escalated_report(source, products, checkout, warnings, escalation) if escalation.escalate
         return dry_run_report(source, products, checkout, warnings) if @dry_run
         return confirmation_needed_report(source, products, checkout, warnings) unless confirmed?
 
         complete(session, source, products, checkout, warnings)
       end
 
+      # Hand off vs. keep going is Decision::EscalationPolicy's call
+      # (docs/plans/system-one-decision-layer.md § Responsibilities 2): a
+      # literal `requires_escalation` status always escalates. A mismatch
+      # from #reconcile_checkout escalates only under
+      # PORTAGE_ABORT_ON_CHECKOUT_MISMATCH. By default the warnings are
+      # surfaced on the report, and the purchase is not stopped for them.
+      # The verdict lands on the report's `decisions:` so an agent loop can
+      # branch on it rather than on the message text.
+      def decide_escalation(checkout, warnings)
+        signals = abort_on_mismatch? ? { warnings: warnings } : {}
+        verdict = Portage::Ucp::Decision::EscalationPolicy.call(checkout_status: checkout["status"], signals: signals)
+        @decisions[:escalation] = verdict.to_h
+        verdict
+      end
+
+      def escalated_report(source, products, checkout, warnings, verdict)
+        return mismatch_report(source, products, checkout, warnings) if verdict.reason == :mismatch
+
+        escalation_report(source, products, checkout, warnings)
+      end
+
+      # One guard per gate, in the order they run: a payment token, the
+      # buyer's spend policy, the opt-in confidence check, then the store's
+      # own answer to the completion.
       def complete(session, source, products, checkout, warnings = [])
         @payment_token ||= PaymentMethods.default
         return no_payment_token_report(source, products, checkout, warnings) unless @payment_token
+
+        held = held_report(source, products, checkout, warnings)
+        return held if held
 
         completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: @payment_token)
         # `complete_checkout` can hand back `requires_escalation` too (e.g.
@@ -474,11 +507,91 @@ module Portage
         # used to report "Purchased." unconditionally regardless of
         # `completed["status"]`, silently misreporting an escalation as a
         # successful purchase.
-        return escalation_report(source, products, completed, warnings) if completed["status"] == "requires_escalation"
+        return escalation_report(source, products, completed, warnings) if decide_escalation(completed, []).escalate
 
         checkout_report(source, products, completed, warnings: warnings, message: "Purchased.")
       rescue Portage::Ucp::Client::PaymentPermissionError
         permission_denied_report(source, products, checkout, warnings)
+      end
+
+      # nil when both pre-completion gates pass; otherwise the report for
+      # the first one that held the purchase.
+      def held_report(source, products, checkout, warnings)
+        policy = decide_policy(checkout)
+        return policy_blocked_report(source, products, checkout, warnings, policy) unless policy.allowed
+
+        confidence = decide_confidence(checkout, warnings)
+        return nil if confidence.nil? || confidence[:proceed]
+
+        low_confidence_report(source, products, checkout, warnings, confidence)
+      end
+
+      # The buyer's own spend policy (`portage policy set`), checked through
+      # Decision::PolicyCheck before any completion is attempted.
+      # Dispatcher runs PolicyGuard as well, but only in-process. A remote
+      # native-UCP store's Dispatcher belongs to the merchant, not to this
+      # buyer, so without this check the buyer's caps, allowlist and token
+      # scopes never applied to a remote store at all. PolicyGuard.check!
+      # only reads, so for the own-store adapter flow this repeats a check
+      # Dispatcher also runs. It doesn't double-count anything.
+      #
+      # The rolling cap and velocity limit count what the transaction log
+      # holds, and only Dispatcher writes that log. Remote purchases don't
+      # add to it yet, so for a remote store those two limits see only
+      # own-store spend.
+      def decide_policy(checkout)
+        verdict = Portage::Ucp::Decision::PolicyCheck.call(
+          amount: checkout_total(checkout), currency: checkout["currency"], merchant: @uri.host,
+          token_ref: Portage::Ucp::Support::TokenRef.for(@payment_token)
+        )
+        @decisions[:policy] = { allowed: verdict.allowed, reason: verdict.reason }
+        verdict
+      end
+
+      def checkout_total(checkout)
+        Array(checkout["totals"]).find { |total| total["type"] == "total" }&.fetch("amount", nil)
+      end
+
+      # Never includes the payment token: the state goes to a model backend,
+      # which may be a hosted API (Jev).
+      def decide_confidence(checkout, warnings)
+        verdict = confidence_check.call(
+          query: @query, merchant: @uri.host, quantity: @qty, warnings: warnings,
+          checkout: checkout.slice("id", "status", "currency", "line_items", "totals")
+        )
+        @decisions[:confidence] = verdict if verdict
+        verdict
+      end
+
+      def confidence_check
+        @confidence_check ||= ConfidenceCheck.new
+      end
+
+      def policy_blocked_report(source, products, checkout, warnings, verdict)
+        url = checkout_url_of(checkout)
+        handoff = hand_off(checkout, reason: "policy_blocked", source: source)
+        message = "Blocked by your spend policy (#{verdict.reason}) — not completed. Review it with " \
+                  "`portage policy show`, or visit the link to finish this checkout yourself."
+        checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
+                                                    handoff: handoff, message: message)
+      end
+
+      def low_confidence_report(source, products, checkout, warnings, verdict)
+        url = checkout_url_of(checkout)
+        handoff = hand_off(checkout, reason: "low_confidence", source: source)
+        checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
+                                                    handoff: handoff, message: low_confidence_message(verdict))
+      end
+
+      def low_confidence_message(verdict)
+        backend = verdict[:backend]
+        if verdict[:error]
+          return "Confidence check (#{backend}) couldn't answer — not completed: #{verdict[:error]} " \
+                 "Visit the link to finish this checkout yourself."
+        end
+
+        "Confidence check (#{backend}) scored this checkout #{verdict[:confidence].round(2)}, below the " \
+          "#{verdict[:threshold]} threshold — not completed. Visit the link to review and finish it yourself."
       end
 
       def no_payment_token_report(source, products, checkout, warnings)
@@ -587,7 +700,8 @@ module Portage
       def checkout_report(source, products, checkout, message:, checkout_url: nil, handoff: nil, warnings: [])
         build_report(source: source, browse: true, checkout: true, products: products, message: message,
                      checkout_url: checkout_url, checkout_id: checkout["id"], checkout_status: checkout["status"],
-                     totals: checkout["totals"], handoff: handoff, warnings: warnings)
+                     totals: checkout["totals"], handoff: handoff, warnings: warnings,
+                     decisions: @decisions.dup)
       end
 
       def safe_search(session)

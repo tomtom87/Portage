@@ -7,6 +7,12 @@ RSpec.describe Portage::Cli::Buy do
   # about the fallback override this explicitly.
   before { allow(Portage::Cli::PaymentMethods).to receive(:default).and_return(nil) }
 
+  # Same idea for the decision layer's gates: never read the real
+  # ~/.portage/policy.json, and never pick up a PORTAGE_DECISION_BACKEND
+  # from the shell running the suite. Tests that care override these.
+  before { allow(Portage::Ucp::Policy).to receive(:load).and_return(Portage::Ucp::Policy.new(data: {})) }
+  around { |example| with_env("PORTAGE_DECISION_BACKEND" => nil, "PORTAGE_MIN_CONFIDENCE" => nil) { example.run } }
+
   let(:product) { { "id" => "p1", "title" => "Cold Brew" } }
   let(:incomplete_checkout) { { "id" => "chk_1", "status" => "ready_for_complete", "links" => [], "totals" => [] } }
   let(:completed_checkout) { { "id" => "chk_1", "status" => "completed", "links" => [], "totals" => [] } }
@@ -455,6 +461,119 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:message]).to eq("Purchased.")
       expect(session).to have_received(:complete_checkout)
+    end
+  end
+
+  describe "the decision layer's verdicts" do
+    let(:priced_checkout) do
+      incomplete_checkout.merge("currency" => "USD", "totals" => [{ "type" => "total", "amount" => 5000 }])
+    end
+
+    def buy(checkout:, completed: completed_checkout, **options)
+      session = fake_session(advertises_checkout: true, checkout: checkout, completed: completed)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1",
+                                   **options).call
+      [report, session]
+    end
+
+    def policy(data)
+      allow(Portage::Ucp::Policy).to receive(:load).and_return(Portage::Ucp::Policy.new(data: data))
+    end
+
+    # Stands in for a Decision::ModelBackends backend: answers the one noul
+    # question ConfidenceCheck asks with a fixed yes-probability.
+    def confidence_check(noul: nil, error: nil, threshold: 0.8)
+      backend = Object.new
+      backend.define_singleton_method(:ask) do |questions:, **|
+        raise error if error
+
+        questions.transform_values do
+          Portage::Ucp::Decision::ModelBackends::Answer.new(type: "noul", confidence: nil, value: noul)
+        end
+      end
+      Portage::Cli::ConfidenceCheck.new(backend: "fake", threshold: threshold, resolver: ->(_name) { backend })
+    end
+
+    it "records a passing escalation and policy verdict on a completed purchase" do
+      report, = buy(checkout: priced_checkout)
+
+      expect(report[:message]).to eq("Purchased.")
+      expect(report[:decisions]).to eq(escalation: { escalate: false, reason: nil },
+                                       policy: { allowed: true, reason: nil })
+    end
+
+    it "records requires_escalation as the escalation verdict" do
+      report, = buy(checkout: incomplete_checkout.merge("status" => "requires_escalation"))
+
+      expect(report[:decisions][:escalation]).to eq(escalate: true, reason: :requires_escalation)
+    end
+
+    it "records a mismatch escalation under PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" do
+      checkout = incomplete_checkout.merge("line_items" => [])
+      report, session = with_env("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" => "1") { buy(checkout: checkout) }
+
+      expect(report[:decisions][:escalation]).to eq(escalate: true, reason: :mismatch)
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    # Dispatcher's own PolicyGuard runs only in-process, so before this
+    # check a remote store never saw the buyer's caps at all.
+    it "blocks a remote store's checkout over the buyer's per-transaction cap before completing it" do
+      policy("per_transaction_cap" => { "amount" => 1000, "currency" => "USD" })
+      report, session = buy(checkout: priced_checkout)
+
+      expect(report[:message]).to start_with("Blocked by your spend policy (per_transaction_cap_exceeded)")
+      expect(report[:decisions][:policy]).to eq(allowed: false, reason: :per_transaction_cap_exceeded)
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "blocks a remote store that isn't on the buyer's merchant allowlist" do
+      policy("merchant_allowlist" => ["other.example"])
+      report, session = buy(checkout: priced_checkout)
+
+      expect(report[:decisions][:policy]).to eq(allowed: false, reason: :merchant_not_allowlisted)
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "asks no model anything when no decision backend is configured" do
+      report, = buy(checkout: priced_checkout)
+
+      expect(report[:decisions]).not_to have_key(:confidence)
+    end
+
+    it "completes when the confidence check clears the threshold" do
+      report, = buy(checkout: priced_checkout, confidence_check: confidence_check(noul: 0.95))
+
+      expect(report[:message]).to eq("Purchased.")
+      expect(report[:decisions][:confidence]).to include(proceed: true, confidence: 0.95, threshold: 0.8)
+    end
+
+    it "holds the purchase and hands off the checkout when confidence is below the threshold" do
+      checkout = priced_checkout.merge("continue_url" => "https://shop.example/checkout/1")
+      report, session = buy(checkout: checkout, confidence_check: confidence_check(noul: 0.3))
+
+      expect(report[:message]).to include("scored this checkout 0.3, below the 0.8 threshold")
+      expect(report[:checkout_url]).to eq("https://shop.example/checkout/1")
+      expect(report[:decisions][:confidence]).to include(proceed: false, confidence: 0.3)
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "fails closed when the decision backend can't answer" do
+      error = Portage::Ucp::Decision::BackendNotConfiguredError.new("JEV_API_KEY is not set")
+      report, session = buy(checkout: priced_checkout, confidence_check: confidence_check(error: error))
+
+      expect(report[:message]).to include("couldn't answer", "JEV_API_KEY is not set")
+      expect(report[:decisions][:confidence]).to include(proceed: false, error: "JEV_API_KEY is not set")
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "never asks for confidence on a run that isn't completing anything" do
+      check = confidence_check(noul: 0.1)
+      allow(check).to receive(:call).and_call_original
+      buy(checkout: priced_checkout, dry_run: true, confidence_check: check)
+
+      expect(check).not_to have_received(:call)
     end
   end
 

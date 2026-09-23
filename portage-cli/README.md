@@ -68,7 +68,8 @@ gem install portage-cli
 
 ```bash
 portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id ID]
-                                [--yes] [--dry-run] [--json]
+                                [--yes] [--dry-run] [--decision-backend jev|laya]
+                                [--min-confidence N] [--json]
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
 portage compare <url> --product-id ID [--id VALUE ...] [--results N]
@@ -105,6 +106,10 @@ portage policy set [--per-transaction-cap N --currency CUR]
 - `--limit` — how many candidate stores to probe, capped at 12.
 - `--yes` — skip the confirmation prompt before completing checkout.
 - `--dry-run` — resolve and price the order without completing checkout.
+- `--decision-backend` — opt into the confidence gate (see "Decisions" below):
+  `jev` or `laya`. Defaults to `PORTAGE_DECISION_BACKEND`; unset means off.
+- `--min-confidence` — the gate's threshold, `0.0`–`1.0`. Defaults to
+  `PORTAGE_MIN_CONFIDENCE`, then `0.8`.
 - `--json` — machine-readable report instead of the human-readable summary.
 
 Exits `0` when a checkout completed (or a dry-run/browse/search resolved
@@ -254,6 +259,44 @@ An empty policy (nothing ever set) means every check passes; this is an
 opt-in guardrail, not a default-deny one. Per-token scopes (merchant/amount
 limits bound to one enrolled card) are set via `portage payment enroll
 --scope-*` above, not here.
+
+### Decisions
+
+`portage buy` makes its judgment calls through `portage-ucp-decision`
+(`docs/plans/system-one-decision-layer.md`), and every checkout report carries
+the verdicts under `decisions:`, so a script or agent loop can branch on data
+rather than on the message text:
+
+```json
+"decisions": {
+  "escalation": { "escalate": false, "reason": null },
+  "policy":     { "allowed": false, "reason": "per_transaction_cap_exceeded" },
+  "confidence": { "proceed": true, "confidence": 0.93, "threshold": 0.8, "backend": "jev" }
+}
+```
+
+- **escalation** — `EscalationPolicy`. A `requires_escalation` checkout always
+  escalates. A checkout that doesn't match the request escalates only under
+  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`; otherwise it's reported as `warnings`.
+- **policy** — `PolicyCheck`, run on your policy file (see "Policy" above)
+  before any `--yes` completion. It applies to remote native-UCP stores too.
+  Before this check, only the own-store adapter flow's in-process
+  `Dispatcher` enforced the policy. Rolling caps and velocity limits count
+  only what the transaction log holds, and only own-store purchases write to
+  that log.
+- **confidence** — `ConfidenceGate`, off unless `--decision-backend` or
+  `PORTAGE_DECISION_BACKEND` names a backend. Right before a `--yes`
+  completion it asks the backend whether the checkout matches the request
+  and is safe to complete unattended. It sends the query, merchant,
+  quantity, line items, totals and warnings, never the payment token. A
+  score below the threshold holds the purchase. So does a backend that can't
+  answer, because the gate fails closed. `jev` needs `JEV_API_KEY`; `laya`
+  needs `LAYA_BRIDGE_SCRIPT` (see `portage-ucp-decision`'s README).
+
+A blocked or held purchase hands the checkout off the same way an escalation
+does (`checkout_url`, plus `--auto-open`/`--notify-webhook` if set). The
+shopper can finish it themselves. `portage find`'s offer order comes from
+`OfferRanking`: buyable first, then cheapest, then unpriced.
 
 ### Shipping address (own-store checkouts only)
 

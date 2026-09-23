@@ -4,4 +4,5 @@ gemspec
 
 gem "portage-ucp", path: "../portage-ucp"
 gem "portage-ucp-client", path: "../portage-ucp-client"
+gem "portage-ucp-decision", path: "../portage-ucp-decision"
 gem "portage-ucp-journal", path: "../portage-ucp-journal"
