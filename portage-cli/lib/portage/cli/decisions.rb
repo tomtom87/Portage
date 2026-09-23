@@ -59,8 +59,19 @@ module Portage
 
       # The buyer's spend policy. PolicyGuard lives in portage-ucp core, so
       # this check runs with or without the decision gem.
+      #
+      # PolicyGuard skips both spend caps when `amount` is nil, which suits
+      # its own caller (an adapter that can't price a checkout up front).
+      # Here it would let a checkout with no `total` line past a configured
+      # cap while reporting `allowed: true`, so a missing total is denied as
+      # `:total_unknown` whenever a cap exists.
       # @return [Hash] `allowed:`, `reason:`.
       def self.policy(amount:, currency:, merchant:, token_ref:)
+        if amount.nil?
+          policy = Portage::Ucp::Policy.load
+          return { allowed: false, reason: :total_unknown } if policy.per_transaction_cap || policy.rolling_cap
+        end
+
         if available?
           verdict = Portage::Ucp::Decision::PolicyCheck.call(amount: amount, currency: currency,
                                                              merchant: merchant, token_ref: token_ref)

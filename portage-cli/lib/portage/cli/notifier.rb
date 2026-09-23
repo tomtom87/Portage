@@ -1,4 +1,6 @@
 require "net/http"
+require "json"
+require "uri"
 require_relative "config"
 
 module Portage
@@ -17,10 +19,12 @@ module Portage
     # beats PORTAGE_NOTIFY_WEBHOOK_URL, which beats ~/.portage/config.json's
     # "notify_webhook_url" (Config).
     class Notifier
-      include Portage::Ucp::Support::HttpClient
-
       ENV_VAR = "PORTAGE_NOTIFY_WEBHOOK_URL".freeze
       CONFIG_KEY = "notify_webhook_url".freeze
+      TIMEOUT = 5
+      # Enough of an error body to name the problem, without pasting a whole
+      # HTML error page into the report.
+      BODY_EXCERPT = 200
 
       def initialize(webhook_url: nil, config: Config.load)
         @override = webhook_url
@@ -42,34 +46,30 @@ module Portage
       # raises out of `Buy#call` — the checkout itself is a real, correct
       # outcome independent of whether this delivery succeeded.
       #
+      # Success is any 2xx, whatever the body: Slack's incoming webhooks
+      # answer `ok` as plain text, which a JSON parse would have misreported
+      # as a failed delivery. Short timeouts, since a hand-off is waiting on
+      # this and Net::HTTP's defaults would stall it for up to two minutes.
+      #
       # @return [String, nil] the delivery failure message, or nil when
       #   disabled or on a successful POST.
       def call(payload)
         return nil unless enabled?
 
-        json_request(Net::HTTP::Post, webhook_url, body: payload)
-        nil
+        response = post(URI(webhook_url), JSON.generate(payload))
+        return nil if response.is_a?(Net::HTTPSuccess)
+
+        "webhook answered #{response.code}: #{response.body.to_s[0, BODY_EXCERPT]}"
       rescue StandardError => e
-        e.message
+        "webhook POST failed: #{e.message}"
       end
 
       private
 
-      def api_error_class
-        NotifyApiError
-      end
-
-      # Raised (internally, always rescued by #call) when the webhook POST
-      # itself fails (non-2xx) — kept distinct from a plain network error
-      # only in that it carries the response body/status, same split
-      # Confirmer::WebhookApiError draws against a raw StandardError.
-      class NotifyApiError < Portage::Ucp::Error
-        include Portage::Ucp::Support::ApiError
-
-        private
-
-        def api_label
-          "Notifier"
+      def post(uri, body)
+        Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
+                                            open_timeout: TIMEOUT, read_timeout: TIMEOUT) do |http|
+          http.post(uri.request_uri, body, "Content-Type" => "application/json")
         end
       end
     end

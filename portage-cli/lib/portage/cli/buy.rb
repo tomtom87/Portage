@@ -111,11 +111,11 @@ module Portage
       def native_flow_error_report(error)
         case error
         when Portage::Ucp::Client::MissingAgentProfileError
-          build_report(source: "native_ucp", browse: false, checkout: false,
+          build_report(source: "native_ucp", outcome: "agent_profile_missing", browse: false, checkout: false,
                        message: "Set PORTAGE_AGENT_PROFILE to a URL that describes this agent — " \
                                 "#{@uri} verifies it before answering any UCP call.")
         when Portage::Ucp::Client::UnsupportedWireShapeError
-          build_report(source: "native_ucp", browse: true, checkout: false,
+          build_report(source: "native_ucp", outcome: "unsupported_wire_shape", browse: true, checkout: false,
                        message: "Can't complete checkout on #{@uri} yet: #{error.message}")
         when Portage::Ucp::Client::ServerError
           server_error_report(error)
@@ -125,7 +125,7 @@ module Portage
           # explanation — a common cause is PORTAGE_AGENT_PROFILE not
           # pointing at a real, JSON agent-profile document the store's UCP
           # endpoint accepts.
-          build_report(source: "native_ucp", browse: false, checkout: false,
+          build_report(source: "native_ucp", outcome: "request_rejected", browse: false, checkout: false,
                        message: "#{@uri} rejected the request (#{error.message}) — if PORTAGE_AGENT_PROFILE " \
                                 "is set, check it points at a real agent-profile document the store accepts.")
         end
@@ -148,7 +148,7 @@ module Portage
       def server_error_report(error)
         url = error.continue_url
         build_report(
-          source: "native_ucp", browse: true, checkout: false, checkout_url: url,
+          source: "native_ucp", outcome: "store_refused", browse: true, checkout: false, checkout_url: url,
           message: "#{@uri} couldn't complete this: #{error.summary}#{url && " — finish it at #{url}"}"
         )
       end
@@ -156,7 +156,7 @@ module Portage
       def catalog_only(session)
         products = safe_search(session)
         report = build_report(
-          source: "native_ucp", browse: true, checkout: false, products: products,
+          source: "native_ucp", outcome: "browse_only", browse: true, checkout: false, products: products,
           message: "I can browse this store but can't check out via UCP yet."
         )
         merge_adapter_checkout_fallback(report)
@@ -209,8 +209,8 @@ module Portage
           # problem (e.g. malformed WOOCOMMERCE_BILLING_ADDRESS JSON) — same
           # "actionable, don't hide it behind dead_end" posture as
           # #run_adapter_flow's own rescue, just one step earlier.
-          return build_report(source: "adapter:#{platform.name}", browse: false, checkout: false,
-                              message: "#{platform.name} adapter misconfigured: #{e.message}")
+          return build_report(source: "adapter:#{platform.name}", outcome: "adapter_misconfigured", browse: false,
+                              checkout: false, message: "#{platform.name} adapter misconfigured: #{e.message}")
         end
 
         run_adapter_flow(adapter, platform)
@@ -234,7 +234,7 @@ module Portage
         # param, an out-of-stock line, a bad gateway id) is visible. Always
         # paired with a next action, since "here's an error" alone leaves the
         # caller to guess whether to retry, reconfigure, or give up.
-        build_report(source: "adapter:#{platform.name}", browse: false, checkout: false,
+        build_report(source: "adapter:#{platform.name}", outcome: "adapter_error", browse: false, checkout: false,
                      message: "#{platform.name} adapter error: #{e.message} — visit #{@uri} yourself, " \
                               "or fix the adapter's env/config and retry.")
       end
@@ -262,7 +262,7 @@ module Portage
         products = CatalogProducts.from(adapter.search_catalog(query: @query, limit: 10))
         checkout = redirect_checkout(adapter, products)
         build_report(
-          source: "adapter:#{platform.name}", browse: true, checkout: !!checkout,
+          source: "adapter:#{platform.name}", outcome: "browse_only", browse: true, checkout: !!checkout,
           products: products, checkout_url: checkout && checkout.links.first&.url,
           message: "Found it on #{platform.name}, but checkout there isn't a live UCP transaction — " \
                    "#{checkout ? 'follow the link to buy it yourself.' : 'no checkout path at all.'}"
@@ -291,7 +291,7 @@ module Portage
         products = safe_search(session)
         product = select_product(products)
         unless product
-          return build_report(source: source, browse: true, checkout: true, products: products,
+          return build_report(source: source, outcome: "no_match", browse: true, checkout: true, products: products,
                               message: no_match_message)
         end
 
@@ -338,14 +338,6 @@ module Portage
 
       def abort_on_mismatch?
         %w[1 true yes].include?(ENV.fetch("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH", "").downcase)
-      end
-
-      def mismatch_report(source, products, checkout, warnings)
-        url = checkout_url_of(checkout)
-        handoff = hand_off(checkout, reason: "checkout_mismatch", source: source)
-        message = "Aborted before purchase — checkout didn't match the request: #{warnings.join(' ')}"
-        checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
-                                                    handoff: handoff, message: message)
       end
 
       # Submits PORTAGE_SHIP_* (see Portage::Cli::ShippingProfile) as the
@@ -476,8 +468,8 @@ module Portage
       # from #reconcile_checkout escalates only under
       # PORTAGE_ABORT_ON_CHECKOUT_MISMATCH. By default the warnings are
       # surfaced on the report, and the purchase is not stopped for them.
-      # The verdict lands on the report's `decisions:` so an agent loop can
-      # branch on it rather than on the message text.
+      # The verdict lands on the report's `decisions:`, and the report's
+      # `outcome:` names which gate (if any) stopped the purchase.
       def decide_escalation(checkout, warnings)
         verdict = Decisions.escalation(checkout_status: checkout["status"],
                                        warnings: abort_on_mismatch? ? warnings : [])
@@ -486,9 +478,11 @@ module Portage
       end
 
       def escalated_report(source, products, checkout, warnings, verdict)
-        return mismatch_report(source, products, checkout, warnings) if verdict[:reason] == :mismatch
+        return escalation_report(source, products, checkout, warnings) unless verdict[:reason] == :mismatch
 
-        escalation_report(source, products, checkout, warnings)
+        handoff_report(source, products, checkout, warnings,
+                       outcome: "checkout_mismatch",
+                       message: "Aborted before purchase — checkout didn't match the request: #{warnings.join(' ')}")
       end
 
       # One guard per gate, in the order they run: a payment token, the
@@ -509,7 +503,7 @@ module Portage
         # successful purchase.
         return escalation_report(source, products, completed, warnings) if decide_escalation(completed, [])[:escalate]
 
-        checkout_report(source, products, completed, warnings: warnings, message: "Purchased.")
+        checkout_report(source, products, completed, outcome: "purchased", warnings: warnings, message: "Purchased.")
       rescue Portage::Ucp::Client::PaymentPermissionError
         permission_denied_report(source, products, checkout, warnings)
       end
@@ -523,7 +517,8 @@ module Portage
         confidence = decide_confidence(checkout, warnings)
         return nil if confidence.nil? || confidence[:proceed]
 
-        low_confidence_report(source, products, checkout, warnings, confidence)
+        handoff_report(source, products, checkout, warnings, outcome: "low_confidence",
+                                                             message: low_confidence_message(confidence))
       end
 
       # The buyer's own spend policy (`portage policy set`), checked through
@@ -568,19 +563,10 @@ module Portage
       end
 
       def policy_blocked_report(source, products, checkout, warnings, verdict)
-        url = checkout_url_of(checkout)
-        handoff = hand_off(checkout, reason: "policy_blocked", source: source)
-        message = "Blocked by your spend policy (#{verdict[:reason]}) — not completed. Review it with " \
-                  "`portage policy show`, or visit the link to finish this checkout yourself."
-        checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
-                                                    handoff: handoff, message: message)
-      end
-
-      def low_confidence_report(source, products, checkout, warnings, verdict)
-        url = checkout_url_of(checkout)
-        handoff = hand_off(checkout, reason: "low_confidence", source: source)
-        checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
-                                                    handoff: handoff, message: low_confidence_message(verdict))
+        handoff_report(source, products, checkout, warnings,
+                       outcome: "policy_blocked",
+                       message: "Blocked by your spend policy (#{verdict[:reason]}) — not completed. Review it " \
+                                "with `portage policy show`, or visit the link to finish this checkout yourself.")
       end
 
       def low_confidence_message(verdict)
@@ -595,13 +581,11 @@ module Portage
       end
 
       def no_payment_token_report(source, products, checkout, warnings)
-        url = checkout_url_of(checkout)
-        handoff = hand_off(checkout, reason: "no_payment_token", source: source)
-        message = "No --payment-token given, and no default payment method on file — run " \
-                  "`portage payment enroll` or pass --payment-token, or visit the link to " \
-                  "finish this checkout yourself."
-        checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
-                                                    handoff: handoff, message: message)
+        handoff_report(source, products, checkout, warnings,
+                       outcome: "no_payment_token",
+                       message: "No --payment-token given, and no default payment method on file — run " \
+                                "`portage payment enroll` or pass --payment-token, or visit the link to " \
+                                "finish this checkout yourself.")
       end
 
       # Same posture as #escalation_report: a completion this agent isn't
@@ -609,13 +593,28 @@ module Portage
       # shopper finishes on the merchant's own continue_url/checkout link,
       # same hand-off requires_escalation already uses (see
       # Client::PaymentPermissionError).
-      def permission_denied_report(source, products, checkout, warnings = [])
-        url = checkout_url_of(checkout)
-        handoff = hand_off(checkout, reason: "permission_denied", source: source)
-        message = "This agent isn't yet granted permission to complete checkout on this store — " \
-                  "visit the link to finish it yourself."
-        checkout_report(source, products, checkout, warnings: warnings, checkout_url: url,
-                                                    handoff: handoff, message: message)
+      def permission_denied_report(source, products, checkout, warnings)
+        handoff_report(source, products, checkout, warnings,
+                       outcome: "permission_denied",
+                       message: "This agent isn't yet granted permission to complete checkout on this store — " \
+                                "visit the link to finish it yourself.")
+      end
+
+      def escalation_report(source, products, checkout, warnings)
+        handoff_report(source, products, checkout, warnings,
+                       outcome: "requires_escalation",
+                       message: "Checkout requires buyer escalation — visit the link to complete it.")
+      end
+
+      # Every checkout this process can't finish itself — a gate held it, or
+      # the store escalated or refused permission — hands the shopper its URL
+      # (and fires the auto-open/webhook side effects) rather than leaving
+      # them at a dead end. `outcome` doubles as the webhook's `reason`, so a
+      # relay and an agent loop branch on the same value.
+      def handoff_report(source, products, checkout, warnings, outcome:, message:)
+        handoff = hand_off(checkout, reason: outcome, source: source, message: message, warnings: warnings)
+        checkout_report(source, products, checkout, outcome: outcome, warnings: warnings, message: message,
+                                                    checkout_url: checkout_url_of(checkout), handoff: handoff)
       end
 
       # Never fires on --dry-run (a dry run creates a real checkout but never
@@ -625,13 +624,18 @@ module Portage
       # out of #call (see CheckoutHandoff, Notifier), so the checkout itself
       # — created, or correctly escalated — stays the outcome of record
       # either way.
-      def hand_off(checkout, reason:, source:)
+      #
+      # The webhook body carries the report's own `message`, plus the store
+      # and the shopper's query, so a Slack/Zapier relay can post it as-is
+      # without a lookup back into this process.
+      def hand_off(checkout, reason:, source:, message:, warnings:)
         url = checkout_url_of(checkout)
         return nil if @dry_run || url.nil?
 
         opened = CheckoutHandoff.new(auto_open: @auto_open).call(url)
-        error = notifier.call(event: "checkout_handoff", reason: reason, checkout_url: url,
-                              checkout_id: checkout["id"], source: source, totals: checkout["totals"])
+        error = notifier.call(event: "checkout_handoff", reason: reason, message: message, store: @uri.to_s,
+                              query: @query, checkout_url: url, checkout_id: checkout["id"], source: source,
+                              totals: checkout["totals"], warnings: warnings)
         { url: url, opened: opened, notified: notifier.enabled? && error.nil?, notify_error: error }
       end
 
@@ -639,10 +643,6 @@ module Portage
         @notifier ||= Notifier.new(webhook_url: @notify_webhook)
       end
 
-      # Every checkout that can't be finished by this process — no
-      # permission, no token, or an explicit requires_escalation — hands the
-      # shopper a URL rather than leaving them at a dead end.
-      #
       # `continue_url` first, because on a real store it is the only field
       # that ever holds the checkout. This used to be
       # `links.find { |l| l["url"] }` on the reasoning that not every
@@ -674,34 +674,35 @@ module Portage
         @yes
       end
 
-      def escalation_report(source, products, checkout, warnings = [])
-        url = checkout_url_of(checkout)
-        handoff = hand_off(checkout, reason: "requires_escalation", source: source)
-        message = "Checkout requires buyer escalation — visit the link to complete it."
-        checkout_report(
-          source, products, checkout, warnings: warnings, checkout_url: url, handoff: handoff, message: message
-        )
-      end
-
       def dry_run_report(source, products, checkout, warnings = [])
-        checkout_report(source, products, checkout, warnings: warnings,
+        checkout_report(source, products, checkout, outcome: "dry_run", warnings: warnings,
                                                     message: "Dry run — checkout created but not completed.")
       end
 
       def confirmation_needed_report(source, products, checkout, warnings = [])
-        checkout_report(source, products, checkout, warnings: warnings,
+        checkout_report(source, products, checkout, outcome: "needs_confirmation", warnings: warnings,
                                                     message: "Checkout ready — pass --yes to confirm the purchase.")
       end
 
       # Flattens the parts of a Checkout wire hash a CLI caller actually
       # wants to see (id/status/totals) onto the report, rather than nesting
       # the raw hash under a key that'd collide with the boolean `checkout:`
-      # field the output struct already reserves (§ output shape).
-      def checkout_report(source, products, checkout, message:, checkout_url: nil, handoff: nil, warnings: [])
-        build_report(source: source, browse: true, checkout: true, products: products, message: message,
-                     checkout_url: checkout_url, checkout_id: checkout["id"], checkout_status: checkout["status"],
-                     totals: checkout["totals"], handoff: handoff, warnings: warnings,
-                     decisions: @decisions.dup)
+      # field the output struct already reserves (§ output shape). `items:`
+      # is what the checkout actually holds; `products:` is only what the
+      # search returned, most of which was never bought.
+      def checkout_report(source, products, checkout, outcome:, message:, checkout_url: nil, handoff: nil,
+                          warnings: [])
+        build_report(source: source, outcome: outcome, browse: true, checkout: true, products: products,
+                     message: message, checkout_url: checkout_url, checkout_id: checkout["id"],
+                     checkout_status: checkout["status"], currency: checkout["currency"],
+                     totals: checkout["totals"], items: checkout_items(checkout), handoff: handoff,
+                     warnings: warnings, decisions: @decisions.dup)
+      end
+
+      def checkout_items(checkout)
+        Array(checkout["line_items"]).map do |line|
+          { id: line.dig("item", "id"), title: line.dig("item", "title"), quantity: line["quantity"] }
+        end
       end
 
       def safe_search(session)
@@ -721,8 +722,8 @@ module Portage
           # all, reporting `merchandise_out_of_stock` for products its own
           # search just returned. That failure mode looks like a store bug
           # from the report alone — this names the likely cause up front.
-          warn "portage: no PORTAGE_SHIP_COUNTRY/PORTAGE_CURRENCY/etc set — some stores drop line items " \
-               "or mis-price without a buyer context (see Portage::Cli::BuyerContext)."
+          warn "portage: no buyer context set (#{BuyerContext::ENV_VARS.values.join(', ')}) — some stores " \
+               "drop line items or misprice without one. Set at least PORTAGE_SHIP_COUNTRY."
         end
       end
 
@@ -758,7 +759,7 @@ module Portage
       end
 
       def dead_end
-        build_report(source: "none", browse: false, checkout: false,
+        build_report(source: "none", outcome: "dead_end", browse: false, checkout: false,
                      message: "No automated path — visit #{@uri} yourself.")
       end
 

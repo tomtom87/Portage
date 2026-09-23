@@ -73,12 +73,17 @@ module Portage
 
       json = options.delete(:json)
       report = Find.new(**options).call
-      History.new.record_search(query: report[:query], offer_count: report[:offers].length,
-                                message: report[:message])
+      record_find(report)
       puts json ? JSON.pretty_generate(report) : format_find(report)
       report[:offers].any? ? 0 : 1
     end
     private_class_method :run_find
+
+    def self.record_find(report)
+      History.new.record_search(query: report[:query], offer_count: report[:offers].length,
+                                message: report[:message])
+    end
+    private_class_method :record_find
 
     def self.parse_find_options(argv)
       opts = {}
@@ -172,6 +177,7 @@ module Portage
     # interactive pick has to name it. Piped/CI runs list the offers and stop.
     def self.buy_from_search(parsed)
       report = Find.new(**parsed[:find]).call
+      record_find(report)
       offer = pick_offer(report, parsed[:json])
       return report[:offers].any? ? 0 : 1 unless offer
 
@@ -203,7 +209,7 @@ module Portage
 
       options[:product_id] ||= product_id
       report = Buy.new(**options).call
-      record_purchase(report, options[:query]) if report[:checkout]
+      record_buy(report, options[:query])
       puts parsed[:json] ? JSON.pretty_generate(report) : format_report(report)
       report[:checkout] || report[:browse] ? 0 : 1
     end
@@ -220,16 +226,30 @@ module Portage
     end
     private_class_method :confidence_check
 
-    # Only checkout attempts land here — a browse-only report never reached a
-    # checkout, so it belongs to search history, not purchase history.
-    def self.record_purchase(report, query)
-      History.new.record_purchase(
-        url: report[:url], query: query, checkout: report[:checkout],
-        checkout_status: report[:checkout_status], message: report[:message],
-        products: report[:products].map { |p| product_line(p) }
+    # A buy that created a checkout is a purchase entry, whatever its
+    # outcome. One that never got that far (no match, browse-only, dead end,
+    # a store or adapter error) is a search at that store, so "what did I
+    # already buy" never lists a checkout that doesn't exist.
+    def self.record_buy(report, query)
+      history = History.new
+      unless report[:checkout_id]
+        return history.record_search(query: query, url: report[:url], offer_count: report[:products].length,
+                                     message: report[:message])
+      end
+
+      history.record_purchase(
+        url: report[:url], query: query, outcome: report[:outcome], source: report[:source],
+        checkout_id: report[:checkout_id], checkout_status: report[:checkout_status],
+        checkout_url: report[:checkout_url], total: report_total(report), currency: report[:currency],
+        items: Array(report[:items]).map { |item| item.transform_keys(&:to_s) }, message: report[:message]
       )
     end
-    private_class_method :record_purchase
+    private_class_method :record_buy
+
+    def self.report_total(report)
+      Array(report[:totals]).find { |total| total["type"] == "total" }&.fetch("amount", nil)
+    end
+    private_class_method :report_total
 
     def self.parse_buy_options(argv)
       url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
@@ -336,13 +356,30 @@ module Portage
     end
     private_class_method :format_history
 
+    # `outcome` first, since it's what the entry is for. Entries recorded
+    # before `outcome` existed fall back to their checkout_status/message.
     def self.history_purchase_line(entry)
-      "#{Time.at(entry['at'])} — #{entry['url']} (#{entry['query']}) — #{entry['checkout_status'] || entry['message']}"
+      items = Array(entry["items"]).map { |item| item_label(item) }.join(", ")
+      [
+        "#{Time.at(entry['at'])} — #{entry['outcome'] || entry['checkout_status'] || entry['message']}",
+        "#{entry['url']} (#{entry['query']})", (items unless items.empty?),
+        (format_amount(entry["total"], entry["currency"]) if entry["total"]),
+        (entry["checkout_url"] unless entry["outcome"] == "purchased")
+      ].compact.join(" — ")
     end
     private_class_method :history_purchase_line
 
+    # Takes a report's symbol-keyed item or a history entry's string-keyed
+    # one.
+    def self.item_label(item)
+      item = item.transform_keys(&:to_s)
+      "#{item['title'] || item['id']} x#{item['quantity']}"
+    end
+    private_class_method :item_label
+
     def self.history_search_line(entry)
-      "#{Time.at(entry['at'])} — \"#{entry['query']}\" — #{entry['offer_count']} offer(s)"
+      where = entry["url"] ? " at #{entry['url']}" : ""
+      "#{Time.at(entry['at'])} — \"#{entry['query']}\"#{where} — #{entry['offer_count']} result(s)"
     end
     private_class_method :history_search_line
 
@@ -632,16 +669,28 @@ module Portage
 
     # --- output ---
 
+    # The `[outcome]` tag leads so a caller reading text, not --json, has the
+    # same value to branch on that the JSON report carries.
     def self.format_report(report)
-      lines = ["#{report[:message]} (source: #{report[:source]})"]
+      lines = ["[#{report[:outcome]}] #{report[:message]} (source: #{report[:source]})"]
       report[:products].each { |p| lines << "  - #{product_line(p)}" }
-      Array(report[:warnings]).each { |w| lines << "  warning: #{w}" }
+      lines.concat(format_checkout(report))
       lines << "  checkout: #{report[:checkout_url]}" if report[:checkout_url]
       lines.concat(format_handoff(report[:handoff])) if report[:handoff]
       lines.concat(format_decisions(report[:decisions])) if report[:decisions]&.any?
       lines.join("\n")
     end
     private_class_method :format_report
+
+    # What the checkout holds, as opposed to the search results above it,
+    # and where it differs from the request.
+    def self.format_checkout(report)
+      lines = Array(report[:items]).map { |item| "  in checkout: #{item_label(item)}" }
+      total = report_total(report)
+      lines << "  total: #{format_amount(total, report[:currency])}" if total
+      lines + Array(report[:warnings]).map { |w| "  warning: #{w}" }
+    end
+    private_class_method :format_checkout
 
     def self.format_decisions(decisions)
       decisions.map do |name, verdict|
@@ -693,8 +742,13 @@ module Portage
     def self.format_price(offer)
       return "price n/a" unless offer[:amount]
 
-      "#{format('%.2f', offer[:amount] / 100.0)}#{" #{offer[:currency]}" if offer[:currency]}"
+      format_amount(offer[:amount], offer[:currency])
     end
     private_class_method :format_price
+
+    def self.format_amount(amount, currency)
+      "#{format('%.2f', amount / 100.0)}#{" #{currency}" if currency}"
+    end
+    private_class_method :format_amount
   end
 end

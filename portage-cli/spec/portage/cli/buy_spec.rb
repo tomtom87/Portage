@@ -176,6 +176,7 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:source]).to eq("native_ucp")
       expect(report[:checkout]).to be true
+      expect(report[:outcome]).to eq("needs_confirmation")
       expect(report[:message]).to include("--yes")
       expect(session).not_to have_received(:complete_checkout)
     end
@@ -187,6 +188,7 @@ RSpec.describe Portage::Cli::Buy do
       report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
 
       expect(report[:message]).to eq("Purchased.")
+      expect(report[:outcome]).to eq("purchased")
       expect(report[:checkout_status]).to eq("completed")
       expect(session).to have_received(:complete_checkout).with(checkout_id: "chk_1", payment_token: "tok_1")
     end
@@ -215,6 +217,7 @@ RSpec.describe Portage::Cli::Buy do
       report = described_class.new(url: "shop.example", query: "cold", yes: true, dry_run: true).call
 
       expect(report[:message]).to include("Dry run")
+      expect(report[:outcome]).to eq("dry_run")
       expect(session).not_to have_received(:complete_checkout)
     end
 
@@ -228,6 +231,9 @@ RSpec.describe Portage::Cli::Buy do
       report = described_class.new(url: "shop.example", query: "cold", yes: true).call
 
       expect(report[:message]).to include("--payment-token")
+      # Nothing in `decisions` held this one, so only `outcome` tells an
+      # agent it isn't a purchase.
+      expect(report[:outcome]).to eq("no_payment_token")
       expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
       expect(session).not_to have_received(:complete_checkout)
     end
@@ -253,6 +259,7 @@ RSpec.describe Portage::Cli::Buy do
       report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
 
       expect(report[:message]).to include("requires buyer escalation")
+      expect(report[:outcome]).to eq("requires_escalation")
       expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
       expect(report[:handoff]).to eq(url: "https://shop.example/checkout/chk_1", opened: false,
                                      notified: false, notify_error: nil)
@@ -290,6 +297,7 @@ RSpec.describe Portage::Cli::Buy do
       report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
 
       expect(report[:message]).to include("isn't yet granted permission")
+      expect(report[:outcome]).to eq("permission_denied")
       expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
       expect(report[:checkout_status]).to eq("ready_for_complete")
       expect(report[:handoff]).to eq(url: "https://shop.example/checkout/chk_1", opened: false,
@@ -315,8 +323,10 @@ RSpec.describe Portage::Cli::Buy do
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
       stub = stub_request(:post, "https://hooks.example/x")
              .with(body: hash_including("event" => "checkout_handoff", "reason" => "no_payment_token",
-                                        "checkout_url" => "https://shop.example/checkout/chk_1"))
-             .to_return(status: 200, body: "{}")
+                                        "checkout_url" => "https://shop.example/checkout/chk_1",
+                                        "store" => "https://shop.example", "query" => "cold",
+                                        "message" => a_string_including("--payment-token")))
+             .to_return(status: 200, body: "ok") # Slack's plain-text reply
 
       report = described_class.new(url: "shop.example", query: "cold", yes: true,
                                    notify_webhook: "https://hooks.example/x").call

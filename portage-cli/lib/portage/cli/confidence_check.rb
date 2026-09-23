@@ -70,8 +70,23 @@ module Portage
           instructions: INSTRUCTIONS, threshold: @threshold
         )
         verdict.to_h.merge(backend: @backend_name)
-      rescue Portage::Ucp::Decision::Error => e
+      rescue StandardError => e
+        # Any failure, not only Decision::Error: this runs after a real
+        # checkout exists, so an escaped exception would drop the report,
+        # the hand-off and the history entry along with the purchase.
         { proceed: false, confidence: nil, threshold: @threshold, backend: @backend_name, error: e.message }
+      end
+
+      # What `portage doctor` reports: why the named backend would hold every
+      # `--yes` purchase, before one is attempted.
+      # @return [String, nil] nil when disabled or ready to answer.
+      def configuration_problem
+        return nil unless enabled?
+        return not_installed_verdict[:error] unless Decisions.available?
+
+        resolve_backend.configuration_problem
+      rescue Portage::Ucp::Decision::Error => e
+        e.message
       end
 
       private

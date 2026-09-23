@@ -155,10 +155,17 @@ a model's confidence (`D::ConfidenceGate.via_backend`, with
 "ask the human", never as "proceed".
 
 If you shell out to `portage buy --json` instead, it makes these same calls
-for you and reports the verdicts under `decisions:`. Branch on
-`decisions.escalation.escalate`, `decisions.policy.allowed`, and
-`decisions.confidence.proceed`, not on the `message` text. Any of them
-stopping the purchase comes with a `checkout_url` to hand the human.
+for you. Branch on the report's `outcome`, not on the `message` text:
+`purchased` is the only outcome that bought anything. `needs_confirmation`
+and `dry_run` stopped before completing on purpose. The hand-off outcomes
+(`requires_escalation`, `policy_blocked`, `low_confidence`,
+`no_payment_token`, `permission_denied`, `checkout_mismatch`) each come
+with a `checkout_url` to hand the human. The gate verdicts behind them are
+under `decisions:` (`policy.reason`, `confidence.error`, ...). Don't infer
+success from `decisions:` alone: a missing payment token or a
+permission-denied store holds a purchase without any gate saying no.
+`items:` is what the checkout holds, and `products:` is only the search
+results. The full list of outcomes is in `portage-cli`'s README.
 
 ## Troubleshooting a real, external UCP store
 
