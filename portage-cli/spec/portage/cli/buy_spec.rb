@@ -593,6 +593,79 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(check).not_to have_received(:call)
     end
+
+    # PolicyGuard's rolling cap and velocity limit count the transaction
+    # log, which only the own-store Dispatcher used to write. A remote
+    # native-UCP purchase now lands there too, so those limits see it.
+    describe "remote purchases in the transaction log" do
+      # spec_helper points every default-built TransactionLog at the same
+      # per-example file, so this reads what Buy wrote.
+      let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new }
+
+      it "records a remote purchase as complete, under the merchant host" do
+        buy(checkout: priced_checkout)
+
+        expect(transaction_log.all).to contain_exactly(
+          include("shop" => "shop.example", "checkout_id" => "chk_1", "status" => "complete", "amount" => 5000,
+                  "currency" => "USD", "payment_token_ref" => Portage::Ucp::Support::TokenRef.for("tok_1"))
+        )
+      end
+
+      it "blocks a second remote buy that would take the rolling spend over the cap" do
+        policy("rolling_cap" => { "amount" => 8000, "currency" => "USD", "window_seconds" => 3600 })
+
+        first, = buy(checkout: priced_checkout)
+        second, session = buy(checkout: priced_checkout.merge("id" => "chk_2"))
+
+        expect(first[:outcome]).to eq("purchased")
+        expect(second[:outcome]).to eq("policy_blocked")
+        expect(second[:decisions][:policy]).to eq(allowed: false, reason: "rolling_spend_cap_exceeded")
+        expect(session).not_to have_received(:complete_checkout)
+      end
+
+      it "blocks a second remote buy past the velocity limit" do
+        policy("velocity" => { "count" => 1, "window_seconds" => 3600 })
+
+        buy(checkout: priced_checkout)
+        second, = buy(checkout: priced_checkout.merge("id" => "chk_2"))
+
+        expect(second[:decisions][:policy]).to eq(allowed: false, reason: "velocity_exceeded")
+      end
+
+      it "settles a completion the store escalated as failed, which neither limit counts" do
+        buy(checkout: priced_checkout, completed: completed_checkout.merge("status" => "requires_escalation"))
+
+        expect(transaction_log.all.map { |record| record["status"] }).to eq(["failed"])
+      end
+
+      it "settles a completion that raised as failed" do
+        session = fake_session(advertises_checkout: true, checkout: priced_checkout)
+        allow(session).to receive(:complete_checkout).and_raise(Portage::Ucp::Client::PaymentPermissionError, "no")
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+
+        expect(report[:outcome]).to eq("permission_denied")
+        expect(transaction_log.all.map { |record| record["status"] }).to eq(["failed"])
+      end
+
+      it "records nothing for a purchase a gate held" do
+        policy("merchant_allowlist" => ["other.example"])
+        buy(checkout: priced_checkout)
+
+        expect(transaction_log.all).to be_empty
+      end
+
+      it "still reports the purchase, with a warning, when the log can't be written afterwards" do
+        log = Portage::Ucp::Support::TransactionLog.new
+        allow(log).to receive(:complete).and_raise(Errno::EACCES, "transactions.json")
+
+        report, = buy(checkout: priced_checkout, transaction_log: log)
+
+        expect(report[:outcome]).to eq("purchased")
+        expect(report[:warnings]).to include(a_string_including("couldn't be recorded in the transaction log"))
+      end
+    end
   end
 
   describe "native UCP, catalog only" do
@@ -684,6 +757,30 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:source]).to eq("adapter:Shopify")
       expect(report[:checkout]).to be true
+    end
+
+    # The loopback session's in-process Dispatcher records the purchase
+    # itself, so Buy recording it too would count it twice against the
+    # rolling cap and velocity limit.
+    it "leaves recording an own-store purchase to Dispatcher" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
+      stub_request(:get, "https://shop.example/")
+        .to_return(status: 200, body: '<script src="https://cdn.shopify.com/x.js"></script>')
+      platform = Portage::Ucp::Resolver::PLATFORMS.find { |p| p.name == "Shopify" }
+      allow(Portage::Ucp::Resolver).to receive_messages(detect_platform: platform,
+                                                        env_for: { shop_domain: "shop.example" }, missing_env: [])
+      adapter = double("adapter")
+      allow(Portage::Ucp::Resolver).to receive(:build_adapter).and_return(adapter)
+      allow(Portage::Ucp::Capabilities::CART).to receive(:advertised_for?).with(adapter).and_return(true)
+      allow(Portage::Ucp::Capabilities::CHECKOUT).to receive(:advertised_for?).with(adapter).and_return(true)
+      allow(Portage::Ucp::Capabilities::FULFILLMENT).to receive(:advertised_for?).with(adapter).and_return(false)
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout, completed: completed_checkout)
+      allow(Portage::Ucp::Client).to receive(:for_adapter).with(adapter, anything).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+
+      expect(report[:outcome]).to eq("purchased")
+      expect(Portage::Ucp::Support::TransactionLog.new.all).to be_empty
     end
 
     it "falls through to the generic dead end when the adapter gem isn't installed" do

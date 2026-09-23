@@ -1,5 +1,6 @@
 require "portage/cli"
 require "portage/ucp"
+require "tmpdir"
 require "webmock/rspec"
 
 WebMock.disable_net_connect!
@@ -8,6 +9,24 @@ RSpec.configure do |config|
   config.expect_with(:rspec) { |c| c.syntax = :expect }
   config.disable_monkey_patching!
   config.order = :random
+
+  # `portage buy` records remote purchases in the transaction log, and reads
+  # it for the rolling cap and velocity limit. A TransactionLog built with no
+  # explicit store or path (Buy's default, PolicyGuard's, Dispatcher's) lands
+  # in a per-example tmpdir, never the developer's ~/.portage/transactions.json.
+  config.around do |example|
+    Dir.mktmpdir do |dir|
+      @transaction_log_path = File.join(dir, "transactions.json")
+      example.run
+    end
+  end
+
+  config.before do
+    allow(Portage::Ucp::Support::TransactionLog).to receive(:new).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @transaction_log_path }.merge(kwargs) unless kwargs.key?(:store)
+      original.call(**kwargs)
+    end
+  end
 end
 
 # Sets the given env vars for the duration of the block, restoring whatever

@@ -329,8 +329,11 @@ otherwise a string naming why it stopped it.
   `token_scope_amount`, `currency_mismatch`, or `total_unknown`, below).
   It applies to remote native-UCP stores too. Before this check, only the
   own-store adapter flow's in-process `Dispatcher` enforced the policy.
-  Rolling caps and velocity limits count only what the transaction log
-  holds, and only own-store purchases write to that log.
+  Rolling caps and velocity limits count the completed purchases at that
+  merchant in `~/.portage/transactions.json`. `Dispatcher` records
+  own-store purchases there, and `portage buy` records remote ones: reserved
+  before the store is asked to complete, then settled as `complete` only
+  when the store answers that it's purchased.
 - **confidence** — `ConfidenceGate`, off unless `--decision-backend` or
   `PORTAGE_DECISION_BACKEND` names a backend. Right before a `--yes`
   completion it asks the backend whether the checkout matches the request

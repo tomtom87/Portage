@@ -134,12 +134,13 @@ shape.
   `Confirmer` is unchanged. A "confirm only when confidence is low" mode
   stays out of scope, because it would turn the gate into an auto-approve
   path (`docs/plans/agentic-payments.md` open decision 3).
-- `PolicyCheck` in `portage buy` closes a real gap: `Dispatcher`'s
+- The policy check in `portage buy` closes a real gap: `Dispatcher`'s
   `PolicyGuard` runs only in-process, so a remote native-UCP store never
-  saw the buyer's policy at all. The rolling cap and velocity limit still
-  read only the transaction log, which only `Dispatcher` writes. Recording
-  remote purchases there, so those two limits see remote spend too, is
-  still open.
+  saw the buyer's policy at all. The rolling cap and velocity limit read
+  the transaction log. `Dispatcher` writes it for own-store purchases, and
+  `portage buy` now records remote completions there too (shop = merchant
+  host), so both limits see remote spend. The loopback path is left to
+  `Dispatcher`, so nothing is counted twice.
 - ~~Risk signals~~ **Mechanism resolved, computation still open:**
   `PolicyCheck#call`'s `risk_signals:` now denies on any truthy named
   signal (`{merchant_too_new: true}` → `reason: :risk_signal_triggered`).
