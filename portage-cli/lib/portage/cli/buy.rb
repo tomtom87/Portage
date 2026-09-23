@@ -44,8 +44,15 @@ module Portage
       #   gate in front of an unattended completion. nil (the default) builds
       #   one from PORTAGE_DECISION_BACKEND / PORTAGE_MIN_CONFIDENCE, which is
       #   a no-op when no backend is named.
+      # @param transaction_log [Portage::Ucp::Support::TransactionLog, nil]
+      #   where a remote purchase is recorded, and what the spend policy's
+      #   rolling cap and velocity limit count. nil (the default) is the
+      #   real ~/.portage/transactions.json, the file Dispatcher writes for
+      #   own-store purchases.
+      # rubocop:disable Metrics/ParameterLists -- all keywords; one per flag, plus two injectable collaborators
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
-                     auto_open: nil, notify_webhook: nil, confidence_check: nil)
+                     auto_open: nil, notify_webhook: nil, confidence_check: nil, transaction_log: nil)
+        # rubocop:enable Metrics/ParameterLists
         raw = url.to_s.strip
         raw = "https://#{raw}" unless raw =~ %r{\Ahttps?://}i
         @uri = URI.parse(raw)
@@ -58,6 +65,7 @@ module Portage
         @auto_open = auto_open
         @notify_webhook = notify_webhook
         @confidence_check = confidence_check
+        @transaction_log = transaction_log
         @decisions = {}
       end
 
@@ -496,7 +504,9 @@ module Portage
         held = held_report(source, products, checkout, warnings)
         return held if held
 
-        completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: @payment_token)
+        completed = recording_transaction(source, checkout) do
+          session.complete_checkout(checkout_id: checkout["id"], payment_token: @payment_token)
+        end
         # `complete_checkout` can hand back `requires_escalation` too (e.g.
         # Shopify's cartSubmitForCompletion result carrying `errors`) — this
         # used to report "Purchased." unconditionally regardless of
@@ -504,9 +514,55 @@ module Portage
         # successful purchase.
         return escalation_report(source, products, completed, warnings) if decide_escalation(completed, [])[:escalate]
 
-        checkout_report(source, products, completed, outcome: "purchased", warnings: warnings, message: "Purchased.")
+        checkout_report(source, products, completed, outcome: "purchased", message: "Purchased.",
+                                                     warnings: warnings + Array(@unrecorded_warning))
       rescue Portage::Ucp::Client::PaymentPermissionError
         permission_denied_report(source, products, checkout, warnings)
+      end
+
+      # PolicyGuard's rolling cap and velocity limit count the completed
+      # records in the transaction log. On the own-store loopback path the
+      # in-process Dispatcher writes those itself, so only a remote
+      # completion is recorded here. Recording both would count a loopback
+      # purchase twice.
+      #
+      # Same shape as Dispatcher's record: reserved `pending` before the
+      # store is asked to complete, so a crash mid-charge leaves evidence,
+      # then settled. Only a completion that came back purchased settles as
+      # `complete`, the one status those limits count.
+      def recording_transaction(source, checkout)
+        return yield unless source == "native_ucp"
+
+        key = "portage-buy:#{@uri.host}:#{checkout['id']}"
+        transaction_log.reserve(idempotency_key: key, checkout_id: checkout["id"], shop: @uri.host,
+                                payment_token_ref: token_ref, amount: checkout_total(checkout),
+                                currency: checkout["currency"])
+        begin
+          completed = yield
+        rescue StandardError
+          transaction_log.complete(idempotency_key: key, status: "failed", policy_decision: @decisions[:policy])
+          raise
+        end
+        settle_transaction(key, completed)
+        completed
+      end
+
+      # Money has moved by now. TransactionLog raises on a failed write so
+      # spend-cap state never drifts silently, but an escaped exception here
+      # would drop the purchase's report and history entry too, so the
+      # failure is put on the report as a warning instead.
+      def settle_transaction(key, completed)
+        purchased = Portage::Ucp::Support::Escalation.reason(checkout_status: completed["status"]).nil?
+        transaction_log.complete(idempotency_key: key, status: purchased ? "complete" : "failed",
+                                 amount: checkout_total(completed), currency: completed["currency"],
+                                 policy_decision: @decisions[:policy])
+      rescue StandardError => e
+        @unrecorded_warning = "Purchased, but it couldn't be recorded in the transaction log (#{e.message}), " \
+                              "so your spend policy's rolling cap and velocity limit won't count it."
+      end
+
+      def transaction_log
+        @transaction_log ||= Portage::Ucp::Support::TransactionLog.new
       end
 
       # nil when both pre-completion gates pass; otherwise the report for
@@ -532,16 +588,17 @@ module Portage
       # only reads, so for the own-store adapter flow this repeats a check
       # Dispatcher also runs. It doesn't double-count anything.
       #
-      # The rolling cap and velocity limit count what the transaction log
-      # holds, and only Dispatcher writes that log. Remote purchases don't
-      # add to it yet, so for a remote store those two limits see only
-      # own-store spend.
+      # The rolling cap and velocity limit count the transaction log's
+      # completed records: Dispatcher writes them for own-store purchases,
+      # and #recording_transaction for remote ones.
       def decide_policy(checkout)
         verdict = Decisions.policy(amount: checkout_total(checkout), currency: checkout["currency"],
-                                   merchant: @uri.host, token_ref: Portage::Ucp::Support::TokenRef.for(@payment_token))
+                                   merchant: @uri.host, token_ref: token_ref, transaction_log: transaction_log)
         @decisions[:policy] = verdict
         verdict
       end
+
+      def token_ref = Portage::Ucp::Support::TokenRef.for(@payment_token)
 
       def checkout_total(checkout)
         Portage::Ucp::Support::Totals.amount(checkout["totals"])

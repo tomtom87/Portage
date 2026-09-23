@@ -92,6 +92,16 @@ pre-1.0, so APIs may still shift between minor versions.
     so `"no"` means off. Before, any non-empty value meant on.
 - Report totals and the policy check's amount come from core's
   `Support::Totals.amount` instead of their own lookups.
+- **Remote purchases didn't count toward the rolling cap or velocity
+  limit.** Both count the transaction log (`~/.portage/transactions.json`),
+  and only the own-store `Dispatcher` wrote to it, so `buy --yes` against a
+  remote native-UCP store never added to either. `buy` now records a remote
+  completion there under the merchant host, with its amount, currency and
+  token ref: reserved before the store is asked, settled `complete` only
+  when it comes back purchased, `failed` otherwise. The own-store loopback
+  path is still left to `Dispatcher`, so nothing is counted twice. If the
+  log can't be written after the purchase, the report says so in
+  `warnings` rather than losing the purchase to an exception.
 
 ## [0.6.4] - 2026-09-22
 

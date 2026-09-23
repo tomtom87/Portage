@@ -51,15 +51,18 @@ module Portage
       # Here it would let a checkout with no `total` line past a configured
       # cap while reporting `allowed: true`, so a missing total is denied as
       # `total_unknown` whenever a cap exists.
+      # @param transaction_log [Portage::Ucp::Support::TransactionLog] what
+      #   the rolling cap and velocity limit count.
       # @return [Hash] `allowed:`, `reason:`.
-      def self.policy(amount:, currency:, merchant:, token_ref:)
+      def self.policy(amount:, currency:, merchant:, token_ref:,
+                      transaction_log: Portage::Ucp::Support::TransactionLog.new)
         policy = Portage::Ucp::Policy.load
         if amount.nil? && (policy.per_transaction_cap || policy.rolling_cap)
           return { allowed: false, reason: "total_unknown" }
         end
 
         Portage::Ucp::PolicyGuard.check!(amount: amount, currency: currency, merchant: merchant,
-                                         token_ref: token_ref, policy: policy)
+                                         token_ref: token_ref, policy: policy, transaction_log: transaction_log)
         { allowed: true, reason: nil }
       rescue Portage::Ucp::PolicyViolationError => e
         { allowed: false, reason: e.reason.to_s }
