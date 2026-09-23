@@ -26,7 +26,8 @@ client = Portage::Ucp::WooCommerce::Client.new(
   consumer_key: ENV.fetch("WOOCOMMERCE_CONSUMER_KEY"),
   consumer_secret: ENV.fetch("WOOCOMMERCE_CONSUMER_SECRET")
 )
-billing_address = ENV["WOOCOMMERCE_BILLING_ADDRESS"] && JSON.parse(ENV["WOOCOMMERCE_BILLING_ADDRESS"])
+billing_json = ENV.fetch("WOOCOMMERCE_BILLING_ADDRESS", nil)
+billing_address = billing_json && JSON.parse(billing_json)
 adapter = Portage::Ucp::WooCommerce::Adapter.new(
   client: client,
   site_url: ENV.fetch("WOOCOMMERCE_SITE_URL"),

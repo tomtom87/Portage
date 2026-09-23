@@ -92,7 +92,8 @@ RSpec.describe Portage::Ucp::WooCommerce::Mapper do
       expect(checkout.links).to eq([])
     end
 
-    it "emits a resume-checkout link built from site_url, carrying the cart token as ?session= so the classic checkout page can bridge into the same cart" do
+    # The ?session= token is what lets the classic checkout page bridge into the same cart.
+    it "emits a resume-checkout link built from site_url, carrying the cart token as ?session=" do
       checkout = described_class.checkout(node, id: "tok_1", status: "incomplete", site_url: "https://shop.example")
 
       expect(checkout.links).to eq([
