@@ -25,6 +25,21 @@ module Portage
           [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
            Portage::Ucp::Total.new(type: "total", amount: total)]
         end
+
+        # The reader for the arrays above: the amount of the first entry of
+        # `type`, or nil when there is none. Takes `Total` value objects or
+        # their wire hashes (string- or symbol-keyed), since callers hold
+        # either — an adapter's own result, or a checkout read back through
+        # a Session.
+        def amount(totals, type: "total")
+          entry = Array(totals).find { |total| field(total, :type) == type }
+          entry && field(entry, :amount)
+        end
+
+        def field(total, name)
+          total.is_a?(Hash) ? total.fetch(name.to_s) { total[name] } : total.public_send(name)
+        end
+        private_class_method :field
       end
     end
   end

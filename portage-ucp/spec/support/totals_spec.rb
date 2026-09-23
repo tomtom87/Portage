@@ -28,4 +28,26 @@ RSpec.describe Portage::Ucp::Support::Totals do
       expect(described_class.line(500, 450).map { |t| t.to_wire_h["amount"] }).to eq([500, 450])
     end
   end
+
+  describe ".amount" do
+    let(:summary) { described_class.summary(subtotal: 1000, total: 1200, tax: 200) }
+
+    it "reads the total from Total value objects" do
+      expect(described_class.amount(summary)).to eq(1200)
+    end
+
+    it "reads any other type by name" do
+      expect(described_class.amount(summary, type: "tax")).to eq(200)
+    end
+
+    it "reads string- and symbol-keyed wire hashes" do
+      expect(described_class.amount(summary.map(&:to_wire_h))).to eq(1200)
+      expect(described_class.amount([{ type: "total", amount: 99 }])).to eq(99)
+    end
+
+    it "is nil with no entry of that type, or no totals at all" do
+      expect(described_class.amount([{ "type" => "subtotal", "amount" => 1000 }])).to be_nil
+      expect(described_class.amount(nil)).to be_nil
+    end
+  end
 end

@@ -16,6 +16,11 @@ pre-1.0, so APIs may still shift between minor versions.
     order.
   - `Escalation.reason(checkout_status:, warnings:)` returns
     `:requires_escalation`, then `:mismatch` for any warning, else nil.
+- New `Support::Totals.amount(totals, type: "total")`, the reader for the
+  arrays `Totals.summary`/`Totals.line` build. It takes `Total` value
+  objects or wire hashes, and returns nil when there's no entry of that
+  type. `Dispatcher` and `ReferenceAdapter` use it in place of their own
+  copies of the lookup, as does `portage-cli`.
 
 ## [0.8.1] - 2026-09-22
 

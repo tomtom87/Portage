@@ -5,6 +5,7 @@ require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/journal"
 require_relative "payment_methods"
+require_relative "setting"
 require_relative "decisions"
 require_relative "confidence_check"
 require_relative "checkout_handoff"
@@ -337,7 +338,7 @@ module Portage
       end
 
       def abort_on_mismatch?
-        %w[1 true yes].include?(ENV.fetch("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH", "").downcase)
+        Setting.flag?(env: "PORTAGE_ABORT_ON_CHECKOUT_MISMATCH")
       end
 
       # Submits PORTAGE_SHIP_* (see Portage::Cli::ShippingProfile) as the
@@ -543,7 +544,7 @@ module Portage
       end
 
       def checkout_total(checkout)
-        Array(checkout["totals"]).find { |total| total["type"] == "total" }&.fetch("amount", nil)
+        Portage::Ucp::Support::Totals.amount(checkout["totals"])
       end
 
       # Never includes the payment token: the state goes to a model backend,

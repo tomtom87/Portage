@@ -301,7 +301,7 @@ module Portage
 
         amount = line_items.sum do |li|
           order_line = order.line_items.find { |oli| oli.id == li[:id] }
-          unit_price = order_line.totals.find { |t| t.type == "total" }.amount / order_line.quantity
+          unit_price = Portage::Ucp::Support::Totals.amount(order_line.totals) / order_line.quantity
           unit_price * li[:quantity]
         end
         [Portage::Ucp::Total.new(type: "total", amount: -amount)]
@@ -372,7 +372,7 @@ module Portage
       end
 
       def totals_for(line_items, discounts)
-        subtotal = line_items.sum { |li| li.totals.find { |t| t.type == "total" }.amount }
+        subtotal = line_items.sum { |li| Portage::Ucp::Support::Totals.amount(li.totals) }
         discount_amount = discounts.applied.sum(&:amount)
         [Portage::Ucp::Total.new(type: "subtotal", amount: subtotal),
          Portage::Ucp::Total.new(type: "total", amount: subtotal - discount_amount)]

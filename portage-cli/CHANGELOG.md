@@ -79,6 +79,19 @@ pre-1.0, so APIs may still shift between minor versions.
   longer asks for `JEV_API_KEY` when no backend is selected.
 - The no-buyer-context warning names every variable it reads and says to
   set at least `PORTAGE_SHIP_COUNTRY`.
+- **Settings resolve one way everywhere.** The auto-open toggle, the
+  notify webhook, `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` and the confidence
+  gate's backend/threshold each parsed their own env var and repeated the
+  "flag, then env var, then `config.json`" order. They now share
+  `Portage::Cli::Setting`. Two edge cases change:
+  - A blank flag or env var (`PORTAGE_AUTO_OPEN_CHECKOUT=`,
+    `--notify-webhook ""`) is unset and falls through to the next level.
+    Before, an empty auto-open env var turned auto-open off, and an empty
+    `--notify-webhook` turned the webhook off.
+  - A `config.json` `"auto_open_checkout"` string is read like the env var,
+    so `"no"` means off. Before, any non-empty value meant on.
+- Report totals and the policy check's amount come from core's
+  `Support::Totals.amount` instead of their own lookups.
 
 ## [0.6.4] - 2026-09-22
 

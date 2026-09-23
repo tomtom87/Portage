@@ -247,7 +247,7 @@ module Portage
     private_class_method :record_buy
 
     def self.report_total(report)
-      Array(report[:totals]).find { |total| total["type"] == "total" }&.fetch("amount", nil)
+      Portage::Ucp::Support::Totals.amount(report[:totals])
     end
     private_class_method :report_total
 

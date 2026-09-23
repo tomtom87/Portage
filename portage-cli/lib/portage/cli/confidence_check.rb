@@ -1,4 +1,5 @@
 require "json"
+require_relative "setting"
 require_relative "decisions"
 
 module Portage
@@ -48,8 +49,8 @@ module Portage
       #   injectable so specs never reach a real model. nil means
       #   ModelBackends.resolve, looked up only once a backend is needed.
       def initialize(backend: nil, threshold: nil, resolver: nil)
-        @backend_name = presence(backend) || presence(ENV.fetch(BACKEND_ENV, nil))
-        @threshold = parse_threshold(threshold || presence(ENV.fetch(THRESHOLD_ENV, nil)) || DEFAULT_THRESHOLD)
+        @backend_name = Setting.resolve(override: backend, env: BACKEND_ENV)&.to_s&.strip
+        @threshold = parse_threshold(Setting.resolve(override: threshold, env: THRESHOLD_ENV) || DEFAULT_THRESHOLD)
         @resolver = resolver
       end
 
@@ -107,11 +108,6 @@ module Portage
       def not_installed_message
         "portage-ucp-decision is not installed — `gem install portage-ucp-decision` to use the " \
           "#{@backend_name} confidence check."
-      end
-
-      def presence(value)
-        value = value.to_s.strip
-        value.empty? ? nil : value
       end
 
       def parse_threshold(raw)
