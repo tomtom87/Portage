@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.6.2] - 2026-09-23
 
 - Fix: the loopback and stdio transports dropped `cart_id` from every call,
   so `get_cart`, `update_cart` and `cancel_cart` always failed with
