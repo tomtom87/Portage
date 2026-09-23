@@ -206,6 +206,26 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).not_to have_received(:complete_checkout)
     end
 
+    it "treats requires_escalation from complete_checkout as an escalation, not a purchase" do
+      # Regression: this used to report "Purchased." unconditionally,
+      # ignoring `completed["status"]` — a Shopify cartSubmitForCompletion
+      # result carrying `errors` returns requires_escalation from
+      # complete_checkout itself, not just from create_checkout.
+      escalation_after_payment = {
+        "id" => "chk_1", "status" => "requires_escalation", "totals" => [],
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
+      }
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout,
+                             completed: escalation_after_payment)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+
+      expect(report[:message]).to include("requires buyer escalation")
+      expect(report[:message]).not_to eq("Purchased.")
+      expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
+    end
+
     it "reports a permission-denied completion as a normal outcome, via continue_url" do
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout.merge(
         "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }]
@@ -310,6 +330,84 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:message]).to include("No product matched")
       expect(session).not_to have_received(:create_checkout)
+    end
+  end
+
+  describe "reconciling the checkout against what was requested" do
+    it "warns when the store drops the requested line item entirely" do
+      checkout = incomplete_checkout.merge("line_items" => [])
+      session = fake_session(advertises_checkout: true, checkout: checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true).call
+
+      expect(report[:warnings].join).to include("dropped the requested item")
+    end
+
+    it "warns when the store checks out a different quantity than requested" do
+      checkout = incomplete_checkout.merge(
+        "line_items" => [{ "item" => { "id" => "p1", "price" => 100 }, "quantity" => 3 }]
+      )
+      session = fake_session(advertises_checkout: true, checkout: checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", qty: 1, yes: true).call
+
+      expect(report[:warnings].join).to include("quantity 3")
+    end
+
+    it "warns when the store prices the item differently than its own catalog just quoted" do
+      priced_product = { "id" => "p1", "title" => "Cold Brew",
+                         "variants" => [{ "id" => "p1", "price" => { "amount" => 500, "currency" => "USD" } }] }
+      checkout = incomplete_checkout.merge(
+        "line_items" => [{ "item" => { "id" => "p1", "price" => 700 }, "quantity" => 1 }], "currency" => "USD"
+      )
+      session = instance_double(
+        Portage::Ucp::Client::Session, advertises?: true,
+                                       search_catalog: { "ucp" => 1, "products" => [priced_product] },
+                                       create_checkout: checkout
+      )
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true).call
+
+      expect(report[:warnings].join).to include("priced the item at 700")
+    end
+
+    it "never warns when the returned line item matches the request" do
+      checkout = incomplete_checkout.merge(
+        "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 1 }]
+      )
+      session = fake_session(advertises_checkout: true, checkout: checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true).call
+
+      expect(report[:warnings]).to eq([])
+    end
+
+    it "aborts before completion when PORTAGE_ABORT_ON_CHECKOUT_MISMATCH is set" do
+      checkout = incomplete_checkout.merge("line_items" => [])
+      session = fake_session(advertises_checkout: true, checkout: checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = with_env("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" => "1") do
+        described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+      end
+
+      expect(report[:message]).to include("Aborted before purchase")
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "only warns, without aborting, when PORTAGE_ABORT_ON_CHECKOUT_MISMATCH is unset" do
+      checkout = incomplete_checkout.merge("line_items" => [])
+      session = fake_session(advertises_checkout: true, checkout: checkout, completed: completed_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+
+      expect(report[:message]).to eq("Purchased.")
+      expect(session).to have_received(:complete_checkout)
     end
   end
 

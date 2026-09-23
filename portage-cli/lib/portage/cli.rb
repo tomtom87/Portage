@@ -607,6 +607,7 @@ module Portage
     def self.format_report(report)
       lines = ["#{report[:message]} (source: #{report[:source]})"]
       report[:products].each { |p| lines << "  - #{product_line(p)}" }
+      Array(report[:warnings]).each { |w| lines << "  warning: #{w}" }
       lines << "  checkout: #{report[:checkout_url]}" if report[:checkout_url]
       lines.concat(format_handoff(report[:handoff])) if report[:handoff]
       lines.join("\n")
