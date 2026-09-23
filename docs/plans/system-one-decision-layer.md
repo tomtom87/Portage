@@ -1,11 +1,11 @@
 # System One decision layer (Jev / Layla)
 
-**Status:** first skeleton built — `portage-ucp-decision` (new gem). All four
-responsibilities below exist as typed decisions; ranking and the policy-check
-wrapper carry real logic, escalation only branches on the literal
-`requires_escalation` status, and confidence gating is backed by two
-swappable model backends (`ModelBackends::Jev`, `ModelBackends::Laya`) rather
-than left abstract. Still not wired into the agent loop, `portage-cli`, or
+**Status:** built — `portage-ucp-decision` (new gem). All four
+responsibilities below exist as typed decisions with real logic: ranking,
+the policy-check wrapper (plus a `risk_signals:` gate), escalation (literal
+`requires_escalation` plus an ambiguous-signal case), and confidence gating
+via two swappable model backends (`ModelBackends::Jev`, `ModelBackends::Laya`).
+Still not wired into the agent loop, `portage-cli`, or
 `skills/shop-via-ucp.md` — those keep their current scattered logic until a
 caller actually switches over.
 
@@ -63,10 +63,12 @@ shape.
 4. **Simple policy checks** — budget, allowlist, risk signals.
    `Portage::Ucp::PolicyGuard` + `Policy` (`portage-ucp/lib/portage/ucp/
    policy_guard.rb`, `policy.rb`) already cover per-transaction cap, rolling
-   cap, velocity, and merchant allowlist, wired into `Dispatcher`. This
-   responsibility is closest to done — System One would call the existing
-   `PolicyGuard.check!` rather than reimplement budget/allowlist logic, and
-   add risk signals as a new, so-far-unbuilt check alongside it.
+   cap, velocity, and merchant allowlist, wired into `Dispatcher`.
+   `Decision::PolicyCheck` calls `PolicyGuard.check!` rather than
+   reimplementing that, and adds risk signals as a caller-supplied
+   `Hash{Symbol => Boolean}` gate alongside it (§ Open questions — the
+   mechanism is built, the signals themselves are still uncomputed anywhere
+   in this repo).
 
 ## Why a layer, not more Adapter methods or more CLI branches
 
@@ -98,21 +100,32 @@ shape.
   `POST https://api.typesafe.ai/v1/systemone`, `JEV_API_KEY` env var) and
   `Decision::ModelBackends::Laya` (`huggingface.co/convaiinnovations/laya`, an
   open-weights local model with no hosted API — this gem shells out to a
-  configurable external command, `LAYA_INFER_COMMAND`, that speaks the same
-  request/response JSON both backends share; wiring an actual Python bridge
-  around Laya's HuggingFace weights is left to the caller). Both flow through
-  `ConfidenceGate.via_backend`. `portage doctor` (aliased `configure`/`setup`)
-  flags a missing `JEV_API_KEY`. The heuristic-over-signals half (price
+  Python bridge script, `LAYA_BRIDGE_SCRIPT` (`examples/laya_bridge.py` is a
+  starting point), that speaks the same request/response JSON both backends
+  share, plus `LAYA_INFER_COMMAND` as an escape hatch for a caller whose
+  bridge isn't `python3 <script>`; a missing or broken bridge raises
+  `BackendNotConfiguredError`/`BackendError` naming the exact problem — unset,
+  path missing, `LAYA_PYTHON` not found, non-zero exit, invalid JSON). Both
+  flow through `ConfidenceGate.via_backend`. `portage doctor` (aliased
+  `configure`/`setup`) flags a missing `JEV_API_KEY` — not a missing Laya
+  bridge, which stays opt-in and silent there since (unlike Jev) nothing
+  expects every setup to configure it. The heuristic-over-signals half (price
   variance, stock volatility, merchant history) is still unevaluated.
 - Relationship to `Confirmer` (`portage-ucp/lib/portage/ucp/confirmer.rb`):
   does confidence gating replace binary confirmation, sit in front of it
   (only ask for confirmation when confidence is low), or run independently?
   Unresolved.
-- Risk signals (new, under "simple policy checks") — what a signal even is
-  here (merchant age, TLS/manifest-signing status per §9, prior escalation
-  rate) is unresearched. `PolicyCheck#call`'s `risk_signals:` parameter is
-  accepted but not yet checked.
-- Ambiguous-signal escalation (§ Responsibilities 2 — a merchant surfacing a
-  mismatch that isn't literally `requires_escalation`) is also still
-  unresolved; `EscalationPolicy#call`'s `signals:` parameter is likewise
-  accepted but not yet checked.
+- ~~Risk signals~~ **Mechanism resolved, computation still open:**
+  `PolicyCheck#call`'s `risk_signals:` now denies on any truthy named
+  signal (`{merchant_too_new: true}` → `reason: :risk_signal_triggered`).
+  What a signal even is here — merchant age, TLS/manifest-signing status per
+  §9, prior escalation rate — is still unresearched: nothing under
+  `Portage::Ucp::Support` computes merchant trust/history, so producing an
+  actual signal value stays the caller's job.
+- ~~Ambiguous-signal escalation~~ **Resolved:** `EscalationPolicy#call`'s
+  `signals:` now escalates on `mismatch: true` or a non-empty `warnings:`
+  array — the same `warnings: [String]` vocabulary the not-yet-merged
+  `82631bf Fix escalation reporting and surface checkout mismatches`
+  (branch `feature/escalation-buyer-context-hardening`) puts on `Buy`'s
+  report, so wiring that branch's `reconcile_checkout` output straight into
+  `signals: {warnings:}` needs no translation once/if it merges.

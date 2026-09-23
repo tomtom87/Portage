@@ -12,6 +12,19 @@ RSpec.describe Portage::Ucp::Decision::ModelBackends::Jev do
       .to raise_error(Portage::Ucp::Decision::BackendNotConfiguredError, /JEV_API_KEY/)
   end
 
+  it "reads the api key from JEV_API_KEY by default and uses it as the Bearer token" do
+    original = ENV.fetch("JEV_API_KEY", nil)
+    ENV["JEV_API_KEY"] = "from-env"
+    stub_request(:post, described_class::BASE_URL)
+      .with(headers: { "Authorization" => "Bearer from-env" })
+      .to_return(status: 200, body: { answers: { "urgency" => { type: "noul", confidence: 0.5 } } }.to_json)
+
+    expect(described_class.new.ask(state: "help!", questions: { "urgency" => question })["urgency"].confidence)
+      .to eq(0.5)
+  ensure
+    ENV["JEV_API_KEY"] = original
+  end
+
   it "posts the state and questions, and returns typed answers with confidence" do
     stub_request(:post, described_class::BASE_URL)
       .with(headers: { "Authorization" => "Bearer test-key" },
