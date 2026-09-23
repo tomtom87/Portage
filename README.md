@@ -8,7 +8,7 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage": a conduit for cargo overland between waterways a ship can't sail directly between.
 
-> **Status**: `0.8.1`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
+> **Status**: `0.9.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
 > **Shopify**: the gem talks to any Shopify store out of box (browse products, cart, checkout, no setup needed). Just one thing needs opt-in: auto-completing checkout. Without it, you'll finish payment in browser via a link the gem spits out. 
 

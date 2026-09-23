@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-09-23
 
 - Initial release. WebMCP as a transport to the existing `Adapter` contract.
 - The registrar reports a non-JSON reply from its endpoint (a proxy's HTML

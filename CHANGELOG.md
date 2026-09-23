@@ -7,7 +7,7 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.9.0] - 2026-09-23
 
 - **New gem: `portage-ucp-webmcp`.** It adds WebMCP as a transport to the
   existing `Adapter` contract, next to classic MCP (stdio, Streamable HTTP)

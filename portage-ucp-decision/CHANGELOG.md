@@ -4,7 +4,9 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.1.0] - 2026-09-23
+
+First publish to RubyGems. It ships the skeleton below plus these changes.
 
 - `OfferRanking` and `EscalationPolicy` now delegate to
   `portage-ucp`'s `Support::OfferRanking` and `Support::Escalation`, the
@@ -39,7 +41,7 @@ pre-1.0, so APIs may still shift between minor versions.
 - `Jev#configuration_problem` joins `Laya#configuration_problem` (now
   public): the reason a backend can't answer yet, for a setup check.
 
-## [0.1.0] - 2026-09-23
+## 0.1.0 skeleton (never published)
 
 - First skeleton: `OfferRanking`, `EscalationPolicy`, `ConfidenceGate`, and
   `PolicyCheck` as typed decisions, per
