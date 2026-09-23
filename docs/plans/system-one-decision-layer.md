@@ -5,9 +5,17 @@ responsibilities below exist as typed decisions with real logic: ranking,
 the policy-check wrapper (plus a `risk_signals:` gate), escalation (literal
 `requires_escalation` plus an ambiguous-signal case), and confidence gating
 via two swappable model backends (`ModelBackends::Jev`, `ModelBackends::Laya`).
-Still not wired into the agent loop, `portage-cli`, or
-`skills/shop-via-ucp.md` — those keep their current scattered logic until a
-caller actually switches over.
+
+**Wired in:** `portage-cli` depends on the gem. `Find#rank` goes through
+`OfferRanking`. `Buy` decides escalation with `EscalationPolicy`, checks the
+buyer's policy with `PolicyCheck` before every `--yes` completion, and runs
+`ConfidenceGate` in front of that completion when a backend is named
+(`Cli::ConfidenceCheck`). Every checkout report carries the verdicts under
+`decisions:`. The agent loop's instructions (`skills/shop-via-ucp.md`,
+`skills/shop-via-ucp/SKILL.md`) call the same four decisions for raw
+`portage-ucp-client` sessions and branch on `decisions:` when they shell out
+to `portage buy --json`. `Buy` still owns the delivery side (`CheckoutHandoff`,
+`Notifier`), which is correct: those react to a decision, they don't make one.
 
 **Driver:** the agent loop, the transport (`WebMCP`/MCP/native UCP), and the
 commerce backend (`Adapter`) each have a clear owner in this repo already.
@@ -111,10 +119,21 @@ shape.
   bridge, which stays opt-in and silent there since (unlike Jev) nothing
   expects every setup to configure it. The heuristic-over-signals half (price
   variance, stock volatility, merchant history) is still unevaluated.
-- Relationship to `Confirmer` (`portage-ucp/lib/portage/ucp/confirmer.rb`):
-  does confidence gating replace binary confirmation, sit in front of it
-  (only ask for confirmation when confidence is low), or run independently?
-  Unresolved.
+- ~~Relationship to `Confirmer`~~ **Resolved for `portage buy`:** the gate
+  runs in front of the completion, after `--yes` and `PolicyCheck`, and never
+  replaces either. It can only hold a purchase `--yes` already allowed. It
+  never approves one that `--yes` didn't. Once a caller names a backend, the
+  gate fails closed: a backend that can't answer holds the purchase, the
+  same as a low score. Default off. `Dispatcher`'s in-process
+  `Confirmer` is unchanged. A "confirm only when confidence is low" mode
+  stays out of scope, because it would turn the gate into an auto-approve
+  path (`docs/plans/agentic-payments.md` open decision 3).
+- `PolicyCheck` in `portage buy` closes a real gap: `Dispatcher`'s
+  `PolicyGuard` runs only in-process, so a remote native-UCP store never
+  saw the buyer's policy at all. The rolling cap and velocity limit still
+  read only the transaction log, which only `Dispatcher` writes. Recording
+  remote purchases there, so those two limits see remote spend too, is
+  still open.
 - ~~Risk signals~~ **Mechanism resolved, computation still open:**
   `PolicyCheck#call`'s `risk_signals:` now denies on any truthy named
   signal (`{merchant_too_new: true}` → `reason: :risk_signal_triggered`).

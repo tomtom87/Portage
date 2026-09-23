@@ -14,7 +14,13 @@ project's Gemfile/gemspec, or run `gem list portage-ucp-client`), prefer it — 
 every guardrail below in code. Otherwise, shell out to the `portage` CLI if it's
 installed (`portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--yes]
 [--dry-run] [--json]`), which runs this same flow end to end including the
-native-UCP-then-adapter-fallback discovery logic. If neither is available, make the raw
+native-UCP-then-adapter-fallback discovery logic. With `--json`, branch on the
+report's `decisions:` (`escalation.escalate`, `policy.allowed`,
+`confidence.proceed`) rather than its `message`. Any of them stopping the
+purchase comes with a `checkout_url` for the human. With
+`portage-ucp-client`, make the same calls through `portage-ucp-decision`
+(`OfferRanking`, `EscalationPolicy`, `PolicyCheck`, `ConfidenceGate`) —
+see `../shop-via-ucp.md`. If neither is available, make the raw
 MCP tool calls yourself, following the sequence below exactly.
 
 ## Guardrails — apply these every time, no exceptions
