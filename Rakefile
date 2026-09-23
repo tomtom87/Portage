@@ -187,4 +187,22 @@ task :publish_all do
   end
 end
 
+AGENT_PROFILE_JSDELIVR_PATH = "gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json".freeze
+
+namespace :agent_profile do
+  desc "Purge jsdelivr's CDN cache for agent-profile.json — required after " \
+       "every change to it (see docs/agent-profile.md). @main is cached for " \
+       "up to a week; skipping this reproduces the §42 `Tool not found` " \
+       "registry miss against otherwise-correct, already-pushed code."
+  task :purge do
+    require "net/http"
+
+    uri = URI("https://purge.jsdelivr.net/#{AGENT_PROFILE_JSDELIVR_PATH}")
+    response = Net::HTTP.get_response(uri)
+    abort "jsdelivr purge failed: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
+
+    puts "Purged https://cdn.jsdelivr.net/#{AGENT_PROFILE_JSDELIVR_PATH}"
+  end
+end
+
 task default: :spec

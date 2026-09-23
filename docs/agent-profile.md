@@ -25,6 +25,11 @@ requests with that key yet (`Portage::Ucp::Security::Signature` only
 and so a future signer has a `kid` to sign under without reshaping the
 document again.
 
+**Then, once the commit is on `main`: `bundle exec rake agent_profile:purge`.**
+With this repo's jsdelivr default (see below) that's not optional — skip
+it and the CDN keeps serving the *previous* document to every real UCP
+server for up to a week, which looks exactly like the generator never ran.
+
 ## Rotating
 
 ```sh
@@ -38,6 +43,8 @@ request signed under the outgoing key keeps verifying while callers move to
 the new one. Nothing here ever drops a key — retire an old entry by hand
 once nothing signs with it any more.
 
+Same as above: commit, then `bundle exec rake agent_profile:purge`.
+
 ## Hosting requirements
 
 Whatever serves this document, live UCP servers reject anything that
@@ -50,21 +57,22 @@ doesn't satisfy every one of these (from the 2026-04-08 spec):
   `no-store`, or `no-cache`
 - `application/json`
 
-## This repo's default: GitHub Pages
+## This repo's default: jsdelivr, hand-published
 
-`.github/workflows/publish-agent-profile.yml` redeploys
-`portage-cli/agent-profile/agent-profile.json` on every push to `main` that
-touches it, to both the Pages site root and the spec's conventional
-`/.well-known/ucp-agent` path. GitHub Pages satisfies every requirement
-above without extra config (HTTPS, no redirect on an exact asset path,
-`Cache-Control: public, max-age=600`).
+There is no CI workflow publishing this document — `.github/workflows/`
+was removed entirely (commit 9669621, "Drop GitHub Actions workflows"). An
+earlier revision of this doc described
+`.github/workflows/publish-agent-profile.yml` redeploying
+`agent-profile.json` to GitHub Pages on every push to `main`; that workflow
+never actually deployed anything (Pages `Source` was never flipped to
+"GitHub Actions" — see "One-time setup" below) and no longer exists at all.
+Treat any reference to it elsewhere (old commit messages, cached docs) as
+historical, not current behavior.
 
-That workflow needs Actions enabled on the repo (billing/minutes) to ever
-run, and as of 2026-09-17 its last three runs have failed anyway (Pages
-`Source` is set to "GitHub Actions" but nothing has ever deployed to it —
-`https://tomtom87.github.io/Portage/...` still 404s). Until both of those are
-sorted, `.env.example`'s `PORTAGE_AGENT_PROFILE` points at jsdelivr's GitHub
-CDN mirror instead:
+The actual default, and what `.env.example`'s `PORTAGE_AGENT_PROFILE`
+points at, is jsdelivr's GitHub CDN mirror serving the checked-in
+`portage-cli/agent-profile/agent-profile.json` directly — no build step,
+no redeploy step, nothing to keep running:
 
 ```
 https://cdn.jsdelivr.net/gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json
@@ -80,9 +88,9 @@ in-band signal pointing at content-type, so check the profile URL's headers
 by hand with `curl -I` if you see that error). jsdelivr serves the same file
 as `application/json` with no redirect and `Cache-Control: public,
 max-age=604800`, and was confirmed live past the agent-profile check on the
-same store. Switch to the Pages URL once that workflow actually deploys
-something — GitHub's CDN caching on raw/jsdelivr file serving isn't a
-documented guarantee the way Pages is.
+same store. GitHub's CDN caching on jsdelivr/raw file serving isn't a
+documented guarantee the way GitHub Pages's is — switch to Pages (see
+below) if that ever matters more than the zero-setup jsdelivr default.
 
 **Purge jsdelivr after every change to `agent-profile.json`.** That
 `max-age=604800` applies to the `@main` alias, so for up to a week after a
@@ -92,10 +100,10 @@ registry miss §42 is about, reproducing against correct code in the repo.
 Confirmed 2026-09-22, days after the capability-id fix landed and was pushed
 to `main`: `raw.githubusercontent.com` served the per-action ids while
 `cdn.jsdelivr.net/gh/...@main/...` still served the coarse
-`dev.ucp.shopping.catalog` with `services: []`. One line fixes it:
+`dev.ucp.shopping.catalog` with `services: []`. One command fixes it:
 
 ```sh
-curl -s https://purge.jsdelivr.net/gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json
+bundle exec rake agent_profile:purge
 ```
 
 Pinning `@<full-sha>` instead of `@main` avoids the whole class of problem —
@@ -103,12 +111,11 @@ jsdelivr treats a sha path as immutable and can't serve a stale one — at the
 cost of updating `.env.example` on every profile change. Either is fine; what
 isn't fine is assuming a push to `main` is live.
 
-**One-time setup this workflow can't do for you:** Settings → Pages → Build
-and deployment → Source = "GitHub Actions", on this repo. Until that's
-flipped, the workflow runs and uploads an artifact with nothing to deploy
-it to.
-
-Once enabled, set:
+**Switching to GitHub Pages instead** (avoids the purge step above, at the
+cost of standing up a deploy path there's no workflow to run automatically
+now — every `agent-profile.json` change needs its own manual Pages
+deploy): Settings → Pages → Build and deployment → Source = "GitHub
+Actions", then set:
 
 ```sh
 # .env
@@ -116,8 +123,8 @@ PORTAGE_AGENT_PROFILE=https://tomtom87.github.io/Portage/agent-profile.json
 ```
 
 Any other host that meets the requirements above works too — GitHub Pages
-is just what this repo happens to run without asking anyone to stand up
-separate infrastructure.
+is just what this repo would run without asking anyone to stand up
+separate infrastructure, if a workflow existed to drive it.
 
 ## Resolved: `Tool not found` on every call once the profile is wired up
 
