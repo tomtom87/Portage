@@ -54,7 +54,9 @@ module Portage
 
           asked = { question => ModelBackends::Question.new(type: type, instructions: instructions,
                                                             criteria: criteria) }
-          answer = backend.ask(state: state, questions: asked).fetch(question)
+          answer = backend.ask(state: state, questions: asked).fetch(question) do
+            raise Portage::Ucp::Decision::BackendError, "backend returned no answer for #{question.inspect}"
+          end
           verdict = call(confidence: gated_score(answer, type), threshold: threshold)
           return verdict if type == "noul"
 

@@ -24,10 +24,20 @@ def main():
     request = json.loads(sys.stdin.read())
     model = load()  # router mode auto-detects language/checkpoint
 
-    answers = model.ask(state=request["state"], questions=request["questions"])
-    # `model.ask` is expected to return, per question name, something with
-    # type/confidence/value fields — adjust this mapping to whatever the
-    # installed `laya` version's return shape actually is.
+    # `model.ask` is a placeholder: adapt this call to whatever the installed
+    # `laya` version actually exposes. Only the output shape below is fixed.
+    raw = model.ask(state=request["state"], questions=request["questions"])
+
+    # ModelBackends.parse_answers reads the answer from a key named after its
+    # type, the same wire shape Jev returns:
+    #   noul   -> {"type": "noul", "noul": <probability of yes, 0.0..1.0>}
+    #   choice -> {"type": "choice", "choice": <option>, "confidence": <0.0..1.0>}
+    #   score  -> {"type": "score", "score": <level>, "confidence": <0.0..1.0>}
+    # A noul without "noul" holds every purchase ConfidenceGate is asked about.
+    answers = {}
+    for name, question in request["questions"].items():
+        kind = question["type"]
+        answers[name] = {"type": kind, kind: raw[name]["value"], "confidence": raw[name].get("confidence")}
     json.dump({"answers": answers}, sys.stdout)
 
 

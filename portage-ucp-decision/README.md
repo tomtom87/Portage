@@ -18,13 +18,22 @@ calls that were scattered across skill instructions, `portage-cli`, and
 not a hosted API) — see `examples/laya_bridge.py` and set
 `LAYA_BRIDGE_SCRIPT`; a missing or broken bridge raises
 `BackendNotConfiguredError`/`BackendError` with a message naming the exact
-problem (unset, path doesn't exist, `LAYA_PYTHON` not on PATH, non-zero exit,
-invalid JSON). `ModelBackends::Jev` reads `JEV_API_KEY` (falling back to
-`TYPESAFE_API_KEY`, TypeSafe's own name for it), and — since it's the
-one with no opt-in step, just a key — a missing one is also flagged by
-`portage doctor`/`portage configure`/`portage setup`. Laya stays optional and
-silent in `doctor` on purpose: unlike Jev it has no default "everyone needs
-this" expectation, so an unconfigured bridge isn't a doctor finding.
+problem (unset, path doesn't exist, `LAYA_PYTHON` not executable, non-zero
+exit, timeout, unreadable reply). The bridge must answer with the same
+`{"answers": {name => answer}}` body Jev returns, each answer keyed by its
+type: `{"type": "noul", "noul": <P(yes)>}`, `{"type": "choice", "choice":
+<option>, "confidence": <c>}`, `{"type": "score", "score": <level>,
+"confidence": <c>}`. `ModelBackends::Jev` reads `JEV_API_KEY` (falling back
+to `TYPESAFE_API_KEY`, TypeSafe's own name for it).
+
+Both backends time out (Jev after 5s to connect and 15s to answer, Laya
+after 60s by default, `timeout:`), and every failure — a timeout, a
+connection error, a reply that isn't that shape — raises a
+`Decision::Error` subclass, so one `rescue Portage::Ucp::Decision::Error`
+covers a backend call. `#configuration_problem` returns the reason a backend
+can't answer yet (nil when it can); `portage doctor` reports it for the
+backend `PORTAGE_DECISION_BACKEND` selects, and says nothing when none is
+selected.
 
 `EscalationPolicy` branches on the literal `requires_escalation` status plus
 an ambiguous-signal case (`signals: {warnings:, mismatch:}`). `ConfidenceGate`

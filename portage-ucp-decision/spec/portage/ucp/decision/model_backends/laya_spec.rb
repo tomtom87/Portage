@@ -33,56 +33,84 @@ RSpec.describe Portage::Ucp::Decision::ModelBackends::Laya do
     end
   end
 
-  it "invokes python against the bridge script and returns typed answers with confidence" do
+  # A real subprocess, not a stubbed Open3: the "bridge" is a Ruby script run
+  # by this Ruby, passed as an absolute LAYA_PYTHON the way a venv's python
+  # would be.
+  def bridge(dir, body)
+    File.join(dir, "laya_bridge.rb").tap { |script| File.write(script, body) }
+  end
+
+  def backend_for(script, **opts)
+    described_class.new(bridge_script: script, python: RbConfig.ruby, command: nil, **opts)
+  end
+
+  it "runs the bridge script with the request on stdin and returns typed answers" do
     Dir.mktmpdir do |dir|
-      script = File.join(dir, "laya_bridge.py")
-      File.write(script, "")
-      allow(Open3).to receive(:capture3).with("python3", script, stdin_data: instance_of(String)).and_return(
-        [{ answers: { "urgency" => { type: "noul", confidence: 0.6, noul: 0.0 } } }.to_json, "",
-         instance_double(Process::Status, success?: true)]
-      )
-      backend = described_class.new(bridge_script: script, python: "python3", command: nil)
+      script = bridge(dir, <<~RUBY)
+        require "json"
+        request = JSON.parse($stdin.read)
+        answer = { type: "noul", confidence: 0.6, noul: request["state"] == "help!" ? 0.9 : 0.0 }
+        puts({ answers: { "urgency" => answer } }.to_json)
+      RUBY
 
-      answers = backend.ask(state: "help!", questions: { "urgency" => question })
+      answers = backend_for(script).ask(state: "help!", questions: { "urgency" => question })
 
-      expect(answers["urgency"].confidence).to eq(0.6)
+      expect(answers["urgency"]).to have_attributes(confidence: 0.6, value: 0.9)
     end
   end
 
-  it "raises BackendError when the bridge script exits non-zero" do
+  it "raises BackendError with stderr when the bridge script exits non-zero" do
     Dir.mktmpdir do |dir|
-      script = File.join(dir, "laya_bridge.py")
-      File.write(script, "")
-      allow(Open3).to receive(:capture3).and_return(["", "traceback...",
-                                                     instance_double(Process::Status, success?: false)])
-      backend = described_class.new(bridge_script: script, python: "python3", command: nil)
+      script = bridge(dir, 'warn "traceback..."; exit 1')
 
-      expect { backend.ask(state: "help!", questions: { "urgency" => question }) }
+      expect { backend_for(script).ask(state: "help!", questions: { "urgency" => question }) }
         .to raise_error(Portage::Ucp::Decision::BackendError, /traceback/)
     end
   end
 
   it "raises BackendError with the offending output when the bridge script emits invalid JSON" do
     Dir.mktmpdir do |dir|
-      script = File.join(dir, "laya_bridge.py")
-      File.write(script, "")
-      allow(Open3).to receive(:capture3).and_return(["not json", "", instance_double(Process::Status, success?: true)])
-      backend = described_class.new(bridge_script: script, python: "python3", command: nil)
+      script = bridge(dir, 'puts "not json"')
 
-      expect { backend.ask(state: "help!", questions: { "urgency" => question }) }
-        .to raise_error(Portage::Ucp::Decision::BackendError, /invalid JSON/)
+      expect { backend_for(script).ask(state: "help!", questions: { "urgency" => question }) }
+        .to raise_error(Portage::Ucp::Decision::BackendError, /unreadable answer.*not json/)
     end
   end
 
+  it "raises BackendError when the reply has no answers" do
+    Dir.mktmpdir do |dir|
+      script = bridge(dir, 'puts "{}"')
+
+      expect { backend_for(script).ask(state: "help!", questions: { "urgency" => question }) }
+        .to raise_error(Portage::Ucp::Decision::BackendError, /KeyError/)
+    end
+  end
+
+  it "kills the bridge and raises BackendError when it overruns its timeout" do
+    Dir.mktmpdir do |dir|
+      script = bridge(dir, "sleep 5")
+
+      expect { backend_for(script, timeout: 0.2).ask(state: "help!", questions: { "urgency" => question }) }
+        .to raise_error(Portage::Ucp::Decision::BackendError, /timed out after 0.2s/)
+    end
+  end
+
+  it "raises BackendError, not Errno::ENOENT, when a custom command can't start" do
+    backend = described_class.new(command: "definitely-not-a-real-bridge-#{SecureRandom.hex(4)}")
+
+    expect { backend.ask(state: "help!", questions: { "urgency" => question }) }
+      .to raise_error(Portage::Ucp::Decision::BackendError, /couldn't run/)
+  end
+
   it "prefers a fully custom command over bridge_script/python when both are given" do
-    allow(Open3).to receive(:capture3).with("some-wrapper", stdin_data: instance_of(String)).and_return(
-      [{ answers: { "urgency" => { type: "noul", confidence: 0.4 } } }.to_json, "",
-       instance_double(Process::Status, success?: true)]
-    )
-    backend = described_class.new(bridge_script: "/no/such/laya_bridge.py", command: "some-wrapper")
+    Dir.mktmpdir do |dir|
+      script = bridge(dir, 'puts({ answers: { "urgency" => { type: "noul", confidence: 0.4 } } }.to_json)')
+      backend = described_class.new(bridge_script: "/no/such/laya_bridge.py",
+                                    command: [RbConfig.ruby, "-rjson", script])
 
-    answers = backend.ask(state: "help!", questions: { "urgency" => question })
+      answers = backend.ask(state: "help!", questions: { "urgency" => question })
 
-    expect(answers["urgency"].confidence).to eq(0.4)
+      expect(answers["urgency"].confidence).to eq(0.4)
+    end
   end
 end

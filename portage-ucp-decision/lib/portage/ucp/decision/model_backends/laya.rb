@@ -28,13 +28,18 @@ module Portage
           # executable on its own. Takes precedence over bridge_script/python
           # since it's a deliberate override, not a default.
           ENV_COMMAND_KEY = "LAYA_INFER_COMMAND".freeze
+          # Seconds. Generous, since the bridge loads model weights on every
+          # call, but bounded: a stuck bridge must hold the purchase, not
+          # hang it.
+          DEFAULT_TIMEOUT = 60
 
           def initialize(bridge_script: ENV.fetch(ENV_BRIDGE_SCRIPT_KEY, nil),
                          python: ENV.fetch(ENV_PYTHON_KEY, DEFAULT_PYTHON),
-                         command: ENV.fetch(ENV_COMMAND_KEY, nil))
+                         command: ENV.fetch(ENV_COMMAND_KEY, nil), timeout: DEFAULT_TIMEOUT)
             @bridge_script = bridge_script
             @python = python
             @custom_command = command
+            @timeout = timeout
           end
 
           def configured? = configuration_problem.nil?
@@ -46,17 +51,16 @@ module Portage
             problem = configuration_problem
             raise Portage::Ucp::Decision::BackendNotConfiguredError, problem if problem
 
-            stdout, stderr, status = Open3.capture3(*command, stdin_data: request_json(state, questions))
+            stdout, stderr, status = run(request_json(state, questions))
             raise Portage::Ucp::Decision::BackendError, "Laya bridge failed: #{stderr}" unless status.success?
 
-            parse_answers(stdout)
+            ModelBackends.parse_answers(stdout, source: "Laya bridge")
           end
 
-          private
-
           # nil means "configured" — anything else is the reason it isn't,
-          # returned rather than raised so #configured? and #ask share one
-          # check without #configured? having to swallow an exception.
+          # returned rather than raised so #configured?, #ask and a setup
+          # check (portage doctor) share one check without swallowing an
+          # exception.
           def configuration_problem
             return nil if @custom_command
 
@@ -68,10 +72,12 @@ module Portage
 
             return "#{ENV_BRIDGE_SCRIPT_KEY}=#{@bridge_script} does not exist" unless File.file?(@bridge_script)
 
-            return "#{ENV_PYTHON_KEY}=#{@python} isn't on PATH" unless which(@python)
+            return "#{ENV_PYTHON_KEY}=#{@python} isn't an executable on PATH" unless which(@python)
 
             nil
           end
+
+          private
 
           def command = @custom_command ? Array(@custom_command) : [@python, @bridge_script]
 
@@ -79,25 +85,47 @@ module Portage
             JSON.generate(state: state, questions: questions.transform_values(&:to_wire_h))
           end
 
-          def parse_answers(stdout)
-            parse(JSON.parse(stdout))
-          rescue JSON::ParserError => e
-            raise Portage::Ucp::Decision::BackendError,
-                  "Laya bridge produced invalid JSON (#{e.message}): #{stdout.inspect}"
-          end
+          # Open3.capture3 with a deadline: the child is killed, not left
+          # running, when it overruns. A command that can't start at all
+          # (ENOENT, EACCES) is a BackendError like any other bridge failure.
+          def run(input)
+            Open3.popen3(*command) do |stdin, stdout, stderr, wait|
+              readers = [Thread.new { stdout.read }, Thread.new { stderr.read }]
+              write_request(stdin, input)
+              timed_out = wait.join(@timeout).nil?
+              Process.kill("KILL", wait.pid) if timed_out
+              # After a kill, a grandchild (a wrapper's python) can still hold
+              # the pipes open, so don't wait on the readers indefinitely.
+              out, err = readers.map { |reader| reader.join(timed_out ? 1 : nil)&.value.to_s }
+              raise Portage::Ucp::Decision::BackendError, "Laya bridge timed out after #{@timeout}s" if timed_out
 
-          def parse(body)
-            body.fetch("answers").transform_values do |answer|
-              Answer.new(type: answer["type"], confidence: answer["confidence"],
-                         value: answer["choice"] || answer["score"] || answer["noul"],
-                         probabilities: answer["probabilities"])
+              [out, err, wait.value]
             end
+          rescue SystemCallError, IOError => e
+            raise Portage::Ucp::Decision::BackendError, "Laya bridge couldn't run #{command.first}: #{e.message}"
           end
 
-          def which(command)
-            ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, command) }
-               .find { |path| File.executable?(path) && !File.directory?(path) }
+          # A bridge that exits without reading its stdin closes the pipe
+          # early. Its exit status and stderr say why, so that's reported
+          # rather than the EPIPE.
+          def write_request(stdin, input)
+            stdin.write(input)
+          rescue Errno::EPIPE
+            nil
+          ensure
+            stdin.close
           end
+
+          # A path (LAYA_PYTHON=/opt/venv/bin/python) is checked as-is; a
+          # bare name is looked up on PATH.
+          def which(command)
+            return (executable_file?(command) ? command : nil) if command.include?("/")
+
+            ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, command) }
+               .find { |path| executable_file?(path) }
+          end
+
+          def executable_file?(path) = File.executable?(path) && !File.directory?(path)
         end
       end
     end
