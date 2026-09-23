@@ -48,9 +48,15 @@ module Portage
       # @param resolver [#call, nil] builds a backend from its name —
       #   injectable so specs never reach a real model. nil means
       #   ModelBackends.resolve, looked up only once a backend is needed.
+      # @raise [ArgumentError] for a threshold outside 0.0..1.0. An explicit
+      #   `threshold:` is always checked, so a mistyped `--min-confidence`
+      #   fails loudly. PORTAGE_MIN_CONFIDENCE is read, and so checked,
+      #   only once a backend is enabled: a stale value in a shell that
+      #   never uses the gate mustn't stop every `portage buy`.
       def initialize(backend: nil, threshold: nil, resolver: nil)
         @backend_name = Setting.resolve(override: backend, env: BACKEND_ENV)&.to_s&.strip
-        @threshold = parse_threshold(Setting.resolve(override: threshold, env: THRESHOLD_ENV) || DEFAULT_THRESHOLD)
+        raw_threshold = enabled? ? Setting.resolve(override: threshold, env: THRESHOLD_ENV) : threshold
+        @threshold = parse_threshold(raw_threshold || DEFAULT_THRESHOLD)
         @resolver = resolver
       end
 

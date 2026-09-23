@@ -69,6 +69,55 @@ RSpec.describe Portage::Cli do
       expect(Portage::Cli::Buy).not_to have_received(:new)
     end
 
+    it "ignores a garbage PORTAGE_MIN_CONFIDENCE while no decision backend is selected" do
+      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: report))
+
+      status = nil
+      with_env("PORTAGE_DECISION_BACKEND" => nil, "PORTAGE_MIN_CONFIDENCE" => "high") do
+        capture_stdout { status = described_class.run(%w[buy shop.example]) }
+      end
+
+      expect(status).to eq(0)
+      expect(Portage::Cli::Buy).to have_received(:new)
+    end
+
+    it "still refuses a garbage PORTAGE_MIN_CONFIDENCE once a decision backend is selected" do
+      allow(Portage::Cli::Buy).to receive(:new)
+
+      with_env("PORTAGE_DECISION_BACKEND" => "jev", "PORTAGE_MIN_CONFIDENCE" => "high") do
+        expect { expect(described_class.run(%w[buy shop.example])).to eq(1) }.to output(/"high"/).to_stderr
+      end
+      expect(Portage::Cli::Buy).not_to have_received(:new)
+    end
+
+    describe "a refused option under --json" do
+      before { allow(Portage::Cli::Buy).to receive(:new) }
+
+      def refused(argv)
+        status = nil
+        stdout = nil
+        expect { stdout = capture_stdout { status = described_class.run(argv) } }.not_to output.to_stderr
+        [status, JSON.parse(stdout)]
+      end
+
+      it "reports an out-of-range --min-confidence as outcome invalid_option" do
+        status, report = refused(%w[buy shop.example --min-confidence 2 --json])
+
+        expect(status).to eq(1)
+        expect(report).to include("outcome" => "invalid_option", "url" => "shop.example", "checkout" => false)
+        expect(report["message"]).to include("between 0.0 and 1.0")
+        expect(Portage::Cli::Buy).not_to have_received(:new)
+      end
+
+      it "reports a flag OptionParser can't read the same way, wherever --json sits" do
+        status, report = refused(%w[buy shop.example --min-confidence high --json])
+
+        expect(status).to eq(1)
+        expect(report).to include("outcome" => "invalid_option")
+        expect(report["message"]).to include("--min-confidence high")
+      end
+    end
+
     it "prints the report's decision verdicts" do
       decided = report.merge(decisions: { policy: { allowed: false, reason: "merchant_not_allowlisted" } })
       allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: decided))

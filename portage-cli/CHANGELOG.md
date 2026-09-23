@@ -102,6 +102,16 @@ pre-1.0, so APIs may still shift between minor versions.
   path is still left to `Dispatcher`, so nothing is counted twice. If the
   log can't be written after the purchase, the report says so in
   `warnings` rather than losing the purchase to an exception.
+- **A garbage `PORTAGE_MIN_CONFIDENCE` broke every `buy`**, even with no
+  decision backend selected, because the threshold was parsed up front
+  either way. The env var is now read, and validated, only once a backend
+  is selected. An explicit `--min-confidence` is still always validated.
+- **`buy --json` could refuse a flag without any JSON.** An out-of-range
+  threshold went to stderr as a bare line, and a flag OptionParser couldn't
+  read (`--min-confidence high`, an unknown flag) escaped as a backtrace.
+  Under `--json` both now print a report with `outcome: "invalid_option"`
+  and exit 1; without it, both are one line on stderr. The threshold is
+  also checked before the search when `buy` has no URL, not after it.
 
 ## [0.6.4] - 2026-09-22
 

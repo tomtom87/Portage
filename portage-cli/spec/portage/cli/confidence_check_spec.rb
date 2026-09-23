@@ -82,9 +82,19 @@ RSpec.describe Portage::Cli::ConfidenceCheck do
     expect { described_class.new(backend: "jev", threshold: 1.5) }.to raise_error(ArgumentError, /between 0.0 and 1.0/)
   end
 
-  it "rejects a non-numeric PORTAGE_MIN_CONFIDENCE" do
+  it "rejects a non-numeric PORTAGE_MIN_CONFIDENCE once a backend is enabled" do
     with_env("PORTAGE_MIN_CONFIDENCE" => "high") do
-      expect { described_class.new }.to raise_error(ArgumentError, /"high"/)
+      expect { described_class.new(backend: "jev") }.to raise_error(ArgumentError, /"high"/)
     end
+  end
+
+  it "ignores PORTAGE_MIN_CONFIDENCE, garbage or not, while no backend is enabled" do
+    with_env("PORTAGE_MIN_CONFIDENCE" => "high") do
+      expect(described_class.new.threshold).to eq(described_class::DEFAULT_THRESHOLD)
+    end
+  end
+
+  it "still rejects an explicit out-of-range threshold with no backend enabled" do
+    expect { described_class.new(threshold: 2.0) }.to raise_error(ArgumentError, /between 0.0 and 1.0/)
   end
 end
