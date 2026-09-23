@@ -22,8 +22,20 @@ class FakeBridge
     @tools.values.map { |tool| tool.except("handler") }
   end
 
+  # The next `misses` executes of `name` answer as if the page had dropped
+  # it mid-re-render, the way ScriptEvaluator reports a "not_registered".
+  def drop_for(name, misses:)
+    @dropped = { name => misses }
+    self
+  end
+
   def execute_tool(name, input)
     @calls << { name: name, input: input }
+    if @dropped&.fetch(name, 0)&.positive?
+      @dropped[name] -= 1
+      raise Portage::Ucp::WebMcp::ToolNotFoundError, "WebMCP tool not registered on this page: #{name}"
+    end
+
     @tools.fetch(name)["handler"].call(input)
   end
 end

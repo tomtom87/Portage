@@ -197,6 +197,37 @@ something the consumer can list.
 - **Results.** An MCP-style `CallToolResult` is unwrapped the same way as over
   stdio or HTTP, and `isError` raises `ServerError`. A JSON string (the spec's
   `executeTool` resolves to one) is parsed. Anything else is returned as it is.
+- **Re-registration.** Some pages drop all their tools and register them again
+  while they re-render. A call to a tool that vanished that way waits up to
+  `reregister_wait:` (default 2 seconds) for it to come back, then retries.
+  The call never ran the first time, so the retry is safe.
+
+### Shopify storefronts
+
+Checked live on 2026-09-23: 6 of 8 Shopify storefronts tried (ColourPop,
+tentree, Kylie Cosmetics, Brooklinen, Allbirds, Billabong) register the same 11
+WebMCP tools of their own. Gymshark and Fashion Nova registered none. The
+tools take UCP-shaped arguments, so `wire: :auto` picks the UCP shape. Two
+names differ from Session's:
+
+```ruby
+session = Portage::Ucp::WebMcp.connect(bridge: bridge, tool_names: { create_cart: "add_to_cart" })
+session.search_catalog(query: "hoodie")          # page tool: search_catalog
+session.get_product(product_id: product["id"])   # page tool: get_product, variants included
+session.create_cart(line_items: [{ product_id: variant["id"], quantity: 1 }]) # adds to the browser's cart
+session.get_cart(cart_id: "current")             # the browser's cart; cart_id is ignored
+```
+
+Things to know about these tools:
+
+- The cart is the browser session's own cart, so `add_to_cart` returns no cart
+  id and adds to what is already there.
+- Search results carry no variants. Call `get_product` for variant ids.
+- Right after `add_to_cart`, the page's cart tools can fail for a second or two
+  with `Standard Actions are not available ... Try again`. Wait and call again.
+- `update_cart_lines` addresses existing cart lines by line id, not by variant.
+  `proceed_to_checkout` navigates the browser to Shopify checkout, where the
+  shopper pays. Neither maps onto a Session method.
 
 ### Errors
 

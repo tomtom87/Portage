@@ -27,3 +27,8 @@ pre-1.0, so APIs may still shift between minor versions.
   `Client::Session`.
 - `WebMcp.polyfill_js`: a minimal, spec-shaped `document.modelContext` for
   browsers without native WebMCP.
+- `Transport` waits out a page that drops and re-registers its tools
+  mid-call (`reregister_wait:`, default 2s) instead of raising
+  `ToolNotFoundError` for a tool it had just found. Confirmed live on
+  Shopify storefronts, whose own `add_to_cart` tool leaves the page with no
+  tools for about 500ms.

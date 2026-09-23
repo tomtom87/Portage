@@ -29,16 +29,21 @@ module Portage
 
         UCP_WRAPPERS = %w[catalog cart checkout].freeze
         WIRES = %i[auto flat ucp].freeze
+        # How long a call waits for a tool the page dropped mid-re-render to
+        # come back (see #execute), and how often it looks.
+        REREGISTER_WAIT = 2.0
+        REREGISTER_POLL = 0.25
 
         attr_reader :bridge
 
-        def initialize(bridge:, prefix: nil, tool_names: {}, wire: :auto)
+        def initialize(bridge:, prefix: nil, tool_names: {}, wire: :auto, reregister_wait: REREGISTER_WAIT)
           raise ArgumentError, "wire: must be one of #{WIRES.join(', ')}" unless WIRES.include?(wire)
 
           @bridge = bridge
           @prefix = prefix.to_s
           @tool_names = tool_names.to_h { |action, tool| [action.to_s, tool.to_s] }
           @wire = wire
+          @reregister_wait = reregister_wait
         end
 
         # Tools the page registers right now, cached until #refresh!.
@@ -58,10 +63,31 @@ module Portage
                   else
                     flat_input(name.to_s, arguments, meta, tool)
                   end
-          result(@bridge.execute_tool(tool["name"], jsonable(input)))
+          result(execute(name.to_s, tool["name"], Jsonable.call(input)))
         end
 
         private
+
+        # A page can drop every tool and register them again while it
+        # re-renders — confirmed live on Shopify storefronts, where the page's
+        # own `add_to_cart` leaves `navigator.modelContext` empty for ~500ms
+        # before all 11 tools come back. A tool #resolve just found that the
+        # page now says isn't registered is that gap, not a missing tool, and
+        # the call never ran, so wait for it and send the call again. Past
+        # `reregister_wait:` it's reported like any other miss.
+        def execute(action, tool_name, input)
+          deadline = monotonic_now + @reregister_wait
+          begin
+            @bridge.execute_tool(tool_name, input)
+          rescue ToolNotFoundError
+            raise(refresh!.then { not_found(action, [tool_name]) }) if monotonic_now >= deadline
+
+            sleep(REREGISTER_POLL)
+            retry
+          end
+        end
+
+        def monotonic_now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
         # A page may register tools after load (or re-register on client-side
         # navigation), so one miss re-reads the page before giving up.
@@ -145,23 +171,6 @@ module Portage
           JSON.parse(text)
         rescue JSON::ParserError
           text
-        end
-
-        # Arguments cross into JavaScript, so value objects (a
-        # Portage::Ucp::CheckoutFulfillment, say) go over as plain hashes.
-        def jsonable(value)
-          case value
-          when Hash then value.to_h { |k, v| [k.to_s, jsonable(v)] }
-          when Array then value.map { |v| jsonable(v) }
-          when String, Numeric, true, false, nil then value
-          else jsonable_object(value)
-          end
-        end
-
-        def jsonable_object(value)
-          return value.to_s if value.is_a?(Symbol) || !value.respond_to?(:to_h)
-
-          jsonable(value.to_h)
         end
       end
     end
