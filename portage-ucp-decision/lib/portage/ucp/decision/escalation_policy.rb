@@ -15,18 +15,12 @@ module Portage
       module EscalationPolicy
         Verdict = Data.define(:escalate, :reason)
 
-        ESCALATING_STATUSES = [Portage::Ucp::Support::Escalation::STATUS].freeze
-
         # @param checkout_status [String] a Checkout#status value.
         # @param signals [Hash] `warnings:` an Array of human-readable
-        #   mismatch strings (any element escalates), `mismatch:` an
-        #   explicit boolean for a caller that's already decided but has no
-        #   string to show. Either alone is enough; neither is required.
+        #   mismatch strings. Any element escalates; none is required.
         def self.call(checkout_status:, signals: {})
           reason = Portage::Ucp::Support::Escalation.reason(checkout_status: checkout_status,
                                                             warnings: signals[:warnings])
-          reason ||= :mismatch if signals[:mismatch] == true
-
           Verdict.new(escalate: !reason.nil?, reason: reason)
         end
       end

@@ -19,18 +19,19 @@ module Portage
           Verdict.new(proceed: confidence >= threshold, confidence: confidence, threshold: threshold)
         end
 
-        # Asks a ModelBackends backend a single question and gates on what it
-        # answered, not just on how sure it was:
+        # Asks a ModelBackends backend one yes/no ("noul") question and gates
+        # on the probability it answered yes. Phrase the question so "yes"
+        # means "safe to proceed". Jev sends no separate `confidence` for a
+        # noul (docs.typesafe.ai/api — confirmed live:
+        # `{"type":"noul","noul":0.37}`), and none is needed: the
+        # yes-probability is the thing to threshold.
         #
-        # - `"noul"` gates on the probability the answer is yes. Jev sends no
-        #   separate `confidence` for a noul (docs.typesafe.ai/api — confirmed
-        #   live: `{"type":"noul","noul":0.37}`), so phrase the question so
-        #   "yes" means "safe to proceed".
-        # - `"choice"`/`"score"` carry a `confidence`, but that's how sure the
-        #   model is of whichever answer it gave — a confident "escalate" is
-        #   still an escalate. These need `proceed_on:`, matched against the
-        #   answer with `===` (an option String for a choice, a Range of levels
-        #   for a score): proceed only on a match at or above the threshold.
+        # Only a noul, on purpose. A choice's or score's `confidence` is how
+        # sure the model is of whichever answer it gave, so a confident
+        # "escalate" would clear the threshold (Jev did exactly that, at
+        # 0.99, for a live `requires_escalation` checkout). A caller that
+        # wants a choice or score can ask the backend directly with
+        # `#ask` and read the answer itself.
         #
         # @param backend [#ask] a ModelBackends::Jev/Laya instance (or
         #   anything answering the same `#ask(state:, questions:)` shape).
@@ -38,42 +39,18 @@ module Portage
         # @param question [String] the key the answer comes back under.
         # @param instructions [String] what the backend should evaluate.
         # @param threshold [Float]
-        # @param type [String] "noul", "choice", or "score" — ModelBackends'
-        #   wire vocabulary.
-        # @param criteria [Hash, Array, nil]
-        # @param proceed_on [#===, nil] required for "choice"/"score".
         # @return [Verdict]
-        # rubocop:disable Metrics/ParameterLists -- all keywords; one question's full wire shape plus its gate
-        def self.via_backend(backend:, state:, question:, instructions:, threshold:, type: "noul", criteria: nil,
-                             proceed_on: nil)
-          # rubocop:enable Metrics/ParameterLists
-          if type != "noul" && proceed_on.nil?
-            raise ArgumentError, "proceed_on: is required for type: #{type.inspect} — a #{type}'s confidence " \
-                                 "says how sure the model is, not which answer it gave"
-          end
-
-          asked = { question => ModelBackends::Question.new(type: type, instructions: instructions,
-                                                            criteria: criteria) }
+        def self.via_backend(backend:, state:, question:, instructions:, threshold:)
+          asked = { question => ModelBackends::Question.new(type: "noul", instructions: instructions) }
           answer = backend.ask(state: state, questions: asked).fetch(question) do
             raise Portage::Ucp::Decision::BackendError, "backend returned no answer for #{question.inspect}"
           end
-          verdict = call(confidence: gated_score(answer, type), threshold: threshold)
-          return verdict if type == "noul"
-
-          case answer.value
-          when proceed_on then verdict
-          else verdict.with(proceed: false)
+          unless answer.value.is_a?(Numeric)
+            raise Portage::Ucp::Decision::BackendError, "noul answer carried no probability: #{answer.to_h}"
           end
-        end
 
-        def self.gated_score(answer, type)
-          score = type == "noul" ? answer.value : answer.confidence
-          return score if score.is_a?(Numeric)
-
-          raise Portage::Ucp::Decision::BackendError,
-                "#{type} answer carried no #{type == 'noul' ? 'noul probability' : 'confidence'}: #{answer.to_h}"
+          call(confidence: answer.value, threshold: threshold)
         end
-        private_class_method :gated_score
       end
     end
   end

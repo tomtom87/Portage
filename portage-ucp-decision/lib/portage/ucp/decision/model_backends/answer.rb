@@ -19,8 +19,8 @@ module Portage
         # yes). `confidence` is how sure the model is of a choice or score —
         # Jev sends none for a noul, so ConfidenceGate gates a noul on
         # `value` instead.
-        Answer = Data.define(:type, :confidence, :value, :probabilities) do
-          def initialize(type:, confidence:, value: nil, probabilities: nil) = super
+        Answer = Data.define(:type, :confidence, :value) do
+          def initialize(type:, confidence:, value: nil) = super
         end
 
         # The `{"answers": {name => {...}}}` body both backends return, as
@@ -35,8 +35,7 @@ module Portage
         def self.parse_answers(raw, source:)
           JSON.parse(raw).fetch("answers").transform_values do |answer|
             Answer.new(type: answer["type"], confidence: answer["confidence"],
-                       value: answer["choice"] || answer["score"] || answer["noul"],
-                       probabilities: answer["probabilities"])
+                       value: answer["choice"] || answer["score"] || answer["noul"])
           end
         rescue JSON::ParserError, KeyError, TypeError, NoMethodError => e
           raise Portage::Ucp::Decision::BackendError,

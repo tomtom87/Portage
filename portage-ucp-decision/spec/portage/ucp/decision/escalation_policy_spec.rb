@@ -24,13 +24,6 @@ RSpec.describe Portage::Ucp::Decision::EscalationPolicy do
     expect(verdict.reason).to be_nil
   end
 
-  it "escalates on an explicit mismatch signal even without requires_escalation" do
-    verdict = described_class.call(checkout_status: "ready_for_complete", signals: { mismatch: true })
-
-    expect(verdict.escalate).to be(true)
-    expect(verdict.reason).to eq(:mismatch)
-  end
-
   it "escalates when warnings are present" do
     verdict = described_class.call(checkout_status: "ready_for_complete",
                                    signals: { warnings: ["Store dropped the requested item."] })
@@ -45,8 +38,8 @@ RSpec.describe Portage::Ucp::Decision::EscalationPolicy do
     expect(verdict.escalate).to be(false)
   end
 
-  it "requires_escalation still wins over absent signals" do
-    verdict = described_class.call(checkout_status: "requires_escalation", signals: { mismatch: false })
+  it "requires_escalation still wins over a warning" do
+    verdict = described_class.call(checkout_status: "requires_escalation", signals: { warnings: ["dropped"] })
 
     expect(verdict.reason).to eq(:requires_escalation)
   end
