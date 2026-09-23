@@ -168,11 +168,11 @@ module Portage
       end
 
       # Buyable first, then cheapest, then unpriced (see Decisions.rank —
-      # OfferRanking when portage-ucp-decision is installed), so an agent
-      # loop ranking its own candidate list gets the same order this command
-      # prints. Sorting on price alone would float a browse-only store above
-      # one you can actually check out from, which is the wrong answer to
-      # "buy me this".
+      # core's Support::OfferRanking, the rule portage-ucp-decision's
+      # OfferRanking wraps), so an agent loop ranking its own candidate list
+      # gets the same order this command prints. Sorting on price alone
+      # would float a browse-only store above one you can actually check
+      # out from, which is the wrong answer to "buy me this".
       def rank(offers) = Decisions.rank(offers)
 
       # --- Shapes ---

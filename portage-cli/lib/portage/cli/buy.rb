@@ -478,7 +478,7 @@ module Portage
       end
 
       def escalated_report(source, products, checkout, warnings, verdict)
-        return escalation_report(source, products, checkout, warnings) unless verdict[:reason] == :mismatch
+        return escalation_report(source, products, checkout, warnings) unless verdict[:reason] == "mismatch"
 
         handoff_report(source, products, checkout, warnings,
                        outcome: "checkout_mismatch",
@@ -522,9 +522,8 @@ module Portage
       end
 
       # The buyer's own spend policy (`portage policy set`), checked through
-      # Decisions.policy before any completion is attempted. That check
-      # needs only portage-ucp core, so it runs with or without the
-      # optional decision gem.
+      # Decisions.policy before any completion is attempted. PolicyGuard is
+      # core, so this runs with or without the optional decision gem.
       # Dispatcher runs PolicyGuard as well, but only in-process. A remote
       # native-UCP store's Dispatcher belongs to the merchant, not to this
       # buyer, so without this check the buyer's caps, allowlist and token
@@ -571,7 +570,7 @@ module Portage
 
       def low_confidence_message(verdict)
         backend = verdict[:backend]
-        if verdict[:error]
+        unless verdict[:reason] == "below_threshold"
           return "Confidence check (#{backend}) couldn't answer — not completed: #{verdict[:error]} " \
                  "Visit the link to finish this checkout yourself."
         end

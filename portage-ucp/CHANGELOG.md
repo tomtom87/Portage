@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.9.0] - 2026-09-23
+
+- New `Support::OfferRanking` and `Support::Escalation`: the offer-ranking
+  and escalation rules, held in core the way `PolicyGuard` holds the policy
+  rule. `portage-ucp-decision`'s `OfferRanking` and `EscalationPolicy` wrap
+  them, and `portage-cli` calls them directly, so there's one copy of each
+  rule instead of a gem copy and a CLI fallback.
+  - `OfferRanking.rank(offers) { |offer| [buyable, amount] }` puts buyable
+    offers first, then priced, then cheapest, and keeps ties in input
+    order.
+  - `Escalation.reason(checkout_status:, warnings:)` returns
+    `:requires_escalation`, then `:mismatch` for any warning, else nil.
+
 ## [0.8.1] - 2026-09-22
 
 - `Resolver`'s WooCommerce platform entry threads `payment_method`/

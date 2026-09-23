@@ -59,22 +59,26 @@ module Portage
 
       # @param state [Hash] JSON-serializable. Never pass it a payment token.
       # @return [Hash, nil] nil when disabled. Otherwise `proceed:`,
-      #   `confidence:`, `threshold:`, and `backend:`, plus `error:` when
-      #   the backend couldn't answer.
+      #   `reason:`, `confidence:`, `threshold:`, `backend:` and `error:`.
+      #   `reason` is nil when it proceeds, else why it held:
+      #   `below_threshold`, `backend_error` (unknown, unconfigured or
+      #   failed backend) or `not_installed` (no portage-ucp-decision).
+      #   `error` is the detail behind the last two, nil otherwise.
       def call(state)
         return nil unless enabled?
-        return not_installed_verdict unless Decisions.available?
+        return held("not_installed", not_installed_message) unless Decisions.available?
 
         verdict = Portage::Ucp::Decision::ConfidenceGate.via_backend(
           backend: resolve_backend, state: JSON.generate(state), question: QUESTION,
           instructions: INSTRUCTIONS, threshold: @threshold
         )
-        verdict.to_h.merge(backend: @backend_name)
+        { proceed: verdict.proceed, reason: verdict.proceed ? nil : "below_threshold",
+          confidence: verdict.confidence, threshold: @threshold, backend: @backend_name, error: nil }
       rescue StandardError => e
         # Any failure, not only Decision::Error: this runs after a real
         # checkout exists, so an escaped exception would drop the report,
         # the hand-off and the history entry along with the purchase.
-        { proceed: false, confidence: nil, threshold: @threshold, backend: @backend_name, error: e.message }
+        held("backend_error", e.message)
       end
 
       # What `portage doctor` reports: why the named backend would hold every
@@ -82,7 +86,7 @@ module Portage
       # @return [String, nil] nil when disabled or ready to answer.
       def configuration_problem
         return nil unless enabled?
-        return not_installed_verdict[:error] unless Decisions.available?
+        return not_installed_message unless Decisions.available?
 
         resolve_backend.configuration_problem
       rescue Portage::Ucp::Decision::Error => e
@@ -95,10 +99,14 @@ module Portage
         (@resolver || Portage::Ucp::Decision::ModelBackends.method(:resolve)).call(@backend_name)
       end
 
-      def not_installed_verdict
-        { proceed: false, confidence: nil, threshold: @threshold, backend: @backend_name,
-          error: "portage-ucp-decision is not installed — `gem install portage-ucp-decision` to use " \
-                 "the #{@backend_name} confidence check." }
+      def held(reason, error)
+        { proceed: false, reason: reason, confidence: nil, threshold: @threshold, backend: @backend_name,
+          error: error }
+      end
+
+      def not_installed_message
+        "portage-ucp-decision is not installed — `gem install portage-ucp-decision` to use the " \
+          "#{@backend_name} confidence check."
       end
 
       def presence(value)

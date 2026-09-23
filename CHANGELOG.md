@@ -24,6 +24,17 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 - `portage-ucp-client`: `get_cart`, `update_cart` and `cancel_cart` work
   again over the loopback and stdio transports. Before, both transports
   dropped `cart_id`. See that gem's changelog.
+- **`portage-ucp` 0.9.0: one copy of each decision rule.** `portage-cli`
+  kept hand-copied fallbacks of `portage-ucp-decision`'s offer-ranking and
+  escalation rules, and ran every spec twice so the copies couldn't drift.
+  Both rules now live in core (`Support::OfferRanking`,
+  `Support::Escalation`) next to `PolicyGuard`. The gem's `OfferRanking`
+  and `EscalationPolicy` wrap them, as `PolicyCheck` wraps `PolicyGuard`,
+  and the CLI calls them directly. `portage-cli` and
+  `portage-ucp-decision` now require `portage-ucp ~> 0.9`, and every
+  lockfile pins `portage-ucp` 0.9.0. `portage buy`'s `decisions:` verdicts
+  now report string reasons in-process as well as in `--json`, and
+  `confidence` gained a `reason` alongside its `error` detail.
 
 ## [0.8.2] - 2026-09-22
 

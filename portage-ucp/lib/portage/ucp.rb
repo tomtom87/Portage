@@ -10,6 +10,8 @@ require_relative "ucp/adapter"
 # conversion, dedup table and HTTP plumbing.
 require_relative "ucp/support/amounts"
 require_relative "ucp/support/totals"
+require_relative "ucp/support/offer_ranking"
+require_relative "ucp/support/escalation"
 require_relative "ucp/support/line_item_status"
 require_relative "ucp/support/idempotency"
 require_relative "ucp/support/checkout_state"

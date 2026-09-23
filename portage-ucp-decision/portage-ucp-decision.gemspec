@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "faraday", ">= 2.0"
-  spec.add_dependency "portage-ucp", "~> 0.8"
+  spec.add_dependency "portage-ucp", "~> 0.9"
 
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.88"

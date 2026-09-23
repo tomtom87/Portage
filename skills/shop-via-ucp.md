@@ -149,6 +149,12 @@ policy = D::PolicyCheck.call(amount: total, currency: checkout["currency"], merc
 # policy.allowed == false -> don't complete; tell the human policy.reason.
 ```
 
+Without `portage-ucp-decision`, the same three rules are in `portage-ucp`
+core, untyped: `Portage::Ucp::Support::OfferRanking.rank(offers) { |o|
+[o[:checkout], o[:amount]] }`, `Portage::Ucp::Support::Escalation.reason(
+checkout_status:, warnings:)`, and `Portage::Ucp::PolicyGuard.check!`
+(raises `PolicyViolationError` with a `reason`).
+
 Before completing a purchase without asking the human, you can also gate on
 a model's confidence (`D::ConfidenceGate.via_backend`, with
 `D::ModelBackends::Jev` or `Laya`). Treat a low score or a backend error as
@@ -161,7 +167,11 @@ and `dry_run` stopped before completing on purpose. The hand-off outcomes
 (`requires_escalation`, `policy_blocked`, `low_confidence`,
 `no_payment_token`, `permission_denied`, `checkout_mismatch`) each come
 with a `checkout_url` to hand the human. The gate verdicts behind them are
-under `decisions:` (`policy.reason`, `confidence.error`, ...). Don't infer
+under `decisions:`. Each verdict has a `reason`, null when that gate passed:
+`escalation.reason` (`requires_escalation`, `mismatch`), `policy.reason`
+(`per_transaction_cap_exceeded`, `merchant_not_allowlisted`, ...), and
+`confidence.reason` (`below_threshold`, `backend_error`, `not_installed`,
+with the detail in `confidence.error`). Don't infer
 success from `decisions:` alone: a missing payment token or a
 permission-denied store holds a purchase without any gate saying no.
 `items:` is what the checkout holds, and `products:` is only the search

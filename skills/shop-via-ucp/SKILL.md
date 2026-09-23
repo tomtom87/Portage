@@ -19,7 +19,8 @@ report's `outcome` rather than its `message`: only `purchased` means bought.
 Every hand-off outcome (`requires_escalation`, `policy_blocked`,
 `low_confidence`, `no_payment_token`, `permission_denied`,
 `checkout_mismatch`) comes with a `checkout_url` for the human, and
-`decisions:` says why a gate held it. `portage history --json` lists past
+`decisions:` says why a gate held it: each verdict's `reason` is a string
+naming the cause, or null when that gate passed. `portage history --json` lists past
 checkouts by the same `outcome`, so check it before buying something twice. With
 `portage-ucp-client`, make the same calls through `portage-ucp-decision`
 (`OfferRanking`, `EscalationPolicy`, `PolicyCheck`, `ConfidenceGate`) —

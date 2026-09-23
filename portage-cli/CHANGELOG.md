@@ -6,28 +6,32 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
-- **The decision layer is wired in, as an optional plugin.**
-  `portage-ucp-decision` is not a dependency. When it's installed,
-  `buy`/`find` make their judgment calls through it. When it isn't,
-  built-in fallbacks give the same answers. Every checkout report carries
-  the verdicts under `decisions:` (`escalation`, `policy`, and
-  `confidence` when enabled).
-  - `find` ranks offers with `OfferRanking`. The order is unchanged.
-  - `buy` decides escalation with `EscalationPolicy`. When a checkout both
-    requires escalation and mismatches the request under
-    `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`, it now reports the store's
-    escalation, not the mismatch. Both hand off the checkout.
-  - `buy --yes` now checks your spend policy with `PolicyCheck` before
-    completing, on remote native-UCP stores too, with or without the
-    decision gem. Before, only the
-    own-store flow's in-process `Dispatcher` enforced it, so a remote
-    store never saw your caps, allowlist or token scopes. A blocked
-    purchase hands off the checkout.
+- **The decision layer is wired in.** `buy`/`find` make their judgment
+  calls through the same rules `portage-ucp-decision` wraps. Ranking,
+  escalation and the policy check live in `portage-ucp` core
+  (`Support::OfferRanking`, `Support::Escalation`, `PolicyGuard`), so they
+  run the same with or without that gem. `portage-ucp-decision` stays an
+  optional plugin that only the confidence gate needs. Every checkout
+  report carries the verdicts under `decisions:` (`escalation`, `policy`,
+  and `confidence` when enabled). Requires `portage-ucp ~> 0.9`.
+  - `find` ranks offers buyable first, then cheapest, then unpriced. The
+    order is unchanged.
+  - When a checkout both requires escalation and mismatches the request
+    under `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`, `buy` now reports the
+    store's escalation, not the mismatch. Both hand off the checkout.
+  - `buy --yes` now checks your spend policy before completing, on remote
+    native-UCP stores too. Before, only the own-store flow's in-process
+    `Dispatcher` enforced it, so a remote store never saw your caps,
+    allowlist or token scopes. A blocked purchase hands off the checkout.
   - New opt-in confidence gate: `--decision-backend jev|laya` /
     `PORTAGE_DECISION_BACKEND`, with a threshold from `--min-confidence` /
     `PORTAGE_MIN_CONFIDENCE` (default `0.8`). Needs `portage-ucp-decision`.
     A low score, a backend that can't answer, or a missing gem holds the
     purchase and hands off the checkout.
+  - Every verdict carries a `reason`: a string, or null when the gate
+    passed, the same in-process as in `--json`. `confidence.reason` is
+    `below_threshold`, `backend_error` or `not_installed`, and
+    `confidence.error` holds the detail behind the last two.
 - **`buy` checked out sold-out items when in-stock matches were right
   there.** It took the top search hit and its first variant unconditionally,
   so a sold-out top hit dead-ended on the store's "Sold out" refusal

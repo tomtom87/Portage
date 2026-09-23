@@ -1,6 +1,15 @@
 require "spec_helper"
 
 RSpec.describe Portage::Ucp::Decision::EscalationPolicy do
+  it "delegates the rule to Portage::Ucp::Support::Escalation" do
+    allow(Portage::Ucp::Support::Escalation).to receive(:reason).and_call_original
+
+    described_class.call(checkout_status: "ready_for_complete", signals: { warnings: ["dropped"] })
+
+    expect(Portage::Ucp::Support::Escalation).to have_received(:reason)
+      .with(checkout_status: "ready_for_complete", warnings: ["dropped"])
+  end
+
   it "escalates on requires_escalation" do
     verdict = described_class.call(checkout_status: "requires_escalation")
 
