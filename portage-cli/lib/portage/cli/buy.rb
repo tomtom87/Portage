@@ -407,11 +407,26 @@ module Portage
       # With a --product-id, that exact product or nothing: falling back to the
       # top search hit when the requested id isn't in the results would buy
       # something the caller never chose.
+      #
+      # Without one, the top hit a shopper could actually buy: checking out a
+      # sold-out top hit dead-ends on the store's "Sold out" refusal even
+      # when an in-stock match sits right below it (confirmed live
+      # 2026-09-23 on allbirds.com and billabong.com). Falls back to the top
+      # hit when nothing reports stock, so the store still gets to answer.
       def select_product(products)
-        return products.first unless @product_id
+        return products.find { |product| available?(product) } || products.first unless @product_id
 
         products.find { |product| product_id_of(product) == @product_id }
       end
+
+      # A product with no variant availability to go on counts as buyable —
+      # only an explicit `available: false` on every variant rules it out.
+      def available?(product)
+        variants = Array(product["variants"])
+        variants.empty? || variants.any? { |variant| variant_available?(variant) }
+      end
+
+      def variant_available?(variant) = variant.dig("availability", "available") != false
 
       # #select_product only ever sees products from #safe_search, which reads
       # through a Session — native remote or the own-store loopback session
@@ -431,9 +446,13 @@ module Portage
       # #product_id_of returns for display/--product-id matching. A
       # product with no variants (or a backend that doesn't distinguish
       # the two) falls back to the product id unchanged (see
-      # docs/design-log.md §41).
+      # docs/design-log.md §41). The first in-stock variant wins over the
+      # first variant, for the same reason #select_product skips sold-out
+      # products (a live Brooklinen sheet set lists its sold-out size first).
       def line_item_id_of(product)
-        product["variants"]&.first&.dig("id") || product_id_of(product)
+        variants = Array(product["variants"])
+        (variants.find { |variant| variant_available?(variant) } || variants.first)&.dig("id") ||
+          product_id_of(product)
       end
 
       def finish_checkout(session, source, products, checkout, warnings = [])
