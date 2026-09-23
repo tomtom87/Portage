@@ -66,8 +66,12 @@ module Portage
         load(relative_path)
       end
 
+      # Explicit encoding: the vendored schemas contain non-ASCII (e.g. "—"),
+      # and a process with no LANG set (a bare Docker image, a CI runner)
+      # defaults Encoding.default_external to US-ASCII, which made every
+      # schema load raise Encoding::InvalidByteSequenceError.
       def load(relative_path)
-        JSON.parse(File.read(File.join(@base_dir, relative_path)))
+        JSON.parse(File.read(File.join(@base_dir, relative_path), encoding: "UTF-8"))
       end
     end
   end

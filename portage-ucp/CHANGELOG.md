@@ -21,6 +21,10 @@ pre-1.0, so APIs may still shift between minor versions.
   objects or wire hashes, and returns nil when there's no entry of that
   type. `Dispatcher` and `ReferenceAdapter` use it in place of their own
   copies of the lookup, as does `portage-cli`.
+- Fix: `SchemaValidator` failed to load any vendored UCP schema in a process
+  with no `LANG` set (a bare Docker image, a CI runner). The schemas contain
+  non-ASCII, and Ruby then reads files as US-ASCII, so every validation
+  raised `Encoding::InvalidByteSequenceError`. It now reads them as UTF-8.
 
 ## [0.8.1] - 2026-09-22
 
