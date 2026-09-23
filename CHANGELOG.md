@@ -7,6 +7,24 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- **New gem: `portage-ucp-webmcp`.** It adds WebMCP as a transport to the
+  existing `Adapter` contract, next to classic MCP (stdio, Streamable HTTP)
+  and native UCP. It is not a new commerce backend.
+  - Inbound: a store's pages register its catalog/cart/checkout tools on
+    `document.modelContext`, and each call goes back to the same
+    `Mcp::Server`.
+  - Outbound: a `portage-ucp-client` transport drives the WebMCP tools of
+    any page, through Ferrum, Playwright, Selenium or any JavaScript-
+    evaluating callable. The page doesn't have to run Portage.
+  - End-to-end specs run the real page scripts in node against the real
+    Rack endpoint. They check that WebMCP returns the same documents as the
+    in-process Loopback transport.
+- `portage-ucp-client`: `get_cart`, `update_cart` and `cancel_cart` work
+  again over the loopback and stdio transports. Before, both transports
+  dropped `cart_id`. See that gem's changelog.
+
 ## [0.8.2] - 2026-09-22
 
 - **Anonymous native UCP validated against thirteen unrelated live Shopify
