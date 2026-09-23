@@ -1,23 +1,21 @@
+require "portage/ucp"
+
 module Portage
   module Ucp
     module Decision
       # docs/plans/system-one-decision-layer.md § Responsibilities 2.
       #
-      # Today `requires_escalation` branching is a rule the agent is told to
-      # follow (skills/shop-via-ucp.md guardrail 2), not a decision a caller
-      # can invoke and test. This makes that explicit call for the literal
-      # status, plus the doc's "ambiguous signal" case: a merchant surfacing
+      # A typed wrapper around `Portage::Ucp::Support::Escalation`, the way
+      # PolicyCheck wraps `PolicyGuard`. The rule lives in core: the literal
+      # `requires_escalation` status wins, then a mismatch the caller found.
+      # That covers the doc's "ambiguous signal" case, a merchant surfacing
       # a mismatch that isn't literally `requires_escalation` but should
-      # still stop here. `signals:` matches the vocabulary the not-yet-merged
-      # checkout-mismatch fix (commit 82631bf, branch
-      # feature/escalation-buyer-context-hardening) uses on its `Buy` report
-      # — a plain `warnings: [String]` array, no dedicated wire-level
-      # "mismatch" type exists anywhere in this repo — so this stays
-      # forward-compatible with that shape without depending on the branch.
+      # still stop here. `signals: {warnings:}` takes the same
+      # `warnings: [String]` array `portage buy` puts on its report.
       module EscalationPolicy
         Verdict = Data.define(:escalate, :reason)
 
-        ESCALATING_STATUSES = %w[requires_escalation].freeze
+        ESCALATING_STATUSES = [Portage::Ucp::Support::Escalation::STATUS].freeze
 
         # @param checkout_status [String] a Checkout#status value.
         # @param signals [Hash] `warnings:` an Array of human-readable
@@ -25,17 +23,12 @@ module Portage
         #   explicit boolean for a caller that's already decided but has no
         #   string to show. Either alone is enough; neither is required.
         def self.call(checkout_status:, signals: {})
-          return Verdict.new(escalate: true, reason: :requires_escalation) if escalating_status?(checkout_status)
-          return Verdict.new(escalate: true, reason: :mismatch) if mismatch?(signals)
+          reason = Portage::Ucp::Support::Escalation.reason(checkout_status: checkout_status,
+                                                            warnings: signals[:warnings])
+          reason ||= :mismatch if signals[:mismatch] == true
 
-          Verdict.new(escalate: false, reason: nil)
+          Verdict.new(escalate: !reason.nil?, reason: reason)
         end
-
-        def self.escalating_status?(checkout_status) = ESCALATING_STATUSES.include?(checkout_status)
-        private_class_method :escalating_status?
-
-        def self.mismatch?(signals) = signals[:mismatch] == true || Array(signals[:warnings]).any?
-        private_class_method :mismatch?
       end
     end
   end

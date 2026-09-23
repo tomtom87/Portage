@@ -16,9 +16,8 @@ Gem::Specification.new do |spec|
                      "portage-ucp (for platform detection via Resolver), portage-ucp-client (for the " \
                      "actual buy calls), and portage-ucp-journal (for `portage-console`'s read-only view of " \
                      "local purchase/transaction/order state); no single adapter gem is a hard dependency. " \
-                     "portage-ucp-decision is optional: installed, buy/find route their decisions through " \
-                     "it and the opt-in confidence gate works; absent, built-in fallbacks give the same " \
-                     "answers."
+                     "Ranking, escalation and the spend-policy check use portage-ucp core's rules; " \
+                     "portage-ucp-decision is optional and only the opt-in confidence gate needs it."
   spec.authors = ["Tom Whitbread"]
   spec.license = "MIT"
   spec.homepage = "https://github.com/tomtom87/Portage/tree/main/portage-cli"
@@ -29,7 +28,7 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "portage-ucp", "~> 0.8"
+  spec.add_dependency "portage-ucp", "~> 0.9"
   spec.add_dependency "portage-ucp-client", "~> 0.6"
   spec.add_dependency "portage-ucp-journal", "~> 0.1"
 

@@ -267,17 +267,19 @@ limits bound to one enrolled card) are set via `portage payment enroll
 
 ### Decisions
 
-`portage buy` and `portage find` make their judgment calls through
-`portage-ucp-decision` (`docs/plans/system-one-decision-layer.md`) when it's
-installed. It's an optional plugin, not a dependency:
+`portage buy` and `portage find` make their judgment calls
+(`docs/plans/system-one-decision-layer.md`) through rules that live in
+`portage-ucp` core: `Support::OfferRanking`, `Support::Escalation` and
+`PolicyGuard`. `portage-ucp-decision` wraps the same modules as typed
+verdicts, so ranking, escalation and the policy check answer the same way
+whether or not it's installed. It's an optional plugin, not a dependency:
 
 ```bash
 gem install portage-ucp-decision   # only needed for the confidence gate
 ```
 
-Without it, built-in fallbacks give the same ranking, escalation and policy
-answers, and the policy check still runs (it needs only `portage-ucp`). The
-confidence gate is the one feature that needs the gem.
+The confidence gate is the one feature that needs the gem, because the
+model backends live there.
 
 Every `portage buy` report carries an `outcome`, so a script or agent loop
 can branch on data rather than on the message text. The text output leads
@@ -307,31 +309,40 @@ Checkout reports also carry `items` (what the checkout holds, as opposed to
 ```json
 "decisions": {
   "escalation": { "escalate": false, "reason": null },
-  "policy":     { "allowed": false, "reason": "per_transaction_cap_exceeded" },
-  "confidence": { "proceed": true, "confidence": 0.93, "threshold": 0.8, "backend": "jev" }
+  "policy":     { "allowed": true, "reason": null },
+  "confidence": { "proceed": false, "reason": "below_threshold", "confidence": 0.41,
+                  "threshold": 0.8, "backend": "jev", "error": null }
 }
 ```
 
-- **escalation** — `EscalationPolicy`. A `requires_escalation` checkout always
-  escalates. A checkout that doesn't match the request escalates only under
+Every verdict has a `reason`: `null` when the gate let the purchase through,
+otherwise a string naming why it stopped it.
+
+- **escalation** — `Support::Escalation`. A `requires_escalation` checkout
+  always escalates (`reason: "requires_escalation"`). A checkout that doesn't
+  match the request escalates (`reason: "mismatch"`) only under
   `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`; otherwise it's reported as `warnings`.
-- **policy** — `PolicyCheck`, run on your policy file (see "Policy" above)
-  before any `--yes` completion. It applies to remote native-UCP stores too.
-  Before this check, only the own-store adapter flow's in-process
-  `Dispatcher` enforced the policy. Rolling caps and velocity limits count
-  only what the transaction log holds, and only own-store purchases write to
-  that log.
+- **policy** — `PolicyGuard`, run on your policy file (see "Policy" above)
+  before any `--yes` completion. `reason` is the guard's own
+  (`per_transaction_cap_exceeded`, `rolling_spend_cap_exceeded`,
+  `velocity_exceeded`, `merchant_not_allowlisted`, `token_scope_merchant`,
+  `token_scope_amount`, `currency_mismatch`, or `total_unknown`, below).
+  It applies to remote native-UCP stores too. Before this check, only the
+  own-store adapter flow's in-process `Dispatcher` enforced the policy.
+  Rolling caps and velocity limits count only what the transaction log
+  holds, and only own-store purchases write to that log.
 - **confidence** — `ConfidenceGate`, off unless `--decision-backend` or
   `PORTAGE_DECISION_BACKEND` names a backend. Right before a `--yes`
   completion it asks the backend whether the checkout matches the request
   and is safe to complete unattended. It sends the query, merchant,
-  quantity, line items, totals and warnings, never the payment token. A
-  score below the threshold holds the purchase. So does a backend that can't
-  answer, or naming a backend without `portage-ucp-decision` installed,
-  because the gate fails closed. `jev` needs `JEV_API_KEY`; `laya`
-  needs `LAYA_BRIDGE_SCRIPT` (see `portage-ucp-decision`'s README).
-  `portage doctor` flags whichever of these is missing for the selected
-  backend.
+  quantity, line items, totals and warnings, never the payment token. The
+  gate fails closed, so three things hold the purchase: a score below the
+  threshold (`reason: "below_threshold"`), a backend that can't answer
+  (`"backend_error"`), and naming a backend without `portage-ucp-decision`
+  installed (`"not_installed"`). For the last two, `error` says what went
+  wrong. `jev` needs `JEV_API_KEY`; `laya` needs `LAYA_BRIDGE_SCRIPT` (see
+  `portage-ucp-decision`'s README). `portage doctor` flags whichever of
+  these is missing for the selected backend.
 - **policy** also denies a checkout with no `total` line as
   `total_unknown` whenever a spend cap is set, rather than skipping the cap.
 
@@ -341,8 +352,10 @@ shopper can finish it themselves. The webhook body is JSON: `event`
 (`checkout_handoff`), `reason` (the report's `outcome`), `message` (the
 report's own sentence), `store`, `query`, `checkout_url`, `checkout_id`,
 `source`, `totals` and `warnings`. Any 2xx counts as delivered; the POST
-gives up after 5 seconds and reports `notify_error` instead. `portage find`'s offer order comes from
-`OfferRanking`: buyable first, then cheapest, then unpriced.
+gives up after 5 seconds and reports `notify_error` instead.
+
+`portage find`'s offer order comes from `Support::OfferRanking`: buyable
+first, then cheapest, then unpriced.
 
 ### Shipping address (own-store checkouts only)
 

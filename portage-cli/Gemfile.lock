@@ -11,7 +11,7 @@ PATH
   specs:
     portage-ucp-decision (0.1.0)
       faraday (>= 2.0)
-      portage-ucp (~> 0.8)
+      portage-ucp (~> 0.9)
 
 PATH
   remote: ../portage-ucp-journal
@@ -21,7 +21,7 @@ PATH
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.8.1)
+    portage-ucp (0.9.0)
       base64 (~> 0.2)
       json_schemer (~> 2.5)
       mcp (~> 0.24)
@@ -31,7 +31,7 @@ PATH
   remote: .
   specs:
     portage-cli (0.6.4)
-      portage-ucp (~> 0.8)
+      portage-ucp (~> 0.9)
       portage-ucp-client (~> 0.6)
       portage-ucp-journal (~> 0.1)
 

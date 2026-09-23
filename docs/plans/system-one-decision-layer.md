@@ -7,14 +7,16 @@ the policy-check wrapper (plus a `risk_signals:` gate), escalation (literal
 via two swappable model backends (`ModelBackends::Jev`, `ModelBackends::Laya`).
 
 **Wired in, as an optional plugin:** `portage-cli` does not depend on the
-gem, so the core and CLI stay light. `Cli::Decisions` loads it when it's
-installed and falls back to built-in copies of the same rules when it isn't.
-`decisions_spec` runs both paths against the same cases. The policy check
-calls core `PolicyGuard` either way. Only the confidence gate needs the gem.
-With it installed, `Find#rank` goes through `OfferRanking`. `Buy` decides escalation with `EscalationPolicy`, checks the
-buyer's policy with `PolicyCheck` before every `--yes` completion, and runs
-`ConfidenceGate` in front of that completion when a backend is named
-(`Cli::ConfidenceCheck`). Every checkout report carries the verdicts under
+gem, so the core and CLI stay light. The ranking, escalation and policy
+rules live in `portage-ucp` core (`Support::OfferRanking`,
+`Support::Escalation`, `PolicyGuard`). The gem's `OfferRanking`,
+`EscalationPolicy` and `PolicyCheck` are typed wrappers around them, and
+`Cli::Decisions` calls core directly, so there is one copy of each rule and
+the CLI answers the same way with or without the gem. Only the confidence
+gate needs the gem. `Find#rank` ranks through core. `Buy` decides escalation
+through core, checks the buyer's policy with `PolicyGuard` before every
+`--yes` completion, and runs `ConfidenceGate` in front of that completion
+when a backend is named (`Cli::ConfidenceCheck`). Every checkout report carries the verdicts under
 `decisions:`. The agent loop's instructions (`skills/shop-via-ucp.md`,
 `skills/shop-via-ucp/SKILL.md`) call the same four decisions for raw
 `portage-ucp-client` sessions and branch on `decisions:` when they shell out

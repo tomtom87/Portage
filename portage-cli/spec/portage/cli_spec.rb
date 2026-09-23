@@ -70,7 +70,7 @@ RSpec.describe Portage::Cli do
     end
 
     it "prints the report's decision verdicts" do
-      decided = report.merge(decisions: { policy: { allowed: false, reason: :merchant_not_allowlisted } })
+      decided = report.merge(decisions: { policy: { allowed: false, reason: "merchant_not_allowlisted" } })
       allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: decided))
 
       output = capture_stdout { described_class.run(%w[buy shop.example]) }

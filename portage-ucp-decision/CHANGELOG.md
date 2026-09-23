@@ -6,6 +6,11 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `OfferRanking` and `EscalationPolicy` now delegate to
+  `portage-ucp`'s `Support::OfferRanking` and `Support::Escalation`, the
+  way `PolicyCheck` already delegated to `PolicyGuard`. Their `Verdict`s
+  and signatures are unchanged. Requires `portage-ucp ~> 0.9`.
+
 - **A backend failure could escape as a raw exception.** Jev let
   `Faraday::Error`, `JSON::ParserError` (a non-JSON 2xx) and `KeyError` (no
   `answers`) through, Laya let `Errno::ENOENT` (a missing

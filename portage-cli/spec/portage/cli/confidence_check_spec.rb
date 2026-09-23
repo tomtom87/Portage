@@ -29,7 +29,7 @@ RSpec.describe Portage::Cli::ConfidenceCheck do
       described_class.new(resolver: resolver).call(query: "cold")
     end
 
-    expect(verdict).to eq(proceed: true, confidence: 0.6, threshold: 0.5, backend: "jev")
+    expect(verdict).to eq(proceed: true, reason: nil, confidence: 0.6, threshold: 0.5, backend: "jev", error: nil)
   end
 
   it "lets explicit arguments win over the env vars" do
@@ -38,7 +38,7 @@ RSpec.describe Portage::Cli::ConfidenceCheck do
       described_class.new(backend: "jev", threshold: 0.9, resolver: ->(_name) { backend }).call(query: "cold")
     end
 
-    expect(verdict).to include(proceed: false, threshold: 0.9, backend: "jev")
+    expect(verdict).to include(proceed: false, reason: "below_threshold", threshold: 0.9, backend: "jev", error: nil)
   end
 
   it "defaults the threshold to DEFAULT_THRESHOLD" do
@@ -57,7 +57,7 @@ RSpec.describe Portage::Cli::ConfidenceCheck do
   it "fails closed on an unknown backend name" do
     verdict = described_class.new(backend: "nope").call({})
 
-    expect(verdict).to include(proceed: false, backend: "nope")
+    expect(verdict).to include(proceed: false, reason: "backend_error", backend: "nope")
     expect(verdict[:error]).to include("unknown decision model backend")
   end
 
@@ -66,7 +66,7 @@ RSpec.describe Portage::Cli::ConfidenceCheck do
       described_class.new(backend: "jev").call({})
     end
 
-    expect(verdict).to include(proceed: false, confidence: nil)
+    expect(verdict).to include(proceed: false, reason: "backend_error", confidence: nil)
     expect(verdict[:error]).to include("JEV_API_KEY is not set")
   end
 
@@ -74,7 +74,7 @@ RSpec.describe Portage::Cli::ConfidenceCheck do
     allow(Portage::Cli::Decisions).to receive(:available?).and_return(false)
     verdict = described_class.new(backend: "jev", resolver: ->(_name) { raise "must not resolve" }).call({})
 
-    expect(verdict).to include(proceed: false, backend: "jev")
+    expect(verdict).to include(proceed: false, reason: "not_installed", backend: "jev")
     expect(verdict[:error]).to include("gem install portage-ucp-decision")
   end
 

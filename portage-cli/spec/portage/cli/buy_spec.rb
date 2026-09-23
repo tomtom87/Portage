@@ -516,14 +516,14 @@ RSpec.describe Portage::Cli::Buy do
     it "records requires_escalation as the escalation verdict" do
       report, = buy(checkout: incomplete_checkout.merge("status" => "requires_escalation"))
 
-      expect(report[:decisions][:escalation]).to eq(escalate: true, reason: :requires_escalation)
+      expect(report[:decisions][:escalation]).to eq(escalate: true, reason: "requires_escalation")
     end
 
     it "records a mismatch escalation under PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" do
       checkout = incomplete_checkout.merge("line_items" => [])
       report, session = with_env("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" => "1") { buy(checkout: checkout) }
 
-      expect(report[:decisions][:escalation]).to eq(escalate: true, reason: :mismatch)
+      expect(report[:decisions][:escalation]).to eq(escalate: true, reason: "mismatch")
       expect(session).not_to have_received(:complete_checkout)
     end
 
@@ -534,7 +534,7 @@ RSpec.describe Portage::Cli::Buy do
       report, session = buy(checkout: priced_checkout)
 
       expect(report[:message]).to start_with("Blocked by your spend policy (per_transaction_cap_exceeded)")
-      expect(report[:decisions][:policy]).to eq(allowed: false, reason: :per_transaction_cap_exceeded)
+      expect(report[:decisions][:policy]).to eq(allowed: false, reason: "per_transaction_cap_exceeded")
       expect(session).not_to have_received(:complete_checkout)
     end
 
@@ -542,8 +542,15 @@ RSpec.describe Portage::Cli::Buy do
       policy("merchant_allowlist" => ["other.example"])
       report, session = buy(checkout: priced_checkout)
 
-      expect(report[:decisions][:policy]).to eq(allowed: false, reason: :merchant_not_allowlisted)
+      expect(report[:decisions][:policy]).to eq(allowed: false, reason: "merchant_not_allowlisted")
       expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "carries the same verdicts in-process as in --json" do
+      report, = buy(checkout: priced_checkout, confidence_check: confidence_check(noul: 0.3))
+
+      expect(report[:decisions].keys).to eq(%i[escalation policy confidence])
+      expect(JSON.parse(JSON.generate(report[:decisions]), symbolize_names: true)).to eq(report[:decisions])
     end
 
     it "asks no model anything when no decision backend is configured" do
@@ -565,7 +572,7 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(report[:message]).to include("scored this checkout 0.3, below the 0.8 threshold")
       expect(report[:checkout_url]).to eq("https://shop.example/checkout/1")
-      expect(report[:decisions][:confidence]).to include(proceed: false, confidence: 0.3)
+      expect(report[:decisions][:confidence]).to include(proceed: false, reason: "below_threshold", confidence: 0.3)
       expect(session).not_to have_received(:complete_checkout)
     end
 
@@ -574,7 +581,8 @@ RSpec.describe Portage::Cli::Buy do
       report, session = buy(checkout: priced_checkout, confidence_check: confidence_check(error: error))
 
       expect(report[:message]).to include("couldn't answer", "JEV_API_KEY is not set")
-      expect(report[:decisions][:confidence]).to include(proceed: false, error: "JEV_API_KEY is not set")
+      expect(report[:decisions][:confidence])
+        .to include(proceed: false, reason: "backend_error", error: "JEV_API_KEY is not set")
       expect(session).not_to have_received(:complete_checkout)
     end
 

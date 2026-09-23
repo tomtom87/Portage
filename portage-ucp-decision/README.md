@@ -8,11 +8,18 @@ calls that were scattered across skill instructions, `portage-cli`, and
 `portage-ucp` into typed, inspectable decisions:
 
 - `Portage::Ucp::Decision::OfferRanking` — which offer to pick among several.
-- `Portage::Ucp::Decision::EscalationPolicy` — hand off vs. keep going.
+  A typed wrapper around `Portage::Ucp::Support::OfferRanking`.
+- `Portage::Ucp::Decision::EscalationPolicy` — hand off vs. keep going. A
+  typed wrapper around `Portage::Ucp::Support::Escalation`.
 - `Portage::Ucp::Decision::ConfidenceGate` — proceed unattended above a
   threshold.
 - `Portage::Ucp::Decision::PolicyCheck` — a typed wrapper around
   `Portage::Ucp::PolicyGuard.check!`, plus a `risk_signals:` gate.
+
+The ranking, escalation and policy rules live in `portage-ucp` core, and
+these three wrap them as `Verdict`s. `portage-cli` calls the core modules
+directly, so it answers the same way with or without this gem. Only
+`ConfidenceGate` and its model backends are unique to this gem.
 
 `ModelBackends::Laya` needs a Python bridge script (it's HuggingFace weights,
 not a hosted API) — see `examples/laya_bridge.py` and set

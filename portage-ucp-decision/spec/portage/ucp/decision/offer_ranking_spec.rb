@@ -3,6 +3,15 @@ require "spec_helper"
 RSpec.describe Portage::Ucp::Decision::OfferRanking do
   let(:candidate_class) { described_class::Candidate }
 
+  it "delegates the rule to Portage::Ucp::Support::OfferRanking" do
+    allow(Portage::Ucp::Support::OfferRanking).to receive(:rank).and_call_original
+    candidates = [candidate_class.new(offer: :only, buyable: true, amount: 100)]
+
+    described_class.call(candidates)
+
+    expect(Portage::Ucp::Support::OfferRanking).to have_received(:rank).with(candidates)
+  end
+
   it "ranks buyable offers before non-buyable ones regardless of price" do
     cheap_unbuyable = candidate_class.new(offer: :cheap_unbuyable, buyable: false, amount: 100)
     pricier_buyable = candidate_class.new(offer: :pricier_buyable, buyable: true, amount: 500)
