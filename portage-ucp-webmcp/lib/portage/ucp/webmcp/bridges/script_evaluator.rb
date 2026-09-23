@@ -17,6 +17,12 @@ module Portage
         # extension, a CDP session, a remote grid — can write their own and
         # hand it to Transport directly.
         class ScriptEvaluator
+          # How much of a driver's own error text a BridgeError quotes — the
+          # same cap portage-ucp-decision puts on a Jev reply. Enough to name
+          # the problem, not a Selenium DOM dump or a stack trace flooding
+          # an agent's context.
+          DETAIL_LIMIT = 300
+
           # Ferrum: `Ferrum::Page#evaluate_async` passes its resolve callback
           # as `arguments[0]`.
           def self.ferrum(page, timeout: 30)
@@ -66,7 +72,7 @@ module Portage
           def evaluate(expression)
             @evaluate.call(expression)
           rescue StandardError => e
-            raise BridgeError, "browser evaluate failed: #{e.class}: #{e.message}"
+            raise BridgeError, "browser evaluate failed: #{e.class}: #{excerpt(e.message)}"
           end
 
           def unwrap(raw)
@@ -77,7 +83,12 @@ module Portage
 
             raise_failure(envelope["code"], envelope["error"].to_s)
           rescue JSON::ParserError => e
-            raise BridgeError, "bridge returned invalid JSON: #{e.message}"
+            raise BridgeError, "bridge returned invalid JSON: #{excerpt(e.message)}"
+          end
+
+          def excerpt(text)
+            text = text.to_s
+            text.length > DETAIL_LIMIT ? "#{text[0, DETAIL_LIMIT]}… (#{text.length} chars)" : text
           end
 
           def raise_failure(code, message)
