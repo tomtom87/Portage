@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- **Fix:** this gem had no `exe/` or `examples/`, unlike every other adapter
+  in this project (`portage-ucp-shopify`/`-wix`/`-woocommerce`/
+  `-bigcommerce`/`-magento`) — there was no way to point an MCP client at a
+  `command` for Etsy without hand-writing the `Client`/`Adapter`/
+  `Server.build` wiring yourself. Adds `exe/portage-ucp-etsy` (reads
+  `ETSY_ACCESS_TOKEN`/`ETSY_API_KEY`/`ETSY_SHOP_ID`, honors `PORTAGE_UCP_CONFIG`
+  the same `-r`-a-file way the other exes do) and `examples/portage_ucp.rb`
+  (a copy-paste `PORTAGE_UCP_CONFIG` starting point).
+
 ## [0.1.4] - 2026-09-17
 
 - No behavior change — widens the `portage-ucp` dependency pin to `~> 0.8`
