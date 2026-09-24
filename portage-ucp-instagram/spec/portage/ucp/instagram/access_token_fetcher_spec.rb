@@ -26,4 +26,23 @@ RSpec.describe Portage::Ucp::Instagram::AccessTokenFetcher do
 
     expect { fetcher.fetch }.to raise_error(Portage::Ucp::Instagram::Error, /token exchange failed/)
   end
+
+  it "raises a clear error instead of an unrescued JSON::ParserError for a non-JSON body" do
+    stub_request(:get, "https://graph.facebook.com/v21.0/oauth/access_token")
+      .with(query: { grant_type: "fb_exchange_token", client_id: "client-1", client_secret: "secret-1",
+                     fb_exchange_token: "short-tok" })
+      .to_return(status: 502, body: "<html>Bad Gateway</html>")
+
+    expect { fetcher.fetch }
+      .to raise_error(Portage::Ucp::Instagram::Error, /non-JSON response \(status 502\)/)
+  end
+
+  it "treats an empty body as an empty hash rather than raising" do
+    stub_request(:get, "https://graph.facebook.com/v21.0/oauth/access_token")
+      .with(query: { grant_type: "fb_exchange_token", client_id: "client-1", client_secret: "secret-1",
+                     fb_exchange_token: "short-tok" })
+      .to_return(status: 400, body: "")
+
+    expect { fetcher.fetch }.to raise_error(Portage::Ucp::Instagram::Error, /token exchange failed: \{\}/)
+  end
 end

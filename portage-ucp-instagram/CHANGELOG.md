@@ -25,6 +25,10 @@ pre-1.0, so APIs may still shift between minor versions.
   results — a `limit` bigger than one page's worth silently returned fewer
   products than asked for. Now follows `paging.next` until `limit` is
   reached or the API runs out of pages, capped at `MAX_PAGES` requests.
+- **Fix:** `AccessTokenFetcher#fetch` let a non-JSON response body (a 5xx
+  from an edge/proxy, a truncated connection) raise an unrescued
+  `JSON::ParserError` with no indication of what actually failed. Now raises
+  a `Portage::Ucp::Instagram::Error` naming the HTTP status and raw body.
 
 ## [0.1.4] - 2026-09-17
 
