@@ -7,6 +7,17 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Documentation only, no code change. Fixes a `NoMethodError`-shaped bug
+  repeated in every bundled adapter's `exe/` (`portage-ucp-shopify`/`-wix`/
+  `-woocommerce`/`-bigcommerce`/`-magento`) and in the root README's
+  "Usage" snippet: each called `.start` on the plain `MCP::Server`
+  `Mcp::Server.build` returns, but that class (mcp gem 0.25.0) has no
+  `#start` — only `MCP::Server::Transports::StdioTransport#open` reads
+  stdio frames. See each affected gem's own CHANGELOG for its fix and new
+  `exe_spec.rb`.
+
 ## [0.9.0] - 2026-09-23
 
 - **New gem: `portage-ucp-webmcp`.** It adds WebMCP as a transport to the
