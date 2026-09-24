@@ -28,5 +28,6 @@ CSP/CSRF guidance.
 ## Shared HTTP client timeouts
 
 Every bundled adapter's HTTP calls go through `Portage::Ucp::Support::HttpClient`, which
-sets a default open timeout of 5s and read timeout of 30s, and retries a timeout once
-through `Portage::Ucp::Support::Retry` rather than propagating it straight to the caller.
+sets a default open timeout of 5s and read timeout of 30s, and retries a timeout (and
+429/5xx responses) with exponential backoff, up to 4 attempts total, through
+`Portage::Ucp::Support::Retry` rather than propagating it straight to the caller.
