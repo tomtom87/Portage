@@ -75,6 +75,21 @@ checkout.links.first.url # => hand this to the shopper/agent to complete the pur
 order = adapter.get_order(order_id: some_commerce_order_id)
 ```
 
+## Standalone MCP server
+
+```bash
+INSTAGRAM_ACCESS_TOKEN=... INSTAGRAM_CATALOG_ID=... bundle exec portage-ucp-instagram
+```
+
+Runs `exe/portage-ucp-instagram`, an MCP server over stdio wired straight to this Adapter. It ships with permissive-nothing defaults (an `UnconfiguredAuthenticator`/`NullRateLimiter`), so an MCP client can search/browse the catalog and nothing else until you wire a real `Authenticator`/`RateLimiter` via a `PORTAGE_UCP_CONFIG` file — the same hook `rackup -r`/Sidekiq's `-r` use:
+
+```bash
+PORTAGE_UCP_CONFIG=./config/portage_ucp.rb INSTAGRAM_ACCESS_TOKEN=... INSTAGRAM_CATALOG_ID=... \
+  bundle exec portage-ucp-instagram
+```
+
+See [`examples/portage_ucp.rb`](examples/portage_ucp.rb) for a starting `PORTAGE_UCP_CONFIG` file (a minimal bearer-token `Authenticator` and in-process `RateLimiter`).
+
 ## Wiring into portage-ucp
 
 Drop the adapter into a `Dispatcher` (or the MCP server) the same as any other backend:
@@ -92,9 +107,18 @@ dispatcher.call(
 ## Errors
 
 ```ruby
-Portage::Ucp::Instagram::Error    # base class
-Portage::Ucp::Instagram::ApiError # any non-2xx response from Meta's Graph API
+Portage::Ucp::Instagram::Error            # base class
+Portage::Ucp::Instagram::ApiError         # any non-2xx response from Meta's Graph API
+Portage::Ucp::Instagram::TokenExpiredError # code 190 — the access token is expired/invalid; re-mint it
 ```
+
+`ApiError` exposes Meta's own error taxonomy alongside the HTTP `status`/`body`/`retry_after` every gem's `ApiError` carries: `#code`, `#error_subcode`, and `#fbtrace_id` (what Meta support asks for when escalating a request).
+
+`Client#get` retries a bare 429/5xx and Meta's own platform-throttling codes (`4`, `17`, `32`, `613`, which arrive as a bare HTTP 400) with backoff honoring `Retry-After`. A `code: 190` (`OAuthException` — expired/invalid token) is never retried; it's raised as `TokenExpiredError` instead of `ApiError`, so it can't be mistaken for a business rejection — re-mint the token via Business Login consent and `AccessTokenFetcher`.
+
+## ⚠️ Meta is sunsetting native checkout — `#get_order` has a shrinking window
+
+Meta phased out native "Checkout on Instagram/Facebook" for all US merchants by August 2025, and is following through at the API level: Graph API v26.0 (July 2026) already blocks the ~47 Commerce Order Management endpoints (order retrieval/listing, line items, payments, refunds, shipments, returns, tax settings) for that reason, and **the same block extends to every supported API version — including this gem's `v21.0` — on October 27, 2026**, at which point the endpoint is removed entirely, with no replacement. `#get_order` only ever served the "Checkout on Instagram/Facebook" population in the first place (see the class-level comment on `Adapter`); after that date it has no merchants left to serve. `search_catalog`/`get_product` (Commerce Catalog) are unaffected — the sunset is Orders-specific.
 
 ## Development
 

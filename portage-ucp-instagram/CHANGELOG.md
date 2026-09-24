@@ -36,6 +36,20 @@ pre-1.0, so APIs may still shift between minor versions.
   a line item missing `quantity`/`price_per_unit` — any single malformed
   product or order could take down an entire catalog search or order fetch.
   All now degrade to a zero amount/empty collection instead.
+- Documentation only, no code change. Confirmed live (2026-09-24) against
+  Meta's published Graph API version list: `DEFAULT_API_VERSION` stays at
+  `v21.0` (supported through 2027-01-21; this gem's Commerce Catalog
+  fields/endpoints are unchanged through the current v26.0) rather than
+  bumping — v26.0 already blocks the Commerce Order Management endpoints
+  `#get_order` reads, since Meta sunset native "Checkout on Instagram/
+  Facebook" for all US merchants in August 2025. That block extends to
+  every version, v21.0 included, on 2026-10-27, removing the endpoint
+  entirely with no replacement — see the README's "Meta is sunsetting
+  native checkout" section for what that leaves `#get_order` able to do
+  and for how much longer.
+- Adds `exe/portage-ucp-instagram`, a standalone stdio MCP server (mirroring
+  `portage-ucp-wix`'s), plus `examples/portage_ucp.rb` as a starting
+  `PORTAGE_UCP_CONFIG` file.
 
 ## [0.1.4] - 2026-09-17
 
