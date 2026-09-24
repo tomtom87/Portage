@@ -38,6 +38,12 @@ module Portage
       class Adapter < Portage::Ucp::Adapter
         PRODUCT_FIELDS = "id,name,description,price,availability,url,item_group_id".freeze
 
+        # Safety cap on Adapter#search_catalog's pagination — a malformed or
+        # unbounded `paging.next` chain (or a `limit` far bigger than a
+        # reasonable single search) can't turn one search into an unbounded
+        # crawl of Meta's API.
+        MAX_PAGES = 10
+
         # §9a dedup via Support::Idempotency, so an agent's retry on a
         # dropped connection doesn't build a second, different in-memory
         # Checkout for the same intent.
@@ -52,8 +58,8 @@ module Portage
 
         def search_catalog(query:, limit:)
           filter = URI.encode_www_form_component(JSON.generate(name: { i_contains: query }))
-          data = @client.get("/#{@catalog_id}/products?fields=#{PRODUCT_FIELDS}&limit=#{limit}&filter=#{filter}")
-          Portage::Ucp::CatalogSearchResult.new(products: (data["data"] || []).map { |node| Mapper.product(node) })
+          path = "/#{@catalog_id}/products?fields=#{PRODUCT_FIELDS}&limit=#{limit}&filter=#{filter}"
+          Portage::Ucp::CatalogSearchResult.new(products: paginated_products(path, limit))
         end
 
         def get_product(product_id:)
@@ -96,6 +102,34 @@ module Portage
         end
 
         private
+
+        # Follows Meta's cursor pagination — each page's `paging.next` is
+        # already a complete URL built from that page's `paging.cursors.
+        # after` — collecting products until `limit` is reached or the API
+        # runs out of pages (no `paging.next`), capped at MAX_PAGES requests
+        # either way.
+        def paginated_products(path, limit)
+          products = []
+          pages = 0
+
+          while path && products.length < limit && pages < MAX_PAGES
+            data = @client.get(path)
+            nodes = data["data"]
+            products.concat(nodes.is_a?(Array) ? nodes.map { |node| Mapper.product(node) } : [])
+            path = next_page(data)
+            pages += 1
+          end
+
+          products.first(limit)
+        end
+
+        # `data["paging"]` is occasionally absent (last page) or, for a
+        # malformed response, not even a Hash — guarded the same way as
+        # every other Mapper/Adapter read of a Meta response body here.
+        def next_page(data)
+          paging = data["paging"]
+          paging.is_a?(Hash) ? paging["next"] : nil
+        end
 
         # A product's own resource only carries its `item_group_id`, not
         # its siblings — fetching the rest of the variant group is a second

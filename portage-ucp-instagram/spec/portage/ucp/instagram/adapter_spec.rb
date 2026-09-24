@@ -39,6 +39,55 @@ RSpec.describe Portage::Ucp::Instagram::Adapter do
       expect(result.products.first).to be_a(Portage::Ucp::Product)
       expect(result.products.first.title).to eq("Handmade Mug")
     end
+
+    it "follows paging.next across pages until limit is reached" do
+      page2_url = "https://graph.facebook.com/v21.0/catalog_1/products?after=cursor1"
+      stub_request(:get, %r{/catalog_1/products\?fields=})
+        .to_return(status: 200, body: { data: [product_node.merge("id" => "1")],
+                                        paging: { cursors: { after: "cursor1" }, next: page2_url } }.to_json)
+      stub_request(:get, page2_url)
+        .to_return(status: 200, body: { data: [product_node.merge("id" => "2")] }.to_json)
+
+      result = adapter.search_catalog(query: "mug", limit: 10)
+
+      expect(result.products.map(&:id)).to eq(%w[1 2])
+    end
+
+    it "stops paging once limit products have been collected, without fetching the next page" do
+      page2 = stub_request(:get, "https://graph.facebook.com/v21.0/catalog_1/products?after=cursor1")
+              .to_return(status: 200, body: { data: [product_node.merge("id" => "2")] }.to_json)
+      stub_request(:get, %r{/catalog_1/products\?fields=})
+        .to_return(status: 200,
+                   body: { data: [product_node.merge("id" => "1")],
+                           paging: { next: "https://graph.facebook.com/v21.0/catalog_1/products?after=cursor1" } }
+                     .to_json)
+
+      result = adapter.search_catalog(query: "mug", limit: 1)
+
+      expect(result.products.map(&:id)).to eq(["1"])
+      expect(page2).not_to have_been_requested
+    end
+
+    it "caps at MAX_PAGES even if paging.next never ends and limit isn't reached" do
+      call_count = 0
+      stub_request(:get, %r{/catalog_1/products}).to_return do
+        call_count += 1
+        { status: 200,
+          body: { data: [product_node.merge("id" => call_count.to_s)],
+                  paging: { next: "https://graph.facebook.com/v21.0/catalog_1/products?after=page#{call_count}" } }
+            .to_json }
+      end
+
+      result = adapter.search_catalog(query: "mug", limit: 1000)
+
+      expect(result.products.length).to eq(Portage::Ucp::Instagram::Adapter::MAX_PAGES)
+    end
+
+    it "tolerates a missing/malformed data array without raising" do
+      stub_request(:get, %r{/catalog_1/products\?}).to_return(status: 200, body: { paging: {} }.to_json)
+
+      expect(adapter.search_catalog(query: "mug", limit: 10).products).to eq([])
+    end
   end
 
   describe "#get_product" do
