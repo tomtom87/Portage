@@ -88,7 +88,7 @@ PORTAGE_UCP_CONFIG=./config/portage_ucp.rb INSTAGRAM_ACCESS_TOKEN=... INSTAGRAM_
   bundle exec portage-ucp-instagram
 ```
 
-See [`examples/portage_ucp.rb`](examples/portage_ucp.rb) for a starting `PORTAGE_UCP_CONFIG` file (a minimal bearer-token `Authenticator` and in-process `RateLimiter`).
+See [`examples/portage_ucp.rb`](https://github.com/tomtom87/Portage/blob/main/portage-ucp-instagram/examples/portage_ucp.rb) for a starting `PORTAGE_UCP_CONFIG` file (a minimal bearer-token `Authenticator` and in-process `RateLimiter`).
 
 ## Wiring into portage-ucp
 
