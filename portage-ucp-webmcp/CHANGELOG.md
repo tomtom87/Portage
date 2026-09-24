@@ -6,6 +6,17 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- An outbound call now waits out a tool that answers the page isn't ready,
+  as it already waited out one the page dropped. Shopify storefronts reload
+  after their own `add_to_cart`/`cancel_cart` and, until they're back, every
+  cart tool answers "Standard Actions are not available… Try again" (as an
+  `isError` result, a JSON string or a thrown error), which surfaced as
+  `ServerError` (seen live on thelightyard.co.uk and burton.com).
+  Only the messages in `PageWait::NOT_READY` are retried; any other tool
+  error is still raised at once, so a mutation can't run twice. The default
+  `reregister_wait:` goes from 2s to 5s: with several browsers busy the tools
+  took up to ~3s to come back.
+
 - `Rack::CallEndpoint` no longer raises `TypeError` when a `tools/call` body
   sends `params` as a string, number or boolean instead of an object; it
   answers `-32602 Invalid params` like any other bad call. A top-level

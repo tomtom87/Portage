@@ -31,7 +31,11 @@ module Portage
         WIRES = %i[auto flat ucp].freeze
         # How long a call waits for a tool the page dropped mid-re-render to
         # come back (see #execute), and how often it looks.
-        REREGISTER_WAIT = 2.0
+        # Long enough for a Shopify storefront to reload after its own
+        # add_to_cart/cancel_cart: its tools answer again 1-1.5s after the
+        # mutation returns on an idle machine, up to ~3s with several
+        # browsers busy (measured live 2026-09-24), so 2s ran out first.
+        REREGISTER_WAIT = 5.0
         REREGISTER_POLL = 0.25
 
         attr_reader :bridge
@@ -82,15 +86,16 @@ module Portage
         # the retried bridge calls count against it, and no sleep runs past
         # it. So a miss costs at most `reregister_wait:` plus the one bridge
         # call in flight when it expires.
+        #
+        # A tool that answers with one of PageWait::NOT_READY gets the same
+        # wait, under the same deadline: the page registers it but can't run
+        # it yet. Past the deadline that answer is reported as the page gave
+        # it.
         def execute(action, tool_name, input)
-          deadline = monotonic_now + @reregister_wait
-          begin
+          wait = PageWait.new(wait: @reregister_wait, poll: REREGISTER_POLL, now: method(:monotonic_now),
+                              sleep: method(:sleep))
+          wait.call(gone: -> { refresh!.then { not_found(action, [tool_name]) } }) do
             @bridge.execute_tool(tool_name, input)
-          rescue ToolNotFoundError
-            raise(refresh!.then { not_found(action, [tool_name]) }) if monotonic_now >= deadline
-
-            sleep((deadline - monotonic_now).clamp(0, REREGISTER_POLL))
-            retry
           end
         end
 

@@ -273,8 +273,12 @@ something the consumer can list.
   `executeTool` resolves to one) is parsed. Anything else is returned as it is.
 - **Re-registration.** Some pages drop all their tools and register them again
   while they re-render. A call to a tool that vanished that way waits up to
-  `reregister_wait:` (default 2 seconds) for it to come back, then retries.
-  The call never ran the first time, so the retry is safe. The wait blocks
+  `reregister_wait:` (default 5 seconds) for it to come back, then retries.
+  The call never ran the first time, so the retry is safe. The same wait
+  covers a tool that is registered but answers that the page isn't ready
+  (`PageWait::NOT_READY`: Shopify's "Standard Actions are not available",
+  which its storefronts answer while they reload after their own
+  `add_to_cart` or `cancel_cart`). No other tool error is retried. The wait blocks
   the calling thread; see "Timeouts" below.
 
 ### Timeouts
@@ -286,8 +290,9 @@ Two limits bound an outbound call, and both block the thread that made it:
   30 seconds) to `evaluate_async`. Playwright and Selenium use the page's or
   driver's own script timeout, so set it there. A driver that times out
   raises, and the error surfaces as `BridgeError`.
-- **`reregister_wait:`** (default 2 seconds, `WebMcp.connect(...,
-  reregister_wait:)`) bounds the wait for a tool the page dropped mid-call.
+- **`reregister_wait:`** (default 5 seconds, `WebMcp.connect(...,
+  reregister_wait:)`) bounds the wait for a tool the page dropped mid-call,
+  or one that answered "not ready".
   It's a plain `sleep`, polling every 0.25 seconds. One monotonic deadline
   covers the whole call: it's set before the first attempt, a retry never
   resets it, the retried calls count against it, and no sleep runs past it.
