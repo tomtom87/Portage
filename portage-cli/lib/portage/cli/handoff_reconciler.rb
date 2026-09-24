@@ -6,7 +6,7 @@ require "portage/ucp/journal"
 require_relative "user_agent"
 require_relative "homepage_fetch"
 require_relative "handoff_spend_mode"
-require_relative "notifier"
+require_relative "reconcile_notifier"
 require_relative "permissive_authenticator"
 require_relative "handoff_reconciler/wire_adapters"
 
@@ -30,11 +30,17 @@ module Portage
       # problem being fixed) may still resolve it.
       class ReconnectError < StandardError; end
 
-      Result = Struct.new(:idempotency_key, :settled, :status, :resolution, :order_id, :amount, :currency, :note,
-                          keyword_init: true) do
+      # `checkout_status` is the store's own raw status while a record stays
+      # pending (`incomplete`, `ready_for_complete`, …) — nil once settled,
+      # or when the checkout was never found at all. Phase 3's
+      # `HandoffWaiter` reads it to know when to emit a `handoff_status`
+      # NDJSON event under `portage buy --wait --json`.
+      Result = Struct.new(:idempotency_key, :settled, :status, :resolution, :order_id, :amount, :currency,
+                          :checkout_status, :note, keyword_init: true) do
         def to_h
           { idempotency_key: idempotency_key, settled: settled, status: status, resolution: resolution,
-            order_id: order_id, amount: amount, currency: currency, note: note }.compact
+            order_id: order_id, amount: amount, currency: currency, checkout_status: checkout_status,
+            note: note }.compact
         end
       end
 
@@ -42,7 +48,7 @@ module Portage
       def initialize(transaction_log: Portage::Ucp::Support::TransactionLog.new,
                      order_ledger: Portage::Ucp::Support::OrderLedger.new,
                      journal: Portage::Ucp::Journal::PurchaseJournal.new,
-                     notifier: Notifier.new, spend_mode: HandoffSpendMode.resolve, clock: -> { Time.now })
+                     notifier: ReconcileNotifier.new, spend_mode: HandoffSpendMode.resolve, clock: -> { Time.now })
         @transaction_log = transaction_log
         @order_ledger = order_ledger
         @journal = journal
@@ -103,7 +109,11 @@ module Portage
         when "canceled" then settle_failed(record, resolution: nil)
         when nil then settle_not_found(record)
         else
-          past_expiry?(record) ? settle_failed(record, resolution: "expired") : still_pending(record)
+          if past_expiry?(record)
+            settle_failed(record, resolution: "expired")
+          else
+            still_pending(record, checkout_status: checkout["status"])
+          end
         end
       end
 
@@ -122,8 +132,9 @@ module Portage
         false
       end
 
-      def still_pending(record, note: nil)
-        Result.new(idempotency_key: record["idempotency_key"], settled: false, status: "pending", note: note)
+      def still_pending(record, note: nil, checkout_status: nil)
+        Result.new(idempotency_key: record["idempotency_key"], settled: false, status: "pending",
+                   checkout_status: checkout_status, note: note)
       end
 
       def settle_failed(record, resolution:, note: nil)

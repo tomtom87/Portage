@@ -70,6 +70,7 @@ gem install portage-cli
 portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id ID]
                                 [--yes] [--dry-run] [--decision-backend jev|laya]
                                 [--min-confidence N] [--json]
+                                [--wait [--wait-timeout DURATION|off]]
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
 portage compare <url> --product-id ID [--id VALUE ...] [--results N]
@@ -309,6 +310,48 @@ toward the caps `portage policy set` configures:
 - `precheck` — `block`, plus a spend-cap check at hand-off time
   (`portage buy`, not reconcile): if this checkout's total would already
   exceed your cap, the URL is still printed but auto-open is suppressed.
+
+`--wait [--wait-timeout DURATION|off]` on `portage buy` polls the same
+reconciler right after a hand-off, instead of waiting for a separate
+`orders reconcile` run. It backs off (2s → 30s, plus jitter) until the
+checkout settles or its deadline passes — the earlier of
+`handoff_wait_timeout` (`PORTAGE_HANDOFF_WAIT_TIMEOUT`, config.json; default
+`30m`, `off` removes it) and the checkout's own `expires_at`. Ctrl-C, or
+the deadline, leaves the record pending for a later `portage orders
+reconcile` — it never settles from the wait itself. Under `--wait --json`,
+stdout streams NDJSON — `handoff`, `handoff_status` on each store-reported
+status change, `handoff_settled` — followed by the final report object;
+plain `--json` without `--wait` is unchanged.
+
+`reconcile_notify` (`PORTAGE_RECONCILE_NOTIFY`, config.json's
+`reconcile_notify`) is a comma list of channels a settled hand-off notifies
+on, from `--wait` or `orders reconcile`: `webhook` (default), `macos` (a
+native notification), `terminal` (a printed line — forced on for a
+plain-text `--wait` regardless of configuration), and `journal` (the order
+snapshot journal write, already unconditional — listing it just documents
+that).
+
+### WebMCP (library use, opt-in)
+
+`portage buy` from the shell has no browser of its own, so there's no CLI
+flag for this — it's for a caller embedding `Portage::Cli::Buy` directly
+alongside its own browser automation:
+
+```ruby
+Portage::Cli::Buy.new(url: "shop.example", query: "mug",
+                      webmcp_bridge: my_portage_ucp_webmcp_bridge).call
+```
+
+Given a `portage-ucp-webmcp` outbound bridge already pointed at a navigated
+page, `Buy` tries it after native-UCP discovery finds nothing at that URL
+and before falling back to a platform adapter. `webmcp_checkout_mode`
+(`PORTAGE_WEBMCP_CHECKOUT_MODE`, config.json's `webmcp_checkout_mode`)
+controls how it finishes: `express_stop` (default) builds the cart/checkout
+and always hands off — reason `express_stop`, so `--wait`/`orders
+reconcile`/`handoff_spend_mode` all apply exactly as they do to any other
+hand-off. `token` isn't implemented yet; it reports
+`webmcp_token_unsupported` rather than attempting completion. Requires
+`gem install portage-ucp-webmcp` — not a hard dependency of `portage-cli`.
 
 ### Decisions
 

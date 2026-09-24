@@ -83,6 +83,15 @@ RSpec.describe Portage::Cli::HandoffReconciler do
       expect(transaction_log.find("portage-buy:shop.example:chk_1")["status"]).to eq("pending")
     end
 
+    it "carries the store's own raw status while pending, for HandoffWaiter's NDJSON events" do
+      reserve_pending
+      stub_checkout({ "id" => "chk_1", "status" => "ready_for_complete" })
+
+      result = reconciler.call(transaction_log.find("portage-buy:shop.example:chk_1"))
+
+      expect(result.checkout_status).to eq("ready_for_complete")
+    end
+
     it "settles failed with resolution expired once expires_at has passed, even mid-progress" do
       reserve_pending(expires_at: (Time.now - 3600).utc.iso8601)
       stub_checkout({ "id" => "chk_1", "status" => "ready_for_complete" })
@@ -204,6 +213,12 @@ RSpec.describe Portage::Cli::HandoffReconciler do
       record = transaction_log.find("portage-buy:shop.example:chk_1")
       expect(record["counts_toward_caps"]).to be false
       expect(transaction_log.completed_since(Time.now - 3600, shop: "shop.example")).to eq([])
+    end
+  end
+
+  describe "default notifier (Phase 3)" do
+    it "defaults to ReconcileNotifier, not the plain webhook-only Notifier" do
+      expect(described_class.new.send(:instance_variable_get, :@notifier)).to be_a(Portage::Cli::ReconcileNotifier)
     end
   end
 

@@ -13,6 +13,9 @@ require_relative "cli/history"
 require_relative "cli/payment_methods"
 require_relative "cli/doctor"
 require_relative "cli/handoff_reconciler"
+require_relative "cli/handoff_waiter"
+require_relative "cli/reconcile_notifier"
+require_relative "cli/reconcile_notify"
 require_relative "cli/generate/adapter"
 require_relative "cli/generate/agent_profile"
 
@@ -27,6 +30,7 @@ module Portage
                                 [--product-id ID] [--yes] [--dry-run]
                                 [--auto-open|--no-auto-open] [--notify-webhook URL]
                                 [--decision-backend jev|laya] [--min-confidence N] [--json]
+                                [--wait [--wait-timeout DURATION|off]]
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
@@ -213,10 +217,87 @@ module Portage
       options[:product_id] ||= product_id
       report = Buy.new(**options).call
       record_buy(report, options[:query])
-      puts parsed[:json] ? JSON.pretty_generate(report) : format_report(report)
+      result = parsed[:wait] ? wait_for_handoff(report, parsed) : nil
+      print_buy_report(report, result, parsed[:json])
       report[:checkout] || report[:browse] ? 0 : 1
     end
     private_class_method :execute_buy
+
+    # docs/plans/handoff-reconcile.md Phase 3 — `portage buy --wait`. A
+    # no-op (returns nil) whenever there's nothing to wait on: --dry-run
+    # never hands off at all, and a completed/browse-only/dead-end report
+    # has no pending shopper record either. Otherwise polls
+    # `HandoffReconciler` through `HandoffWaiter` until it settles or its
+    # deadline passes.
+    #
+    # Under --json, every event streams to stdout as it happens (NDJSON) —
+    # the initial hand-off, then a line per checkout-status change, then the
+    # settle, so a calling agent reading stdout live never has to guess
+    # whether it's still waiting. Under plain output, nothing streams here:
+    # the forced "terminal" notify channel (see #wait_notifier) prints its
+    # own line when it settles, and the final report follows exactly as it
+    # does without --wait.
+    def self.wait_for_handoff(report, parsed)
+      return nil unless report[:handoff] && report[:checkout_id]
+
+      transaction_log = Portage::Ucp::Support::TransactionLog.new
+      record = pending_shopper_record(report[:checkout_id], transaction_log)
+      return nil unless record
+
+      json = parsed[:json]
+      emit_ndjson(handoff_event(report)) if json
+      reconciler = HandoffReconciler.new(transaction_log: transaction_log, notifier: wait_notifier(json))
+      waiter = HandoffWaiter.new(reconciler: reconciler, transaction_log: transaction_log,
+                                 wait_timeout_override: parsed[:wait_timeout])
+      waiter.call(record) { |event, result| emit_wait_event(event, result, json) }
+    end
+    private_class_method :wait_for_handoff
+
+    def self.pending_shopper_record(checkout_id, transaction_log)
+      transaction_log.each_record.find { |r| r["checkout_id"] == checkout_id && r["settled_by"] == "shopper" }
+    end
+    private_class_method :pending_shopper_record
+
+    # `terminal` is forced on for a plain-text wait (see ReconcileNotify) so
+    # the shopper sees a line the moment it settles even with nothing
+    # configured. Never forced under --json: that channel prints plain text,
+    # which would corrupt the NDJSON stream this method's caller is also
+    # writing to the same stdout.
+    def self.wait_notifier(json)
+      ReconcileNotifier.new(channels: ReconcileNotify.resolve(extra: json ? [] : ["terminal"]))
+    end
+    private_class_method :wait_notifier
+
+    def self.handoff_event(report)
+      { event: "handoff", checkout_id: report[:checkout_id], checkout_url: report[:checkout_url],
+        reason: report[:outcome] }
+    end
+    private_class_method :handoff_event
+
+    # Only `:settled` ever reaches stdout as `handoff_settled` — a timeout or
+    # an interrupted wait leaves `result.settled` false, and that's already
+    # visible in the final report object this event stream ends with, so a
+    # second, redundant "gave up" event isn't needed.
+    def self.emit_wait_event(event, result, json)
+      return unless json
+
+      case event
+      when :status then emit_ndjson({ event: "handoff_status", status: result.checkout_status })
+      when :settled
+        emit_ndjson({ event: "handoff_settled", result: result.status, resolution: result.resolution,
+                      order_id: result.order_id, amount: result.amount, currency: result.currency }.compact)
+      end
+    end
+    private_class_method :emit_wait_event
+
+    def self.emit_ndjson(payload) = puts JSON.generate(payload)
+    private_class_method :emit_ndjson
+
+    def self.print_buy_report(report, result, json)
+      report = report.merge(reconcile: result.to_h) if result
+      puts json ? JSON.pretty_generate(report) : format_report(report)
+    end
+    private_class_method :print_buy_report
 
     # Built before the buy starts (and before the search, when there's no
     # URL), so a bad --min-confidence, or a bad PORTAGE_MIN_CONFIDENCE with
@@ -297,9 +378,9 @@ module Portage
         parser.on("--product-id ID") { |v| buy[:product_id] = v }
         parser.on("--yes") { buy[:yes] = true }
         parser.on("--dry-run") { buy[:dry_run] = true }
-        parser.on("--[no-]auto-open") { |v| buy[:auto_open] = v }
-        parser.on("--notify-webhook URL") { |v| buy[:notify_webhook] = v }
         parser.on("--json") { parsed[:json] = true }
+        add_handoff_options(parser, buy)
+        add_wait_options(parser, parsed)
         add_search_options(parser, buy, parsed)
         add_confidence_options(parser, parsed[:confidence])
       end
@@ -313,6 +394,22 @@ module Portage
       parser.on("--min-confidence N", Float) { |v| confidence[:threshold] = v }
     end
     private_class_method :add_confidence_options
+
+    def self.add_handoff_options(parser, buy)
+      parser.on("--[no-]auto-open") { |v| buy[:auto_open] = v }
+      parser.on("--notify-webhook URL") { |v| buy[:notify_webhook] = v }
+    end
+    private_class_method :add_handoff_options
+
+    # docs/plans/handoff-reconcile.md Phase 3 — `--wait`/`--wait-timeout`
+    # land on `parsed`, never on `buy`: they're consumed by
+    # `#wait_for_handoff` after `Buy#call` returns, and `Buy.new` has no
+    # `wait:`/`wait_timeout:` keyword to accidentally receive them.
+    def self.add_wait_options(parser, parsed)
+      parser.on("--wait") { parsed[:wait] = true }
+      parser.on("--wait-timeout DURATION") { |v| parsed[:wait_timeout] = v }
+    end
+    private_class_method :add_wait_options
 
     # `--query` feeds both halves: it's the store search when there's no URL
     # and the catalog search once a store is settled, so it's registered once
