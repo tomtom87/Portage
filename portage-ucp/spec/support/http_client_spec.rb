@@ -28,6 +28,11 @@ RSpec.describe Portage::Ucp::Support::HttpClient do
       def basic_auth_get(path)
         json_request(Net::HTTP::Get, "https://example.test#{path}", basic_auth: %w[key secret])
       end
+
+      def get_with_timeouts(path, open_timeout:, read_timeout:)
+        json_request(Net::HTTP::Get, "https://example.test#{path}", open_timeout: open_timeout,
+                                                                    read_timeout: read_timeout)
+      end
     end
   end
 
@@ -86,6 +91,28 @@ RSpec.describe Portage::Ucp::Support::HttpClient do
     expect { client.get("/products/9") }.to raise_error(test_error) { |error|
       expect(error.retry_after).to eq("2")
     }
+  end
+
+  it "bounds every request with a default open/read timeout, never Net::HTTP's own 60s default" do
+    stub_request(:get, "https://example.test/products").to_return(body: "{}")
+    expect(Net::HTTP).to receive(:start)
+      .with("example.test", 443, hash_including(open_timeout: Portage::Ucp::Support::HttpClient::DEFAULT_OPEN_TIMEOUT,
+                                                read_timeout: Portage::Ucp::Support::HttpClient::DEFAULT_READ_TIMEOUT))
+      .and_call_original
+    client.get("/products")
+  end
+
+  it "lets a caller override the open/read timeout per call" do
+    stub_request(:get, "https://example.test/products").to_return(body: "{}")
+    expect(Net::HTTP).to receive(:start)
+      .with("example.test", 443, hash_including(open_timeout: 1, read_timeout: 2))
+      .and_call_original
+    client.get_with_timeouts("/products", open_timeout: 1, read_timeout: 2)
+  end
+
+  it "surfaces Net::OpenTimeout so Support::Retry can classify it as retryable" do
+    stub_request(:get, "https://example.test/products").to_timeout
+    expect { client.get("/products") }.to raise_error(Net::OpenTimeout)
   end
 
   it "requires an including client to name its error class" do
