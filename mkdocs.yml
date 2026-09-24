@@ -10,6 +10,7 @@ docs_dir: docs
 exclude_docs: |
   plans/
   design-log.md
+  _migrate/
 
 theme:
   name: material
