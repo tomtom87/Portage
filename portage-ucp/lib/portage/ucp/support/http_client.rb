@@ -15,6 +15,17 @@ module Portage
       # (by building the uri/headers it passes to #json_request) and
       # #api_error_class, the gem's own ApiError to raise on a non-2xx.
       module HttpClient
+        # Net::HTTP's own defaults (open: 60s, read: 60s) are sized for a
+        # human waiting on a browser tab, not an agent loop mid-checkout —
+        # a hung upstream would otherwise tie up a call for a full minute
+        # before Support::Retry (or the caller) even gets a chance to react.
+        # Mirrors Check#get's own explicit open_timeout: 5, read_timeout: 5
+        # precedent; read gets more room here since a slow catalog/checkout
+        # response is common and legitimate, where Check is just a fast
+        # existence probe.
+        DEFAULT_OPEN_TIMEOUT = 5
+        DEFAULT_READ_TIMEOUT = 30
+
         private
 
         # @param basic_auth [Array(String, String), nil] user/password pair
@@ -24,7 +35,12 @@ module Portage
         #   the parsed body — for callers that need response headers (e.g.
         #   WooCommerce's Cart-Token session threading). They call #parse!
         #   themselves once they're done reading headers.
-        def json_request(http_method, uri, body: nil, headers: {}, basic_auth: nil, raw: false)
+        # @param open_timeout [Numeric] seconds to wait for the TCP
+        #   connection itself; see DEFAULT_OPEN_TIMEOUT.
+        # @param read_timeout [Numeric] seconds to wait for each read off an
+        #   already-open connection; see DEFAULT_READ_TIMEOUT.
+        def json_request(http_method, uri, body: nil, headers: {}, basic_auth: nil, raw: false,
+                         open_timeout: DEFAULT_OPEN_TIMEOUT, read_timeout: DEFAULT_READ_TIMEOUT)
           uri = URI(uri.to_s)
           request = http_method.new(uri)
           request.basic_auth(*basic_auth) if basic_auth
@@ -32,7 +48,9 @@ module Portage
           request["Content-Type"] ||= "application/json"
           request.body = JSON.generate(body) if body
 
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |http| http.request(request) }
+          response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
+                                                         open_timeout: open_timeout,
+                                                         read_timeout: read_timeout) { |http| http.request(request) }
           raw ? response : parse!(response)
         end
 

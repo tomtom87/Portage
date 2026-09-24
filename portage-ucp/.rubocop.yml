@@ -53,6 +53,12 @@ Metrics/ParameterLists:
     # per-wire-field rationale as manifest.rb above, not a sign the method
     # needs splitting.
     - "lib/portage/ucp/security/signature.rb"
+    # HttpClient#json_request takes one keyword per orthogonal request
+    # concern (body, headers, basic_auth, raw, open_timeout, read_timeout)
+    # — same one-keyword-per-field rationale as manifest.rb above; folding
+    # the two timeouts into one options hash would make the common case
+    # (leave both at their default) noisier, not simpler.
+    - "lib/portage/ucp/support/http_client.rb"
     # SigningHelper.sign (spec-only) mirrors Signature's own request-field
     # parameter list above, plus signing-specific knobs (digest_name, coord,
     # components, created) a spec needs to construct arbitrary test
