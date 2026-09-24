@@ -73,6 +73,24 @@ RSpec.describe Portage::Ucp::WebMcp::Bridges::ScriptEvaluator do
     expect { described_class.new(evaluate: "js") }.to raise_error(ArgumentError)
   end
 
+  # `name` and `input` become JS via JSON.generate, not string interpolation
+  # into the expression's own syntax, so nothing in either — a tool name an
+  # untrusted store chose, or arguments an agent is echoing back — can close
+  # the call and run its own code in the page.
+  it "can't be broken out of by a tool name or input containing JS-breaking characters" do
+    evaluator, expressions = evaluator_returning('{"ok":true,"value":null}')
+    hostile = '"); window.pwned = true; ("'
+
+    evaluator.execute_tool(hostile, { "note" => hostile })
+
+    expression = expressions.last
+    expect(expression).to include(JSON.generate(hostile))
+    # The raw, unescaped payload (a bare `"` closing the string early) never
+    # appears — only its JSON-escaped form does, so it lands as inert string
+    # data rather than syntax that could run in the page.
+    expect(expression).not_to include(hostile)
+  end
+
   describe "driver adapters" do
     let(:envelope) { '{"ok":true,"value":[]}' }
 
