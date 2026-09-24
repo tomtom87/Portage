@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- **Fix:** `Client#get` never retried anything — a transient Meta 429/5xx (or
+  the platform's own throttling codes 4/17/32/613, which arrive as a bare
+  HTTP 400) surfaced straight to the caller as a one-shot failure instead of
+  being retried with backoff, same as every other adapter's `Client`. Now
+  includes `Support::Retry` and wraps `#get` in `with_retry`.
+- **Fix:** a code-190 `OAuthException` (expired/invalid access token) was
+  indistinguishable from any other `ApiError` and, worse, was eligible for
+  the retry loop above — retrying with the same dead token forever instead
+  of failing fast. Now raised as its own `TokenExpiredError`, never retried,
+  with a message pointing at re-minting the token via Business Login consent
+  and `AccessTokenFetcher`.
+- **Fix:** `ApiError` only exposed the HTTP status and raw body — reading
+  Meta's own `error.code`/`error_subcode`/`fbtrace_id` (what Meta support
+  asks for when escalating a request) meant reaching into `#body` by hand.
+  Now exposed as `#code`/`#error_subcode`/`#fbtrace_id`.
+
 ## [0.1.4] - 2026-09-17
 
 - No behavior change — widens the `portage-ucp` dependency pin to `~> 0.8`
