@@ -201,6 +201,53 @@ RSpec.describe "WebMCP page scripts", :node do
 
       expect(page_json("document.modelContext.getTools()")).to match_array(%w[search_catalog create_cart])
     end
+
+    it "survives a previous generation whose own registerTool settles after reregister_wait_ms, " \
+       "against the same persistent modelContext" do
+      # A registerTool whose delay can be changed mid-test, so the previous
+      # generation's calls are the slow ones (slower than reregister_wait_ms)
+      # while the next generation's calls, against that very same
+      # modelContext (never reinstalled), are fast — the one case
+      # REREGISTER_WAIT_MS's bound is meant to make safe: a previous
+      # generation that's still in flight when the bound is exceeded, not
+      # one that was isolated onto a fresh modelContext.
+      browser.evaluate(<<~JS)
+        (function () {
+          var tools = new Map();
+          window.__regDelayMs = 300;
+          document.modelContext = {
+            registerTool: function (tool, options) {
+              var delay = window.__regDelayMs;
+              return new Promise(function (resolve, reject) {
+                setTimeout(function () {
+                  if (tools.has(tool.name)) { reject(new Error("tool already registered: " + tool.name)); return; }
+                  tools.set(tool.name, tool);
+                  var signal = options && options.signal;
+                  if (signal) signal.addEventListener("abort", function () { tools.delete(tool.name); });
+                  resolve({ unregister: function () { tools.delete(tool.name); } });
+                }, delay);
+              });
+            },
+            unregisterTool: function (name) { tools.delete(name); },
+            getTools: function () { return Promise.resolve(Array.from(tools.keys())); }
+          };
+        })();
+      JS
+
+      slow = Portage::Ucp::WebMcp::Registrar.new(catalog: Store.catalog(only: %w[search_catalog create_cart]),
+                                                 endpoint: "/ucp/webmcp", reregister_wait_ms: 50).to_js
+      browser.evaluate(slow) # generation 1: its registerTool calls are in flight for the next 300ms
+
+      browser.evaluate("window.__regDelayMs = 5;")
+      browser.evaluate(slow) # generation 2: bounded wait expires at 50ms, then registers fast
+
+      sleep 0.4 # long enough for generation 1's 300ms registerTool calls to finally settle
+      browser.evaluate("Promise.resolve().then(() => null)")
+
+      names = page_json("document.modelContext.getTools()")
+      expect(names).to match_array(%w[search_catalog create_cart])
+      expect(page_json("window.portageWebMcp.registered")).to match_array(%w[search_catalog create_cart])
+    end
   end
 
   describe "registrar.js against a page with no modelContext at all" do
