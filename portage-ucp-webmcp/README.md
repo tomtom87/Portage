@@ -83,6 +83,13 @@ What the catalog exposes:
 `Rack::CallEndpoint` enforces the same filter on the server side. An action the
 page doesn't register can't be reached by POSTing its name.
 
+A second `GET /webmcp.js` (a Turbo/SPA reload re-running the script tag)
+re-registers cleanly: it waits for the previous generation's own in-flight
+`registerTool` calls to settle and unregister before registering the same
+names again, bounded by `registrar_options: { reregister_wait_ms: }` (default
+2000) so a previous generation that never settles can't block the page
+forever.
+
 ### Security
 
 The endpoint is browser-facing and the page's cookies go with every call. For
@@ -116,6 +123,73 @@ Portage::Ucp::WebMcp::Rack::App.new(
 
 The endpoint then answers the CORS preflight and sends credentialed CORS
 headers for that origin only.
+
+### Request limits
+
+Two more limits bound a single `POST /webmcp`, on top of the `Origin`/method/
+content-type checks above. Every rejection — these two, the checks above, and
+a JSON-RPC error `dispatch` itself returns — answers with the same JSON-RPC
+error envelope, so a caller never needs to branch on HTTP status to read why
+a call failed.
+
+- **`max_body_bytes:`** (default 1MiB). A `Content-Length` over the cap is
+  refused with `413` before anything is read. Otherwise at most
+  `max_body_bytes + 1` bytes are ever read off the request body, so a body
+  with no `Content-Length` (or one that under-reports) still can't be
+  buffered in full first.
+- **`call_timeout:`** (default 30 seconds, `nil` disables it). Bounds one
+  `tools/call`/`tools/list` dispatch into the catalog's `Mcp::Server#handle`.
+  A call that runs past it answers a JSON-RPC error rather than holding the
+  browser's `fetch` (and the request thread) open indefinitely. This is a
+  floor under the endpoint, not a replacement for your own `Adapter`/HTTP
+  client timeouts — a slow adapter call still ties up the thread until it
+  fires.
+
+```ruby
+Portage::Ucp::WebMcp::Rack::App.new(
+  catalog: catalog,
+  call_options: { max_body_bytes: 262_144, call_timeout: 10 }
+)
+```
+
+### Content-Security-Policy
+
+The registrar's script and its `fetch` calls need two directives, if your
+store sets a CSP:
+
+- **`script-src`**: allow the origin `GET /webmcp.js` is served from (usually
+  your own, `'self'`). The script has no inline `<script>` body — it's a
+  `src=` include — so no `'unsafe-inline'` or nonce is needed for it.
+- **`connect-src`**: allow the origin `POST /webmcp` targets. For a
+  same-origin endpoint, `'self'` already covers it. For the cross-origin
+  pattern above (`registrar_options: { endpoint: "https://api.shop.example/..." }`),
+  add that origin explicitly: `connect-src 'self' https://api.shop.example`.
+  Also add it for every origin passed to `exposed_to:` if that agent surface
+  itself calls the endpoint from a different frame's document.
+
+Nothing here needs `'unsafe-eval'`: the registrar only calls `fetch` and
+`document.modelContext.registerTool`, never `eval` or `new Function`.
+
+### CSRF posture
+
+`allowed_origins`/`Origin` checking (above) is the endpoint's primary CSRF
+defense: a browser attaches the real `Origin` on every `fetch`, and page
+script can't override it, so a cross-site page's request is rejected before
+your `Authenticator` ever sees it — the same protection `SameSite` cookies
+give a classic form POST, enforced here explicitly since the endpoint has to
+work from a cross-origin storefront too (`allowed_origins:`).
+
+If your `Authenticator` reads a session cookie (cookie-auth, `credentials:
+"same-origin"` or `"include"`), also set a CSRF token, the same as you would
+for any other cookie-authenticated POST endpoint: put it on the page's
+requests with `registrar_options: { headers: { "x-csrf-token" => token } }`
+and check `server_context[:request]` for it in your `Authenticator`, exactly
+as `spec/support/store.rb` does in this gem's own specs. `Origin` checking
+alone is not a substitute for this when the endpoint's `Authenticator` trusts
+a cookie: a same-origin `Origin` only proves the request came from a page on
+your site, not that the page is the one your store served (an XSS on another
+page of the same origin, or a subdomain sharing the cookie's domain, can
+still fetch same-origin).
 
 ### Browsers without WebMCP
 
@@ -257,7 +331,7 @@ still catch them.
 |---|---|
 | `WebMcp::BridgeError` | The page has no WebMCP surface, the driver failed, or the result couldn't be read. It quotes at most 300 characters of the driver's own error. |
 | `WebMcp::ToolNotFoundError` | No page tool answers the action. `#available` lists what the page registers. |
-| `Client::ServerError` | The tool ran and failed: `isError`, or the page's tool threw. |
+| `Client::ServerError` | The tool ran and failed: `isError`, the page's tool threw, or the endpoint's own `call_timeout:` fired. |
 
 ## Development
 
@@ -273,3 +347,13 @@ the real `Rack::App`. This makes the round-trip specs go page, then endpoint,
 then `Mcp::Server`, then `ReferenceAdapter`, with nothing mocked. They also
 check that WebMCP returns the same documents as the in-process Loopback
 transport. These specs are skipped when `node` isn't installed.
+
+`spec/portage/ucp/webmcp/real_browser_spec.rb` runs the same register ->
+call -> re-register sequence against a real, headless Chrome (via `ferrum`)
+instead of the node stand-in, for a second confirmation against an actual
+browser's WebMCP/fetch behavior. It's slow and needs Chrome or Chromium
+installed, so it's excluded by default:
+
+```bash
+REAL_BROWSER=1 bundle exec rspec spec/portage/ucp/webmcp/real_browser_spec.rb
+```
