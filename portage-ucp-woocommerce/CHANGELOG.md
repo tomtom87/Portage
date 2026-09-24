@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Fixes a `NoMethodError` at launch: `exe/portage-ucp-woocommerce` handed
+  the server `Server.build(adapter:).start`, but `Server.build` returns a
+  plain `MCP::Server` (mcp gem 0.25.0), which has no `#start` — only
+  `MCP::Server::Transports::StdioTransport#open` reads stdio frames. The exe
+  now calls that directly, matching `portage-ucp-etsy`'s exe. Adds
+  `spec/portage/ucp/woocommerce/exe_spec.rb`, which runs the exe as a real
+  subprocess and pipes it a JSON-RPC `initialize` + `tools/list` handshake
+  to prove it actually starts and answers requests.
+
 ## [0.2.1] - 2026-09-23
 
 - `Mapper.checkout_links`'s `resume-checkout` link now carries the cart
