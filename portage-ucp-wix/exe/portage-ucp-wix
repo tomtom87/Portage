@@ -21,4 +21,5 @@ require ENV["PORTAGE_UCP_CONFIG"] if ENV["PORTAGE_UCP_CONFIG"]
 client = Portage::Ucp::Wix::Client.new(access_token: ENV.fetch("WIX_ACCESS_TOKEN"))
 adapter = Portage::Ucp::Wix::Adapter.new(client: client)
 
-Portage::Ucp::Mcp::Server.build(adapter: adapter).start
+server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
+MCP::Server::Transports::StdioTransport.new(server).open
