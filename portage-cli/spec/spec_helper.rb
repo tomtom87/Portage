@@ -1,5 +1,6 @@
 require "portage/cli"
 require "portage/ucp"
+require "portage/ucp/decision"
 require "tmpdir"
 require "webmock/rspec"
 

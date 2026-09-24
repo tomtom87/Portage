@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.7.1] - 2026-09-24
+
+- Fix: `buy <url> --max-price` (and `--product-id` with `--max-price`) was
+  silently ignored — `add_search_options` only wired `--max-price` into the
+  `find` options, not `buy`, so a URL-driven buy could complete over the cap
+  the caller set. `Buy#select_product` now filters to products within
+  `max_price` first, using a variant's own price where available and
+  otherwise the product's lowest price (unpriced products stay eligible,
+  same rule `Find` already used). `no_match_message` now names the cap.
+- Every store-facing request (`discover()` calls and the notifier webhook
+  POST) now sends `portage-cli/<ver> portage-ucp-client/<ver>
+  (+https://github.com/tomtom87/Portage)` instead of Ruby's or Faraday's
+  default User-Agent. New `Cli::USER_AGENT`/`Cli::HTTP_HEADERS`
+  (`lib/portage/cli/user_agent.rb`) replace the ad-hoc UA strings each of
+  `portage-buy`, `portage-find` and `portage-payment-enroll` built on their
+  own. Requires `portage-ucp-client >= 0.6.3`.
+
 ## [0.7.0] - 2026-09-23
 
 - **The decision layer is wired in.** `buy`/`find` make their judgment

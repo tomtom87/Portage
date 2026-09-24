@@ -10,7 +10,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-decision (0.1.0)
+    portage-ucp-decision (0.1.1)
       faraday (>= 2.0)
       portage-ucp (~> 0.9)
 

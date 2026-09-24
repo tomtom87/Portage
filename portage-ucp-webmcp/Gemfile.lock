@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp-client
   specs:
-    portage-ucp-client (0.6.2)
+    portage-ucp-client (0.6.3)
       faraday (>= 2.0)
       mcp (~> 0.24)
       portage-ucp (~> 0.8)
@@ -18,7 +18,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-webmcp (0.1.0)
+    portage-ucp-webmcp (0.1.1)
       portage-ucp (~> 0.8)
       portage-ucp-client (~> 0.6, >= 0.6.2)
       rack (~> 3.0)
