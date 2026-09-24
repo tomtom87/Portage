@@ -1,6 +1,7 @@
 require "net/http"
 require "json"
 require "uri"
+require_relative "connection"
 
 module Portage
   module Ucp
@@ -31,7 +32,7 @@ module Portage
           request["Content-Type"] = form ? "application/x-www-form-urlencoded" : "application/json"
           request.body = form ? URI.encode_www_form(payload) : JSON.generate(payload)
 
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |http| http.request(request) }
+          response = Connection.start(uri, route: :payment) { |http| http.request(request) }
           body = JSON.parse(response.body)
           raise error_class, "#{description}: #{body}" unless response.is_a?(Net::HTTPSuccess)
 

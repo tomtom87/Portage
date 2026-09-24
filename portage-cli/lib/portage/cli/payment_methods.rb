@@ -5,6 +5,7 @@ require "uri"
 require "net/http"
 require "portage/ucp"
 require "portage/ucp/client"
+require "portage/ucp/support/connection"
 
 # Buy::PermissiveAuthenticator (adapter-loopback auth) is used by
 # #adapter_session below — not require_relative'd here to avoid a load
@@ -222,8 +223,8 @@ module Portage
       end
 
       def fetch_homepage(uri)
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                       open_timeout: 5, read_timeout: 5) do |http|
+        response = Portage::Ucp::Support::Connection.start(uri, route: :payment, open_timeout: 5,
+                                                                read_timeout: 5) do |http|
           http.get(uri.request_uri, UserAgent.headers)
         end
         response.is_a?(Net::HTTPSuccess) ? [response.body, response.to_hash] : [nil, {}]

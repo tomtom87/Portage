@@ -25,6 +25,11 @@ Metrics/AbcSize:
 
 Metrics/ParameterLists:
   Max: 6
+  Exclude:
+    # .connect's 7th keyword (proxy:, docs/plans/proxy-support.md Phase 1)
+    # is a plain pass-through to Transports::Http, same breadth as the six
+    # already there (command:/args:/env:/url:/headers:/capabilities:).
+    - "lib/portage/ucp/client.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:

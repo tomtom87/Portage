@@ -1,6 +1,8 @@
 require "net/http"
 require "json"
 require "uri"
+require "portage/ucp"
+require "portage/ucp/support/connection"
 require_relative "config"
 require_relative "setting"
 require_relative "user_agent"
@@ -64,8 +66,8 @@ module Portage
       private
 
       def post(uri, body)
-        Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                            open_timeout: TIMEOUT, read_timeout: TIMEOUT) do |http|
+        Portage::Ucp::Support::Connection.start(uri, route: :notify, open_timeout: TIMEOUT,
+                                                     read_timeout: TIMEOUT) do |http|
           http.post(uri.request_uri, body, UserAgent.headers.merge("Content-Type" => "application/json"))
         end
       end

@@ -25,11 +25,29 @@ class LocalProxy
 
   # @param require_auth [String, nil] "user:pass" -- when set, any request
   #   without a matching Proxy-Authorization is answered 407 instead of 200.
-  def initialize(require_auth: nil)
+  # @param relay [Boolean] Phase 1 (docs/plans/proxy-support.md) addition:
+  #   when true, a successful CONNECT actually dials the requested host:port
+  #   for real and pipes bytes both ways, instead of answering 200 and
+  #   closing immediately. This is what makes a *chain* of LocalProxy
+  #   instances possible -- hop 1's CONNECT to hop 2 has to genuinely reach
+  #   hop 2's own accept loop for hop 2 to see and answer the next CONNECT
+  #   (or the final plain request) in turn. A hop that can't reach the
+  #   requested address (the chain's real, unreachable-by-design final
+  #   target in most specs) answers 502 rather than hanging or lying with
+  #   a 200 it can't back up -- Support::Connection's tunnel building
+  #   treats any non-200 CONNECT response as that hop's own failure.
+  # @param responses [Array<String>, nil] Phase 1 addition for the gateway
+  #   "never follow a redirect off the gateway" spec: raw HTTP response
+  #   byte-strings answered in order to successive non-CONNECT requests
+  #   (the last one repeats once exhausted). Defaults to nil, which keeps
+  #   the original fixed "200 ok" body for every plain request.
+  def initialize(require_auth: nil, relay: false, responses: nil)
     @server = TCPServer.new("127.0.0.1", 0)
     @host = "127.0.0.1"
     @port = @server.addr[1]
     @require_auth = require_auth
+    @relay = relay
+    @responses = responses
     @requests = Queue.new
     @thread = Thread.new { accept_loop }
   end
@@ -67,9 +85,8 @@ class LocalProxy
     return client.close unless request_line
 
     headers = read_headers(client)
-    answer(client, request_line, headers)
-    client.close
     @requests << Recorded.new(request_line: request_line.strip, headers: headers)
+    answer(client, request_line, headers)
   rescue StandardError => e
     @requests << Recorded.new(request_line: "ERROR: #{e.class}: #{e.message}", headers: {})
   end
@@ -77,6 +94,9 @@ class LocalProxy
   def answer(client, request_line, headers)
     if @require_auth && !authorized?(headers)
       client.write("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\n\r\n")
+      client.close
+    elsif request_line.start_with?("CONNECT") && @relay
+      relay_connect(client, request_line)
     elsif request_line.start_with?("CONNECT")
       # Real proxies would now start relaying bytes; closing here is enough
       # to prove the client reached this proxy and asked it to tunnel --
@@ -84,10 +104,53 @@ class LocalProxy
       # which every call site under test already handles as a normal
       # network error.
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n")
+      client.close
     else
-      body = "ok"
-      client.write("HTTP/1.1 200 OK\r\nContent-Length: #{body.bytesize}\r\n\r\n#{body}")
+      client.write(next_plain_response)
+      client.close
     end
+  end
+
+  def next_plain_response
+    return "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok" unless @responses
+
+    @responses.length > 1 ? @responses.shift : @responses.first
+  end
+
+  # Dials the CONNECT target for real (a short connect timeout so an
+  # unreachable/non-resolving host -- the deliberately-unreachable final
+  # target most chain specs use -- fails fast rather than hanging the
+  # spec) and, on success, relays bytes in both directions until either
+  # side closes. This is what lets a chain of N LocalProxy instances stand
+  # in for N real forward proxies: each hop is a completely ordinary
+  # CONNECT-capable proxy from its neighbors' point of view.
+  def relay_connect(client, request_line)
+    target = request_line.split[1].to_s
+    host, port = target.split(":")
+    upstream = Socket.tcp(host, port.to_i, connect_timeout: 2)
+    client.write("HTTP/1.1 200 Connection Established\r\n\r\n")
+    pump(client, upstream)
+  rescue StandardError
+    client.write("HTTP/1.1 502 Bad Gateway\r\n\r\n")
+  ensure
+    client.close
+    upstream&.close
+  end
+
+  def pump(left, right)
+    threads = [
+      Thread.new do
+        IO.copy_stream(left, right)
+      rescue StandardError
+        nil
+      end,
+      Thread.new do
+        IO.copy_stream(right, left)
+      rescue StandardError
+        nil
+      end
+    ]
+    threads.each(&:join)
   end
 
   def read_headers(client)

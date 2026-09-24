@@ -96,8 +96,8 @@ RSpec.describe Portage::Ucp::Support::HttpClient do
   it "bounds every request with a default open/read timeout, never Net::HTTP's own 60s default" do
     stub_request(:get, "https://example.test/products").to_return(body: "{}")
     expect(Net::HTTP).to receive(:start)
-      .with("example.test", 443, hash_including(open_timeout: Portage::Ucp::Support::HttpClient::DEFAULT_OPEN_TIMEOUT,
-                                                read_timeout: Portage::Ucp::Support::HttpClient::DEFAULT_READ_TIMEOUT))
+      .with("example.test", 443, nil, hash_including(open_timeout: Portage::Ucp::Support::HttpClient::DEFAULT_OPEN_TIMEOUT,
+                                                     read_timeout: Portage::Ucp::Support::HttpClient::DEFAULT_READ_TIMEOUT))
       .and_call_original
     client.get("/products")
   end
@@ -105,7 +105,7 @@ RSpec.describe Portage::Ucp::Support::HttpClient do
   it "lets a caller override the open/read timeout per call" do
     stub_request(:get, "https://example.test/products").to_return(body: "{}")
     expect(Net::HTTP).to receive(:start)
-      .with("example.test", 443, hash_including(open_timeout: 1, read_timeout: 2))
+      .with("example.test", 443, nil, hash_including(open_timeout: 1, read_timeout: 2))
       .and_call_original
     client.get_with_timeouts("/products", open_timeout: 1, read_timeout: 2)
   end
