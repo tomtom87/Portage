@@ -8,8 +8,8 @@ RSpec.describe "exe/portage-ucp-etsy" do
     { "ETSY_ACCESS_TOKEN" => "acc-tok", "ETSY_API_KEY" => "keystring", "ETSY_SHOP_ID" => "42" }
   end
 
-  # The exe's `Server.build(...).start` reads newline-delimited JSON-RPC
-  # frames from $stdin until EOF (see mcp's StdioTransport#open), so handing
+  # The exe hands its built server to `StdioTransport#open`, which reads
+  # newline-delimited JSON-RPC frames from $stdin until EOF, so handing
   # it a closed stdin is enough to load the whole exe — requires, client/
   # adapter construction, server build — and have it exit cleanly on its own,
   # without needing a real Etsy account or a JSON-RPC client on the other end.
