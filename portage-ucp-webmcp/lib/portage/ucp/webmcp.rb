@@ -11,6 +11,7 @@ require_relative "webmcp/rack/script_endpoint"
 require_relative "webmcp/rack/app"
 require_relative "webmcp/bridges/script_evaluator"
 require_relative "webmcp/jsonable"
+require_relative "webmcp/page_wait"
 require_relative "webmcp/transport"
 
 module Portage

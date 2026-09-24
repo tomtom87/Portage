@@ -128,6 +128,66 @@ RSpec.describe Portage::Ucp::WebMcp::Transport do
       expect(transport).to have_received(:sleep).with(described_class::REREGISTER_POLL).twice
     end
 
+    context "when the page's tool says the page isn't ready yet" do
+      let(:not_ready) do
+        "Error: Standard Actions are not available. Ensure Shopify Standard Actions are available before " \
+          "calling cart tools.\nRecovery: Try again - this is usually a transient error."
+      end
+
+      def answer_not_ready(times, with:)
+        misses = times
+        bridge.register("get_cart") do
+          next { "id" => "c1" } if (misses -= 1).negative?
+          raise Portage::Ucp::Client::ServerError.new(not_ready, payload: nil) if with == :throw
+
+          result = { "content" => [{ "type" => "text", "text" => not_ready }], "isError" => true }
+          with == :json ? JSON.generate(result) : result
+        end
+      end
+
+      it "waits and sends the call again when the tool throws it" do
+        answer_not_ready(2, with: :throw)
+        allow(transport).to receive(:sleep)
+
+        expect(transport.call_tool(name: "get_cart", arguments: { cart_id: "c1" })).to eq("id" => "c1")
+        expect(bridge.calls.size).to eq(3)
+      end
+
+      it "waits and sends the call again when the tool returns it as isError" do
+        answer_not_ready(1, with: :result)
+        allow(transport).to receive(:sleep)
+
+        expect(transport.call_tool(name: "get_cart", arguments: { cart_id: "c1" })).to eq("id" => "c1")
+        expect(bridge.calls.size).to eq(2)
+      end
+
+      # How Shopify storefronts' tools answer through the page (live, 2026-09-24).
+      it "waits and sends the call again when the tool returns it as a JSON string" do
+        answer_not_ready(1, with: :json)
+        allow(transport).to receive(:sleep)
+
+        expect(transport.call_tool(name: "get_cart", arguments: { cart_id: "c1" })).to eq("id" => "c1")
+        expect(bridge.calls.size).to eq(2)
+      end
+
+      it "reports the page's own error once reregister_wait: runs out" do
+        answer_not_ready(99, with: :throw)
+        impatient = described_class.new(bridge: bridge, reregister_wait: 0)
+
+        expect { impatient.call_tool(name: "get_cart", arguments: { cart_id: "c1" }) }
+          .to raise_error(Portage::Ucp::Client::ServerError, /Standard Actions are not available/)
+        expect(bridge.calls.size).to eq(1)
+      end
+
+      it "never retries any other tool error" do
+        bridge.register("get_cart") { raise Portage::Ucp::Client::ServerError.new("Sold out", payload: nil) }
+
+        expect { transport.call_tool(name: "get_cart", arguments: { cart_id: "c1" }) }
+          .to raise_error(Portage::Ucp::Client::ServerError, /Sold out/)
+        expect(bridge.calls.size).to eq(1)
+      end
+    end
+
     it "gives up with ToolNotFoundError once reregister_wait: runs out" do
       bridge.register("get_cart").drop_for("get_cart", misses: 99)
       impatient = described_class.new(bridge: bridge, reregister_wait: 0)
