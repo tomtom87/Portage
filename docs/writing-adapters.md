@@ -1,3 +1,5 @@
+# Writing adapters
+
 ## Writing your own adapter
 
 ```ruby
@@ -15,9 +17,9 @@ See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkou
 
 `payment_method` / `saved_address` / `shopper_data` (`app.portage-ucp.payment_method`, `app.portage-ucp.saved_address`, `app.portage-ucp.shopper_data`) are Portage-owned extensions too, shipped together: saved payment references and addresses, plus the erasure path that removes them (and the shopper's linked identity) in one call. `oauth_token:` is the authorization boundary on every method here, including the two `list_*` reads — see `Portage::Ucp::Adapter`'s doc comments on `save_payment_method` for why a bare `subject:` string would be a lookup vulnerability. `save_payment_method`'s `payment_token:` runs through the same `PaymentTokenGuard` Luhn/format check as `complete_checkout`, and `delete_shopper_data` is idempotent — safe to call again on an already-erased subject.
 
-### Checking your adapter against the contract
+## Checking your adapter against the contract
 
-`Portage::Ucp::SchemaValidator` (see [Spec conformance](#spec-conformance) below) checks that your `Adapter`'s output matches UCP's wire schemas, but schema-valid output can still violate the contract's behavioral guarantees — an idempotency key that isn't actually deduped, a raw PAN reaching your adapter, a capability that's advertised but doesn't round-trip through its own schema. The core gem ships a conformance kit, an RSpec shared-examples suite, for that:
+[Spec conformance](spec-conformance.md) covers `Portage::Ucp::SchemaValidator`, which checks that your `Adapter`'s output matches UCP's wire schemas, but schema-valid output can still violate the contract's behavioral guarantees — an idempotency key that isn't actually deduped, a raw PAN reaching your adapter, a capability that's advertised but doesn't round-trip through its own schema. The core gem ships a conformance kit, an RSpec shared-examples suite, for that:
 
 ```ruby
 # spec/spec_helper.rb

@@ -1,3 +1,5 @@
+# Library usage
+
 ## Installation
 
 ```ruby
@@ -49,15 +51,15 @@ bundle exec portage-ucp-shopify   # stdio, reads SHOPIFY_SHOP_DOMAIN /
 Step 2 (wiring a real `authenticator`/`rate_limiter`/`business`) still has to come from
 you — the exe won't guess those — so point `PORTAGE_UCP_CONFIG` at a Ruby file that
 calls `Portage::Ucp.configure`, the same `-r`-a-file pattern `rackup`/Sidekiq use.
-[`portage-ucp-shopify/examples/portage_ucp.rb`](portage-ucp-shopify/examples/portage_ucp.rb)
-is a copy-paste starting point (bearer-token authenticator, in-process rate limiter):
+`portage-ucp-shopify/examples/portage_ucp.rb` is a copy-paste starting point
+(bearer-token authenticator, in-process rate limiter):
 
 ```bash
 PORTAGE_UCP_CONFIG=./config/portage_ucp.rb bundle exec portage-ucp-shopify
 ```
 
 Without it, the server still starts but rejects every mutating call — the
-`UnconfiguredAuthenticator` default from [Security hooks](#security-hooks--nothing-is-permissive-by-default) below.
+`UnconfiguredAuthenticator` default from [Security hooks](security-hooks.md).
 
 An agent connecting to it can now do this end to end — shown here as simplified `tools/call name { args }` shorthand, not the literal JSON-RPC envelope on the wire:
 
@@ -80,4 +82,4 @@ tools/call get_order { order_id: "gid://shopify/Order/9001" }
   → checkout_id: gid://shopify/Cart/abc, permalink_url: https://your-shop.example/orders/9001, totals: [...]
 ```
 
-Five tool calls, one snowboard bought. [`docs/walkthrough.md`](docs/walkthrough.md) shows what's actually running behind each of those — auth checks, PAN rejection, idempotent retries — plus how to serve the discovery manifest and order webhooks, from the shopper agent's side.
+Five tool calls, one snowboard bought. [The walkthrough](walkthrough.md) shows what's actually running behind each of those — auth checks, PAN rejection, idempotent retries — plus how to serve the discovery manifest and order webhooks, from the shopper agent's side.

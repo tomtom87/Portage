@@ -1,3 +1,5 @@
+# Architecture
+
 ## How the pieces fit together
 
 ```
@@ -22,3 +24,7 @@ Portage::Ucp::Rack::WebhookEndpoint (HMAC-verified inbound order-lifecycle webho
 ```
 
 A capability (e.g. `dev.ucp.shopping.cart`) is only advertised if your `Adapter` overrides at least one of its backing methods — an unconfigured method just means that capability doesn't show up in the manifest or the MCP tool list, not a 500.
+
+See [Writing adapters](writing-adapters.md) for what those `Adapter` methods look like in
+practice, and the [Capability coverage](capability-coverage.md) table for exactly which
+methods each bundled adapter overrides today.

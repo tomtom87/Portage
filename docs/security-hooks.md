@@ -1,3 +1,5 @@
+# Security hooks
+
 ## Security hooks — nothing is permissive by default
 
 Read this before wiring a server up to anything real — every default here is deliberately locked down, not permissive-by-omission:
@@ -14,3 +16,17 @@ Read this before wiring a server up to anything real — every default here is d
 - **Inbound request signatures**: `Portage::Ucp::Security::Signature` / `Rack::SignatureVerification` verify RFC 9421 HTTP Message Signatures on inbound requests per UCP's signature spec — the same verify-before-parse posture as `Rack::WebhookEndpoint`, trusting `Manifest#signing_keys`' current+next JWK array.
 - **Durable records**: `Portage::Ucp::Support::TransactionLog` reserves a transaction before `complete_checkout` dispatch and marks it settled/failed after, recording `PolicyGuard`/`Confirmer` outcomes on the same record. `Portage::Ucp::Support::OrderLedger` writes a durable snapshot alongside it once settlement succeeds — a failed snapshot write surfaces without flipping an already-settled charge to failed.
 
+## WebMCP-specific hardening
+
+`portage-ucp-webmcp`'s `CallEndpoint` (the Rack endpoint a page's `document.modelContext`
+tool calls land on) adds two more limits on top of the above: a `max_body_bytes` cap
+(1 MiB default, rejected with `413`) and a `call_timeout` (30s default) on the underlying
+tool dispatch. Both are configurable per endpoint instance — see
+[the WebMCP adapter page](adapters/webmcp.md) for the full README, including its
+CSP/CSRF guidance.
+
+## Shared HTTP client timeouts
+
+Every bundled adapter's HTTP calls go through `Portage::Ucp::Support::HttpClient`, which
+sets a default open timeout of 5s and read timeout of 30s, and retries a timeout once
+through `Portage::Ucp::Support::Retry` rather than propagating it straight to the caller.
