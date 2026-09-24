@@ -9,3 +9,7 @@ gem "portage-ucp-client", path: "../portage-ucp-client"
 # the not-installed path.
 gem "portage-ucp-decision", path: "../portage-ucp-decision"
 gem "portage-ucp-journal", path: "../portage-ucp-journal"
+# Optional at runtime (not in the gemspec), but in the dev bundle so the
+# suite covers Buy#webmcp_flow. buy_spec.rb stubs Webmcp.available? for the
+# not-installed path.
+gem "portage-ucp-webmcp", path: "../portage-ucp-webmcp"

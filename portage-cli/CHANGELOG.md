@@ -25,6 +25,36 @@ pre-1.0, so APIs may still shift between minor versions.
   URL) when this checkout would already exceed the cap.
 - Phase 0 of the plan above (a live signal check against a real store) was
   not run before this shipped — see `docs/design-log.md` §44.
+- **`portage buy --wait [--wait-timeout DURATION|off]`.** After a hand-off,
+  polls `HandoffReconciler` with backoff (2s → 30s, plus jitter) until the
+  checkout settles or its deadline passes — the earlier of
+  `handoff_wait_timeout` (`PORTAGE_HANDOFF_WAIT_TIMEOUT`, config.json;
+  default 30m, `off` removes it) and the checkout's own `expires_at`.
+  Ctrl-C or the deadline leaves the record pending for a later `portage
+  orders reconcile`; it never settles from the wait itself. Under `--wait
+  --json`, stdout streams NDJSON (`handoff`, `handoff_status` on each
+  store-reported status change, `handoff_settled`) followed by the final
+  report object; plain `--json` with no `--wait` is unchanged byte-for-byte.
+- **`reconcile_notify`** (`PORTAGE_RECONCILE_NOTIFY`, config.json) — a comma
+  list of channels a settled hand-off notifies on, from `--wait` or `portage
+  orders reconcile`. Default `webhook`. Adds `macos` (a native notification,
+  merchant/amount escaped into a fixed AppleScript template) and `terminal`
+  (a printed line, forced on for a plain-text `--wait` regardless of
+  configuration). `journal` is accepted for documentation — the Phase 1
+  order-snapshot journal write was already unconditional.
+- **WebMCP outbound, opt-in (Phase 4, partial).** `Buy.new(webmcp_bridge:)`
+  takes a `portage-ucp-webmcp` outbound bridge already pointed at a
+  navigated page; when given one, `portage-cli` tries it after native-UCP
+  discovery finds nothing and before a platform-adapter fallback. Only
+  `webmcp_checkout_mode: express_stop` (the default) is implemented: it
+  builds the cart/checkout and always hands off (reason `express_stop`),
+  feeding Phases 1-3 unchanged, since a WebMCP page doesn't expose
+  `complete_checkout` by default anyway. `token` mode reports
+  `webmcp_token_unsupported` rather than attempting completion — it still
+  needs a `Confirmer`-swap seam in `Mcp::Server.build` and payment-token
+  enrollment that don't exist yet. No new hard runtime dependency:
+  `portage-ucp-webmcp` is lazily `require`d, same posture as an optional
+  platform adapter gem.
 
 ## [0.7.2] - 2026-09-24
 

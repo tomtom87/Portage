@@ -412,6 +412,116 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "buy --wait (docs/plans/handoff-reconcile.md Phase 3)" do
+    let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new }
+    let(:handoff_report) do
+      { url: "https://shop.example", source: "native_ucp", browse: true, checkout: true, checkout_id: "chk_1",
+        checkout_url: "https://shop.example/c/chk_1", outcome: "requires_escalation", message: "hand off",
+        products: [], warnings: [], handoff: { url: "https://shop.example/c/chk_1", opened: false,
+                                               notified: false, notify_error: nil } }
+    end
+
+    def reserve_pending
+      transaction_log.reserve(idempotency_key: "portage-buy:shop.example:chk_1", checkout_id: "chk_1",
+                              payment_token_ref: nil, shop: "shop.example", settled_by: "shopper")
+    end
+
+    def stub_buy(report)
+      allow(Portage::Cli::Buy).to receive(:new).and_return(instance_double(Portage::Cli::Buy, call: report))
+    end
+
+    it "never passes --wait/--wait-timeout through to Buy.new" do
+      captured = nil
+      allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+        captured = opts
+        instance_double(Portage::Cli::Buy, call: report)
+      }
+
+      capture_stdout { described_class.run(%w[buy shop.example --query cold --wait --wait-timeout 5m]) }
+
+      expect(captured).not_to have_key(:wait)
+      expect(captured).not_to have_key(:wait_timeout)
+    end
+
+    it "does nothing extra when there's no handoff to wait on" do
+      stub_buy(report)
+      expect(Portage::Cli::HandoffWaiter).not_to receive(:new)
+
+      capture_stdout { described_class.run(%w[buy shop.example --query cold --wait]) }
+    end
+
+    it "polls until the handoff settles, then reports it" do
+      stub_buy(handoff_report)
+      reserve_pending
+      settled = Portage::Cli::HandoffReconciler::Result.new(idempotency_key: "portage-buy:shop.example:chk_1",
+                                                            settled: true, status: "complete", order_id: "ord_1",
+                                                            amount: 4200, currency: "USD")
+      allow(Portage::Cli::HandoffReconciler).to receive(:new)
+        .and_return(instance_double(Portage::Cli::HandoffReconciler, call: settled))
+
+      output = capture_stdout { described_class.run(%w[buy shop.example --query cold --wait]) }
+
+      expect(output).to include("requires_escalation")
+    end
+
+    it "streams NDJSON events under --wait --json, ending with the final report object" do
+      stub_buy(handoff_report)
+      reserve_pending
+      settled = Portage::Cli::HandoffReconciler::Result.new(idempotency_key: "portage-buy:shop.example:chk_1",
+                                                            settled: true, status: "complete", order_id: "ord_1",
+                                                            amount: 4200, currency: "USD")
+      allow(Portage::Cli::HandoffReconciler).to receive(:new)
+        .and_return(instance_double(Portage::Cli::HandoffReconciler, call: settled))
+
+      output = capture_stdout { described_class.run(%w[buy shop.example --query cold --wait --json]) }
+      lines = output.lines.map(&:strip).reject(&:empty?)
+
+      first_event = JSON.parse(lines.first)
+      expect(first_event).to include("event" => "handoff", "checkout_id" => "chk_1")
+      settled_event = JSON.parse(lines[1])
+      expect(settled_event).to include("event" => "handoff_settled", "result" => "complete", "order_id" => "ord_1")
+      final = JSON.parse(lines[2..].join("\n"))
+      expect(final).to include("outcome" => "requires_escalation")
+      expect(final["reconcile"]).to include("status" => "complete")
+    end
+
+    it "forces the terminal notify channel in plain mode but not under --json" do
+      stub_buy(handoff_report)
+      reserve_pending
+      settled = Portage::Cli::HandoffReconciler::Result.new(idempotency_key: "portage-buy:shop.example:chk_1",
+                                                            settled: true, status: "complete")
+      allow(Portage::Cli::HandoffReconciler).to receive(:new)
+        .and_return(instance_double(Portage::Cli::HandoffReconciler, call: settled))
+
+      captured_channels = nil
+      allow(Portage::Cli::ReconcileNotify).to receive(:resolve) { |**kwargs| captured_channels = kwargs[:extra] }
+
+      capture_stdout { described_class.run(%w[buy shop.example --query cold --wait]) }
+      expect(captured_channels).to eq(["terminal"])
+
+      capture_stdout { described_class.run(%w[buy shop.example --query cold --wait --json]) }
+      expect(captured_channels).to eq([])
+    end
+
+    it "passes --wait-timeout through to HandoffWaiter" do
+      stub_buy(handoff_report)
+      reserve_pending
+      settled = Portage::Cli::HandoffReconciler::Result.new(idempotency_key: "portage-buy:shop.example:chk_1",
+                                                            settled: true, status: "complete")
+      allow(Portage::Cli::HandoffReconciler).to receive(:new)
+        .and_return(instance_double(Portage::Cli::HandoffReconciler, call: settled))
+      captured = nil
+      allow(Portage::Cli::HandoffWaiter).to receive(:new) { |**opts|
+        captured = opts
+        instance_double(Portage::Cli::HandoffWaiter, call: settled)
+      }
+
+      capture_stdout { described_class.run(%w[buy shop.example --query cold --wait --wait-timeout 5m]) }
+
+      expect(captured[:wait_timeout_override]).to eq("5m")
+    end
+  end
+
   describe "orders reconcile" do
     let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new }
 

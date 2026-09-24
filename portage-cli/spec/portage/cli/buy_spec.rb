@@ -1,4 +1,5 @@
 require "spec_helper"
+require "portage/ucp/webmcp"
 
 RSpec.describe Portage::Cli::Buy do
   # Never let #complete's `@payment_token ||= PaymentMethods.default`
@@ -957,6 +958,115 @@ RSpec.describe Portage::Cli::Buy do
           selected_group = kwargs[:fulfillment].shipping_methods.first.groups.first
           expect(selected_group.selected_option_id).to eq("standard")
         end
+      end
+    end
+  end
+
+  describe "WebMCP outbound (docs/plans/handoff-reconcile.md Phase 4)" do
+    let(:bridge) { double("bridge") }
+
+    def stub_no_native_manifest
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
+      stub_request(:get, "https://shop.example/").to_return(status: 200, body: "<html>nothing recognizable</html>")
+    end
+
+    let(:webmcp_checkout) do
+      { "id" => "chk_1", "status" => "ready_for_complete", "totals" => [],
+        "continue_url" => "https://shop.example/cart/c/chk_1" }
+    end
+
+    def webmcp_session(checkout: webmcp_checkout)
+      instance_double(Portage::Ucp::Client::Session, advertises?: true,
+                                                     search_catalog: { "products" => [product] },
+                                                     create_checkout: checkout)
+    end
+
+    it "never touches WebMCP when no bridge is given (the default)" do
+      stub_no_native_manifest
+      expect(Portage::Ucp::WebMcp).not_to receive(:connect)
+
+      report = described_class.new(url: "shop.example", query: "cold").call
+
+      expect(report[:source]).to eq("none")
+    end
+
+    it "never touches WebMCP when native UCP discovery already answers" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      expect(Portage::Ucp::WebMcp).not_to receive(:connect)
+
+      described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
+    end
+
+    it "builds cart/checkout over WebMCP and always hands off (express_stop), never completing" do
+      stub_no_native_manifest
+      session = webmcp_session
+      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1",
+                                   webmcp_bridge: bridge).call
+
+      expect(report[:source]).to eq("webmcp")
+      expect(report[:outcome]).to eq("express_stop")
+      expect(report[:handoff]).not_to be_nil
+      expect(session).to have_received(:create_checkout)
+    end
+
+    it "reserves a pending shopper handoff record for the express-stop checkout" do
+      stub_no_native_manifest
+      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(webmcp_session)
+      transaction_log = Portage::Ucp::Support::TransactionLog.new
+
+      described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
+
+      record = transaction_log.find("portage-buy:shop.example:chk_1")
+      expect(record).to include("status" => "pending", "settled_by" => "shopper", "handoff_reason" => "express_stop")
+    end
+
+    it "skips a store with no cart/checkout capability over WebMCP, falling through to adapter detection" do
+      stub_no_native_manifest
+      no_checkout_session = instance_double(Portage::Ucp::Client::Session, advertises?: false)
+      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(no_checkout_session)
+      allow(Portage::Ucp::Resolver).to receive(:detect_platform).and_return(nil)
+
+      report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
+
+      expect(report[:source]).to eq("none")
+    end
+
+    it "reports webmcp_not_installed instead of raising when portage-ucp-webmcp isn't available" do
+      stub_no_native_manifest
+      allow(Portage::Cli::Webmcp).to receive(:available?).and_return(false)
+      expect(Portage::Ucp::WebMcp).not_to receive(:connect)
+
+      report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
+
+      expect(report[:outcome]).to eq("webmcp_not_installed")
+      expect(report[:source]).to eq("webmcp")
+    end
+
+    it "reports a webmcp_error instead of raising when the bridge blows up" do
+      stub_no_native_manifest
+      allow(Portage::Ucp::WebMcp).to receive(:connect)
+        .and_raise(Portage::Ucp::WebMcp::BridgeError, "page has no modelContext")
+
+      report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
+
+      expect(report[:outcome]).to eq("webmcp_error")
+      expect(report[:message]).to include("page has no modelContext")
+    end
+
+    describe "webmcp_checkout_mode=token" do
+      around { |example| with_env("PORTAGE_WEBMCP_CHECKOUT_MODE" => "token") { example.run } }
+
+      it "refuses rather than silently behaving like express_stop" do
+        stub_no_native_manifest
+        allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(webmcp_session)
+
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
+
+        expect(report[:outcome]).to eq("webmcp_token_unsupported")
+        expect(report[:checkout]).to be false
       end
     end
   end

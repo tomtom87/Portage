@@ -15,6 +15,8 @@ require_relative "homepage_fetch"
 require_relative "permissive_authenticator"
 require_relative "handoff_reconciler"
 require_relative "handoff_spend_mode"
+require_relative "webmcp"
+require_relative "webmcp_checkout_mode"
 
 module Portage
   module Cli
@@ -58,14 +60,22 @@ module Portage
       #   units (same as Find's). A product priced above it is never picked,
       #   even with a --product-id; one with no price to go on still is, as
       #   in Find, and the checkout's own total then meets the spend policy.
-      # rubocop:disable Metrics/ParameterLists -- all keywords; one per flag, plus two injectable collaborators
+      # @param webmcp_bridge [#list_tools, #execute_tool, nil] docs/plans/
+      #   handoff-reconcile.md Phase 4 — a `portage-ucp-webmcp` outbound
+      #   Bridge (already pointed at a navigated page) an embedding caller
+      #   already holds. nil (the default, and the only option from the
+      #   `portage buy` CLI, which has no browser of its own) skips WebMCP
+      #   entirely — zero behavior change from before this parameter
+      #   existed. Given one, attempted after native-UCP discovery finds
+      #   nothing at this URL and before a platform-adapter fallback (see
+      #   #webmcp_flow).
+      # rubocop:disable Metrics/ParameterLists -- all keywords; one per flag, plus injectable collaborators
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
                      auto_open: nil, notify_webhook: nil, confidence_check: nil, transaction_log: nil,
-                     max_price: nil)
+                     max_price: nil, webmcp_bridge: nil)
         # rubocop:enable Metrics/ParameterLists
         raw = url.to_s.strip
-        raw = "https://#{raw}" unless raw =~ %r{\Ahttps?://}i
-        @uri = URI.parse(raw)
+        @uri = URI.parse(raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}")
         @query = query
         @qty = qty
         @payment_token = payment_token
@@ -77,6 +87,7 @@ module Portage
         @confidence_check = confidence_check
         @transaction_log = transaction_log
         @max_price = max_price
+        @webmcp_bridge = webmcp_bridge
         @decisions = {}
       end
 
@@ -94,6 +105,9 @@ module Portage
           session = discover(linked)
           return native_flow(session) if session
         end
+
+        webmcp_result = webmcp_flow
+        return webmcp_result if webmcp_result
 
         platform = Portage::Ucp::Resolver.detect_platform(body, headers)
         adapter_flow(platform) || dead_end
@@ -211,6 +225,64 @@ module Portage
         match && URI.join(@uri, match[1])
       end
 
+      # --- Step 1b: WebMCP outbound (docs/plans/handoff-reconcile.md Phase 4) ---
+      #
+      # Opt-in only: nil unless a caller passed `webmcp_bridge:` (see
+      # #initialize), so `portage buy` from the shell — with no browser of
+      # its own — sees no behavior change here at all. Attempted after
+      # native-UCP discovery finds nothing at this URL and before falling
+      # back to a platform adapter, since a WebMCP page, like native UCP,
+      # works without this process holding the store's own credentials.
+      #
+      # `express_stop` (the only implemented mode) builds the cart and
+      # checkout, then always hands off rather than attempting
+      # #complete_checkout — which a WebMCP page doesn't expose by default
+      # in the first place (ToolCatalog leaves it out: it needs a
+      # server-side Confirmer swap this gem doesn't have a seam for yet).
+      # That hand-off feeds Phases 1-3 completely unchanged: reason
+      # `express_stop` reserves a pending record, notifies, and later
+      # reconciles exactly like any other hand-off.
+      def webmcp_flow
+        return nil unless @webmcp_bridge
+        return webmcp_not_installed_report unless Portage::Cli::Webmcp.available?
+
+        session = Portage::Ucp::WebMcp.connect(bridge: @webmcp_bridge)
+        return nil unless session.advertises?(CART_CAP) && session.advertises?(CHECKOUT_CAP)
+
+        return webmcp_token_unsupported_report if webmcp_checkout_mode == "token"
+
+        full_buy(session, source: "webmcp", force_handoff: true)
+      rescue Portage::Ucp::WebMcp::BridgeError, Portage::Ucp::WebMcp::ToolNotFoundError,
+             Portage::Ucp::Client::ServerError => e
+        build_report(source: "webmcp", outcome: "webmcp_error", browse: false, checkout: false,
+                     message: "WebMCP checkout failed: #{e.message}")
+      end
+
+      def webmcp_checkout_mode
+        Portage::Cli::WebmcpCheckoutMode.resolve
+      end
+
+      def webmcp_not_installed_report
+        build_report(source: "webmcp", outcome: "webmcp_not_installed", browse: false, checkout: false,
+                     message: "A WebMCP bridge was given but portage-ucp-webmcp isn't installed — " \
+                              "`gem install portage-ucp-webmcp`.")
+      end
+
+      # `token` mode isn't implemented: it needs `Mcp::Server.build` to swap
+      # in a payment-token Confirmer for a WebMCP session (see
+      # portage-ucp-webmcp's README, "complete_checkout"), plus PayPal/Stripe
+      # agent-token enrollment in `portage payment enroll` — neither exists
+      # yet (docs/plans/handoff-reconcile.md Phase 4 is explicitly a sketch
+      # pending that design). Fails loudly here rather than silently
+      # behaving like `express_stop`, so a caller who configured `token`
+      # notices instead of getting a hand-off they didn't ask for.
+      def webmcp_token_unsupported_report
+        build_report(source: "webmcp", outcome: "webmcp_token_unsupported", browse: false, checkout: false,
+                     message: "webmcp_checkout_mode=token isn't supported yet — see " \
+                              "docs/plans/handoff-reconcile.md Phase 4. Use express_stop (the default), or " \
+                              "complete the checkout via the page's own payment button.")
+      end
+
       # --- Step 2/3: platform detection + adapter fallback ---
 
       def adapter_flow(platform)
@@ -307,7 +379,11 @@ module Portage
       # remote store, so shipping-address/rate selection stays loopback-only
       # for now rather than guessing at a wire shape no real UCP server has
       # confirmed (see docs/design-log.md).
-      def full_buy(session, source:, fulfillment_adapter: nil)
+      # @param force_handoff [Boolean] docs/plans/handoff-reconcile.md Phase
+      #   4's `express_stop` — skips escalation/confirmation/completion
+      #   entirely and always hands the built checkout off, once past the
+      #   `--dry-run` check. Only #webmcp_flow ever sets this.
+      def full_buy(session, source:, fulfillment_adapter: nil, force_handoff: false)
         products = safe_search(session)
         product = select_product(products)
         unless product
@@ -321,7 +397,7 @@ module Portage
         checkout = select_cheapest_shipping(session, checkout) if fulfillment_adapter
 
         warnings = reconcile_checkout(product, checkout)
-        finish_checkout(session, source, products, checkout, warnings)
+        finish_checkout(session, source, products, checkout, warnings, force_handoff: force_handoff)
       end
 
       # A store can silently drop the requested line, change its quantity, or
@@ -490,10 +566,11 @@ module Portage
           product_id_of(product)
       end
 
-      def finish_checkout(session, source, products, checkout, warnings = [])
+      def finish_checkout(session, source, products, checkout, warnings = [], force_handoff: false)
         escalation = decide_escalation(checkout, warnings)
         return escalated_report(source, products, checkout, warnings, escalation) if escalation[:escalate]
         return dry_run_report(source, products, checkout, warnings) if @dry_run
+        return webmcp_handoff_report(source, products, checkout, warnings) if force_handoff
         return confirmation_needed_report(source, products, checkout, warnings) unless confirmed?
 
         complete(session, source, products, checkout, warnings)
@@ -701,6 +778,18 @@ module Portage
         checkout_report(source, products, checkout, outcome: outcome, message: message,
                                                     warnings: warnings + Array(@pending_handoff_warning),
                                                     checkout_url: checkout_url_of(checkout), handoff: handoff)
+      end
+
+      # docs/plans/handoff-reconcile.md Phase 4 — #webmcp_flow's
+      # `express_stop` mode. Reuses #handoff_report as-is: reason
+      # `express_stop` reserves a pending shopper record and fires
+      # auto-open/notify exactly like any other hand-off (Phases 1-3 apply
+      # unchanged), even though it got here because a mode setting chose to
+      # stop, not because anything was denied or escalated.
+      def webmcp_handoff_report(source, products, checkout, warnings)
+        message = "Cart and checkout are built — finish payment with the store's own express-pay button " \
+                  "on the page."
+        handoff_report(source, products, checkout, warnings, outcome: "express_stop", message: message)
       end
 
       # Never fires on --dry-run (a dry run creates a real checkout but never
