@@ -28,4 +28,5 @@ adapter = Portage::Ucp::BigCommerce::Adapter.new(
   payment_gateway_id: ENV.fetch("BIGCOMMERCE_PAYMENT_GATEWAY_ID", nil)
 )
 
-Portage::Ucp::Mcp::Server.build(adapter: adapter).start
+server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
+MCP::Server::Transports::StdioTransport.new(server).open
