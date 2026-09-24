@@ -30,10 +30,28 @@ module Portage
           uri = URI("https://graph.facebook.com/#{@api_version}/oauth/access_token?#{URI.encode_www_form(params)}")
 
           response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(Net::HTTP::Get.new(uri)) }
-          body = JSON.parse(response.body)
+          body = parse_body(response)
           raise Portage::Ucp::Instagram::Error, "token exchange failed: #{body}" unless response.is_a?(Net::HTTPSuccess)
 
           Result.new(access_token: body["access_token"], expires_in: body["expires_in"])
+        end
+
+        private
+
+        # Meta answers a rejected exchange (bad client_id/secret, expired
+        # short-lived token) with a JSON error body the same shape as any
+        # other Graph API error, but a transport-level failure (a 5xx from
+        # an edge/proxy, a truncated connection) can hand back an empty or
+        # non-JSON body instead — this keeps that case a clear
+        # Portage::Ucp::Instagram::Error instead of an unrescued
+        # JSON::ParserError with no indication what actually failed.
+        def parse_body(response)
+          return {} if response.body.nil? || response.body.empty?
+
+          JSON.parse(response.body)
+        rescue JSON::ParserError
+          raise Portage::Ucp::Instagram::Error,
+                "token exchange failed: non-JSON response (status #{response.code}): #{response.body.inspect}"
         end
       end
     end
