@@ -131,7 +131,7 @@
     try {
       var handle = context.registerTool(descriptor(tool), registerOptions());
       settled = Promise.resolve(handle).then(function (resolved) {
-        if (resolved && typeof resolved.unregister === "function") handles.push(resolved);
+        if (resolved && typeof resolved.unregister === "function") handles.push({ name: tool.name, handle: resolved });
         state.registered.push(tool.name);
       }, function (error) {
         state.errors.push({ tool: tool.name, message: String((error && error.message) || error) });
@@ -153,13 +153,35 @@
   // next generation's script, racing this promise above — never unregisters
   // a name that hasn't finished registering yet, which would otherwise leave
   // it orphaned on `context` with nothing in `handles` to drop it.
+  //
+  // By the time those pending calls settle, a newer generation may already
+  // have taken over `root.portageWebMcp` (this is exactly the slow-previous-
+  // generation case REREGISTER_WAIT_MS bounds the *wait* for, not the
+  // *cleanup*): if this generation's own `registerTool` call was slower than
+  // that bound, its belated success races the new generation's registration
+  // of the same name. Cleanup here must not delete a name the current
+  // generation has since (re-)registered — the legacy `unregisterTool(name)`
+  // fallback in particular can't tell "this call belongs to my stale
+  // registration" from "this name now belongs to the current generation", so
+  // it's skipped for any name the current generation now owns.
   function unregister() {
     if (controller) controller.abort();
     var settled = Promise.all(pending.map(function (p) { return p.catch(function () {}); }));
     return settled.then(function () {
-      handles.forEach(function (handle) { try { handle.unregister(); } catch (_e) { /* already gone */ } });
+      var current = root.portageWebMcp;
+      var superseded = current !== state;
+      function ownedByCurrentGeneration(name) {
+        return superseded && current && current.registered && current.registered.indexOf(name) !== -1;
+      }
+      handles.forEach(function (entry) {
+        if (ownedByCurrentGeneration(entry.name)) return;
+        try { entry.handle.unregister(); } catch (_e) { /* already gone */ }
+      });
       if (context && typeof context.unregisterTool === "function") {
-        config.tools.forEach(function (tool) { try { context.unregisterTool(tool.name); } catch (_e) { /* already gone */ } });
+        config.tools.forEach(function (tool) {
+          if (ownedByCurrentGeneration(tool.name)) return;
+          try { context.unregisterTool(tool.name); } catch (_e) { /* already gone */ }
+        });
       }
       state.registered = [];
     });
