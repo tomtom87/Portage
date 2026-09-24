@@ -89,7 +89,7 @@ ETSY_ACCESS_TOKEN=... ETSY_API_KEY=... ETSY_SHOP_ID=... bundle exec portage-ucp-
 
 Wiring a real `authenticator`/`rate_limiter`/`business` still has to come from you — the exe won't guess
 those — so point `PORTAGE_UCP_CONFIG` at a Ruby file that calls `Portage::Ucp.configure`, the same `-r`-a-file
-pattern `rackup`/Sidekiq use. [`examples/portage_ucp.rb`](examples/portage_ucp.rb) is a copy-paste starting
+pattern `rackup`/Sidekiq use. [`examples/portage_ucp.rb`](https://github.com/tomtom87/Portage/blob/main/portage-ucp-etsy/examples/portage_ucp.rb) is a copy-paste starting
 point (bearer-token authenticator, in-process rate limiter):
 
 ```bash
