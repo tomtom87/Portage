@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Fix: `Support::HttpClient#json_request` opened every request with no
+  `open_timeout`/`read_timeout` of its own, so a hung upstream fell back to
+  Net::HTTP's own 60s defaults on both — a full minute an agent loop could
+  be stuck mid-checkout before anything reacted. It now defaults to a 5s
+  open / 30s read timeout (mirroring `Check#get`'s own explicit precedent),
+  overridable per call via `open_timeout:`/`read_timeout:` keywords.
+  `Support::Retry#retryable_error?` now also treats `Net::OpenTimeout` and
+  `Net::ReadTimeout` as retryable — neither carries a `status`, but both are
+  exactly the "the upstream didn't do the work, try again" case the module
+  exists for.
+
 ## [0.9.0] - 2026-09-23
 
 - New `Support::OfferRanking` and `Support::Escalation`: the offer-ranking
