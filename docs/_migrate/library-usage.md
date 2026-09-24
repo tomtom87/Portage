@@ -1,3 +1,15 @@
+## Installation
+
+```ruby
+# Gemfile
+gem "portage-ucp"
+gem "portage-ucp-shopify" # or another adapter gem, or your own Adapter subclass
+```
+
+```bash
+bundle install
+```
+
 ## Usage
 
 ```ruby
