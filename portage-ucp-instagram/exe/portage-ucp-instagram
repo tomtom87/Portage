@@ -22,4 +22,5 @@ require ENV["PORTAGE_UCP_CONFIG"] if ENV["PORTAGE_UCP_CONFIG"]
 client = Portage::Ucp::Instagram::Client.new(access_token: ENV.fetch("INSTAGRAM_ACCESS_TOKEN"))
 adapter = Portage::Ucp::Instagram::Adapter.new(client: client, catalog_id: ENV.fetch("INSTAGRAM_CATALOG_ID"))
 
-Portage::Ucp::Mcp::Server.build(adapter: adapter).start
+server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
+MCP::Server::Transports::StdioTransport.new(server).open
