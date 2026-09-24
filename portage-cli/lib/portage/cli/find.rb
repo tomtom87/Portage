@@ -5,6 +5,7 @@ require "portage/ucp/client"
 require_relative "search_backends"
 require_relative "probe_cache"
 require_relative "decisions"
+require_relative "user_agent"
 
 module Portage
   module Cli
@@ -128,7 +129,7 @@ module Portage
       end
 
       def discover(origin)
-        Portage::Ucp::Client.discover(origin)
+        Portage::Ucp::Client.discover(origin, headers: HTTP_HEADERS)
       rescue StandardError
         nil
       end

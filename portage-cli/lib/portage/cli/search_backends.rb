@@ -2,6 +2,7 @@ require "net/http"
 require "uri"
 require "json"
 require "yaml"
+require_relative "user_agent"
 
 module Portage
   module Cli
@@ -18,7 +19,6 @@ module Portage
     module SearchBackends
       OPEN_TIMEOUT = 5
       READ_TIMEOUT = 5
-      USER_AGENT = "portage-find".freeze
 
       # Reference works and marketplaces-of-links that a search backend will
       # happily return for a product query but that are never themselves a UCP
@@ -47,7 +47,7 @@ module Portage
       def self.request(uri, headers)
         Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
                                             open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT) do |http|
-          http.get(uri.request_uri, { "User-Agent" => USER_AGENT }.merge(headers))
+          http.get(uri.request_uri, HTTP_HEADERS.merge(headers))
         end
       end
       private_class_method :request

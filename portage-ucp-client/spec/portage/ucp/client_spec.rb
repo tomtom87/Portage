@@ -55,6 +55,31 @@ RSpec.describe Portage::Ucp::Client do
       expect(session.capabilities).to eq(["dev.ucp.shopping.catalog"])
     end
 
+    let(:mcp_manifest) { { services: [{ transport: "mcp", endpoint: "https://shop.example/mcp" }] }.to_json }
+
+    it "identifies itself as Portage on the manifest GET" do
+      stub_request(:get, "https://shop.example/.well-known/ucp")
+        .with(headers: { "User-Agent" => Portage::Ucp::Client::USER_AGENT })
+        .to_return(status: 200, body: mcp_manifest)
+      allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
+
+      described_class.discover("https://shop.example")
+
+      expect(Portage::Ucp::Client::USER_AGENT).to match(%r{\Aportage-ucp-client/\d+\.\d+\.\d+ \(\+https://})
+    end
+
+    it "sends the caller's headers, its own User-Agent included, on the GET and every call after it" do
+      headers = { "User-Agent" => "portage-cli/1.0" }
+      stub_request(:get, "https://shop.example/.well-known/ucp").with(headers: headers)
+                                                                .to_return(status: 200, body: mcp_manifest)
+      allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
+
+      described_class.discover("https://shop.example", headers: headers)
+
+      expect(Portage::Ucp::Client::Transports::Http).to have_received(:new)
+        .with(url: "https://shop.example/mcp", headers: headers)
+    end
+
     it "raises DiscoveryError when the manifest can't be fetched" do
       stub_request(:get, "https://shop.example/.well-known/ucp").to_return(status: 404)
 

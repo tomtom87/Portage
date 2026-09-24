@@ -22,6 +22,11 @@ module Portage
     # Adapter directly, and place an order.
     module Client
       MANIFEST_PATH = "/.well-known/ucp".freeze
+      # Sent on every request this gem makes to a store (the manifest GET and
+      # each Streamable HTTP call) unless the caller's own headers name one,
+      # so a merchant reading its logs can tell a Portage agent from Ruby's
+      # or Faraday's default and find out what it is.
+      USER_AGENT = "portage-ucp-client/#{VERSION} (+https://github.com/tomtom87/Portage)".freeze
 
       # Wraps an already-built Adapter directly — no subprocess/socket. Still
       # runs the real merchant-side contract (authenticator, rate limiter,
@@ -51,14 +56,17 @@ module Portage
       # Portage::Ucp::Manifest#services — the core-gem fix this client
       # depends on to know where to connect).
       # @return [Session] scoped to the manifest's advertised capabilities.
-      def self.discover(url)
-        manifest = fetch_manifest(url)
-        connect(url: mcp_endpoint(manifest), capabilities: capability_names(manifest))
+      # @param headers [Hash{String => String}] sent with the manifest GET
+      #   and every call after it — e.g. a "User-Agent" naming the app
+      #   built on this gem.
+      def self.discover(url, headers: {})
+        manifest = fetch_manifest(url, headers)
+        connect(url: mcp_endpoint(manifest), headers: headers, capabilities: capability_names(manifest))
       end
 
-      def self.fetch_manifest(url)
+      def self.fetch_manifest(url, headers = {})
         uri = URI.parse("#{url.to_s.sub(%r{/\z}, '')}#{MANIFEST_PATH}")
-        response = Net::HTTP.get_response(uri)
+        response = Net::HTTP.get_response(uri, with_user_agent(headers))
         raise DiscoveryError, "GET #{uri} returned #{response.code}" unless response.is_a?(Net::HTTPSuccess)
 
         JSON.parse(response.body)
@@ -70,6 +78,13 @@ module Portage
         raise DiscoveryError, "couldn't reach #{url}: #{e.class}: #{e.message}"
       end
       private_class_method :fetch_manifest
+
+      # USER_AGENT unless `headers` already names one, in any case.
+      def self.with_user_agent(headers)
+        return headers if headers.keys.any? { |name| name.to_s.casecmp?("user-agent") }
+
+        { "User-Agent" => USER_AGENT }.merge(headers)
+      end
 
       # Real UCP manifests (confirmed live on Casper, Allbirds, Glossier, and
       # 34+ other Shopify UCP rollouts as of "2026-08-25") nest everything one

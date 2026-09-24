@@ -26,7 +26,9 @@ module Portage
           include UcpWireShape
 
           def initialize(url:, headers: {})
-            @client = ::MCP::Client.new(transport: ::MCP::Client::HTTP.new(url: url, headers: headers))
+            @client = ::MCP::Client.new(
+              transport: ::MCP::Client::HTTP.new(url: url, headers: Client.with_user_agent(headers))
+            )
             @client.connect
           end
 

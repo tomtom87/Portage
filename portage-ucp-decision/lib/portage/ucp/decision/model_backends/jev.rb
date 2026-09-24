@@ -21,6 +21,7 @@ module Portage
           # to two minutes on a hung connection.
           OPEN_TIMEOUT = 5
           TIMEOUT = 15
+          USER_AGENT = "portage-ucp-decision/#{VERSION} (+https://github.com/tomtom87/Portage)".freeze
           ENV_KEY = "JEV_API_KEY".freeze
           FALLBACK_ENV_KEY = "TYPESAFE_API_KEY".freeze
 
@@ -32,7 +33,8 @@ module Portage
             @api_key = api_key
             @model = model
             @connection = connection ||
-                          Faraday.new(url: BASE_URL, request: { open_timeout: OPEN_TIMEOUT, timeout: TIMEOUT })
+                          Faraday.new(url: BASE_URL, headers: { "User-Agent" => USER_AGENT },
+                                      request: { open_timeout: OPEN_TIMEOUT, timeout: TIMEOUT })
           end
 
           def configured? = configuration_problem.nil?
