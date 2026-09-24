@@ -157,5 +157,16 @@ RSpec.describe Portage::Ucp::Instagram::Adapter do
 
       expect(adapter.get_order(order_id: "999")).to be_nil
     end
+
+    it "warns once per Adapter instance that get_order is deprecated" do
+      stub_request(:get, %r{/999\?fields=id,order_status})
+        .to_return(status: 200, body: { id: "999", order_status: { state: "COMPLETED" },
+                                        estimated_payment_details: {}, items: { data: [] } }.to_json)
+
+      expect(Kernel).to receive(:warn).once.with(/deprecated.*2026-10-27/m)
+
+      adapter.get_order(order_id: "999")
+      adapter.get_order(order_id: "999")
+    end
   end
 end
