@@ -57,6 +57,17 @@ Metrics/ClassLength:
     # Phase 1), not several unrelated responsibilities. The Wire* adapter
     # structs already live in their own file (handoff_reconciler/wire_adapters.rb).
     - "lib/portage/cli/handoff_reconciler.rb"
+    # ProxySettings resolves one config surface (docs/plans/proxy-support.md
+    # Phase 2) across many independently-precedenced fields (url, mode,
+    # ca_file, proxy_headers, no_proxy, routes, chains, forward_headers) —
+    # breadth of one small method per field's own flag > env > config.json
+    # resolution, not a class doing unrelated things.
+    - "lib/portage/cli/proxy_settings.rb"
+    # One `*_finding` method per independent doctor check (authenticator,
+    # rate limiter, signing keys, user agent, env-proxy footgun, payment
+    # handlers, capabilities) — breadth of one flat findings list, not a
+    # class doing unrelated things.
+    - "lib/portage/cli/doctor.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and
