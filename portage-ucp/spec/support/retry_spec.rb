@@ -92,6 +92,38 @@ RSpec.describe Portage::Ucp::Support::Retry do
     expect(attempts).to eq(1)
   end
 
+  it "retries a Net::OpenTimeout, which carries no status at all" do
+    instance = caller_class.new
+    allow(instance).to receive(:sleep)
+    attempts = 0
+
+    result = instance.call do
+      attempts += 1
+      raise Net::OpenTimeout, "execution expired" if attempts < 2
+
+      "ok"
+    end
+
+    expect(result).to eq("ok")
+    expect(attempts).to eq(2)
+  end
+
+  it "retries a Net::ReadTimeout, which carries no status at all" do
+    instance = caller_class.new
+    allow(instance).to receive(:sleep)
+    attempts = 0
+
+    result = instance.call do
+      attempts += 1
+      raise Net::ReadTimeout, "execution expired" if attempts < 2
+
+      "ok"
+    end
+
+    expect(result).to eq("ok")
+    expect(attempts).to eq(2)
+  end
+
   it "does not retry an error with no status at all" do
     instance = caller_class.new
     allow(instance).to receive(:sleep)

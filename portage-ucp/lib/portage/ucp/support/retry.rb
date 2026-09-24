@@ -1,3 +1,5 @@
+require "net/http"
+
 module Portage
   module Ucp
     module Support
@@ -44,10 +46,16 @@ module Portage
         end
 
         # Default covers the common REST shape: any error carrying a `status`
-        # of 429 or 5xx (Support::ApiError-including errors all expose this).
-        # Platform clients override to recognize signals with no HTTP status
-        # of their own (e.g. a GraphQL THROTTLED extension code).
+        # of 429 or 5xx (Support::ApiError-including errors all expose this),
+        # plus Net::HTTP's own open/read timeouts (Support::HttpClient's
+        # open_timeout/read_timeout) — the upstream never answered at all, so
+        # there's no status to check, but that's exactly the "try again"
+        # case this module exists for. Platform clients override to
+        # recognize signals with no HTTP status of their own (e.g. a
+        # GraphQL THROTTLED extension code).
         def retryable_error?(error)
+          return true if error.is_a?(Net::OpenTimeout) || error.is_a?(Net::ReadTimeout)
+
           error.respond_to?(:status) && (error.status == 429 || (500..599).cover?(error.status))
         end
 
