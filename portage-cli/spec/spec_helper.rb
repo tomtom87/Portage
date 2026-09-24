@@ -28,6 +28,16 @@ RSpec.configure do |config|
       original.call(**kwargs)
     end
   end
+
+  # `Cli.apply_proxy_settings` (docs/plans/proxy-support.md Phase 2) sets
+  # Portage::Ucp::Support::ProxyConfig.current process-wide — reset it after
+  # every example so one test's resolved proxy config (or a Cli.run that
+  # went through it) never leaks into the next, including specs (like
+  # proxy_support_spec.rb) that construct Buy/Notifier/etc. directly and
+  # expect ProxyConfig.current's own lazy `direct` default.
+  config.after do
+    Portage::Ucp::Support::ProxyConfig.current = nil
+  end
 end
 
 # Sets the given env vars for the duration of the block, restoring whatever
