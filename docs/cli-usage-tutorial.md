@@ -146,6 +146,24 @@ portage find --query "usb-c cable" --max-price 20 --json
 #    each store's catalog decides fit
 ```
 
+## Running behind a proxy
+
+```bash
+http_proxy=http://user:pass@proxy.internal:3128 no_proxy=localhost,127.0.0.1 \
+  portage buy --query "hoodie" --dry-run --json
+```
+
+Use `http_proxy` (lowercase or `HTTP_PROXY`), not `HTTPS_PROXY` — confirmed against a
+real local proxy (see `docs/plans/proxy-support.md` Phase 0): every raw `Net::HTTP.start`
+call site in `portage-cli`/`portage-ucp`/the adapter gems resolves its proxy from Ruby
+stdlib's own `:ENV` default, which only ever reads `http_proxy`/`HTTP_PROXY` — for both
+`http://` and `https://` targets — and never `https_proxy`/`HTTPS_PROXY`. Setting only
+`HTTPS_PROXY` (the usual convention elsewhere) silently proxies nothing here; that's a
+real gap, tracked as Phase 1, not a typo in this example. `portage doctor` reports the
+effective proxy it detected, credentials redacted. Full details, including `no_proxy`
+matching rules and the one exception (`portage-ucp-client`'s Faraday-based UCP tool
+calls, which *do* honor `HTTPS_PROXY`): see the root [`README.md`](../README.md#running-behind-a-proxy).
+
 ## Known issue: `Client.discover` can't parse real 2026-08-25 manifests
 
 Testing `buy` against a handful of the verified 38 (Casper, Glossier,
