@@ -118,6 +118,104 @@ RSpec.describe "WebMCP page scripts", :node do
     end
   end
 
+  describe "registrar.js re-registering against a slow, spec-shaped modelContext" do
+    # A fake modelContext whose registerTool takes __DELAY_MS__ to settle and
+    # rejects a name still held by an earlier registration — the two things
+    # a real spec-compliant browser does that a synchronous test double
+    # wouldn't: enough to actually race two script generations against each
+    # other instead of asserting on the happy path.
+    let(:slow_model_context_js) do
+      <<~JS
+        (function () {
+          var tools = new Map();
+          document.modelContext = {
+            registerTool: function (tool, options) {
+              return new Promise(function (resolve, reject) {
+                setTimeout(function () {
+                  if (tools.has(tool.name)) { reject(new Error("tool already registered: " + tool.name)); return; }
+                  tools.set(tool.name, tool);
+                  var signal = options && options.signal;
+                  if (signal) signal.addEventListener("abort", function () { tools.delete(tool.name); });
+                  resolve({ unregister: function () { tools.delete(tool.name); } });
+                }, __DELAY_MS__);
+              });
+            },
+            unregisterTool: function (name) { tools.delete(name); },
+            getTools: function () { return Promise.resolve(Array.from(tools.keys())); }
+          };
+        })();
+      JS
+    end
+
+    def install_slow_context(delay_ms:)
+      browser.evaluate(slow_model_context_js.sub("__DELAY_MS__", delay_ms.to_s))
+    end
+
+    let(:registrar) do
+      Portage::Ucp::WebMcp::Registrar.new(catalog: Store.catalog(only: %w[search_catalog create_cart]),
+                                          endpoint: "/ucp/webmcp")
+    end
+
+    it "awaits the previous generation's in-flight registerTool calls before the next one registers, " \
+       "so a fast reload never collides on a name" do
+      install_slow_context(delay_ms: 30)
+      script = registrar.to_js
+
+      browser.evaluate(script)
+      browser.evaluate(script) # re-run before the first generation's registerTool has resolved
+
+      sleep 0.3 # real wall-clock time for the fake browser's setTimeouts to fire
+      browser.evaluate("Promise.resolve().then(() => null)")
+
+      names = page_json("document.modelContext.getTools()")
+      expect(names).to match_array(%w[search_catalog create_cart])
+      expect(page_json("window.portageWebMcp.errors")).to eq([])
+    end
+
+    it "bounds the wait with reregisterWaitMs instead of blocking on a previous generation that never settles" do
+      install_slow_context(delay_ms: 10)
+      # A registerTool that never resolves: the previous generation's own
+      # `unregister()` would otherwise wait on it forever.
+      browser.evaluate(<<~JS)
+        document.modelContext.registerTool = function () { return new Promise(function () {}); };
+      JS
+      stuck = Portage::Ucp::WebMcp::Registrar.new(catalog: Store.catalog(only: %w[search_catalog]),
+                                                  endpoint: "/ucp/webmcp", reregister_wait_ms: 50).to_js
+      browser.evaluate(stuck)
+
+      install_slow_context(delay_ms: 10) # a fresh, responsive modelContext for the next generation
+      browser.evaluate(stuck)
+
+      sleep 0.3
+      browser.evaluate("Promise.resolve().then(() => null)")
+
+      expect(page_json("document.modelContext.getTools()")).to eq(["search_catalog"])
+    end
+
+    it "still registers normally against a slow modelContext when there is no previous generation to await" do
+      install_slow_context(delay_ms: 30)
+      browser.evaluate(registrar.to_js)
+
+      sleep 0.1
+      browser.evaluate("Promise.resolve().then(() => null)")
+
+      expect(page_json("document.modelContext.getTools()")).to match_array(%w[search_catalog create_cart])
+    end
+  end
+
+  describe "registrar.js against a page with no modelContext at all" do
+    it "records the reason instead of raising, even on a second load" do
+      script = Portage::Ucp::WebMcp::Registrar.new(
+        catalog: Store.catalog(only: %w[search_catalog]), endpoint: "/ucp/webmcp"
+      ).to_js
+
+      browser.evaluate(script)
+      browser.evaluate(script)
+
+      expect(page_json("window.portageWebMcp.reason")).to eq("no_model_context")
+    end
+  end
+
   describe "consumer.js against other WebMCP surfaces" do
     it "uses navigator.modelContextTesting (listTools + executeTool with a JSON string)" do
       browser.evaluate(<<~JS)
