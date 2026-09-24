@@ -20,6 +20,11 @@ require_relative "ucp/support/retry"
 require_relative "ucp/reference_adapter"
 require_relative "ucp/support/api_error"
 require_relative "ucp/support/not_found"
+# Phase 1 of docs/plans/proxy-support.md: the shared connection seam behind
+# HttpClient/TokenExchange/Check below, and every migrated portage-cli and
+# adapter-gem call site — see connection.rb's own doc comment.
+require_relative "ucp/support/proxy_config"
+require_relative "ucp/support/connection"
 require_relative "ucp/support/http_client"
 require_relative "ucp/support/token_exchange"
 # Unlike its Support:: siblings above, this one IS used in the core gem's own

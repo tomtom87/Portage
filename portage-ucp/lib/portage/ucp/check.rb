@@ -1,6 +1,7 @@
 require "net/http"
 require "uri"
 require "json"
+require_relative "support/connection"
 
 module Portage
   module Ucp
@@ -79,8 +80,7 @@ module Portage
       def get(uri, limit = REDIRECT_LIMIT)
         raise Portage::Ucp::Error, "too many redirects" if limit.zero?
 
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                       open_timeout: 5, read_timeout: 5) do |http|
+        response = Support::Connection.start(uri, route: :probe, open_timeout: 5, read_timeout: 5) do |http|
           http.get(uri.request_uri, { "User-Agent" => "portage-ucp-check" })
         end
 

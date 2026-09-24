@@ -1,5 +1,6 @@
 require "net/http"
 require "json"
+require "portage/ucp"
 
 module Portage
   module Ucp
@@ -29,7 +30,9 @@ module Portage
                      fb_exchange_token: @short_lived_token }
           uri = URI("https://graph.facebook.com/#{@api_version}/oauth/access_token?#{URI.encode_www_form(params)}")
 
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(Net::HTTP::Get.new(uri)) }
+          response = Portage::Ucp::Support::Connection.start(uri, route: :platform) do |http|
+            http.request(Net::HTTP::Get.new(uri))
+          end
           body = parse_body(response)
           raise Portage::Ucp::Instagram::Error, "token exchange failed: #{body}" unless response.is_a?(Net::HTTPSuccess)
 

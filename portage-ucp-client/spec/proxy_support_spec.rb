@@ -79,6 +79,32 @@ RSpec.describe "Phase 0 env-proxy support (portage-ucp-client)" do
     end
   end
 
+  describe "Transports::Http's proxy: option (Phase 1's 'lighter touch' for this gem)" do
+    # docs/plans/proxy-support.md Phase 1: Faraday already reads the env
+    # proxy vars itself and accepts a `proxy:` connection option, so this
+    # gem's seam is just wiring that option through -- not reimplementing
+    # Faraday's own proxy handling (see Transports::Http#initialize).
+    it "wires an explicit proxy: option into the Faraday connection regardless of env vars" do
+      expect do
+        Portage::Ucp::Client::Transports::Http.new(url: "https://shop.example.invalid/mcp",
+                                                   proxy: "http://#{proxy.host}:#{proxy.port}")
+      end.to raise_error(StandardError) # the *.invalid target can't be reached past the (stub) proxy
+
+      rec = proxy.last_request
+      expect(rec).not_to be_nil
+      expect(rec.request_line).to eq("CONNECT shop.example.invalid:443 HTTP/1.1")
+    end
+
+    it "reaches the local proxy even when no env proxy variable is set at all" do
+      expect do
+        Portage::Ucp::Client::Transports::Http.new(url: "https://shop.example.invalid/mcp",
+                                                   proxy: "http://#{proxy.host}:#{proxy.port}")
+      end.to raise_error(StandardError)
+
+      expect(proxy.last_request).not_to be_nil
+    end
+  end
+
   describe "Client.fetch_manifest (plain Net::HTTP.get_response, not Faraday)" do
     it "routes through http_proxy, not https_proxy (inherits the Net::HTTP gap)" do
       ENV["https_proxy"] = "http://#{proxy.host}:#{proxy.port}"

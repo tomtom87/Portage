@@ -1,5 +1,6 @@
 require "net/http"
 require "uri"
+require "portage/ucp/support/connection"
 require_relative "user_agent"
 
 module Portage
@@ -19,8 +20,8 @@ module Portage
       def self.call(uri, limit: REDIRECT_LIMIT)
         return [nil, {}] if limit.zero?
 
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                       open_timeout: 5, read_timeout: 5) do |http|
+        response = Portage::Ucp::Support::Connection.start(uri, route: :store, open_timeout: 5,
+                                                                read_timeout: 5) do |http|
           http.get(uri.request_uri, UserAgent.headers)
         end
 

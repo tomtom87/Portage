@@ -79,6 +79,11 @@ Style/HashSlice:
 Metrics/ModuleLength:
   Exclude:
     - "lib/portage/ucp/value_objects.rb"
+    # Breadth, not complexity — one small dispatch method per proxy mode
+    # (:direct/:forward/:gateway/hand-rolled tunnel) plus two small wrapper
+    # classes (TunnelledHttp/GatewayHttp) that belong right next to the code
+    # that builds them, docs/plans/proxy-support.md Phase 1.
+    - "lib/portage/ucp/support/connection.rb"
 
 # Product/Variant's optional_wire_h methods each omit ~5 independently-
 # optional wire fields (one `if`/`unless` per field, same "omit when absent"
