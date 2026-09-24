@@ -17,8 +17,7 @@ gate needs the gem. `Find#rank` ranks through core. `Buy` decides escalation
 through core, checks the buyer's policy with `PolicyGuard` before every
 `--yes` completion, and runs `ConfidenceGate` in front of that completion
 when a backend is named (`Cli::ConfidenceCheck`). Every checkout report
-carries the verdicts under `decisions:`. The agent loop's instructions (`skills/shop-via-ucp.md`,
-`skills/shop-via-ucp/SKILL.md`) call the same four decisions for raw
+carries the verdicts under `decisions:`. The agent loop's instructions (`skills/shop-via-ucp/SKILL.md`) call the same four decisions for raw
 `portage-ucp-client` sessions and branch on `decisions:` when they shell out
 to `portage buy --json`. `Buy` still owns the delivery side (`CheckoutHandoff`,
 `Notifier`), which is correct: those react to a decision, they don't make one.
@@ -29,7 +28,7 @@ What doesn't have an owner is the judgment calls in between — which offer to
 pick among several, whether to hand off to a human or keep going, whether a
 result is confident enough to act on unattended, whether a spend is even
 allowed before it's attempted. Today those calls are scattered: some live in
-skill instructions the agent loop happens to follow (`skills/shop-via-ucp.md`
+skill instructions the agent loop happens to follow (`skills/shop-via-ucp/SKILL.md`
 guardrail 2), some in `portage-cli` (`Buy#escalation_report`,
 `CheckoutHandoff`), some in `portage-ucp` (`PolicyGuard`, `Confirmer`). None of
 them are a typed decision a caller can inspect or test against — they're
@@ -61,7 +60,7 @@ shape.
    (an agent loop, a different frontend) can invoke on its own candidate list.
 2. **Escalation policy** — "hand off vs. keep going." Partial precedent:
    `requires_escalation` branching is currently a *rule the agent is told to
-   follow* (`skills/shop-via-ucp.md` guardrail 2) plus a CLI-side delivery
+   follow* (`skills/shop-via-ucp/SKILL.md` guardrail 2) plus a CLI-side delivery
    mechanism once escalation has already been decided
    (`docs/plans/checkout-handoff-delivery.md`, `CheckoutHandoff`,
    `Notifier`). Nothing decides escalation from ambiguous signals (e.g. "did
