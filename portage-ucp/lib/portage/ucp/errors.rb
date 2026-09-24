@@ -87,5 +87,40 @@ module Portage
         @decision = decision
       end
     end
+
+    # Raised by Support::Connection (docs/plans/proxy-support.md Phase 1)
+    # when any hop of a proxy connection fails — a plain-forward/gateway
+    # dial that can't reach its proxy at all, or (most commonly) a
+    # hand-rolled CONNECT tunnel hop answering anything but 200. Named by
+    # 1-indexed hop position (never 0-indexed — "hop 2" means the second
+    # proxy a request passes through, matching how a human would describe a
+    # chain) and the *redacted* proxy host (`host:port`, or
+    # `http://***@host:port` when the profile carried credentials) — never
+    # the real credentials, same posture as `doctor`'s proxy_finding in
+    # portage-cli. `status` is the CONNECT response's HTTP status when the
+    # hop answered at all (e.g. 407 for "proxy authentication required"),
+    # or nil when the hop never answered (DNS failure, connection refused).
+    class ProxyError < Error
+      attr_reader :hop_index, :status
+
+      def initialize(hop_index:, host:, status: nil, detail: nil)
+        @hop_index = hop_index
+        @status = status
+        super(build_message(host, detail))
+      end
+
+      private
+
+      def build_message(host, detail)
+        redacted = Support::Connection.redact(host)
+        outcome = if status
+                    reason = Support::Connection::REASONS[status]
+                    "CONNECT failed with #{status}#{" (#{reason})" if reason}"
+                  else
+                    "CONNECT failed#{" (#{detail})" if detail}"
+                  end
+        "hop #{hop_index} (#{redacted}): #{outcome}"
+      end
+    end
   end
 end

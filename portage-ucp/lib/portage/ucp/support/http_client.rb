@@ -1,6 +1,7 @@
 require "net/http"
 require "json"
 require "uri"
+require_relative "connection"
 
 module Portage
   module Ucp
@@ -39,8 +40,13 @@ module Portage
         #   connection itself; see DEFAULT_OPEN_TIMEOUT.
         # @param read_timeout [Numeric] seconds to wait for each read off an
         #   already-open connection; see DEFAULT_READ_TIMEOUT.
+        # @param route [Symbol] docs/plans/proxy-support.md's proxy route —
+        #   every included adapter gem talks to a platform admin API here,
+        #   so :platform is the sensible default; a core caller with a
+        #   different traffic shape (e.g. Confirmer::Webhook's out-of-band
+        #   notification) passes its own.
         def json_request(http_method, uri, body: nil, headers: {}, basic_auth: nil, raw: false,
-                         open_timeout: DEFAULT_OPEN_TIMEOUT, read_timeout: DEFAULT_READ_TIMEOUT)
+                         open_timeout: DEFAULT_OPEN_TIMEOUT, read_timeout: DEFAULT_READ_TIMEOUT, route: :platform)
           uri = URI(uri.to_s)
           request = http_method.new(uri)
           request.basic_auth(*basic_auth) if basic_auth
@@ -48,9 +54,9 @@ module Portage
           request["Content-Type"] ||= "application/json"
           request.body = JSON.generate(body) if body
 
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                         open_timeout: open_timeout,
-                                                         read_timeout: read_timeout) { |http| http.request(request) }
+          response = Portage::Ucp::Support::Connection.start(
+            uri, route: route, open_timeout: open_timeout, read_timeout: read_timeout
+          ) { |http| http.request(request) }
           raw ? response : parse!(response)
         end
 

@@ -129,10 +129,10 @@ module Portage
         #   or status HTTP call itself fails.
         # @return [Hash] `{approved: true}` on approval.
         def confirm!(amount:, currency:, merchant:, idempotency_key:)
-          json_request(Net::HTTP::Post, @confirm_url,
-                       body: { amount: amount, currency: currency, merchant: merchant,
-                               idempotency_key: idempotency_key },
-                       headers: @headers)
+          json_request(Net::HTTP::Post, @confirm_url, route: :notify,
+                                                      body: { amount: amount, currency: currency, merchant: merchant,
+                                                              idempotency_key: idempotency_key },
+                                                      headers: @headers)
 
           status = @wait ? @wait.call(idempotency_key) : poll(idempotency_key)
           return { approved: true } if status == "approved"
@@ -146,7 +146,7 @@ module Portage
           deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @timeout_seconds
 
           loop do
-            response = json_request(Net::HTTP::Get, status_url_for(idempotency_key), headers: @headers)
+            response = json_request(Net::HTTP::Get, status_url_for(idempotency_key), route: :notify, headers: @headers)
             return response["status"] if %w[approved denied].include?(response["status"])
             return "timeout" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 

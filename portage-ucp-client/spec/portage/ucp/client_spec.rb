@@ -29,11 +29,22 @@ RSpec.describe Portage::Ucp::Client do
     it "builds an HTTP transport when url: is given" do
       transport = instance_double(Portage::Ucp::Client::Transports::Http)
       allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
-        .with(url: "https://shop.example/mcp", headers: {}).and_return(transport)
+        .with(url: "https://shop.example/mcp", headers: {}, proxy: nil).and_return(transport)
 
       session = described_class.connect(url: "https://shop.example/mcp")
 
       expect(session.instance_variable_get(:@transport)).to equal(transport)
+    end
+
+    it "threads proxy: through to the HTTP transport (docs/plans/proxy-support.md Phase 1)" do
+      transport = instance_double(Portage::Ucp::Client::Transports::Http)
+      allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
+        .with(url: "https://shop.example/mcp", headers: {}, proxy: "http://proxy.example:3128").and_return(transport)
+
+      described_class.connect(url: "https://shop.example/mcp", proxy: "http://proxy.example:3128")
+
+      expect(Portage::Ucp::Client::Transports::Http).to have_received(:new)
+        .with(url: "https://shop.example/mcp", headers: {}, proxy: "http://proxy.example:3128")
     end
   end
 
@@ -48,7 +59,7 @@ RSpec.describe Portage::Ucp::Client do
       )
       transport = instance_double(Portage::Ucp::Client::Transports::Http)
       allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
-        .with(url: "https://shop.example/mcp", headers: {}).and_return(transport)
+        .with(url: "https://shop.example/mcp", headers: {}, proxy: nil).and_return(transport)
 
       session = described_class.discover("https://shop.example")
 
@@ -77,7 +88,7 @@ RSpec.describe Portage::Ucp::Client do
       described_class.discover("https://shop.example", headers: headers)
 
       expect(Portage::Ucp::Client::Transports::Http).to have_received(:new)
-        .with(url: "https://shop.example/mcp", headers: headers)
+        .with(url: "https://shop.example/mcp", headers: headers, proxy: nil)
     end
 
     it "raises DiscoveryError when the manifest can't be fetched" do
@@ -128,7 +139,7 @@ RSpec.describe Portage::Ucp::Client do
       )
       transport = instance_double(Portage::Ucp::Client::Transports::Http)
       allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
-        .with(url: "https://shop.example/api/ucp/mcp", headers: {}).and_return(transport)
+        .with(url: "https://shop.example/api/ucp/mcp", headers: {}, proxy: nil).and_return(transport)
 
       session = described_class.discover("https://shop.example")
 

@@ -40,11 +40,13 @@ module Portage
 
       # Connects over stdio (a subprocess) or Streamable HTTP (a URL) — pass
       # exactly one of `command:` or `url:`.
-      def self.connect(command: nil, args: [], env: nil, url: nil, headers: {}, capabilities: nil)
+      # @param proxy [String, Hash, nil] forwarded to Transports::Http (a
+      #   `url:` connection only) — see its own doc comment.
+      def self.connect(command: nil, args: [], env: nil, url: nil, headers: {}, capabilities: nil, proxy: nil)
         transport = if command
                       Transports::Stdio.new(command: command, args: args, env: env)
                     elsif url
-                      Transports::Http.new(url: url, headers: headers)
+                      Transports::Http.new(url: url, headers: headers, proxy: proxy)
                     else
                       raise ArgumentError, "connect requires either command: or url:"
                     end
@@ -59,9 +61,11 @@ module Portage
       # @param headers [Hash{String => String}] sent with the manifest GET
       #   and every call after it — e.g. a "User-Agent" naming the app
       #   built on this gem.
-      def self.discover(url, headers: {})
+      # @param proxy [String, Hash, nil] forwarded to the Streamable HTTP
+      #   connection this discovers into — see Transports::Http.
+      def self.discover(url, headers: {}, proxy: nil)
         manifest = fetch_manifest(url, headers)
-        connect(url: mcp_endpoint(manifest), headers: headers, capabilities: capability_names(manifest))
+        connect(url: mcp_endpoint(manifest), headers: headers, capabilities: capability_names(manifest), proxy: proxy)
       end
 
       def self.fetch_manifest(url, headers = {})
