@@ -104,6 +104,49 @@ portage generate adapter NAME | agent-profile
 
 Full reference, flags, and env vars: [`portage-cli/README.md`](portage-cli/README.md).
 
+## Running behind a proxy
+
+No Portage-specific proxy config exists yet ([`docs/plans/proxy-support.md`](docs/plans/proxy-support.md)
+tracks the full design), but Ruby's own standard `http_proxy` env var already works for
+outbound traffic, with caveats worth knowing before you rely on it:
+
+- **Set `http_proxy` (or `HTTP_PROXY`), not `HTTPS_PROXY`.** Every raw `Net::HTTP` call
+  site in `portage-ucp`, `portage-cli`, and the adapter gems (`Support::HttpClient`,
+  `Check`, `Support::TokenExchange`, `buy`/`find`/`payment`'s homepage probes,
+  `search_backends`, `notifier`, the Shopify and Instagram adapters) resolves its proxy
+  from Ruby stdlib's `Net::HTTP.start(..., p_addr: :ENV)` default, which **only ever reads
+  `http_proxy`/`HTTP_PROXY` — never `https_proxy`/`HTTPS_PROXY`, even for an `https://`
+  target.** That single variable is used as the proxy for both `http://` and `https://`
+  traffic (the `https://` case tunnels through it via `CONNECT`). Setting only
+  `HTTPS_PROXY` silently proxies nothing for these call sites — a real, confirmed gap
+  against the usual convention, tracked as Phase 1 (a `Support::Connection` seam that
+  reads its own config, not stdlib's env-proxy quirks).
+- **`portage-ucp-client`'s own UCP/MCP tool calls are the exception.** They go through
+  Faraday (via the `mcp` gem's HTTP transport), which resolves the proxy from the
+  *target's own scheme* — `https_proxy` for an `https://` endpoint, `http_proxy` for an
+  `http://` one, no cross-fallback either way. `Client.discover`'s manifest GET, though,
+  is a bare `Net::HTTP.get_response` call and follows the `http_proxy`-only rule above —
+  so a single `discover` call can have its manifest fetch and its tool calls pick up
+  *different* env vars.
+- **Credentials in the proxy URL work.** `http://user:pass@proxy.internal:3128` reaches
+  the proxy as `Proxy-Authorization: Basic …`, for both Net::HTTP and Faraday.
+- **`no_proxy`/`NO_PROXY` matching** is suffix-based: a bare `no_proxy=example.com` bypasses
+  both `example.com` and any subdomain of it; a leading-dot entry (`.example.com`) bypasses
+  subdomains only, not the bare domain; `host:port` entries only bypass that exact port; CIDR
+  entries (`10.0.0.0/8`) match if the target hostname resolves. **`NO_PROXY=*` is not
+  honored as "bypass everything"** the way curl/npm treat it — Ruby's stdlib has no special
+  case for a bare `*`. Lowercase and uppercase variables are both read; if both are set,
+  lowercase wins.
+- `portage doctor` reports the effective proxy it detected (credentials redacted).
+
+```bash
+http_proxy=http://user:pass@proxy.internal:3128 no_proxy=localhost,127.0.0.1 \
+  portage buy --query "hoodie" --dry-run --json
+```
+
+See [`docs/cli-usage-tutorial.md`](docs/cli-usage-tutorial.md) for the same example in
+context, and the design log for the full Phase 0 write-up.
+
 ## Requirements
 
 Ruby >= 3.2, and the `mcp` gem `~> 0.24` (pulled in by `portage-ucp`). Each adapter gem

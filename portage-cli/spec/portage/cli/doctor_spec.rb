@@ -11,7 +11,8 @@ RSpec.describe Portage::Cli::Doctor do
   end
 
   it "flags every collaborator still at its unconfigured default" do
-    with_env("PORTAGE_DECISION_BACKEND" => nil) do
+    with_env("PORTAGE_DECISION_BACKEND" => nil, "http_proxy" => nil, "HTTP_PROXY" => nil, "https_proxy" => nil,
+             "HTTPS_PROXY" => nil) do
       findings = described_class.new.call
 
       expect(findings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
@@ -27,7 +28,8 @@ RSpec.describe Portage::Cli::Doctor do
       config.payment_handlers = [{ name: "stripe" }]
     end
 
-    with_env("PORTAGE_DECISION_BACKEND" => "jev", "JEV_API_KEY" => "test-key") do
+    with_env("PORTAGE_DECISION_BACKEND" => "jev", "JEV_API_KEY" => "test-key", "http_proxy" => nil,
+             "HTTP_PROXY" => nil, "https_proxy" => nil, "HTTPS_PROXY" => nil) do
       expect(described_class.new.call).to be_empty
     end
   end
@@ -118,5 +120,47 @@ RSpec.describe Portage::Cli::Doctor do
     findings = described_class.new(adapter_class: untouched_adapter).call
 
     expect(findings.map(&:check)).to all(satisfy { |c| !c.start_with?("capability:") })
+  end
+
+  describe "the proxy check (Phase 0 of docs/plans/proxy-support.md)" do
+    def proxy_finding(env)
+      base = { "http_proxy" => nil, "HTTP_PROXY" => nil, "https_proxy" => nil, "HTTPS_PROXY" => nil,
+               "no_proxy" => nil, "NO_PROXY" => nil }
+      with_env(base.merge(env)) { described_class.new.call.find { |f| f.check == "proxy" } }
+    end
+
+    it "says nothing when no proxy env var is set" do
+      expect(proxy_finding({})).to be_nil
+    end
+
+    it "reports the effective proxy, with credentials redacted, when http_proxy is set" do
+      finding = proxy_finding("http_proxy" => "http://bob:s3cr3t@proxy.internal:3128")
+
+      expect(finding.message).to include("http://***@proxy.internal:3128")
+      expect(finding.message).not_to include("bob", "s3cr3t")
+    end
+
+    it "names HTTP_PROXY as the source when only the uppercase variant is set" do
+      expect(proxy_finding("HTTP_PROXY" => "http://proxy.internal:3128").message).to include("HTTP_PROXY")
+    end
+
+    it "mentions the active no_proxy value" do
+      finding = proxy_finding("http_proxy" => "http://proxy.internal:3128", "no_proxy" => "localhost,127.0.0.1")
+
+      expect(finding.message).to include("no_proxy=localhost,127.0.0.1")
+    end
+
+    it "flags HTTPS_PROXY set alone as not doing anything for these call sites" do
+      finding = proxy_finding("https_proxy" => "http://proxy.internal:3128")
+
+      expect(finding.message).to include("HTTPS_PROXY/https_proxy is set but http_proxy/HTTP_PROXY is not")
+    end
+
+    it "prefers the working http_proxy report over the gap warning when both are set" do
+      finding = proxy_finding("http_proxy" => "http://proxy.internal:3128", "https_proxy" => "http://other:3128")
+
+      expect(finding.message).to include("proxy.internal:3128")
+      expect(finding.message).not_to include("is not")
+    end
   end
 end

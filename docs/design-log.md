@@ -2995,3 +2995,100 @@ the `macos`/`journal`/`terminal` notify channels beyond the webhook
 already a sketch in the plan). Phase 1's reconcile is useful standalone via
 cron/launchd without `--wait`; scoping this session to Phases 1–2 kept the
 untested-against-a-real-store surface smaller while Phase 0 is still open.
+
+## 45. Proxy support, Phase 0 — env-proxy behavior confirmed against a real local proxy (2026-09-24)
+
+`docs/plans/proxy-support.md` Phase 0 asks a narrow question before any
+`ProxyConfig`/`Support::Connection` code gets written: does Ruby's own
+`HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` support already work at the nine raw
+`Net::HTTP.start` call sites (`Support::HttpClient`, `Check`,
+`Support::TokenExchange` in core; `buy`/`search_backends`/`payment_methods`/
+`notifier` in portage-cli; the Shopify and Instagram adapters' clients) plus
+`portage-ucp-client`'s Faraday-based transport? Evaluated against a real
+local CONNECT-capable TCP proxy (a plain-Ruby `Socket` server, no gem — see
+`spec/support/local_proxy.rb` in each of the five gems it was needed in),
+not just WebMock stubs.
+
+**The headline finding contradicts the plan's own framing.** The plan's
+Phase 0 checklist and its README/tutorial example both assume `HTTPS_PROXY`
+is the variable that matters for an `https://` target. It isn't — for
+Net::HTTP. `Net::HTTP#proxy_uri` (`net-http` gem, confirmed on 0.9.1, and
+this is long-standing documented stdlib behavior, not a version-specific
+bug — see the rdoc for `Net::HTTP@Proxy+Server`) builds its env-lookup URI
+with a **hardcoded `"http"` scheme**, regardless of `use_ssl?`:
+
+```ruby
+def proxy_uri
+  @proxy_uri ||= URI::HTTP.new("http", nil, address, port, nil, nil, nil, nil, nil).find_proxy || false
+  ...
+```
+
+So `:ENV` proxy mode reads **only `http_proxy`/`HTTP_PROXY`, for both
+`http://` and `https://` targets** (the https case tunnels through it via
+`CONNECT`, same as it would through an explicitly-configured proxy).
+`https_proxy`/`HTTPS_PROXY` is never consulted by Net::HTTP. Confirmed on
+all nine call sites: setting only `HTTPS_PROXY` leaves every one of them
+proxying nothing, silently — no error, no warning, just a direct connection.
+
+**Faraday and Net::HTTP do not behave the same**, despite both ultimately
+delegating to the identical stdlib `URI::Generic#find_proxy`. Faraday
+(`Connection#proxy_from_env`) builds its lookup URI from the *request's own
+scheme* — `https_proxy` for an `https://` target, `http_proxy` for an
+`http://` one — with no cross-fallback either way. `portage-ucp-client`'s
+real UCP/MCP tool calls go through the `mcp` gem's `MCP::Client::HTTP`,
+which is Faraday-based (`Faraday.new(url)`, no explicit `proxy:`), so that
+one code path — alone among everything the plan lists — genuinely does
+honor `HTTPS_PROXY`. `Client.fetch_manifest` in the same gem, though, is a
+bare `Net::HTTP.get_response` call, not Faraday, so the manifest-fetch half
+of a `Client.discover` inherits the `http_proxy`-only rule while the
+tool-call half doesn't — one gem, two behaviors, for two halves of the same
+logical operation.
+
+Everything else the plan asked to confirm checked out close to expectation,
+once `http_proxy` (not `https_proxy`) is the variable under test:
+
+- **No accidental bypass.** None of the nine sites pass an explicit
+  `p_addr` — `Net::HTTP.start(host, port, **opts)`'s own arg-parsing
+  (`p_addr = :ENV if arg.size < 2`) means every one of them gets the
+  `:ENV` default. Not a bug hiding in this codebase; the whole gap is
+  upstream.
+- **Credentials.** `user:pass@host:port` in the proxy URL reaches
+  `Proxy-Authorization: Basic …` correctly, for both Net::HTTP (CONNECT
+  tunnel and plain-HTTP absolute-URI request) and Faraday (which delegates
+  to the same Net::HTTP mechanism under `faraday-net_http`).
+- **Case.** `http_proxy` (lowercase) wins if both cases are set; uppercase
+  `HTTP_PROXY` alone is honored outside a CGI-like environment (a
+  `warn` fires — the httpoxy-CVE mitigation) and is ignored entirely when
+  `ENV["REQUEST_METHOD"]` is set (none of Portage's call sites run under
+  CGI, but worth knowing for anyone embedding this in one). `no_proxy`/
+  `NO_PROXY` are both read regardless, lowercase winning if both are set.
+- **`NO_PROXY` matching is suffix-based, not exact.** A bare
+  `no_proxy=example.com` (no leading dot) bypasses both `example.com`
+  itself and any subdomain of it — `URI::Generic.use_proxy?` compares
+  `".#{hostname}".end_with?(".#{p_host}")`. A leading-dot entry
+  (`.example.com`) bypasses subdomains *only*, not the bare domain — the
+  asymmetry runs the other way from what the leading dot usually signals
+  in `no_proxy` conventions elsewhere. `host:port` entries only bypass on
+  a matching port. CIDR entries (`10.0.0.0/8`) match only when the target
+  hostname actually resolves at proxy-resolution time (`IPSocket.getaddress`,
+  rescued on failure) — a non-resolving host silently skips CIDR checks
+  rather than raising. **`NO_PROXY=*` is not honored as "bypass
+  everything"** the way curl/npm/etc. treat it; Ruby's stdlib has no
+  special case for a bare `*`, so it's just an ordinary (non-matching)
+  token. A separate, unconditional rule bypasses the proxy whenever the
+  *target* hostname itself resolves to loopback (`127.0.0.0/8`/`::1`),
+  regardless of `no_proxy` content.
+
+**Shipped on the strength of this:** a "Running behind a proxy" section in
+the root README and a corrected example in `docs/cli-usage-tutorial.md`
+(using `http_proxy`, not the plan's original `HTTPS_PROXY` snippet — that
+example would have silently done nothing against these call sites), a
+`portage doctor` check reporting the effective proxy with credentials
+redacted to `http://***@host:port` and flagging the HTTPS_PROXY-alone
+footgun by name, and a regression spec per call site (`spec/proxy_support_spec.rb`
+in `portage-ucp`, `portage-cli`, `portage-ucp-shopify`, `portage-ucp-instagram`,
+`portage-ucp-client`) asserting against the real local proxy so Phase 1's
+`Support::Connection` refactor can't silently regress any of this. Phase
+1+ (the actual `ProxyConfig`/`Support::Connection` seam, CLI flags, doctor
+reachability/gateway checks, inbound) is unaffected by any of this and
+starts from a codebase that now knows exactly what it's replacing.
