@@ -41,7 +41,10 @@ server.start # stdio, or mount as Streamable HTTP per the `mcp` gem's own docs
 
 That's a running MCP server, wired up inline. Every adapter gem also ships an
 executable that does steps 1 and 3 for you, so you don't need a throwaway Ruby file
-just to point an MCP client (Claude Desktop, etc.) at a `command`:
+just to point an MCP client (Claude Desktop, etc.) at a `command`
+(Etsy and Instagram gain this `exe/` + `examples/` once `feat/etsy-exe` and
+`harden/instagram` merge — see the [feature matrix](adapters/feature-matrix.md) for
+current status):
 
 ```bash
 bundle exec portage-ucp-shopify   # stdio, reads SHOPIFY_SHOP_DOMAIN /

@@ -49,7 +49,9 @@ Thirteen gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 A backend on some other stack writes its own thin `Adapter` subclass against `portage-ucp`
 directly. Every adapter gem ships the same `exe/` executable, `examples/portage_ucp.rb`
-starting point, and `PORTAGE_UCP_CONFIG` config hook — see [Library usage](library-usage.md).
+starting point, and `PORTAGE_UCP_CONFIG` config hook — see [Library usage](library-usage.md)
+(Etsy and Instagram gain `exe/` + `examples/` once `feat/etsy-exe` and `harden/instagram`
+merge — see the [feature matrix](adapters/feature-matrix.md) for current status).
 Etsy and Instagram/Facebook Shops have no real cart/checkout API to back, so those two only
 implement catalog/order for real — full per-capability breakdown in
 [Capability coverage](capability-coverage.md) (and the [feature matrix](adapters/feature-matrix.md)
