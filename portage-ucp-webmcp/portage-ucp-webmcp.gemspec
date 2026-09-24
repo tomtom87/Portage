@@ -23,10 +23,12 @@ Gem::Specification.new do |spec|
   spec.add_dependency "portage-ucp-client", "~> 0.6", ">= 0.6.2"
   spec.add_dependency "rack", "~> 3.0"
 
+  spec.add_development_dependency "ferrum", "~> 0.15"
   spec.add_development_dependency "rack-test", "~> 2.1"
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.88"
   spec.add_development_dependency "webmock", "~> 3.24"
+  spec.add_development_dependency "webrick", "~> 1.8"
   spec.add_development_dependency "yard", "~> 0.9"
   spec.metadata["source_code_uri"] = "https://github.com/tomtom87/Portage/tree/main/portage-ucp-webmcp"
   spec.metadata["changelog_uri"] = "https://github.com/tomtom87/Portage/blob/main/portage-ucp-webmcp/CHANGELOG.md"
