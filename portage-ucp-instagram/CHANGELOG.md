@@ -21,6 +21,10 @@ pre-1.0, so APIs may still shift between minor versions.
   Meta's own `error.code`/`error_subcode`/`fbtrace_id` (what Meta support
   asks for when escalating a request) meant reaching into `#body` by hand.
   Now exposed as `#code`/`#error_subcode`/`#fbtrace_id`.
+- **Fix:** `Adapter#search_catalog` only ever fetched Meta's first page of
+  results — a `limit` bigger than one page's worth silently returned fewer
+  products than asked for. Now follows `paging.next` until `limit` is
+  reached or the API runs out of pages, capped at `MAX_PAGES` requests.
 
 ## [0.1.4] - 2026-09-17
 
