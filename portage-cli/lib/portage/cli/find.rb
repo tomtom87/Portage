@@ -129,7 +129,7 @@ module Portage
       end
 
       def discover(origin)
-        Portage::Ucp::Client.discover(origin, headers: HTTP_HEADERS)
+        Portage::Ucp::Client.discover(origin, headers: UserAgent.headers)
       rescue StandardError
         nil
       end

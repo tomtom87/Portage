@@ -47,7 +47,7 @@ module Portage
       def self.request(uri, headers)
         Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
                                             open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT) do |http|
-          http.get(uri.request_uri, HTTP_HEADERS.merge(headers))
+          http.get(uri.request_uri, UserAgent.headers.merge(headers))
         end
       end
       private_class_method :request

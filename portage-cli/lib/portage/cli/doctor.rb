@@ -1,5 +1,6 @@
 require "portage/ucp"
 require_relative "confidence_check"
+require_relative "user_agent"
 
 module Portage
   module Cli
@@ -26,6 +27,7 @@ module Portage
           signing_keys_finding,
           payment_handlers_finding,
           decision_backend_finding,
+          user_agent_finding,
           *capability_findings
         ].compact
       end
@@ -69,6 +71,21 @@ module Portage
                                message: "#{problem} — until then every `portage buy --yes` is held for the shopper.")
       rescue ArgumentError => e
         Finding.new(check: "decision_backend", message: e.message)
+      end
+
+      # PORTAGE_USER_AGENT / config.json's "user_agent" (UserAgent) is sent
+      # as-is on every outbound request. Net::HTTP raises ArgumentError on a
+      # header value containing CR/LF rather than send it, so a bad override
+      # would otherwise surface for the first time mid-checkout instead of
+      # here.
+      def user_agent_finding
+        value = Portage::Cli::UserAgent.value
+        return unless value =~ /[\r\n]/
+
+        Finding.new(check: "user_agent",
+                    message: "Configured User-Agent (PORTAGE_USER_AGENT or user_agent in " \
+                             "~/.portage/config.json) contains a newline — every outbound request will " \
+                             "raise instead of sending.")
       end
 
       def payment_handlers_finding

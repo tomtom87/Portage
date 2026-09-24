@@ -200,7 +200,7 @@ module Portage
       # entangled with cart/checkout-specific branching this only needs the
       # session object from.
       def discover_session(url)
-        native = Portage::Ucp::Client.discover(url, headers: HTTP_HEADERS)
+        native = Portage::Ucp::Client.discover(url, headers: UserAgent.headers)
         native if native
       rescue Portage::Ucp::Client::DiscoveryError
         adapter_session(url)
@@ -224,7 +224,7 @@ module Portage
       def fetch_homepage(uri)
         response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
                                                        open_timeout: 5, read_timeout: 5) do |http|
-          http.get(uri.request_uri, HTTP_HEADERS)
+          http.get(uri.request_uri, UserAgent.headers)
         end
         response.is_a?(Net::HTTPSuccess) ? [response.body, response.to_hash] : [nil, {}]
       rescue StandardError
