@@ -598,6 +598,6 @@ now the live open items: finding the actual allowlist/enrollment path.
    Shopify or working around differently.
 5. If you find the actual gate, come back and correct
    `docs/agent-profile.md`'s "Still open" section and
-   `skills/shop-via-ucp.md`'s troubleshooting entry — both currently say
+   `skills/shop-via-ucp/SKILL.md`'s troubleshooting entry — both currently say
    "unconfirmed, ruled out X and Y" and should be updated with whatever's
    found, same as this doc.

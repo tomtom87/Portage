@@ -23,9 +23,9 @@ Every hand-off outcome (`requires_escalation`, `policy_blocked`,
 naming the cause, or null when that gate passed. `portage history --json` lists past
 checkouts by the same `outcome`, so check it before buying something twice. With
 `portage-ucp-client`, make the same calls through `portage-ucp-decision`
-(`OfferRanking`, `EscalationPolicy`, `PolicyCheck`, `ConfidenceGate`) —
-see `../shop-via-ucp.md`. If neither is available, make the raw
-MCP tool calls yourself, following the sequence below exactly.
+(`OfferRanking`, `EscalationPolicy`, `PolicyCheck`, `ConfidenceGate`).
+If neither is available, make the raw MCP tool calls yourself, following the sequence
+below exactly.
 
 ## Guardrails — apply these every time, no exceptions
 
@@ -66,9 +66,8 @@ call is scoped to from it, and a cart built without one comes back with no line 
 `merchandise_out_of_stock` warning for a product the same store's `search_catalog` just
 reported as available.
 
-Full walkthrough with example payloads, plus a troubleshooting section for real
-external UCP stores (missing `PORTAGE_AGENT_PROFILE`, a profile URL the store can't
+Full walkthrough with example payloads: `../../docs/walkthrough.md`. Troubleshooting a
+real external UCP store (missing `PORTAGE_AGENT_PROFILE`, a profile URL the store can't
 fetch, or `Tool not found` on every call once the profile's attached — which means the
 profile declares capability ids the store's registry doesn't have, not that you lack
-access; see `../../docs/ucp-tool-gating-investigation.md`): `../shop-via-ucp.md`
-in this repo.
+access): `../../docs/ucp-tool-gating-investigation.md`.
