@@ -78,6 +78,28 @@ checkout.links.first.url # => hand this to the shopper/agent to complete the pur
 order = adapter.get_order(order_id: some_receipt_id)
 ```
 
+### Standalone MCP server
+
+This gem also ships `exe/portage-ucp-etsy`, which does the `Client`/`Adapter`/`Server.build` wiring above for
+you, so you don't need a throwaway Ruby file just to point an MCP client (Claude Desktop, etc.) at a `command`:
+
+```bash
+ETSY_ACCESS_TOKEN=... ETSY_API_KEY=... ETSY_SHOP_ID=... bundle exec portage-ucp-etsy
+```
+
+Wiring a real `authenticator`/`rate_limiter`/`business` still has to come from you — the exe won't guess
+those — so point `PORTAGE_UCP_CONFIG` at a Ruby file that calls `Portage::Ucp.configure`, the same `-r`-a-file
+pattern `rackup`/Sidekiq use. [`examples/portage_ucp.rb`](examples/portage_ucp.rb) is a copy-paste starting
+point (bearer-token authenticator, in-process rate limiter):
+
+```bash
+PORTAGE_UCP_CONFIG=./config/portage_ucp.rb \
+  ETSY_ACCESS_TOKEN=... ETSY_API_KEY=... ETSY_SHOP_ID=... bundle exec portage-ucp-etsy
+```
+
+Without it, the server still starts but rejects every mutating call — the `UnconfiguredAuthenticator`
+default.
+
 ## Wiring into portage-ucp
 
 Drop the adapter into a `Dispatcher` (or the MCP server) the same as any other backend:
