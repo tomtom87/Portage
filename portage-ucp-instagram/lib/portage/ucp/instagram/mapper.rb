@@ -173,13 +173,16 @@ module Portage
         # `node["items"]["data"]` absent entirely (no items field), present
         # but empty (an order with no line items), or malformed (either
         # level not the Hash/Array Meta's documented shape promises) all
-        # degrade to "no line items" rather than raising.
+        # degrade to "no line items" rather than raising. Individual
+        # elements of `data` are validated too: `data.grep(Hash)` drops any
+        # non-Hash entry (nil, a bare string, etc.) so #order_line_item
+        # never has to handle a non-Hash `node`.
         def order_items(node)
           items = node["items"]
           return [] unless items.is_a?(Hash)
 
           data = items["data"]
-          data.is_a?(Array) ? data : []
+          data.is_a?(Array) ? data.grep(Hash) : []
         end
 
         # A nested `.dig` chain raises TypeError the moment an intermediate

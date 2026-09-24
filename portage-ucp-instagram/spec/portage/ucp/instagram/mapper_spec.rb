@@ -157,6 +157,17 @@ RSpec.describe Portage::Ucp::Instagram::Mapper do
       expect(order.line_items).to eq([])
     end
 
+    it "drops non-Hash elements in items.data (nil, a bare string) rather than raising" do
+      node["items"]["data"] = [nil, "oops", { "id" => "li_1", "retailer_id" => "SKU1",
+                                              "product_name" => "Handmade Mug", "quantity" => 1,
+                                              "price_per_unit" => { "amount" => "25.00" } }]
+
+      order = described_class.order(node)
+
+      expect(order.line_items.size).to eq(1)
+      expect(order.line_items.first.id).to eq("li_1")
+    end
+
     it "degrades a malformed order_status/estimated_payment_details (not a Hash) rather than raising" do
       node["order_status"] = "COMPLETED" # not the documented {"state" => ...} shape
       node["estimated_payment_details"] = nil
