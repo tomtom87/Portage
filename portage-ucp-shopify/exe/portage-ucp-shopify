@@ -20,4 +20,5 @@ client = Portage::Ucp::Shopify::Client.new(
 )
 adapter = Portage::Ucp::Shopify::Adapter.new(client: client)
 
-Portage::Ucp::Mcp::Server.build(adapter: adapter).start
+server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
+MCP::Server::Transports::StdioTransport.new(server).open

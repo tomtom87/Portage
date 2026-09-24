@@ -6,6 +6,15 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Fixes a `NoMethodError` at launch: `exe/portage-ucp-shopify` handed the
+  server `Server.build(adapter:).start`, but `Server.build` returns a plain
+  `MCP::Server` (mcp gem 0.25.0), which has no `#start` — only
+  `MCP::Server::Transports::StdioTransport#open` reads stdio frames. The exe
+  now calls that directly, matching `portage-ucp-etsy`'s exe. Adds
+  `spec/portage/ucp/shopify/exe_spec.rb`, which runs the exe as a real
+  subprocess and pipes it a JSON-RPC `initialize` + `tools/list` handshake
+  to prove it actually starts and answers requests.
+
 - Documentation only, no code change. Confirmed live (2026-09-22) that the
   `resume-checkout` link `Mapper.checkout_links` builds from
   `Cart#checkoutUrl` lands on a *populated* checkout in a cold browser with no
