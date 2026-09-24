@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.1.1] - 2026-09-24
 
 - An outbound call now waits out a tool that answers the page isn't ready,
   as it already waited out one the page dropped. Shopify storefronts reload

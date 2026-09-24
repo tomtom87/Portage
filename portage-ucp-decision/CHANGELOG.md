@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.1.1] - 2026-09-24
+
+- The Jev backend's Faraday connection now sends its own User-Agent,
+  `portage-ucp-decision/<ver> (+https://github.com/tomtom87/Portage)`,
+  instead of Faraday's default.
+
 ## [0.1.0] - 2026-09-23
 
 First publish to RubyGems. It ships the skeleton below plus these changes.
