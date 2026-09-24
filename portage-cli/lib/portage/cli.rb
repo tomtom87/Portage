@@ -12,6 +12,7 @@ require_relative "cli/compare"
 require_relative "cli/history"
 require_relative "cli/payment_methods"
 require_relative "cli/doctor"
+require_relative "cli/handoff_reconciler"
 require_relative "cli/generate/adapter"
 require_relative "cli/generate/agent_profile"
 
@@ -44,6 +45,7 @@ module Portage
                                  [--rolling-cap N --rolling-window-seconds N --currency CUR]
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
+             portage orders reconcile [--checkout ID] [--json]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
              portage configure [--require FILE] [--adapter CLASS_NAME] [--json]  (alias for doctor)
              portage setup [--require FILE] [--adapter CLASS_NAME] [--json]      (alias for doctor)
@@ -53,8 +55,8 @@ module Portage
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
-                 "doctor" => :run_doctor, "configure" => :run_doctor, "setup" => :run_doctor,
-                 "generate" => :run_generate }.freeze
+                 "orders" => :run_orders, "doctor" => :run_doctor, "configure" => :run_doctor,
+                 "setup" => :run_doctor, "generate" => :run_generate }.freeze
 
     # @param argv [Array<String>]
     # @return [Integer] process exit code
@@ -610,6 +612,77 @@ module Portage
       end
     end
     private_class_method :format_payment_enroll
+
+    # --- orders ---
+
+    # docs/plans/handoff-reconcile.md Phase 1 — resolves every pending
+    # `settled_by: "shopper"` TransactionLog record (or just the one named
+    # by `--checkout`) by re-fetching that checkout from the store. Safe to
+    # run from cron/launchd: a record that's already terminal, or that
+    # doesn't belong to this run (a `--checkout` for a different id, or
+    # `settled_by: nil` dispatcher crash-evidence), is a no-op result, not
+    # an error, so a scheduled run never needs its own filtering logic.
+    def self.run_orders(argv)
+      sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      return run_orders_reconcile(argv) if sub == "reconcile"
+
+      warn USAGE
+      1
+    end
+    private_class_method :run_orders
+
+    def self.run_orders_reconcile(argv)
+      opts = {}
+      OptionParser.new do |parser|
+        parser.on("--checkout ID") { |v| opts[:checkout] = v }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+
+      transaction_log = Portage::Ucp::Support::TransactionLog.new
+      reconciler = HandoffReconciler.new(transaction_log: transaction_log)
+      results = reconcile_records(opts[:checkout], transaction_log, reconciler)
+
+      puts opts[:json] ? JSON.pretty_generate(results.map(&:to_h)) : format_reconcile(results)
+      0
+    end
+    private_class_method :run_orders_reconcile
+
+    def self.reconcile_records(checkout_id, transaction_log, reconciler)
+      return reconcile_one_checkout(checkout_id, transaction_log, reconciler) if checkout_id
+
+      HandoffReconciler.each_pending_shopper_record(transaction_log).map { |record| reconciler.call(record) }
+    end
+    private_class_method :reconcile_records
+
+    # `--checkout ID` reconciles the one named record whatever its
+    # `settled_by`/status — #call itself still refuses to settle anything
+    # that isn't a pending shopper record, this just skips the "iterate
+    # every pending record" step when the caller already knows which one.
+    def self.reconcile_one_checkout(checkout_id, transaction_log, reconciler)
+      key = transaction_log.each_record.find { |r| r["checkout_id"] == checkout_id }&.fetch("idempotency_key", nil)
+      return [] unless key
+
+      [reconciler.call(transaction_log.find(key))]
+    end
+    private_class_method :reconcile_one_checkout
+
+    def self.format_reconcile(results)
+      return "(nothing to reconcile)" if results.empty?
+
+      results.map { |r| format_reconcile_result(r) }.join("\n")
+    end
+    private_class_method :format_reconcile
+
+    def self.format_reconcile_result(result)
+      return "#{result.idempotency_key}: #{result.note}" unless result.settled
+
+      parts = ["#{result.idempotency_key}: #{result.status}"]
+      parts << "resolution: #{result.resolution}" if result.resolution
+      parts << "order: #{result.order_id}" if result.order_id
+      parts << format_amount(result.amount, result.currency) if result.amount
+      parts.join(" — ")
+    end
+    private_class_method :format_reconcile_result
 
     # --- doctor ---
 

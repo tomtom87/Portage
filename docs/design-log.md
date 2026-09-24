@@ -2937,3 +2937,61 @@ not idempotent server-side: the same `idempotency-key` sent twice produced
 two different cart ids on all three stores tested. The client sends the key
 correctly; the guarantee just isn't there to rely on, so no caller should
 treat a retried `create_cart` as safe.
+
+## 44. Handoff reconcile, Phases 1–2 — built ahead of Phase 0's live check (2026-09-24)
+
+docs/plans/handoff-reconcile.md Phase 0 calls for a live signal check
+against a real store (a real handoff, polled `get_checkout` before/during/
+after payment) before building anything else — the plan's own §42/§9-style
+"verify the platform's behaviour first" lesson. This session had no live
+store credentials available (`.env` empty in this checkout; the
+`ucp-test-bc2vif1p.myshopify.com` dev store's Admin token, per §17,
+expires in ~24h and wasn't refreshed here) and no way to run a real
+browser-side card payment. Phase 0 was **not run**.
+
+Decided (with the user) to build Phases 1–2 anyway, on the plan's own
+default assumption — `completed` is observable on `get_checkout` after the
+shopper pays — since that's what the UCP checkout schema's status enum and
+every other adapter's own conformance spec already assume, and the
+alternative (do nothing until a live store shows up) blocks real progress on
+a session with no live credentials to unblock it with. **This is an
+unverified assumption, not a confirmed one.** Before relying on this in
+production against a real store, run the Phase 0 check the plan describes
+and update this entry with what's actually observed — in particular whether
+`get_checkout` still answers after the shopper completes at `continue_url`,
+or starts 404ing (the plan's Phase 1 "gone" branch, already handled here as
+the `resolution: "unknown"` path, but never exercised against a real store).
+
+**What shipped:**
+- `TransactionLog::OPTIONAL_ATTRIBUTES` (`settled_by`, `handoff_reason`,
+  `store_url`, `expires_at`, `resolution`, `counts_toward_caps`) — a fixed
+  allowlist `#reserve`/`#complete` accept via `**optional_attributes`,
+  raising `ArgumentError` on anything else. No `reserve_handoff`/
+  `settle_handoff` pair, per the plan's "core changes stay minimal, additive
+  and in one place." `#completed_since` filters `counts_toward_caps: false`
+  in the `TransactionLog` wrapper, not in `Store`/`FileStore` — every Store
+  and every caller (CLI, MCP server, Dispatcher) gets the same numbers.
+- `Portage::Cli::HandoffReconciler` (portage-cli) — settles one pending
+  `settled_by: "shopper"` record from the store's own `get_checkout` status,
+  per the plan's outcome table (`completed`→complete, `canceled`→failed,
+  in-progress→stays pending, not-found/transport-error/reconnect-failure→
+  stays pending until `expires_at`, then failed with `resolution: "unknown"`
+  or `"expired"`). Reconnects generically across native UCP and any
+  configured platform adapter (mirrors `Buy`'s own discovery chain,
+  extracted into `Portage::Cli::HomepageFetch`/`PermissiveAuthenticator` so
+  neither class duplicates the other's logic) — this was the "needs to be
+  fluid across adapters" requirement, not just Shopify.
+- `portage orders reconcile [--checkout ID] [--json]` (portage-cli).
+- `Buy#hand_off` now reserves the pending record (best-effort — a failed
+  write is a report warning, never blocks the hand-off), and Phase 2's
+  `handoff_spend_mode` (`block`/`warn`/`precheck`, `PORTAGE_HANDOFF_SPEND_MODE`)
+  — `precheck` runs `PolicyGuard.check!` at hand-off time and suppresses
+  auto-open (never the URL) when this checkout would already exceed the
+  buyer's own cap.
+
+**Deliberately not built this session:** Phase 3 (`--wait`/NDJSON events,
+the `macos`/`journal`/`terminal` notify channels beyond the webhook
+`HandoffReconciler` already fires) and Phase 4 (WebMCP checkout completion,
+already a sketch in the plan). Phase 1's reconcile is useful standalone via
+cron/launchd without `--wait`; scoping this session to Phases 1–2 kept the
+untested-against-a-real-store surface smaller while Phase 0 is still open.

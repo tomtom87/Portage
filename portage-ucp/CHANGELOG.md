@@ -6,6 +6,16 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `Support::TransactionLog#reserve`/`#complete` accept a fixed allowlist of
+  optional attributes (`OPTIONAL_ATTRIBUTES`: `settled_by`, `handoff_reason`,
+  `store_url`, `expires_at`, `resolution`, `counts_toward_caps`) beyond
+  their existing keywords, raising `ArgumentError` on anything else — the
+  extension point `docs/plans/handoff-reconcile.md`'s Phase 1/2 use to
+  record and settle a shopper-completed hand-off as a transaction record,
+  not a parallel path. `#completed_since` now excludes
+  `counts_toward_caps: false` records (Phase 2's `warn` spend mode); a
+  record with neither field set reads exactly as before. No change to any
+  existing caller.
 - Fix: `Support::HttpClient#json_request` opened every request with no
   `open_timeout`/`read_timeout` of its own, so a hung upstream fell back to
   Net::HTTP's own 60s defaults on both — a full minute an agent loop could

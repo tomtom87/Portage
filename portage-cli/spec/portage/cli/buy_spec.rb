@@ -668,6 +668,72 @@ RSpec.describe Portage::Cli::Buy do
     end
   end
 
+  describe "pending handoff records (docs/plans/handoff-reconcile.md Phase 1)" do
+    let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new }
+    let(:escalation) do
+      { "id" => "chk_1", "status" => "requires_escalation",
+        "links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }],
+        "currency" => "USD", "totals" => [{ "type" => "total", "amount" => 4200 }],
+        "expires_at" => "2026-09-25T00:00:00Z" }
+    end
+
+    def buy_and_escalate(**options)
+      session = fake_session(advertises_checkout: true, checkout: escalation)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1", **options).call
+    end
+
+    it "reserves a pending, settled_by: shopper record when a checkout is handed off" do
+      buy_and_escalate
+
+      record = transaction_log.find("portage-buy:shop.example:chk_1")
+      expect(record).to include("status" => "pending", "settled_by" => "shopper",
+                                "handoff_reason" => "requires_escalation", "store_url" => "https://shop.example",
+                                "checkout_id" => "chk_1", "shop" => "shop.example", "amount" => 4200,
+                                "currency" => "USD", "expires_at" => "2026-09-25T00:00:00Z")
+    end
+
+    it "never reserves anything on --dry-run" do
+      buy_and_escalate(dry_run: true, yes: false)
+
+      expect(transaction_log.all).to be_empty
+    end
+
+    it "surfaces a warning on the report, without failing the hand-off, when the reserve write fails" do
+      allow_any_instance_of(Portage::Ucp::Support::TransactionLog).to receive(:reserve)
+        .and_raise(Errno::EACCES, "transactions.json")
+
+      report = buy_and_escalate
+
+      expect(report[:outcome]).to eq("requires_escalation")
+      expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
+      expect(report[:warnings]).to include(a_string_including("Couldn't save this hand-off"))
+    end
+
+    describe "precheck spend mode" do
+      around { |example| with_env("PORTAGE_HANDOFF_SPEND_MODE" => "precheck") { example.run } }
+
+      it "suppresses auto-open and flags over_cap when this checkout would already exceed the buyer's cap" do
+        allow(Portage::Ucp::Policy).to receive(:load)
+          .and_return(Portage::Ucp::Policy.new(data: { "per_transaction_cap" => { "amount" => 100,
+                                                                                  "currency" => "USD" } }))
+
+        report = buy_and_escalate(auto_open: true)
+
+        expect(report[:handoff][:over_cap]).to be true
+        expect(report[:handoff][:opened]).to be false
+      end
+
+      it "still hands off normally when under the cap" do
+        allow(Portage::Ucp::Policy).to receive(:load).and_return(Portage::Ucp::Policy.new(data: {}))
+
+        report = buy_and_escalate
+
+        expect(report[:handoff]).not_to have_key(:over_cap)
+      end
+    end
+  end
+
   describe "native UCP, catalog only" do
     before do
       stub_request(:get, "https://shop.example/").to_return(status: 200, body: "<html>nothing recognizable</html>")

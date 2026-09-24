@@ -412,6 +412,64 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "orders reconcile" do
+    let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new }
+
+    it "reports nothing to reconcile when the log is empty" do
+      output = capture_stdout { expect(described_class.run(%w[orders reconcile])).to eq(0) }
+
+      expect(output).to include("nothing to reconcile")
+    end
+
+    it "reconciles every pending shopper record" do
+      transaction_log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil,
+                              settled_by: "shopper")
+      result = Portage::Cli::HandoffReconciler::Result.new(idempotency_key: "k1", settled: true, status: "failed",
+                                                           resolution: "expired")
+      allow(Portage::Cli::HandoffReconciler).to receive(:new)
+        .and_return(instance_double(Portage::Cli::HandoffReconciler, call: result))
+
+      output = capture_stdout { expect(described_class.run(%w[orders reconcile])).to eq(0) }
+
+      expect(output).to include("k1: failed").and include("resolution: expired")
+    end
+
+    it "reconciles only the named --checkout" do
+      transaction_log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil,
+                              settled_by: "shopper")
+      transaction_log.reserve(idempotency_key: "k2", checkout_id: "chk_2", payment_token_ref: nil,
+                              settled_by: "shopper")
+      seen = []
+      reconciler = instance_double(Portage::Cli::HandoffReconciler)
+      allow(reconciler).to receive(:call) do |record|
+        seen << record["checkout_id"]
+        Portage::Cli::HandoffReconciler::Result.new(idempotency_key: record["idempotency_key"], settled: false,
+                                                    note: "pending")
+      end
+      allow(Portage::Cli::HandoffReconciler).to receive(:new).and_return(reconciler)
+
+      capture_stdout { described_class.run(%w[orders reconcile --checkout chk_2]) }
+
+      expect(seen).to eq(["chk_2"])
+    end
+
+    it "emits JSON under --json" do
+      transaction_log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil,
+                              settled_by: "shopper")
+      result = Portage::Cli::HandoffReconciler::Result.new(idempotency_key: "k1", settled: false, note: "pending")
+      allow(Portage::Cli::HandoffReconciler).to receive(:new)
+        .and_return(instance_double(Portage::Cli::HandoffReconciler, call: result))
+
+      output = capture_stdout { described_class.run(%w[orders reconcile --json]) }
+
+      expect(JSON.parse(output)).to eq([{ "idempotency_key" => "k1", "settled" => false, "note" => "pending" }])
+    end
+
+    it "prints usage for an unknown orders subcommand" do
+      expect { expect(described_class.run(%w[orders nope])).to eq(1) }.to output.to_stderr
+    end
+  end
+
   describe "configure/setup aliases" do
     %w[configure setup].each do |alias_name|
       it "routes #{alias_name} to the same command as doctor" do
