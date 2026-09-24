@@ -13,8 +13,9 @@ Gem::Specification.new do |spec|
   spec.homepage = "https://github.com/tomtom87/Portage/tree/main/portage-ucp-etsy"
   spec.required_ruby_version = ">= 3.2"
 
-  spec.files = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md"]
+  spec.files = Dir["lib/**/*.rb", "exe/*", "README.md", "LICENSE", "CHANGELOG.md"]
   spec.bindir = "exe"
+  spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
   spec.add_dependency "portage-ucp", "~> 0.8"
