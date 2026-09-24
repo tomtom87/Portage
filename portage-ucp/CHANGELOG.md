@@ -16,6 +16,12 @@ pre-1.0, so APIs may still shift between minor versions.
   `Net::ReadTimeout` as retryable — neither carries a `status`, but both are
   exactly the "the upstream didn't do the work, try again" case the module
   exists for.
+- Documentation only, no code change. Fixes the README's "Usage" snippet:
+  it called `server.start` on the `MCP::Server` `Mcp::Server.build` returns,
+  but that class (mcp gem 0.25.0) has no `#start` — only
+  `MCP::Server::Transports::StdioTransport#open` reads stdio frames. Every
+  bundled adapter's `exe/` had the same bug; this just fixes the README to
+  match.
 
 ## [0.9.0] - 2026-09-23
 
