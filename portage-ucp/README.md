@@ -73,7 +73,7 @@ Portage::Ucp.configure do |config|
 end
 
 server = Portage::Ucp::Mcp::Server.build(adapter: MyAdapter.new)
-server.start
+MCP::Server::Transports::StdioTransport.new(server).open
 ```
 
 See the root README's [Usage](https://github.com/tomtom87/Portage#usage)
