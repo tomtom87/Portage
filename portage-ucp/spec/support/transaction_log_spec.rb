@@ -185,4 +185,58 @@ RSpec.describe Portage::Ucp::Support::TransactionLog do
         .to raise_error(Portage::Ucp::NotImplementedError)
     end
   end
+
+  describe "handoff-reconcile optional attributes (docs/plans/handoff-reconcile.md)" do
+    it "carries settled_by/handoff_reason/store_url/expires_at through reserve" do
+      record = log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil,
+                           settled_by: "shopper", handoff_reason: "requires_escalation",
+                           store_url: "https://shop.example", expires_at: "2026-09-25T00:00:00Z")
+
+      expect(record).to include("settled_by" => "shopper", "handoff_reason" => "requires_escalation",
+                                "store_url" => "https://shop.example", "expires_at" => "2026-09-25T00:00:00Z")
+    end
+
+    it "carries resolution/counts_toward_caps through complete" do
+      log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil, settled_by: "shopper")
+
+      log.complete(idempotency_key: "k1", status: "failed", resolution: "expired")
+
+      expect(log.find("k1")).to include("resolution" => "expired")
+    end
+
+    it "raises ArgumentError on an unknown optional attribute, from reserve or complete" do
+      expect { log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil, bogus: 1) }
+        .to raise_error(ArgumentError, /unknown optional attribute/)
+
+      log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil)
+      expect { log.complete(idempotency_key: "k1", status: "complete", bogus: 1) }
+        .to raise_error(ArgumentError, /unknown optional attribute/)
+    end
+
+    it "reads exactly as before when no optional attribute is set" do
+      record = log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil)
+
+      expect(record["settled_by"]).to be_nil
+      expect(record["counts_toward_caps"]).to be_nil
+    end
+
+    it "excludes counts_toward_caps: false records from #completed_since (Phase 2)" do
+      log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil, shop: "shop-a")
+      log.complete(idempotency_key: "k1", status: "complete", amount: 100, currency: "USD",
+                   counts_toward_caps: false)
+
+      log.reserve(idempotency_key: "k2", checkout_id: "chk_2", payment_token_ref: nil, shop: "shop-a")
+      log.complete(idempotency_key: "k2", status: "complete", amount: 200, currency: "USD")
+
+      results = log.completed_since(Time.now - 3600, shop: "shop-a")
+      expect(results.map { |r| r["idempotency_key"] }).to eq(["k2"])
+    end
+
+    it "still counts a record with no counts_toward_caps field at all" do
+      log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil, shop: "shop-a")
+      log.complete(idempotency_key: "k1", status: "complete", amount: 100, currency: "USD")
+
+      expect(log.completed_since(Time.now - 3600, shop: "shop-a").map { |r| r["idempotency_key"] }).to eq(["k1"])
+    end
+  end
 end

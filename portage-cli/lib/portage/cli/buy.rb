@@ -11,6 +11,10 @@ require_relative "confidence_check"
 require_relative "checkout_handoff"
 require_relative "notifier"
 require_relative "user_agent"
+require_relative "homepage_fetch"
+require_relative "permissive_authenticator"
+require_relative "handoff_reconciler"
+require_relative "handoff_spend_mode"
 
 module Portage
   module Cli
@@ -694,7 +698,8 @@ module Portage
       # relay and an agent loop branch on the same value.
       def handoff_report(source, products, checkout, warnings, outcome:, message:)
         handoff = hand_off(checkout, reason: outcome, source: source, message: message, warnings: warnings)
-        checkout_report(source, products, checkout, outcome: outcome, warnings: warnings, message: message,
+        checkout_report(source, products, checkout, outcome: outcome, message: message,
+                                                    warnings: warnings + Array(@pending_handoff_warning),
                                                     checkout_url: checkout_url_of(checkout), handoff: handoff)
       end
 
@@ -709,15 +714,67 @@ module Portage
       # The webhook body carries the report's own `message`, plus the store
       # and the shopper's query, so a Slack/Zapier relay can post it as-is
       # without a lookup back into this process.
+      #
+      # Also where docs/plans/handoff-reconcile.md Phase 1 records a pending
+      # `settled_by: "shopper"` TransactionLog row (best-effort — a failed
+      # write surfaces as a warning, never blocks the hand-off itself), and
+      # where Phase 2's `precheck` spend mode suppresses auto-open when this
+      # checkout's total would already exceed the buyer's own spend cap.
       def hand_off(checkout, reason:, source:, message:, warnings:)
         url = checkout_url_of(checkout)
         return nil if @dry_run || url.nil?
 
-        opened = CheckoutHandoff.new(auto_open: @auto_open).call(url)
-        error = notifier.call(event: "checkout_handoff", reason: reason, message: message, store: @uri.to_s,
-                              query: @query, checkout_url: url, checkout_id: checkout["id"], source: source,
-                              totals: checkout["totals"], warnings: warnings)
-        { url: url, opened: opened, notified: notifier.enabled? && error.nil?, notify_error: error }
+        over_cap = precheck_mode? && over_spend_cap?(checkout)
+        record_pending_handoff(checkout, reason: reason)
+
+        opened = over_cap ? false : CheckoutHandoff.new(auto_open: @auto_open).call(url)
+        error = notifier.call(handoff_notify_payload(checkout, url, reason: reason, source: source, message: message,
+                                                                    warnings: warnings, over_cap: over_cap))
+        result = { url: url, opened: opened, notified: notifier.enabled? && error.nil?, notify_error: error }
+        over_cap ? result.merge(over_cap: true) : result
+      end
+
+      def handoff_notify_payload(checkout, url, reason:, source:, message:, warnings:, over_cap:)
+        payload = { event: "checkout_handoff", reason: reason, message: message, store: @uri.to_s,
+                    query: @query, checkout_url: url, checkout_id: checkout["id"], source: source,
+                    totals: checkout["totals"], warnings: warnings }
+        over_cap ? payload.merge(over_cap: true) : payload
+      end
+
+      # Never raises: a record that can't be written is a warning on the
+      # report (surfaced via @pending_handoff_warning, see #handoff_report),
+      # not a reason to fail the hand-off itself — same posture as
+      # #settle_transaction's own @unrecorded_warning.
+      def record_pending_handoff(checkout, reason:)
+        transaction_log.reserve(idempotency_key: handoff_transaction_key(checkout), checkout_id: checkout["id"],
+                                shop: @uri.host, payment_token_ref: token_ref, amount: checkout_total(checkout),
+                                currency: checkout["currency"], settled_by: "shopper", handoff_reason: reason,
+                                store_url: @uri.to_s, expires_at: checkout["expires_at"])
+      rescue StandardError => e
+        @pending_handoff_warning = "Couldn't save this hand-off for later reconcile (#{e.message}) — " \
+                                   "run `portage orders reconcile --checkout #{checkout['id']}` once fixed, " \
+                                   "or it'll never be picked up automatically."
+      end
+
+      def handoff_transaction_key(checkout)
+        "portage-buy:#{@uri.host}:#{checkout['id']}"
+      end
+
+      def precheck_mode?
+        Portage::Cli::HandoffSpendMode.resolve == "precheck"
+      end
+
+      # Same PolicyGuard the buyer's own spend cap already goes through
+      # (#decide_policy) — reused here so a hand-off that never reached
+      # #decide_policy at all (escalation, permission_denied, no_payment_token,
+      # checkout_mismatch) still gets the buyer a heads-up that finishing
+      # this checkout by hand would blow the cap, before they do.
+      def over_spend_cap?(checkout)
+        Portage::Ucp::PolicyGuard.check!(amount: checkout_total(checkout), currency: checkout["currency"],
+                                         merchant: @uri.host, token_ref: token_ref, transaction_log: transaction_log)
+        false
+      rescue Portage::Ucp::PolicyViolationError
+        true
       end
 
       def notifier
@@ -820,23 +877,7 @@ module Portage
       # catalog-only-native adapter-checkout-fallback path) ---
 
       def fetch_homepage(uri, limit = REDIRECT_LIMIT)
-        return [nil, {}] if limit.zero?
-
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                       open_timeout: 5, read_timeout: 5) do |http|
-          http.get(uri.request_uri, UserAgent.headers)
-        end
-
-        case response
-        when Net::HTTPRedirection
-          fetch_homepage(URI.join(uri, response["location"]), limit - 1)
-        when Net::HTTPSuccess
-          [response.body, response.to_hash]
-        else
-          [nil, {}]
-        end
-      rescue StandardError
-        [nil, {}]
+        HomepageFetch.call(uri, limit: limit)
       end
 
       def dead_end
@@ -846,14 +887,6 @@ module Portage
 
       def build_report(**fields)
         { url: @uri.to_s, checkout_url: nil, products: [], warnings: [] }.merge(fields)
-      end
-
-      # Loopback buy against your own store needs *some* authenticator (§9
-      # rejects anonymous mutation by default) — since this process already
-      # has this platform's own credentials (that's the gate to even reach
-      # here), authenticating this local CLI session is reasonable.
-      class PermissiveAuthenticator < Portage::Ucp::Authenticator
-        def call(_server_context) = :local_cli
       end
     end
   end

@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- **Did the shopper finish the checkout? `portage orders reconcile`.**
+  Every checkout `portage buy` hands to the shopper's own browser
+  (`requires_escalation`, `permission_denied`, `no_payment_token`,
+  `policy_blocked`, `low_confidence`, `checkout_mismatch`) now reserves a
+  pending record in the transaction log (best-effort — a failed write is a
+  report warning, never blocks the hand-off). `portage orders reconcile
+  [--checkout ID] [--json]` re-fetches each pending checkout from the store
+  and settles it: `complete` only on a store-reported `completed` status,
+  `failed` on `canceled` or an unanswered expiry, otherwise stays pending.
+  Never infers success from a vanished checkout or a plain timeout. Safe to
+  run from cron/launchd. See `docs/plans/handoff-reconcile.md`.
+- **`handoff_spend_mode`** (`PORTAGE_HANDOFF_SPEND_MODE`, config.json) —
+  whether a reconciled shopper purchase counts toward the buyer's own spend
+  cap/velocity limit. `block` (default): counts like any agent purchase.
+  `warn`: recorded but excluded from cap math. `precheck`: `block`, plus a
+  spend-cap check at hand-off time that suppresses auto-open (never the
+  URL) when this checkout would already exceed the cap.
+- Phase 0 of the plan above (a live signal check against a real store) was
+  not run before this shipped — see `docs/design-log.md` §44.
+
 ## [0.7.2] - 2026-09-24
 
 - The User-Agent every store-facing request sends (`Cli::UserAgent`, née

@@ -51,6 +51,12 @@ Metrics/ClassLength:
     # rubocop config/lib entrypoint/version/adapter/spec_helper/conformance
     # spec) — breadth of one template file each, not a class doing too much.
     - "lib/portage/cli/generate/adapter.rb"
+    # Same rationale as Buy/Find above — HandoffReconciler implements one
+    # documented algorithm end to end (settle-from-status, expiry, order
+    # snapshot, journal, notify, reconnect; docs/plans/handoff-reconcile.md
+    # Phase 1), not several unrelated responsibilities. The Wire* adapter
+    # structs already live in their own file (handoff_reconciler/wire_adapters.rb).
+    - "lib/portage/cli/handoff_reconciler.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and

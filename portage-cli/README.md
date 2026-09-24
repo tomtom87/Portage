@@ -88,6 +88,7 @@ portage policy set [--per-transaction-cap N --currency CUR]
                     [--rolling-cap N --rolling-window-seconds N --currency CUR]
                     [--velocity-count N --velocity-window-seconds N]
                     [--allow HOST ...] [--clear-allowlist]
+portage orders reconcile [--checkout ID] [--json]
 ```
 
 - `--query` — search term. Against the store's catalog when you name a store,
@@ -272,6 +273,42 @@ An empty policy (nothing ever set) means every check passes; this is an
 opt-in guardrail, not a default-deny one. Per-token scopes (merchant/amount
 limits bound to one enrolled card) are set via `portage payment enroll
 --scope-*` above, not here.
+
+### Orders reconcile
+
+Nearly every real checkout `portage buy` can't finish itself hands the
+shopper a link — `requires_escalation`, `permission_denied`,
+`no_payment_token`, `policy_blocked`, `low_confidence`, or
+`checkout_mismatch`. That's a pending purchase this process knows nothing
+more about until something asks the store. `portage orders reconcile`
+re-fetches each pending hand-off from the store and settles it once the
+store itself reports a terminal status:
+
+```bash
+portage orders reconcile              # every pending hand-off
+portage orders reconcile --checkout chk_123
+portage orders reconcile --json
+```
+
+A `completed` checkout settles `complete` — using the store's own total at
+settle time, not the hand-off-time snapshot — records the order (when one
+exists) and a journal entry, and is counted toward your spend policy's
+rolling cap/velocity per `handoff_spend_mode` below. A `canceled` checkout,
+or one that expires with no answer, settles `failed`. Anything still
+in-progress, or not currently reachable, is left pending for the next run —
+safe to put on a cron/launchd schedule; two overlapping runs never
+double-settle the same record.
+
+`handoff_spend_mode` (`PORTAGE_HANDOFF_SPEND_MODE`, config.json's
+`handoff_spend_mode`) controls whether a reconciled shopper purchase counts
+toward the caps `portage policy set` configures:
+
+- `block` (default) — counts like any agent-completed purchase.
+- `warn` — recorded, but excluded from the cap/velocity math; still notifies
+  when it would have pushed spend over the cap.
+- `precheck` — `block`, plus a spend-cap check at hand-off time
+  (`portage buy`, not reconcile): if this checkout's total would already
+  exceed your cap, the URL is still printed but auto-open is suppressed.
 
 ### Decisions
 
