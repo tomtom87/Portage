@@ -77,6 +77,30 @@ RSpec.describe Portage::Cli::Doctor do
     end
   end
 
+  describe "the configured User-Agent" do
+    before { allow(Portage::Cli::Config).to receive(:load).and_return(Portage::Cli::Config.new(data: {})) }
+
+    def user_agent_finding(value)
+      with_env("PORTAGE_USER_AGENT" => value) do
+        described_class.new.call.find { |f| f.check == "user_agent" }
+      end
+    end
+
+    it "says nothing about the default" do
+      expect(user_agent_finding(nil)).to be_nil
+    end
+
+    it "says nothing about a clean override" do
+      expect(user_agent_finding("my-agent/1.0")).to be_nil
+    end
+
+    it "flags an override containing a newline, since Net::HTTP would raise on it mid-checkout" do
+      finding = user_agent_finding("my-agent/1.0\nX-Injected: yes")
+
+      expect(finding.message).to include("PORTAGE_USER_AGENT", "newline")
+    end
+  end
+
   it "flags a capability implemented on some but not all of its actions" do
     adapter_class = Class.new(Portage::Ucp::Adapter) do
       def search_catalog(**) = []

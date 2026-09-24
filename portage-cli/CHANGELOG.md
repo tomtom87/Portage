@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.7.2] - 2026-09-24
+
+- The User-Agent every store-facing request sends (`Cli::UserAgent`, née
+  `Cli::USER_AGENT`/`Cli::HTTP_HEADERS`) is now configurable: `PORTAGE_USER_AGENT`
+  beats `~/.portage/config.json`'s `user_agent` key, both of which beat the
+  `portage-cli/<ver> portage-ucp-client/<ver> (+https://github.com/...)`
+  default — same precedence `Notifier`'s webhook URL already uses. `portage
+  doctor` (and its `configure`/`setup` aliases) now flags a configured value
+  containing a stray newline, since `Net::HTTP` would otherwise raise on it
+  mid-checkout instead of at setup time.
+
 ## [0.7.1] - 2026-09-24
 
 - Fix: `buy <url> --max-price` (and `--product-id` with `--max-price`) was

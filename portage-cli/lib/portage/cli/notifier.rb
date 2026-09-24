@@ -66,7 +66,7 @@ module Portage
       def post(uri, body)
         Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
                                             open_timeout: TIMEOUT, read_timeout: TIMEOUT) do |http|
-          http.post(uri.request_uri, body, HTTP_HEADERS.merge("Content-Type" => "application/json"))
+          http.post(uri.request_uri, body, UserAgent.headers.merge("Content-Type" => "application/json"))
         end
       end
     end

@@ -100,7 +100,7 @@ module Portage
       # --- Step 1: native UCP manifest ---
 
       def discover(url)
-        Portage::Ucp::Client.discover(url.to_s, headers: HTTP_HEADERS)
+        Portage::Ucp::Client.discover(url.to_s, headers: UserAgent.headers)
       rescue Portage::Ucp::Client::ManifestShapeError => e
         # The store *is* running UCP — this client just couldn't parse its
         # manifest. Distinct from a genuine 404/unreachable host below:
@@ -824,7 +824,7 @@ module Portage
 
         response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
                                                        open_timeout: 5, read_timeout: 5) do |http|
-          http.get(uri.request_uri, HTTP_HEADERS)
+          http.get(uri.request_uri, UserAgent.headers)
         end
 
         case response
