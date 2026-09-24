@@ -21,11 +21,11 @@ gem install portage-cli
 # Answer API is the keyless default (brand/entity queries only, e.g. "burton
 # snowboard"). For open-ended queries, set BRAVE_SEARCH_API_KEY (Brave Search)
 # or GOOGLE_CSE_KEY + GOOGLE_CSE_CX (Google Programmable Search).
-portage find --query "usb-c cable" --max-price 20 --json
+portage find --query "burton snowboards" --json
 
 # No URL: lists candidate offers, and (in a terminal) lets you pick one to
 # price out with --dry-run — no charge either way.
-portage buy --query "wireless mouse" --max-price 40 --dry-run --json
+portage buy --query "burton snowboards" --max-price 600 --dry-run --json
 
 # Have a URL? Skip search — goes straight to its /.well-known/ucp manifest.
 portage buy https://some-ucp-store.example --query "hoodie" --yes --payment-token "$TOKEN"
