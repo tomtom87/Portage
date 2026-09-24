@@ -4,6 +4,42 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `Rack::CallEndpoint` no longer raises `TypeError` when a `tools/call` body
+  sends `params` as a string, number or boolean instead of an object; it
+  answers `-32602 Invalid params` like any other bad call. A top-level
+  JSON-RPC batch (an array) and a non-string `method` were already handled
+  without crashing; both now have specs.
+- `Rack::CallEndpoint` takes `max_body_bytes:` (default 1MiB). A
+  `Content-Length` over the cap is refused with `413` before anything is
+  read; otherwise at most `max_body_bytes + 1` bytes are ever read off the
+  body, so a missing or understated `Content-Length` can't be used to buffer
+  an unbounded body first.
+- `Rack::CallEndpoint` takes `call_timeout:` (default 30s, `nil` disables it),
+  bounding one dispatch into the catalog's `Mcp::Server#handle` so a slow
+  adapter call can't hold a browser's `fetch` open indefinitely. Every
+  rejection this endpoint answers — origin/method/content-type/size checks
+  included — now shares one JSON-RPC error envelope shape.
+- `registrar.js` no longer races a Turbo/SPA reload against itself: a second
+  `GET /webmcp.js` now awaits the previous generation's own in-flight
+  `registerTool` calls (and that generation's `unregister`) before
+  registering the same names again, bounded by `reregister_wait_ms:`
+  (default 2000) so a previous generation that never settles can't block the
+  page forever. Previously, a fast-enough reload could start registering
+  before the first generation had actually dropped anything, and the second
+  generation's calls would collide on every tool name.
+- Security review: added a spec confirming `ScriptEvaluator` can't be broken
+  out of by a tool name or argument containing JS-breaking characters (it's
+  JSON-encoded, never interpolated into the expression's own syntax).
+  README: new "Content-Security-Policy" and "CSRF posture" sections, and a
+  "Request limits" section documenting `max_body_bytes:`/`call_timeout:`.
+- `spec/portage/ucp/webmcp/real_browser_spec.rb`: registrar.js register ->
+  tool call -> re-register against a real, headless Chrome (via a new
+  `ferrum` dev dependency), not just the `:node` specs' stand-in tab.
+  Excluded by default (slow, needs Chrome installed); run with
+  `REAL_BROWSER=1 bundle exec rspec spec/portage/ucp/webmcp/real_browser_spec.rb`.
+
 ## [0.1.0] - 2026-09-23
 
 - Initial release. WebMCP as a transport to the existing `Adapter` contract.
