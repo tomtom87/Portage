@@ -10,14 +10,24 @@ module Portage
 
         AVAILABLE_STATES = ["in stock", "available for order", "preorder"].freeze
 
+        # A bare decimal, optionally followed by a currency code — anything
+        # else (an empty amount, "N/A", a stray currency symbol) is treated
+        # as unparseable rather than handed to BigDecimal, which raises
+        # ArgumentError on anything that isn't a valid decimal literal. A
+        # single malformed price on one product/order shouldn't blow up an
+        # entire catalog search or order fetch.
+        AMOUNT_PATTERN = /\A-?\d+(\.\d+)?\z/
+
         # Meta's Catalog product `price` field is a single string combining
         # amount and currency (`"25.00 USD"`), unlike every REST-based
         # adapter in this project splitting those into separate fields —
-        # this is the one place that string needs parsing.
+        # this is the one place that string needs parsing. A currency-less
+        # string (`"25.00"`, no space) splits to a nil currency, same as a
+        # currency Meta never sent.
         def money(price_string)
           return Portage::Ucp::Money.new(amount_minor: 0, currency: nil) unless price_string
 
-          amount, currency = price_string.split
+          amount, currency = price_string.to_s.split
           money_from_parts(amount, currency)
         end
 
@@ -26,7 +36,7 @@ module Portage
         # `amount`/`currency` fields — this is the shape #order and
         # #order_line_item work with.
         def money_from_parts(amount, currency)
-          Portage::Ucp::Support::Amounts.money(amount, currency)
+          Portage::Ucp::Support::Amounts.money(safe_amount(amount), currency)
         end
 
         def description(node)
@@ -36,8 +46,16 @@ module Portage
         def price(price_string)
           return Portage::Ucp::Price.new(amount: 0, currency: nil) unless price_string
 
-          amount, currency = price_string.split
-          Portage::Ucp::Price.new(amount: Portage::Ucp::Support::Amounts.decimal_to_minor(amount), currency: currency)
+          amount, currency = price_string.to_s.split
+          Portage::Ucp::Price.new(amount: Portage::Ucp::Support::Amounts.decimal_to_minor(safe_amount(amount)),
+                                  currency: currency)
+        end
+
+        # nil in, nil out (Support::Amounts already treats a nil amount as
+        # zero); a non-numeric string in, nil out, so it's treated the same
+        # way rather than raising.
+        def safe_amount(amount)
+          amount if amount.nil? || (amount.is_a?(String) && amount.match?(AMOUNT_PATTERN))
         end
 
         def price_range(price_string)
@@ -128,25 +146,54 @@ module Portage
         ORDER_STATUS = { "COMPLETED" => "fulfilled", "CANCELLED" => "removed" }.freeze
 
         def order(node)
-          status = Portage::Ucp::Support::LineItemStatus.from_table(ORDER_STATUS, node.dig("order_status", "state"))
-          items = node.dig("items", "data") || []
-          subtotal = money_from_parts(node.dig("estimated_payment_details", "subtotal", "amount"), nil).amount_minor
-          total = money_from_parts(node.dig("estimated_payment_details", "total_amount", "amount"), nil).amount_minor
+          status = Portage::Ucp::Support::LineItemStatus.from_table(ORDER_STATUS, order_status_state(node))
           Portage::Ucp::Order.new(
             id: node["id"],
             checkout_id: "",
             permalink_url: "",
-            line_items: items.map { |n| order_line_item(n, status) },
+            line_items: order_items(node).map { |n| order_line_item(n, status) },
             fulfillment: Portage::Ucp::Fulfillment.new,
-            currency: node.dig("estimated_payment_details", "total_amount", "currency"),
-            totals: Portage::Ucp::Support::Totals.summary(subtotal: subtotal, total: total)
+            currency: safe_dig(node, "estimated_payment_details", "total_amount", "currency"),
+            totals: order_totals(node)
           )
         end
 
+        def order_status_state(node)
+          safe_dig(node, "order_status", "state")
+        end
+
+        def order_totals(node)
+          subtotal = money_from_parts(safe_dig(node, "estimated_payment_details", "subtotal", "amount"),
+                                      nil).amount_minor
+          total = money_from_parts(safe_dig(node, "estimated_payment_details", "total_amount", "amount"),
+                                   nil).amount_minor
+          Portage::Ucp::Support::Totals.summary(subtotal: subtotal, total: total)
+        end
+
+        # `node["items"]["data"]` absent entirely (no items field), present
+        # but empty (an order with no line items), or malformed (either
+        # level not the Hash/Array Meta's documented shape promises) all
+        # degrade to "no line items" rather than raising.
+        def order_items(node)
+          items = node["items"]
+          return [] unless items.is_a?(Hash)
+
+          data = items["data"]
+          data.is_a?(Array) ? data : []
+        end
+
+        # A nested `.dig` chain raises TypeError the moment an intermediate
+        # value isn't a Hash (e.g. Meta sending `estimated_payment_details`
+        # as something other than the documented object) — this stops at
+        # nil instead, same "degrade, don't raise" posture as #order_items.
+        def safe_dig(hash, *keys)
+          keys.reduce(hash) { |h, k| h.is_a?(Hash) ? h[k] : nil }
+        end
+
         def order_line_item(node, status)
-          quantity = node["quantity"]
+          quantity = node["quantity"] || 0
           fulfilled = Portage::Ucp::Support::LineItemStatus.fulfilled_quantity(status, quantity)
-          unit_price = money_from_parts(node.dig("price_per_unit", "amount"), nil).amount_minor
+          unit_price = money_from_parts(safe_dig(node, "price_per_unit", "amount"), nil).amount_minor
           line_total = unit_price * quantity
           Portage::Ucp::OrderLineItem.new(
             id: node["id"].to_s,

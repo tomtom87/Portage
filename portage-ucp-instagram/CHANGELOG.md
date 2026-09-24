@@ -29,6 +29,13 @@ pre-1.0, so APIs may still shift between minor versions.
   from an edge/proxy, a truncated connection) raise an unrescued
   `JSON::ParserError` with no indication of what actually failed. Now raises
   a `Portage::Ucp::Instagram::Error` naming the HTTP status and raw body.
+- **Fix:** `Mapper.money`/`.price`/`.order`/`.order_line_item` raised
+  (`ArgumentError` from `BigDecimal`, `TypeError`/`NoMethodError` from a
+  nested `.dig`/arithmetic on `nil`) on a malformed price string, an
+  unexpected non-Hash `order_status`/`estimated_payment_details`/`items`, or
+  a line item missing `quantity`/`price_per_unit` — any single malformed
+  product or order could take down an entire catalog search or order fetch.
+  All now degrade to a zero amount/empty collection instead.
 
 ## [0.1.4] - 2026-09-17
 
