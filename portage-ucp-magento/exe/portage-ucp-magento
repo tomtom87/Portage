@@ -36,4 +36,5 @@ adapter = Portage::Ucp::Magento::Adapter.new(
   default_address: default_address && JSON.parse(default_address, symbolize_names: true)
 )
 
-Portage::Ucp::Mcp::Server.build(adapter: adapter).start
+server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
+MCP::Server::Transports::StdioTransport.new(server).open
