@@ -2,6 +2,7 @@ require "net/http"
 require "uri"
 require "json"
 require "yaml"
+require "portage/ucp"
 require_relative "user_agent"
 
 module Portage
@@ -45,8 +46,8 @@ module Portage
       end
 
       def self.request(uri, headers)
-        Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                            open_timeout: OPEN_TIMEOUT, read_timeout: READ_TIMEOUT) do |http|
+        Portage::Ucp::Support::Connection.start(uri, route: :search, open_timeout: OPEN_TIMEOUT,
+                                                     read_timeout: READ_TIMEOUT) do |http|
           http.get(uri.request_uri, HTTP_HEADERS.merge(headers))
         end
       end

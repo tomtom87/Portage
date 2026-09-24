@@ -1,5 +1,6 @@
 require "net/http"
 require "json"
+require "portage/ucp"
 
 module Portage
   module Ucp
@@ -77,7 +78,7 @@ module Portage
           headers.each { |key, value| request[key] = value }
           request.body = JSON.generate({ query: query, variables: variables })
 
-          response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
+          response = Portage::Ucp::Support::Connection.start(uri, route: :platform) { |http| http.request(request) }
           status = response.code.to_i
           raise Portage::Ucp::Shopify::ServerError, status if status >= 500
 

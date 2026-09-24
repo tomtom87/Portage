@@ -25,9 +25,19 @@ module Portage
         class Http
           include UcpWireShape
 
-          def initialize(url:, headers: {})
+          # @param proxy [String, Hash, URI, nil] docs/plans/proxy-support.md
+          #   Phase 1's "lighter touch" for this gem: Faraday already reads
+          #   the env proxy vars itself (`Faraday.ignore_env_proxy` is
+          #   false) and accepts a `proxy:` connection option, so this just
+          #   wires that option through rather than reimplementing Faraday's
+          #   own proxy handling. Accepts anything
+          #   `Faraday::Connection#proxy=`/`Faraday::ProxyOptions.from`
+          #   accepts — a bare URL string is the common case.
+          def initialize(url:, headers: {}, proxy: nil)
             @client = ::MCP::Client.new(
-              transport: ::MCP::Client::HTTP.new(url: url, headers: Client.with_user_agent(headers))
+              transport: ::MCP::Client::HTTP.new(url: url, headers: Client.with_user_agent(headers)) do |faraday|
+                faraday.proxy = proxy if proxy
+              end
             )
             @client.connect
           end

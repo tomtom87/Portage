@@ -222,8 +222,8 @@ module Portage
       end
 
       def fetch_homepage(uri)
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                       open_timeout: 5, read_timeout: 5) do |http|
+        response = Portage::Ucp::Support::Connection.start(uri, route: :payment, open_timeout: 5,
+                                                                read_timeout: 5) do |http|
           http.get(uri.request_uri, HTTP_HEADERS)
         end
         response.is_a?(Net::HTTPSuccess) ? [response.body, response.to_hash] : [nil, {}]

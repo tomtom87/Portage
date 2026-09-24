@@ -822,8 +822,8 @@ module Portage
       def fetch_homepage(uri, limit = REDIRECT_LIMIT)
         return [nil, {}] if limit.zero?
 
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                       open_timeout: 5, read_timeout: 5) do |http|
+        response = Portage::Ucp::Support::Connection.start(uri, route: :store, open_timeout: 5,
+                                                                read_timeout: 5) do |http|
           http.get(uri.request_uri, HTTP_HEADERS)
         end
 

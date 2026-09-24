@@ -9,20 +9,21 @@ require "base64"
 require "timeout"
 require "webmock/rspec" # other spec files in this gem require it too, which disables net connect process-wide
 
-# Phase 0 of docs/plans/proxy-support.md: Support::HttpClient, Check and
-# Support::TokenExchange are three of the nine raw `Net::HTTP.start(uri.host,
-# uri.port, ...)` call sites the plan lists. None of them pass an explicit
-# `p_addr`, so Net::HTTP's own default (`:ENV`) is what decides whether an
-# env proxy is used -- these specs lock that default in against a real local
-# proxy so a future refactor (Phase 1's Support::Connection) can't silently
-# regress it.
+# Phase 0 of docs/plans/proxy-support.md documented a real gap here:
+# Support::HttpClient, Check and Support::TokenExchange are three of the nine
+# raw `Net::HTTP.start(uri.host, uri.port, ...)` call sites the plan lists,
+# and none of them passed an explicit `p_addr`, so Net::HTTP's own `:ENV`
+# proxy default decided whether an env proxy was used -- and that default
+# reads *only* `http_proxy`/`HTTP_PROXY`, for both http and https targets,
+# because `Net::HTTP#proxy_uri` hardcodes its env-lookup scheme to "http"
+# regardless of `use_ssl?` (docs/design-log.md #44).
 #
-# Confirmed here (see docs/proxy.md for the full write-up): only
-# `http_proxy`/`HTTP_PROXY` is ever consulted for an env proxy, for *both*
-# http and https targets -- `https_proxy`/`HTTPS_PROXY` is never read by
-# Net::HTTP's `:ENV` proxy mode (`Net::HTTP#proxy_uri` hardcodes the lookup
-# scheme to "http" regardless of `use_ssl?`). That is a genuine gap against
-# the common HTTPS_PROXY convention, not a mistake in these specs.
+# Phase 1 replaced every one of these three call sites' raw Net::HTTP.start
+# with Support::Connection.start, which resolves the env proxy itself
+# instead of leaving Net::HTTP's `:ENV` default in place -- and, unlike
+# Net::HTTP, actually reads HTTPS_PROXY/https_proxy for an https:// target.
+# These specs assert the *fixed* behavior directly against a real local
+# proxy, closing the gap Phase 0 could only document.
 class TestHttpClient
   include Portage::Ucp::Support::HttpClient
 
@@ -37,7 +38,7 @@ class TestTokenExchange
   public :exchange
 end
 
-RSpec.describe "Phase 0 env-proxy support (portage-ucp)" do
+RSpec.describe "Phase 1 env-proxy support via Support::Connection (portage-ucp)" do
   around do |example|
     previous = %w[http_proxy https_proxy no_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY].to_h { |k| [k, ENV.fetch(k, nil)] }
     previous.each_key { |k| ENV.delete(k) }
@@ -57,8 +58,8 @@ RSpec.describe "Phase 0 env-proxy support (portage-ucp)" do
   after { proxy.stop }
 
   describe Portage::Ucp::Support::HttpClient do
-    it "routes an https request through http_proxy (Net::HTTP never reads https_proxy)" do
-      ENV["http_proxy"] = "http://#{proxy.host}:#{proxy.port}"
+    it "closes docs/design-log.md #44's gap: routes an https request through HTTPS_PROXY/https_proxy" do
+      ENV["https_proxy"] = "http://#{proxy.host}:#{proxy.port}"
 
       expect do
         TestHttpClient.new.json_request(Net::HTTP::Get, URI("https://shop.example.invalid/orders"))
@@ -69,20 +70,31 @@ RSpec.describe "Phase 0 env-proxy support (portage-ucp)" do
       expect(rec.request_line).to eq("CONNECT shop.example.invalid:443 HTTP/1.1")
     end
 
-    it "is not reached at all when only https_proxy is set (the confirmed gap)" do
-      ENV["https_proxy"] = "http://#{proxy.host}:#{proxy.port}"
+    it "no longer reads http_proxy for an https:// target (Net::HTTP's old, now-replaced default did)" do
+      ENV["http_proxy"] = "http://#{proxy.host}:#{proxy.port}"
 
       expect do
         Timeout.timeout(2) do
           TestHttpClient.new.json_request(Net::HTTP::Get, URI("https://shop.example.invalid/orders"))
         end
-      end.to raise_error(StandardError) # real DNS failure for the *.invalid host, not a proxy error
+      end.to raise_error(StandardError) # real DNS failure for the *.invalid host -- it went direct
 
       expect(proxy.last_request(timeout: 1)).to be_nil
     end
 
-    it "sends Proxy-Authorization from user:pass in the proxy URL" do
-      ENV["http_proxy"] = "http://bob:s3cr3t@#{proxy.host}:#{proxy.port}"
+    it "routes a plain http:// request through HTTP_PROXY/http_proxy" do
+      ENV["http_proxy"] = "http://#{proxy.host}:#{proxy.port}"
+
+      response = TestHttpClient.new.json_request(Net::HTTP::Get, URI("http://shop.example.invalid/orders"), raw: true)
+      expect(response.body).to eq("ok")
+
+      rec = proxy.last_request
+      expect(rec).not_to be_nil
+      expect(rec.request_line).to start_with("GET http://shop.example.invalid/orders")
+    end
+
+    it "sends Proxy-Authorization from user:pass in the https_proxy URL" do
+      ENV["https_proxy"] = "http://bob:s3cr3t@#{proxy.host}:#{proxy.port}"
 
       expect { TestHttpClient.new.json_request(Net::HTTP::Get, URI("https://shop.example.invalid/orders")) }
         .to raise_error(StandardError)
@@ -92,7 +104,7 @@ RSpec.describe "Phase 0 env-proxy support (portage-ucp)" do
     end
 
     it "honours no_proxy for the target host" do
-      ENV["http_proxy"] = "http://#{proxy.host}:#{proxy.port}"
+      ENV["https_proxy"] = "http://#{proxy.host}:#{proxy.port}"
       ENV["no_proxy"] = "shop.example.invalid"
 
       expect do
@@ -106,8 +118,8 @@ RSpec.describe "Phase 0 env-proxy support (portage-ucp)" do
   end
 
   describe Portage::Ucp::Check do
-    it "routes its manifest/homepage probe through http_proxy" do
-      ENV["http_proxy"] = "http://#{proxy.host}:#{proxy.port}"
+    it "routes its https manifest/homepage probe through https_proxy" do
+      ENV["https_proxy"] = "http://#{proxy.host}:#{proxy.port}"
 
       described_class.call("shop.example.invalid")
 
@@ -115,11 +127,19 @@ RSpec.describe "Phase 0 env-proxy support (portage-ucp)" do
       expect(rec).not_to be_nil
       expect(rec.request_line).to eq("CONNECT shop.example.invalid:443 HTTP/1.1")
     end
+
+    it "is not routed through http_proxy alone" do
+      ENV["http_proxy"] = "http://#{proxy.host}:#{proxy.port}"
+
+      described_class.call("shop.example.invalid")
+
+      expect(proxy.last_request(timeout: 1)).to be_nil
+    end
   end
 
   describe Portage::Ucp::Support::TokenExchange do
-    it "routes a token exchange POST through http_proxy" do
-      ENV["http_proxy"] = "http://#{proxy.host}:#{proxy.port}"
+    it "routes a token exchange POST through https_proxy" do
+      ENV["https_proxy"] = "http://#{proxy.host}:#{proxy.port}"
 
       expect do
         TestTokenExchange.new.exchange("https://shop.example.invalid/oauth/token", { grant_type: "refresh_token" },
