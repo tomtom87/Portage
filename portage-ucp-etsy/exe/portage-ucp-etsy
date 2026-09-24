@@ -1,0 +1,29 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Standalone MCP server over stdio. Configure the shop connection via env
+# vars, and — since this gem ships with permissive-nothing defaults (see
+# README's "Security hooks") — wire a real Authenticator/RateLimiter/etc. via
+# a config file loaded with PORTAGE_UCP_CONFIG, the same way `rackup -r` or
+# Sidekiq's `-r` work — see ../examples/portage_ucp.rb for a starting point.
+# Without one, the server still starts but rejects every mutating call.
+#
+# Only ETSY_ACCESS_TOKEN and ETSY_API_KEY are read here, not ETSY_CLIENT_ID/
+# ETSY_REFRESH_TOKEN: this exe expects a shop-scoped access_token you've
+# already fetched (e.g. via `bundle exec rake etsy_access_token`) and refresh
+# out-of-band, same as any other long-lived process holding a token with an
+# expiry.
+
+require "portage/ucp"
+require "portage/ucp/etsy"
+
+require ENV["PORTAGE_UCP_CONFIG"] if ENV["PORTAGE_UCP_CONFIG"]
+
+client = Portage::Ucp::Etsy::Client.new(
+  access_token: ENV.fetch("ETSY_ACCESS_TOKEN"),
+  api_key: ENV.fetch("ETSY_API_KEY")
+)
+adapter = Portage::Ucp::Etsy::Adapter.new(client: client, shop_id: ENV.fetch("ETSY_SHOP_ID"))
+
+server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
+MCP::Server::Transports::StdioTransport.new(server).open
