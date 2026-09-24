@@ -19,15 +19,39 @@
   var state = { registered: [], errors: [], reason: null, unregister: unregister };
   var controller = typeof AbortController === "function" ? new AbortController() : null;
   var handles = [];
+  var pending = [];
   var nextId = 0;
 
-  // A second load (Turbo/SPA navigation re-running the script tag) would
-  // otherwise collide on every tool name; drop the previous registration.
-  if (root.portageWebMcp && typeof root.portageWebMcp.unregister === "function") root.portageWebMcp.unregister();
+  // Bounded wait, in ms, for the previous generation's own registerTool
+  // calls (still in flight when a Turbo/SPA reload re-runs this script tag)
+  // to settle and unregister before this generation registers the same
+  // names. registerTool is async, so a second load can otherwise start
+  // registering before the first generation's unregister has actually
+  // dropped anything, colliding on every name. Same shape as Transport's
+  // reregister_wait: one deadline, never reset, a stuck previous generation
+  // costs at most this much (see CHANGELOG's 0e8d49c and the README's
+  // "Timeouts").
+  var REREGISTER_WAIT_MS = (config && config.reregisterWaitMs) || 2000;
+
+  function timeoutAfter(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  // Drop the previous generation's registrations before this one starts.
+  // `unregister()` itself waits out that generation's own pending
+  // registerTool calls (see below), so this is only racing a previous
+  // generation that never settles at all.
+  var previous = root.portageWebMcp;
+  var previousDone = previous && typeof previous.unregister === "function"
+    ? Promise.race([previous.unregister(), timeoutAfter(REREGISTER_WAIT_MS)])
+    : Promise.resolve();
   root.portageWebMcp = state;
 
   // Current spec: `document.modelContext`. Earlier drafts, and the browser
-  // builds that shipped them, used `navigator.modelContext`.
+  // builds that shipped them, used `navigator.modelContext`. Neither
+  // `document` nor `navigator` is guaranteed to exist on every host this
+  // script can be evaluated in (a worker, a test harness), so both reads are
+  // optional-chained by hand rather than assumed.
   var context = (doc && doc.modelContext) || (nav && nav.modelContext);
   if (!context || typeof context.registerTool !== "function") {
     state.reason = "no_model_context";
@@ -103,9 +127,10 @@
   }
 
   function register(tool) {
+    var settled;
     try {
       var handle = context.registerTool(descriptor(tool), registerOptions());
-      Promise.resolve(handle).then(function (resolved) {
+      settled = Promise.resolve(handle).then(function (resolved) {
         if (resolved && typeof resolved.unregister === "function") handles.push(resolved);
         state.registered.push(tool.name);
       }, function (error) {
@@ -113,21 +138,34 @@
       });
     } catch (error) {
       state.errors.push({ tool: tool.name, message: String((error && error.message) || error) });
+      settled = Promise.resolve();
     }
+    pending.push(settled);
   }
 
   // Spec surface unregisters on the AbortSignal passed at registration;
   // earlier drafts returned a handle with `unregister()` or offered
   // `unregisterTool(name)`. All three are tried — each is a no-op where the
   // browser doesn't implement it.
+  //
+  // Waits out this generation's own pending registerTool calls first (each
+  // wrapped so one rejecting can't stall the others), so a caller — or the
+  // next generation's script, racing this promise above — never unregisters
+  // a name that hasn't finished registering yet, which would otherwise leave
+  // it orphaned on `context` with nothing in `handles` to drop it.
   function unregister() {
     if (controller) controller.abort();
-    handles.forEach(function (handle) { try { handle.unregister(); } catch (_e) { /* already gone */ } });
-    if (typeof context.unregisterTool === "function") {
-      config.tools.forEach(function (tool) { try { context.unregisterTool(tool.name); } catch (_e) { /* already gone */ } });
-    }
-    state.registered = [];
+    var settled = Promise.all(pending.map(function (p) { return p.catch(function () {}); }));
+    return settled.then(function () {
+      handles.forEach(function (handle) { try { handle.unregister(); } catch (_e) { /* already gone */ } });
+      if (context && typeof context.unregisterTool === "function") {
+        config.tools.forEach(function (tool) { try { context.unregisterTool(tool.name); } catch (_e) { /* already gone */ } });
+      }
+      state.registered = [];
+    });
   }
 
-  config.tools.forEach(register);
+  previousDone.then(function () {
+    config.tools.forEach(register);
+  });
 })(__PORTAGE_WEBMCP_CONFIG__);

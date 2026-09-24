@@ -21,8 +21,16 @@ module Portage
         # @param include_polyfill [Boolean] prepend assets/polyfill.js, so
         #   browsers without native WebMCP still get a spec-shaped
         #   `document.modelContext` for an agent-driven browser to read.
+        # @param reregister_wait_ms [Integer, nil] how long a re-registration
+        #   (a Turbo/SPA reload re-running the script tag) waits for the
+        #   previous generation's own in-flight registerTool calls to settle
+        #   before this generation registers the same names, so the two
+        #   can't race and collide. Default (registrar.js's own): 2000.
+        # rubocop:disable Metrics/ParameterLists -- one page-script config
+        # option per keyword, each independently optional; a options hash
+        # would just move the same seven names one level down.
         def initialize(catalog:, endpoint:, credentials: "same-origin", headers: {}, exposed_to: nil,
-                       include_polyfill: false)
+                       include_polyfill: false, reregister_wait_ms: nil)
           valid = CREDENTIALS.include?(credentials)
           raise ArgumentError, "credentials must be one of #{CREDENTIALS.join(', ')}" unless valid
 
@@ -32,13 +40,16 @@ module Portage
           @headers = headers
           @exposed_to = exposed_to
           @include_polyfill = include_polyfill
+          @reregister_wait_ms = reregister_wait_ms
         end
+        # rubocop:enable Metrics/ParameterLists
 
         def config
           {
             "endpoint" => @endpoint, "credentials" => @credentials,
             "headers" => @headers.to_h { |k, v| [k.to_s, v.to_s] },
             "exposedTo" => @exposed_to,
+            "reregisterWaitMs" => @reregister_wait_ms,
             "tools" => @catalog.tools
           }.compact
         end
