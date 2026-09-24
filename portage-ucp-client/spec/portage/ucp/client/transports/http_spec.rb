@@ -7,8 +7,9 @@ RSpec.describe Portage::Ucp::Client::Transports::Http do
   let(:wire_meta) { { "ucp-agent" => { "profile" => "https://agent.example/profile" } } }
 
   before do
-    allow(MCP::Client::HTTP).to receive(:new).with(url: "https://shop.example/mcp", headers: {})
-                                             .and_return(mcp_transport)
+    allow(MCP::Client::HTTP).to receive(:new)
+      .with(url: "https://shop.example/mcp", headers: { "User-Agent" => Portage::Ucp::Client::USER_AGENT })
+      .and_return(mcp_transport)
     allow(MCP::Client).to receive(:new).with(transport: mcp_transport).and_return(mcp_client)
     allow(mcp_client).to receive(:connect)
     allow(mcp_client).to receive(:call_tool)
@@ -21,6 +22,17 @@ RSpec.describe Portage::Ucp::Client::Transports::Http do
     expect(mcp_client).to receive(:connect)
 
     described_class.new(url: "https://shop.example/mcp")
+  end
+
+  it "keeps a User-Agent the caller names, in any case, over its own" do
+    allow(MCP::Client::HTTP).to receive(:new).with(url: "https://shop.example/mcp",
+                                                   headers: { "user-agent" => "mine/1" })
+                                             .and_return(mcp_transport)
+
+    described_class.new(url: "https://shop.example/mcp", headers: { "user-agent" => "mine/1" })
+
+    expect(MCP::Client::HTTP).to have_received(:new).with(url: "https://shop.example/mcp",
+                                                          headers: { "user-agent" => "mine/1" })
   end
 
   it "raises MissingAgentProfileError when meta has no agent_profile" do

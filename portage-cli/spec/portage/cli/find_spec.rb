@@ -169,8 +169,8 @@ RSpec.describe Portage::Cli::Find do
   it "ranks buyable stores above browse-only ones, then by price" do
     cheap = product.merge("id" => "p2", "price_range" => { "min" => { "amount" => 100, "currency" => "USD" } })
     browse_only = session(advertises: false, products: [cheap])
-    allow(Portage::Ucp::Client).to receive(:discover).with("https://browse.example").and_return(browse_only)
-    allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example")
+    allow(Portage::Ucp::Client).to receive(:discover).with("https://browse.example", headers: Portage::Cli::HTTP_HEADERS).and_return(browse_only)
+    allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example", headers: Portage::Cli::HTTP_HEADERS)
                                                      .and_return(session(products: [product]))
 
     report = find(backends: [backend("duckduckgo", ["https://browse.example", "https://shop.example"])]).call
@@ -181,8 +181,8 @@ RSpec.describe Portage::Cli::Find do
   it "keeps searching when one store's catalog call blows up" do
     broken = instance_double(Portage::Ucp::Client::Session, advertises?: true)
     allow(broken).to receive(:search_catalog).and_raise(StandardError)
-    allow(Portage::Ucp::Client).to receive(:discover).with("https://broken.example").and_return(broken)
-    allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example")
+    allow(Portage::Ucp::Client).to receive(:discover).with("https://broken.example", headers: Portage::Cli::HTTP_HEADERS).and_return(broken)
+    allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example", headers: Portage::Cli::HTTP_HEADERS)
                                                      .and_return(session(products: [product]))
 
     report = find(backends: [backend("duckduckgo", ["https://broken.example", "https://shop.example"])]).call

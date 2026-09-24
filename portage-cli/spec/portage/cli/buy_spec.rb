@@ -170,7 +170,7 @@ RSpec.describe Portage::Cli::Buy do
   describe "native UCP, cart+checkout advertised" do
     it "creates a checkout and reports it awaiting confirmation without --yes" do
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
-      allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example").and_return(session)
+      allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example", headers: Portage::Cli::HTTP_HEADERS).and_return(session)
 
       report = described_class.new(url: "shop.example", query: "cold").call
 
@@ -377,7 +377,7 @@ RSpec.describe Portage::Cli::Buy do
 
     it "unwraps search_catalog's wire envelope instead of treating it as the product list" do
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
-      allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example").and_return(session)
+      allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example", headers: Portage::Cli::HTTP_HEADERS).and_return(session)
 
       report = described_class.new(url: "shop.example", query: "cold").call
 
@@ -689,12 +689,12 @@ RSpec.describe Portage::Cli::Buy do
 
   describe "no native manifest — homepage fallback" do
     it "follows an alternate <link rel=\"ucp\"> manifest pointer" do
-      allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example").and_return(nil)
+      allow(Portage::Ucp::Client).to receive(:discover).with("https://shop.example", headers: Portage::Cli::HTTP_HEADERS).and_return(nil)
       stub_request(:get, "https://shop.example/").to_return(
         status: 200, body: '<html><head><link rel="ucp" href="https://ucp.shop.example/manifest"></head></html>'
       )
       session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
-      allow(Portage::Ucp::Client).to receive(:discover).with("https://ucp.shop.example/manifest").and_return(session)
+      allow(Portage::Ucp::Client).to receive(:discover).with("https://ucp.shop.example/manifest", headers: Portage::Cli::HTTP_HEADERS).and_return(session)
 
       report = described_class.new(url: "shop.example", query: "cold").call
 
