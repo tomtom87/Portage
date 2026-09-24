@@ -1,7 +1,7 @@
 # Security
 
 This document pulls the trust-boundary reasoning that matters for anyone integrating
-or auditing Portage out of [`docs/design-log.md`](docs/design-log.md) (154KB of
+or auditing Portage out of [`docs/design-log.md`](https://github.com/tomtom87/Portage/blob/main/docs/design-log.md) (154KB of
 decision history) into one place. It doesn't replace the design log — where a topic
 below says "see §N", that's where the full reasoning and alternatives-considered live.
 

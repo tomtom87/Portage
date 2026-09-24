@@ -6,7 +6,7 @@ As Portage is an open workspace, based on a collection of Ruby gems that expose 
 
 Bug reports, adapters, new features, docs, and spec-conformance fixes are very welcome inded.
 
-Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md) — in short: be decent, and never paste real credentials, tokens, or customer PII into an issue or PR.
+Participation is governed by the [Code of Conduct](https://github.com/tomtom87/Portage/blob/main/CODE_OF_CONDUCT.md) — in short: be decent, and never paste real credentials, tokens, or customer PII into an issue or PR.
 
 Before anything else: this project is still slightly **pre-`1.0` and still tracking a moving spec due to how UCP is evolving**. 
 
@@ -44,7 +44,7 @@ The capability/adapter contract is not settled, so things are likely to change. 
 
 ## Code of conduct
 
-This project ships a [Code of Conduct](CODE_OF_CONDUCT.md) (Contributor Covenant 2.1) that
+This project ships a [Code of Conduct](https://github.com/tomtom87/Portage/blob/main/CODE_OF_CONDUCT.md) (Contributor Covenant 2.1) that
 applies to issues, pull requests, and discussions. Two clauses matter more here than in most
 repos, because Portage handles live commerce credentials: never post real credentials, tokens,
 payment instruments, or customer PII, and report security issues privately rather than in a
@@ -72,7 +72,7 @@ filing.
 ## Reporting a security issue
 
 **Do not open a public issue.** Report it privately to the maintainer — see
-[`SECURITY.md`](SECURITY.md), which also documents the trust boundaries Portage assumes
+[`SECURITY.md`](https://github.com/tomtom87/Portage/blob/main/SECURITY.md), which also documents the trust boundaries Portage assumes
 (the `Marshal`-backed idempotency store, payment-token handling, the policy guards). If
 you're unsure whether something is a security issue, treat it as one and report privately.
 
@@ -132,7 +132,7 @@ rake conformance
 ```
 
 Run at least the gem(s) you touched before opening a PR. CI
-([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs rspec and rubocop for every
+([`.github/workflows/ci.yml`](https://github.com/tomtom87/Portage/blob/main/.github/workflows/ci.yml)) runs rspec and rubocop for every
 gem on two Ruby versions plus `rake conformance`, but finding it locally is faster than
 waiting on the matrix.
 
@@ -184,8 +184,8 @@ Checklist for a **bundled** adapter gem (one living in this repo):
    `CHANGELOG.md`, following an existing adapter's layout.
 2. `spec/portage/ucp/<platform>/conformance_spec.rb` running the shared kit.
 3. Added to `GEMS` **and** `ADAPTER_GEMS` in the root [`Rakefile`](Rakefile).
-4. Added to the `gem:` matrix in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-5. Added to the gem table in the [README](README.md).
+4. Added to the `gem:` matrix in [`.github/workflows/ci.yml`](https://github.com/tomtom87/Portage/blob/main/.github/workflows/ci.yml).
+5. Added to the gem table in the [README](https://github.com/tomtom87/Portage/blob/main/README.md).
 6. No live network in specs — stub with `webmock`.
 
 An adapter you publish as your own gem outside this repo is equally welcome; open an issue
@@ -237,7 +237,7 @@ This repo keeps a story-style history. Conventional Commits prefixes (`feat:`, `
 ## Changelogs
 
 Each gem keeps its own `CHANGELOG.md` for its own API; the root
-[`CHANGELOG.md`](CHANGELOG.md) covers the workspace, shared docs, and anything spanning more
+[`CHANGELOG.md`](https://github.com/tomtom87/Portage/blob/main/CHANGELOG.md) covers the workspace, shared docs, and anything spanning more
 than one gem. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 Add your entry under the unreleased heading of every changelog your change affects. Mark
@@ -246,14 +246,33 @@ breaking changes are allowed, not that they go unannounced.
 
 ## Documentation and the design log
 
-[`docs/design-log.md`](docs/design-log.md) is the decision history: numbered sections, each
-one a dated record of a decision, what was rejected, and why. It's the reason most "why is
-it like this?" questions have an answer.
+[`docs/design-log.md`](https://github.com/tomtom87/Portage/blob/main/docs/design-log.md)
+is the decision history: numbered sections, each one a dated record of a decision, what
+was rejected, and why. It's the reason most "why is it like this?" questions have an
+answer.
 
 You don't need to add a design-log section to contribute. Do add one (next number, dated,
 same shape as the existing entries) when your PR settles a question rather than just
 implementing one — a contract change, a rejected alternative worth recording, or a platform
 behavior you had to reverse-engineer. Reference existing sections as `§N`.
+
+### Building the docs locally
+
+The published documentation site (Read the Docs, MkDocs Material) lives under `docs/` and
+`mkdocs.yml` at the repo root. It pulls each gem's own README in via
+`mkdocs-include-markdown-plugin` rather than duplicating content, so most of what you'd
+edit is still each gem's own `README.md`.
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r docs/requirements.txt
+mkdocs serve       # http://127.0.0.1:8000, live-reloads on save
+mkdocs build --strict   # what CI/Read the Docs runs — fails on any broken link or nav issue
+```
+
+`docs/design-log.md` and `docs/plans/**` are excluded from the built site and from the
+generated `llms.txt`/`llms-full.txt` (see `exclude_docs` in `mkdocs.yml`) — they're
+internal working documents, not published documentation.
 
 ## Releasing (maintainers)
 

@@ -1,0 +1,158 @@
+site_name: Portage
+site_description: Ruby gems that expose a commerce backend to AI shopping agents over MCP and UCP.
+site_url: https://portage-ucp.readthedocs.io/en/latest/
+repo_url: https://github.com/tomtom87/Portage
+repo_name: tomtom87/Portage
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+
+exclude_docs: |
+  plans/
+  design-log.md
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.sections
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+
+plugins:
+  - search
+  - include-markdown:
+      rewrite_relative_urls: true
+  - llmstxt:
+      full_output: llms-full.txt
+      markdown_description: >
+        Ruby gems that expose a commerce backend to AI shopping agents over
+        MCP (Model Context Protocol) and UCP (Universal Commerce Protocol).
+      sections:
+        Getting started:
+          - index.md
+          - getting-started/quickstart.md
+          - walkthrough.md
+          - cli-usage-tutorial.md
+        Concepts:
+          - concepts/ucp-overview.md
+          - well-known-ucp.md
+          - agent-profile.md
+          - ucp-tool-gating-investigation.md
+        Guides:
+          - security-hooks.md
+          - architecture.md
+          - writing-adapters.md
+          - capability-coverage.md
+          - spec-conformance.md
+          - checking-any-store.md
+          - development.md
+          - library-usage.md
+          - adapter-requirements.md
+        CLI reference:
+          - cli-reference.md
+        Adapters:
+          - adapters/feature-matrix.md
+          - adapters/shopify.md
+          - adapters/wix.md
+          - adapters/woocommerce.md
+          - adapters/bigcommerce.md
+          - adapters/magento.md
+          - adapters/etsy.md
+          - adapters/instagram.md
+          - adapters/webmcp.md
+        Core gems:
+          - core-gems/portage-ucp.md
+          - core-gems/portage-ucp-client.md
+          - core-gems/portage-ucp-decision.md
+          - core-gems/portage-ucp-journal.md
+        Skills:
+          - skills/shop-via-ucp.md
+          - skills/serve-via-ucp.md
+        Other:
+          - security.md
+          - contributing.md
+          - changelog.md
+          - ai-agents.md
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Quickstart: getting-started/quickstart.md
+      - Walkthrough: walkthrough.md
+      - CLI usage tutorial: cli-usage-tutorial.md
+  - Concepts:
+      - UCP overview: concepts/ucp-overview.md
+      - Serving /.well-known/ucp: well-known-ucp.md
+      - Agent profile: agent-profile.md
+      - "Tool gating: troubleshooting Tool not found": ucp-tool-gating-investigation.md
+  - Guides:
+      - Security hooks: security-hooks.md
+      - Architecture: architecture.md
+      - Writing adapters: writing-adapters.md
+      - Capability coverage: capability-coverage.md
+      - Spec conformance: spec-conformance.md
+      - Checking any store: checking-any-store.md
+      - Development: development.md
+      - Library usage: library-usage.md
+      - Adapter requirements: adapter-requirements.md
+  - CLI reference: cli-reference.md
+  - Adapters:
+      - Feature matrix: adapters/feature-matrix.md
+      - Shopify: adapters/shopify.md
+      - Wix: adapters/wix.md
+      - WooCommerce: adapters/woocommerce.md
+      - BigCommerce: adapters/bigcommerce.md
+      - Magento: adapters/magento.md
+      - Etsy: adapters/etsy.md
+      - Instagram: adapters/instagram.md
+      - WebMCP: adapters/webmcp.md
+  - Core gems:
+      - portage-ucp: core-gems/portage-ucp.md
+      - portage-ucp-client: core-gems/portage-ucp-client.md
+      - portage-ucp-decision: core-gems/portage-ucp-decision.md
+      - portage-ucp-journal: core-gems/portage-ucp-journal.md
+  - Skills:
+      - shop-via-ucp: skills/shop-via-ucp.md
+      - serve-via-ucp: skills/serve-via-ucp.md
+  - Security: security.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
+  - For AI agents: ai-agents.md

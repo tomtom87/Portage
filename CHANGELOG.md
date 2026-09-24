@@ -376,7 +376,7 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   `discovery-cache.json` to remember which origins answered
   `/.well-known/ucp`, so a URL-less search doesn't re-probe the same hosts on
   every run. Both are the CLI's, and both are documented in
-  [`portage-cli`](portage-cli/README.md).
+  [`portage-cli`](https://github.com/tomtom87/Portage/blob/main/portage-cli/README.md).
 - Search-backend credentials as configuration that belongs to no adapter:
   `BRAVE_SEARCH_API_KEY`, `GOOGLE_CSE_KEY` / `GOOGLE_CSE_CX`, and
   `PORTAGE_STORES`. The per-adapter variables in the root README's
