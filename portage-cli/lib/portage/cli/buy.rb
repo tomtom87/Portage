@@ -50,9 +50,14 @@ module Portage
       #   rolling cap and velocity limit count. nil (the default) is the
       #   real ~/.portage/transactions.json, the file Dispatcher writes for
       #   own-store purchases.
+      # @param max_price [Integer, nil] the most one unit may cost, in minor
+      #   units (same as Find's). A product priced above it is never picked,
+      #   even with a --product-id; one with no price to go on still is, as
+      #   in Find, and the checkout's own total then meets the spend policy.
       # rubocop:disable Metrics/ParameterLists -- all keywords; one per flag, plus two injectable collaborators
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
-                     auto_open: nil, notify_webhook: nil, confidence_check: nil, transaction_log: nil)
+                     auto_open: nil, notify_webhook: nil, confidence_check: nil, transaction_log: nil,
+                     max_price: nil)
         # rubocop:enable Metrics/ParameterLists
         raw = url.to_s.strip
         raw = "https://#{raw}" unless raw =~ %r{\Ahttps?://}i
@@ -67,6 +72,7 @@ module Portage
         @notify_webhook = notify_webhook
         @confidence_check = confidence_check
         @transaction_log = transaction_log
+        @max_price = max_price
         @decisions = {}
       end
 
@@ -407,9 +413,10 @@ module Portage
       end
 
       def no_match_message
-        return "No product matched \"#{@query}\"." unless @product_id
+        budget = @max_price ? " at or under #{@max_price} minor units" : ""
+        return "No product matched \"#{@query}\"#{budget}." unless @product_id
 
-        "Product #{@product_id} isn't in this store's results for \"#{@query}\"."
+        "Product #{@product_id} isn't in this store's results for \"#{@query}\"#{budget}."
       end
 
       # With a --product-id, that exact product or nothing: falling back to the
@@ -421,10 +428,26 @@ module Portage
       # when an in-stock match sits right below it (confirmed live
       # 2026-09-23 on allbirds.com and billabong.com). Falls back to the top
       # hit when nothing reports stock, so the store still gets to answer.
+      #
+      # Either way, only among products within --max-price: before it
+      # reached here, `buy <url> --max-price` checked out whatever the store
+      # ranked first (confirmed live 2026-09-24: a $679.95 board on
+      # burton.com under --max-price 600).
       def select_product(products)
+        products = products.select { |product| within_max_price?(product) }
         return products.find { |product| available?(product) } || products.first unless @product_id
 
         products.find { |product| product_id_of(product) == @product_id }
+      end
+
+      # Priced the way #reconcile_checkout expects the store to charge: the
+      # variant #line_item_id_of would check out, else the product's lowest
+      # price.
+      def within_max_price?(product)
+        return true unless @max_price
+
+        price = expected_unit_price(product, line_item_id_of(product))
+        price.nil? || price <= @max_price
       end
 
       # A product with no variant availability to go on counts as buyable —

@@ -34,6 +34,18 @@ RSpec.describe Portage::Cli do
                                   yes: true, dry_run: true)
     end
 
+    it "hands --max-price to Buy too, so a url's own catalog is held to it" do
+      captured = nil
+      allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+        captured = opts
+        instance_double(Portage::Cli::Buy, call: report)
+      }
+
+      described_class.run(%w[buy shop.example --query cold --max-price 600])
+
+      expect(captured).to include(url: "shop.example", max_price: 60_000)
+    end
+
     it "prints JSON when --json is given, and strips :json before building Buy" do
       captured = nil
       allow(Portage::Cli::Buy).to receive(:new) { |**opts|

@@ -102,7 +102,10 @@ portage policy set [--per-transaction-cap N --currency CUR]
   search ranks first. If the id isn't in the results, nothing is bought.
 - `--store` — name the merchant without giving a full URL; skips the search.
 - `--max-price` — in major units (`400` means 400), compared per offer in that
-  offer's own currency. No FX conversion.
+  offer's own currency. No FX conversion. Applies per unit, to the search and
+  to the store's own catalog once one is settled (a URL, `--store`, or a
+  picked offer): nothing priced above it is checked out, even with
+  `--product-id`. A product with no price is still eligible.
 - `--limit` — how many candidate stores to probe, capped at 12.
 - `--yes` — skip the confirmation prompt before completing checkout.
 - `--dry-run` — resolve and price the order without completing checkout.

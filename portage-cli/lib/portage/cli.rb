@@ -319,7 +319,7 @@ module Portage
       parser.on("--query QUERY") { |v| parsed[:find][:query] = buy[:query] = v }
       parser.on("--store URL") { |v| parsed[:store] = v }
       parser.on("--limit N", Integer) { |v| parsed[:find][:limit] = v }
-      parser.on("--max-price N", Float) { |v| parsed[:find][:max_price] = to_minor_units(v) }
+      parser.on("--max-price N", Float) { |v| parsed[:find][:max_price] = buy[:max_price] = to_minor_units(v) }
     end
     private_class_method :add_search_options
 
