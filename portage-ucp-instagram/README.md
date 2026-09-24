@@ -120,6 +120,8 @@ Portage::Ucp::Instagram::TokenExpiredError # code 190 — the access token is ex
 
 Meta phased out native "Checkout on Instagram/Facebook" for all US merchants by August 2025, and is following through at the API level: Graph API v26.0 (July 2026) already blocks the ~47 Commerce Order Management endpoints (order retrieval/listing, line items, payments, refunds, shipments, returns, tax settings) for that reason, and **the same block extends to every supported API version — including this gem's `v21.0` — on October 27, 2026**, at which point the endpoint is removed entirely, with no replacement. `#get_order` only ever served the "Checkout on Instagram/Facebook" population in the first place (see the class-level comment on `Adapter`); after that date it has no merchants left to serve. `search_catalog`/`get_product` (Commerce Catalog) are unaffected — the sunset is Orders-specific.
 
+`#get_order` keeps working, unchanged, until the cutoff — it's deprecated, not yet removed. Each `Adapter` instance emits a one-time `Kernel#warn` the first time `#get_order` is called, pointing at this section, so a long-lived process (e.g. `exe/portage-ucp-instagram`) doesn't spam stderr on every subsequent call. After 2026-10-27 this adapter becomes **catalog + checkout-handoff only**: `search_catalog`/`get_product`/`create_checkout`/`get_checkout` are unaffected, but `#get_order` will start raising instead of returning data, and `dev.ucp.shopping.order` should no longer be advertised for this adapter — track the next major/minor release notes for the exact removal.
+
 ## Development
 
 ```bash

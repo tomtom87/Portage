@@ -49,11 +49,24 @@ module Portage
         # Checkout for the same intent.
         include Portage::Ucp::Support::Idempotency
 
+        # See README's "Meta is sunsetting native checkout": Graph API drops
+        # Commerce Order Management entirely, across every version, on
+        # 2026-10-27. `#get_order` keeps working until then and warns once
+        # per process rather than once per call, same reasoning as Ruby's own
+        # `Kernel#warn`-based deprecations — a long-lived MCP server calling
+        # this per request would otherwise spam stderr forever.
+        ORDER_DEPRECATION_NOTICE =
+          "Portage::Ucp::Instagram::Adapter#get_order is deprecated: Meta removes Commerce Order Management " \
+          "endpoints (the Graph API this method calls) across all API versions on 2026-10-27, sunsetting native " \
+          "Checkout on Instagram/Facebook. This adapter becomes catalog + checkout-handoff only after that date " \
+          "— see README.md/CHANGELOG.md.".freeze
+
         def initialize(client:, catalog_id:)
           super()
           @client = client
           @catalog_id = catalog_id
           @checkouts = {}
+          @order_deprecation_warned = false
         end
 
         def search_catalog(query:, limit:)
@@ -91,6 +104,7 @@ module Portage
         # "Checkout on Instagram/Facebook" merchants — everyone else's
         # orders live entirely outside Meta's system.
         def get_order(order_id:)
+          warn_order_deprecation
           fields = "id,order_status,items{retailer_id,product_name,quantity,price_per_unit}," \
                    "estimated_payment_details"
           node = @client.get("/#{order_id}?fields=#{fields}")
@@ -102,6 +116,13 @@ module Portage
         end
 
         private
+
+        def warn_order_deprecation
+          return if @order_deprecation_warned
+
+          @order_deprecation_warned = true
+          Kernel.warn(ORDER_DEPRECATION_NOTICE)
+        end
 
         # Follows Meta's cursor pagination — each page's `paging.next` is
         # already a complete URL built from that page's `paging.cursors.

@@ -50,6 +50,22 @@ pre-1.0, so APIs may still shift between minor versions.
 - Adds `exe/portage-ucp-instagram`, a standalone stdio MCP server (mirroring
   `portage-ucp-wix`'s), plus `examples/portage_ucp.rb` as a starting
   `PORTAGE_UCP_CONFIG` file.
+- **Fix:** `exe/portage-ucp-instagram` called `Server.build(...).start` —
+  `mcp` 0.25.0's `::MCP::Server` has no `#start`, so the exe raised
+  `NoMethodError` on every real invocation (only `exe_spec`'s test double
+  hid it). Now opens `MCP::Server::Transports::StdioTransport.new(server)`,
+  matching `portage-ucp-etsy`'s exe. `exe_spec` now shells the exe out
+  through `Open3` with a piped `initialize`/`tools/list` handshake instead
+  of doubling `Server.build`/`#start`, so this class of bug can't hide
+  behind a stub again.
+- **Deprecation:** `Adapter#get_order` now emits a one-time `Kernel#warn`
+  the first time it's called on a given `Adapter` instance, pointing at the
+  README's "Meta is sunsetting native checkout" section. No behavior change
+  yet — Meta's Commerce Order Management endpoints keep working, across
+  every Graph API version including this gem's `v21.0`, through
+  2026-10-27; this just surfaces the countdown to anyone still calling
+  `#get_order`. After that date this adapter becomes catalog +
+  checkout-handoff only.
 
 ## [0.1.4] - 2026-09-17
 
