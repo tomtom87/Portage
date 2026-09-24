@@ -36,7 +36,7 @@ end
 
 # 3. serve it over MCP
 server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
-server.start # stdio, or mount as Streamable HTTP per the `mcp` gem's own docs
+MCP::Server::Transports::StdioTransport.new(server).open # stdio; or mount as Streamable HTTP per the `mcp` gem's own docs
 ```
 
 That's a running MCP server, wired up inline. Every adapter gem also ships an
