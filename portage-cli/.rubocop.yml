@@ -51,6 +51,12 @@ Metrics/ClassLength:
     # rubocop config/lib entrypoint/version/adapter/spec_helper/conformance
     # spec) — breadth of one template file each, not a class doing too much.
     - "lib/portage/cli/generate/adapter.rb"
+    # ProxySettings resolves one config surface (docs/plans/proxy-support.md
+    # Phase 2) across many independently-precedenced fields (url, mode,
+    # ca_file, proxy_headers, no_proxy, routes, chains, forward_headers) —
+    # breadth of one small method per field's own flag > env > config.json
+    # resolution, not a class doing unrelated things.
+    - "lib/portage/cli/proxy_settings.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and

@@ -1,6 +1,7 @@
 require "portage/ucp"
 require "uri"
 require_relative "confidence_check"
+require_relative "proxy_settings"
 
 module Portage
   module Cli
@@ -16,8 +17,9 @@ module Portage
     class Doctor
       Finding = Struct.new(:check, :message, keyword_init: true)
 
-      def initialize(adapter_class: nil)
+      def initialize(adapter_class: nil, proxy_settings: ProxySettings.new)
         @adapter_class = adapter_class
+        @proxy_settings = proxy_settings
       end
 
       def call
@@ -28,6 +30,7 @@ module Portage
           payment_handlers_finding,
           decision_backend_finding,
           proxy_finding,
+          *proxy_doctor_findings,
           *capability_findings
         ].compact
       end
@@ -125,6 +128,13 @@ module Portage
         "(unparseable proxy URL)"
       end
 
+      # Phase 2's own checks against whatever ProxySettings resolved
+      # (flags/env/config.json), kept separate from proxy_finding above —
+      # see ProxyDoctor's own comment for why the two don't merge.
+      def proxy_doctor_findings
+        ProxyDoctor.new(proxy_settings: @proxy_settings).findings
+      end
+
       def payment_handlers_finding
         return unless Array(config.payment_handlers).empty?
 
@@ -160,3 +170,8 @@ module Portage
     end
   end
 end
+
+# Loaded after Doctor closes — ProxyDoctor calls Doctor::Finding.new, so
+# Doctor has to exist first (this file requires proxy_settings, not
+# proxy_doctor, at the top for exactly this reason).
+require_relative "proxy_doctor"

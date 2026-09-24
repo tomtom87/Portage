@@ -10,9 +10,18 @@ RSpec.describe Portage::Cli::Doctor do
     Portage::Ucp.instance_variable_set(:@configuration, nil)
   end
 
+  # Phase 2's own PORTAGE_PROXY* vars (docs/plans/proxy-support.md) are
+  # nulled here too, same reasoning as the http_proxy/HTTPS_PROXY pair
+  # already were — a real one set in the shell running these specs would
+  # otherwise make ProxyDoctor add findings and break the exact match below.
+  def no_proxy_env
+    { "http_proxy" => nil, "HTTP_PROXY" => nil, "https_proxy" => nil, "HTTPS_PROXY" => nil,
+      "PORTAGE_PROXY" => nil, "PORTAGE_PROXY_MODE" => nil, "PORTAGE_NO_PROXY" => nil,
+      "PORTAGE_PROXY_CA" => nil, "PORTAGE_PROXY_HEADERS" => nil }
+  end
+
   it "flags every collaborator still at its unconfigured default" do
-    with_env("PORTAGE_DECISION_BACKEND" => nil, "http_proxy" => nil, "HTTP_PROXY" => nil, "https_proxy" => nil,
-             "HTTPS_PROXY" => nil) do
+    with_env(no_proxy_env.merge("PORTAGE_DECISION_BACKEND" => nil)) do
       findings = described_class.new.call
 
       expect(findings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
@@ -28,8 +37,7 @@ RSpec.describe Portage::Cli::Doctor do
       config.payment_handlers = [{ name: "stripe" }]
     end
 
-    with_env("PORTAGE_DECISION_BACKEND" => "jev", "JEV_API_KEY" => "test-key", "http_proxy" => nil,
-             "HTTP_PROXY" => nil, "https_proxy" => nil, "HTTPS_PROXY" => nil) do
+    with_env(no_proxy_env.merge("PORTAGE_DECISION_BACKEND" => "jev", "JEV_API_KEY" => "test-key")) do
       expect(described_class.new.call).to be_empty
     end
   end

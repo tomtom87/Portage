@@ -11,6 +11,7 @@ require_relative "cli/find"
 require_relative "cli/compare"
 require_relative "cli/history"
 require_relative "cli/payment_methods"
+require_relative "cli/proxy_settings"
 require_relative "cli/doctor"
 require_relative "cli/generate/adapter"
 require_relative "cli/generate/agent_profile"
@@ -49,6 +50,12 @@ module Portage
              portage setup [--require FILE] [--adapter CLASS_NAME] [--json]      (alias for doctor)
              portage generate adapter NAME [--dir DIR]
              portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
+             portage --version
+
+           proxy flags (buy/find/compare/doctor/payment enroll):
+             [--proxy URL] [--proxy-mode forward|gateway] [--proxy-header "Name: value"]
+             [--no-proxy HOSTS] [--proxy-route ROUTE=URL|direct] [--proxy-chain URL,URL,...]
+             [--proxy-passthrough HEADER] [--proxy-ca FILE] [--no-env-proxy]
     USAGE
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
@@ -56,15 +63,46 @@ module Portage
                  "doctor" => :run_doctor, "configure" => :run_doctor, "setup" => :run_doctor,
                  "generate" => :run_generate }.freeze
 
+    VERSION_FLAGS = %w[--version -v version].freeze
+
     # @param argv [Array<String>]
     # @return [Integer] process exit code
     def self.run(argv)
       command, *rest = argv
+      return run_version if VERSION_FLAGS.include?(command)
       return send(COMMANDS[command], rest) if COMMANDS.key?(command)
 
       warn USAGE
       1
     end
+
+    # So a packaged install (Homebrew's `test do` block, `portage doctor`)
+    # can confirm which release it's running without hitting the network.
+    def self.run_version
+      puts VERSION
+      0
+    end
+    private_class_method :run_version
+
+    # --- proxy (docs/plans/proxy-support.md Phase 2) ---
+
+    # Resolves this command's `--proxy*` flags/env/config.json into a
+    # ProxyConfig and installs it as the process-wide default every
+    # Support::Connection.start call (buy/find/compare/payment/doctor alike)
+    # already reads unless it's handed its own `proxy:` — see ProxySettings'
+    # own comment for why. A bad flag or a malformed/protected-header
+    # config.json surfaces here as a clean message, never a raw core
+    # exception.
+    # @return [ProxySettings, nil] nil on a config error (already reported).
+    def self.apply_proxy_settings(proxy_flags)
+      settings = ProxySettings.new(flags: proxy_flags || {})
+      Portage::Ucp::Support::ProxyConfig.current = settings.resolve
+      settings
+    rescue ProxySettings::ConfigError => e
+      warn "portage: #{e.message}"
+      nil
+    end
+    private_class_method :apply_proxy_settings
 
     # --- find ---
 
@@ -73,6 +111,8 @@ module Portage
       return 1 unless options
 
       json = options.delete(:json)
+      return 1 unless apply_proxy_settings(options.delete(:proxy))
+
       report = Find.new(**options).call
       record_find(report)
       puts json ? JSON.pretty_generate(report) : format_find(report)
@@ -99,11 +139,13 @@ module Portage
     private_class_method :parse_find_options
 
     def self.find_option_parser(opts)
+      opts[:proxy] = {}
       OptionParser.new do |parser|
         parser.on("--query QUERY") { |v| opts[:query] = v }
         parser.on("--limit N", Integer) { |v| opts[:limit] = v }
         parser.on("--max-price N", Float) { |v| opts[:max_price] = to_minor_units(v) }
         parser.on("--json") { opts[:json] = true }
+        ProxySettings.add_options(parser, opts[:proxy])
       end
     end
     private_class_method :find_option_parser
@@ -122,6 +164,8 @@ module Portage
 
       json = options.delete(:json)
       url = options.delete(:url)
+      return 1 unless apply_proxy_settings(options.delete(:proxy))
+
       report = Compare.new(origin_url: url, **options).call
       # Recorded as a search, not a purchase — compare never checks out. The
       # query string names the compare so `portage history list` doesn't
@@ -148,12 +192,14 @@ module Portage
     private_class_method :parse_compare_options
 
     def self.compare_option_parser(opts)
+      opts[:proxy] = {}
       OptionParser.new do |parser|
         parser.on("--product-id ID") { |v| opts[:origin_product_id] = v }
         parser.on("--id VALUE") { |v| opts[:identity] << v }
         parser.on("--results N", Integer) { |v| opts[:results] = v }
         parser.on("--max-price N", Float) { |v| opts[:max_price] = to_minor_units(v) }
         parser.on("--json") { opts[:json] = true }
+        ProxySettings.add_options(parser, opts[:proxy])
       end
     end
     private_class_method :compare_option_parser
@@ -163,6 +209,7 @@ module Portage
     def self.run_buy(argv)
       parsed = parse_buy_options(argv)
       return 1 unless parsed
+      return 1 unless apply_proxy_settings(parsed[:proxy])
 
       url = parsed[:buy][:url] || parsed[:store]
       parsed[:confidence_check] = confidence_check(parsed, url)
@@ -277,7 +324,10 @@ module Portage
       buy = { url: url, qty: 1, yes: false, dry_run: false }
       parsed = { buy: buy, find: {}, confidence: {} }
       json = argv.include?("--json")
-      buy_option_parser(buy, parsed).parse!(argv)
+      parsed[:proxy] = {}
+      parser = buy_option_parser(buy, parsed)
+      ProxySettings.add_options(parser, parsed[:proxy])
+      parser.parse!(argv)
       buy[:query] ||= ""
       return parsed if url || !buy[:query].strip.empty?
 
@@ -456,13 +506,14 @@ module Portage
     private_class_method :run_payment_mutate
 
     def self.parse_payment_enroll_options(argv)
-      opts = { scope_merchants: [] }
+      opts = { scope_merchants: [], proxy: {} }
       OptionParser.new do |parser|
         parser.on("--label NAME") { |v| opts[:label] = v }
         parser.on("--json") { opts[:json] = true }
         parser.on("--scope-merchant HOST") { |v| opts[:scope_merchants] << v }
         parser.on("--scope-max-amount N", Integer) { |v| opts[:scope_max_amount] = v }
         parser.on("--scope-currency CUR") { |v| opts[:scope_currency] = v }
+        ProxySettings.add_options(parser, opts[:proxy])
       end.parse!(argv)
       opts[:url] = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
       opts
@@ -487,6 +538,7 @@ module Portage
         warn USAGE
         return 1
       end
+      return 1 unless apply_proxy_settings(opts[:proxy])
 
       result = PaymentMethods.new.enroll(opts[:url], label: opts[:label],
                                                      scope: payment_enroll_scope(opts)) do |setup_url|
@@ -614,11 +666,12 @@ module Portage
     # --- doctor ---
 
     def self.parse_doctor_options(argv)
-      opts = {}
+      opts = { proxy: {} }
       OptionParser.new do |parser|
         parser.on("--require FILE") { |v| opts[:require] = v }
         parser.on("--adapter CLASS_NAME") { |v| opts[:adapter] = v }
         parser.on("--json") { opts[:json] = true }
+        ProxySettings.add_options(parser, opts[:proxy])
       end.parse!(argv)
       opts
     end
@@ -628,8 +681,10 @@ module Portage
       opts = parse_doctor_options(argv)
       require File.expand_path(opts[:require]) if opts[:require]
       adapter_class = opts[:adapter] && Object.const_get(opts[:adapter])
+      proxy_settings = apply_proxy_settings(opts[:proxy])
+      return 1 unless proxy_settings
 
-      findings = Doctor.new(adapter_class: adapter_class).call
+      findings = Doctor.new(adapter_class: adapter_class, proxy_settings: proxy_settings).call
       puts opts[:json] ? JSON.pretty_generate(findings.map(&:to_h)) : format_doctor(findings)
       findings.empty? ? 0 : 1
     end
