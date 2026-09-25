@@ -106,28 +106,38 @@ Full reference, flags, and env vars: [`portage-cli/README.md`](portage-cli/READM
 
 ## Running behind a proxy
 
-No Portage-specific proxy config exists yet ([`docs/plans/proxy-support.md`](docs/plans/proxy-support.md)
-tracks the full design), but Ruby's own standard `http_proxy` env var already works for
-outbound traffic, with caveats worth knowing before you rely on it:
+Portage-specific proxy config (`--proxy*` flags, `PORTAGE_PROXY*` env vars,
+`~/.portage/config.json`'s `"proxy"` section, and a fail-closed inbound-trust seam
+for a reverse proxy in front of the MCP/WebMCP endpoints) is implemented —
+[`docs/plans/proxy-support.md`](docs/plans/proxy-support.md) tracks the full design
+across its phases, and [`docs/proxy.md`](docs/proxy.md) walks through corporate
+egress, a rotating residential pool, an API gateway, mitmproxy for debugging, and
+nginx/Cloudflare in front of Portage's own endpoints. The CLI flags/env vars
+themselves are documented in [`portage-cli/README.md`](portage-cli/README.md#proxy).
 
-- **Set `http_proxy` (or `HTTP_PROXY`), not `HTTPS_PROXY`.** Every raw `Net::HTTP` call
+Below that Portage-specific layer, Ruby's own standard `http_proxy` env var is
+still the fallback for any route nothing above configures, with caveats worth
+knowing before you rely on it alone:
+
+- **`https_proxy`/`HTTPS_PROXY` is honored correctly as of Phase 1.** Every call
   site in `portage-ucp`, `portage-cli`, and the adapter gems (`Support::HttpClient`,
   `Check`, `Support::TokenExchange`, `buy`/`find`/`payment`'s homepage probes,
-  `search_backends`, `notifier`, the Shopify and Instagram adapters) resolves its proxy
-  from Ruby stdlib's `Net::HTTP.start(..., p_addr: :ENV)` default, which **only ever reads
-  `http_proxy`/`HTTP_PROXY` — never `https_proxy`/`HTTPS_PROXY`, even for an `https://`
-  target.** That single variable is used as the proxy for both `http://` and `https://`
-  traffic (the `https://` case tunnels through it via `CONNECT`). Setting only
-  `HTTPS_PROXY` silently proxies nothing for these call sites — a real, confirmed gap
-  against the usual convention, tracked as Phase 1 (a `Support::Connection` seam that
-  reads its own config, not stdlib's env-proxy quirks).
-- **`portage-ucp-client`'s own UCP/MCP tool calls are the exception.** They go through
-  Faraday (via the `mcp` gem's HTTP transport), which resolves the proxy from the
-  *target's own scheme* — `https_proxy` for an `https://` endpoint, `http_proxy` for an
-  `http://` one, no cross-fallback either way. `Client.discover`'s manifest GET, though,
-  is a bare `Net::HTTP.get_response` call and follows the `http_proxy`-only rule above —
-  so a single `discover` call can have its manifest fetch and its tool calls pick up
-  *different* env vars.
+  `search_backends`, `notifier`, the Shopify and Instagram adapters) now goes
+  through `Support::Connection`, which resolves `https_proxy`/`HTTPS_PROXY` for an
+  `https://` target and `http_proxy`/`HTTP_PROXY` for an `http://` one — unlike
+  Ruby stdlib's own `Net::HTTP.start(..., p_addr: :ENV)` default, which hardcodes
+  an `http_proxy`-only lookup for *any* target scheme (the bug Phase 0 confirmed;
+  see the design log for the full write-up). This env fallback only applies to a
+  route nothing else (a flag, `PORTAGE_PROXY*`, or config.json) has configured at
+  all — see "Portage-specific proxy config" above.
+- **One exception remains: `Client.fetch_manifest`** (`portage-ucp-client`), the
+  manifest GET `Client.discover` makes before it ever opens an MCP session, is
+  still a bare `Net::HTTP.get_response` and so still follows the old
+  `http_proxy`-only rule. `Client.discover`'s own tool calls, once connected, go
+  through Faraday (via the `mcp` gem's HTTP transport) and resolve the proxy from
+  the *target's own scheme* independently — so a single `discover` call can have
+  its manifest fetch and its tool calls pick up *different* proxies. See
+  `docs/proxy.md`'s "Known gaps" section.
 - **Credentials in the proxy URL work.** `http://user:pass@proxy.internal:3128` reaches
   the proxy as `Proxy-Authorization: Basic …`, for both Net::HTTP and Faraday.
 - **`no_proxy`/`NO_PROXY` matching** is suffix-based: a bare `no_proxy=example.com` bypasses

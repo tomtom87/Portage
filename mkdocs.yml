@@ -87,6 +87,7 @@ plugins:
           - development.md
           - library-usage.md
           - adapter-requirements.md
+          - proxy.md
         CLI reference:
           - cli-reference.md
         Adapters:
@@ -134,6 +135,7 @@ nav:
       - Development: development.md
       - Library usage: library-usage.md
       - Adapter requirements: adapter-requirements.md
+      - Running behind a proxy: proxy.md
   - CLI reference: cli-reference.md
   - Adapters:
       - Feature matrix: adapters/feature-matrix.md
