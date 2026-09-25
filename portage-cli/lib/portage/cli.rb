@@ -411,6 +411,7 @@ module Portage
       parser = buy_option_parser(buy, parsed)
       ProxySettings.add_options(parser, parsed[:proxy])
       parser.parse!(argv)
+      url = reinterpret_bare_query(url, buy, parsed)
       buy[:query] ||= ""
       return parsed if url || !buy[:query].strip.empty?
 
@@ -420,6 +421,24 @@ module Portage
       invalid_buy_option(e.message, url: url, json: json)
     end
     private_class_method :parse_buy_options
+
+    # Bare arg is normally the store URL (`portage buy <url> --query "..."`),
+    # but `portage buy "coffee"` — no --query, and "coffee" doesn't look like
+    # a URL/domain — means the same thing as `portage buy --query "coffee"`:
+    # search first, then buy from whatever the caller picks. Only reinterpret
+    # when no --query was already given, so `portage buy shop.com --query
+    # "coffee"` keeps treating "shop.com" as the store.
+    def self.reinterpret_bare_query(url, buy, parsed)
+      return url unless url && buy[:query].to_s.strip.empty? && !url_like?(url)
+
+      buy[:url] = nil
+      parsed[:find][:query] = buy[:query] = url
+      nil
+    end
+    private_class_method :reinterpret_bare_query
+
+    def self.url_like?(text) = text.match?(%r{\A[a-z][a-z0-9+.-]*://}i) || text.include?(".")
+    private_class_method :url_like?
 
     def self.buy_option_parser(buy, parsed)
       OptionParser.new do |parser|

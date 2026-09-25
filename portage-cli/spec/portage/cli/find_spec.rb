@@ -35,6 +35,18 @@ RSpec.describe Portage::Cli::Find do
     expect(report[:message]).to include("duckduckgo")
   end
 
+  it "nudges toward a real search backend when duckduckgo is the only one running" do
+    report = find(backends: [backend("duckduckgo", [])]).call
+
+    expect(report[:message]).to include("BRAVE_SEARCH_API_KEY", "GOOGLE_CSE_KEY", "portage doctor")
+  end
+
+  it "skips the nudge once a keyed backend is also running, empty or not" do
+    report = find(backends: [backend("duckduckgo", []), backend("brave", [])]).call
+
+    expect(report[:message]).not_to include("BRAVE_SEARCH_API_KEY")
+  end
+
   it "tells you to configure a backend when none are available" do
     report = find(backends: []).call
 

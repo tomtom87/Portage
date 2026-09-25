@@ -189,6 +189,41 @@ RSpec.describe Portage::Cli::Doctor do
     end
   end
 
+  describe "the search backend used by find/buy without a url" do
+    def no_key_env
+      { "BRAVE_SEARCH_API_KEY" => nil, "GOOGLE_CSE_KEY" => nil, "GOOGLE_CSE_CX" => nil, "PORTAGE_STORES" => nil }
+    end
+
+    def search_backend_finding(env = {})
+      with_env(no_key_env.merge(env)) do
+        allow(Portage::Cli::SearchBackends::Allowlist).to receive(:new)
+          .and_return(instance_double(Portage::Cli::SearchBackends::Allowlist, available?: false))
+        described_class.new.call.find { |f| f.check == "search_backend" }
+      end
+    end
+
+    it "flags a duckduckgo-only setup as an info finding, not a warning" do
+      finding = search_backend_finding
+
+      expect(finding.level).to eq("info")
+      expect(finding.message).to include("BRAVE_SEARCH_API_KEY", "GOOGLE_CSE_KEY", "GOOGLE_CSE_CX",
+                                         "stores.yml")
+    end
+
+    it "says nothing once a keyed backend is configured" do
+      expect(search_backend_finding("BRAVE_SEARCH_API_KEY" => "test-key")).to be_nil
+    end
+
+    it "says nothing once an allowlist is in play" do
+      with_env(no_key_env) do
+        allow(Portage::Cli::SearchBackends::Allowlist).to receive(:new)
+          .and_return(instance_double(Portage::Cli::SearchBackends::Allowlist, available?: true))
+
+        expect(described_class.new.call.find { |f| f.check == "search_backend" }).to be_nil
+      end
+    end
+  end
+
   describe "the configured User-Agent" do
     before { allow(Portage::Cli::Config).to receive(:load).and_return(Portage::Cli::Config.new(data: {})) }
 

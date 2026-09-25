@@ -213,12 +213,31 @@ module Portage
         names = @backends.map(&:name)
         return no_backends_message if names.empty?
 
-        "No candidate stores came back from #{names.join(', ')} for \"#{@query}\"."
+        "No candidate stores came back from #{names.join(', ')} for \"#{@query}\".#{keyed_backend_hint}"
       end
 
       def no_backends_message
         "No search backend available — set BRAVE_SEARCH_API_KEY, GOOGLE_CSE_KEY/GOOGLE_CSE_CX, " \
           "or list stores in ~/.portage/stores.yml."
+      end
+
+      # DuckDuckGo's free Instant Answer API is the keyless default, but it
+      # only answers *entity* queries ("burton snowboards" → burton.com) —
+      # open-ended shopping terms like "coffee" or "iphone" resolve to
+      # nothing, every time, regardless of what those stores actually stock
+      # (see SearchBackends::DuckDuckGo's own comment). Names alone (e.g.
+      # `no_candidates_message`) don't say *why* nothing came back, so this
+      # spells out the fix rather than leaving the caller to guess whether
+      # it's a network problem or a backend limitation. Only fires when no
+      # keyed backend (Brave/Google CSE) ran alongside it — one of those
+      # already covered the query with real web search, so there's nothing
+      # to suggest.
+      def keyed_backend_hint
+        return "" unless SearchBackends.only_duckduckgo?(@backends)
+
+        " DuckDuckGo's free API only resolves specific brand/product names, not open-ended search — " \
+          "set BRAVE_SEARCH_API_KEY or GOOGLE_CSE_KEY/GOOGLE_CSE_CX for real web search " \
+          "(see `portage doctor`)."
       end
 
       def summary(candidates, stores, offers)
