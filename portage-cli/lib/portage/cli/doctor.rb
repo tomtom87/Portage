@@ -5,6 +5,7 @@ require_relative "user_agent"
 require_relative "proxy_settings"
 require_relative "shipping_profile"
 require_relative "dot_env"
+require_relative "search_backends"
 
 module Portage
   module Cli
@@ -49,6 +50,7 @@ module Portage
           dot_env_finding,
           *seller_findings,
           decision_backend_finding,
+          search_backend_finding,
           user_agent_finding,
           shipping_finding,
           proxy_finding,
@@ -121,6 +123,30 @@ module Portage
                                message: "#{problem} — until then every `portage buy --yes` is held for the shopper.")
       rescue ArgumentError => e
         Finding.new(check: "decision_backend", message: e.message)
+      end
+
+      # `portage buy`/`portage find` with no URL/--store depend on a search
+      # backend to name candidate stores in the first place. Every install
+      # gets DuckDuckGo's free Instant Answer API for free, but it only
+      # resolves *entity* queries ("burton snowboards" → burton.com) — an
+      # open-ended query ("coffee", "iphone", "screens") comes back empty
+      # every time, regardless of what any store actually stocks (see
+      # SearchBackends::DuckDuckGo). That's easy to mistake for "find is
+      # broken" rather than "no real web search is configured", so this
+      # flags it up front rather than letting every URL-less search rediscover
+      # it one confusing empty result at a time.
+      def search_backend_finding
+        return if SearchBackends::Allowlist.new.available?
+
+        backends = SearchBackends.default
+        return unless SearchBackends.only_duckduckgo?(backends)
+
+        Finding.new(check: "search_backend", level: "info",
+                    message: "Only DuckDuckGo's free Instant Answer API is active for `portage find`/" \
+                             "`portage buy` without a URL — it resolves specific brand/product names, not " \
+                             "open-ended search terms. Set BRAVE_SEARCH_API_KEY or GOOGLE_CSE_KEY+" \
+                             "GOOGLE_CSE_CX for real web search, or list known stores in " \
+                             "~/.portage/stores.yml.")
       end
 
       # PORTAGE_USER_AGENT / config.json's "user_agent" (UserAgent) is sent

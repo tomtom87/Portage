@@ -268,6 +268,30 @@ RSpec.describe Portage::Cli do
     it "still needs a url or a query" do
       expect { expect(described_class.run(["buy", "--yes"])).to eq(1) }.to output.to_stderr
     end
+
+    it "treats a bare positional arg with no --query as the search query, not a store URL" do
+      find_query = nil
+      allow(Portage::Cli::Find).to receive(:new) { |**opts|
+        find_query = opts[:query]
+        instance_double(Portage::Cli::Find, call: found)
+      }
+      allow(Portage::Cli::Buy).to receive(:new)
+
+      capture_stdout { described_class.run(%w[buy coffee]) }
+
+      expect(find_query).to eq("coffee")
+      expect(Portage::Cli::Buy).not_to have_received(:new)
+    end
+
+    it "still reads a URL-looking bare arg as the store, not the query" do
+      captured = stub_buy
+      allow(Portage::Cli::Find).to receive(:new)
+
+      capture_stdout { described_class.run(["buy", "shop.example", "--query", "cold", "--yes"]) }
+
+      expect(captured.call).to include(url: "shop.example", query: "cold")
+      expect(Portage::Cli::Find).not_to have_received(:new)
+    end
   end
 
   describe "history" do

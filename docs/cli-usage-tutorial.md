@@ -74,6 +74,12 @@ Same search-and-probe pipeline as `find`, but shaped like a real `buy` call
 so you can see the price/path resolution `buy` would use — `--dry-run` stops
 before checkout, no charge either way.
 
+`--query` is optional when the only positional argument doesn't look like a
+URL (no `scheme://`, no `.` in it) — `portage buy "usb-c cable"` is
+shorthand for `portage buy --query "usb-c cable"`. A bare arg that *does*
+look like a URL/domain (`shop.com`, `https://shop.com`) is still read as the
+store to buy from, same as always.
+
 ```bash
 portage buy https://some-ucp-store.example --query "hoodie" --dry-run
 ```
@@ -146,6 +152,18 @@ DuckDuckGo-only is a keyless fallback, not a real search engine. To make
 - **Seed `~/.portage/stores.yml`** (bare YAML array of URLs) or
   `PORTAGE_STORES` (comma-separated) — costs no network call, always
   considered regardless of query, good for stores you already trust.
+
+`portage doctor` flags a DuckDuckGo-only setup itself (an info-level
+`search_backend` finding, doesn't fail the run) so this is visible before
+you hit a confusing empty result, and an empty `find`/`buy --query` result
+now names the fix inline:
+
+```
+No candidate stores came back from duckduckgo for "usb-c cable". DuckDuckGo's
+free API only resolves specific brand/product names, not open-ended search —
+set BRAVE_SEARCH_API_KEY or GOOGLE_CSE_KEY/GOOGLE_CSE_CX for real web search
+(see `portage doctor`).
+```
 
 All of these, and the `PORTAGE_SHIP_*` address, are listed in the repo's
 `.env.example`.

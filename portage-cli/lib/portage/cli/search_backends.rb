@@ -37,6 +37,15 @@ module Portage
         [Allowlist.new, DuckDuckGo.new, Brave.new, GoogleCse.new].select(&:available?)
       end
 
+      # True when the only thing standing between the caller and a real web
+      # search is a missing API key — i.e. DuckDuckGo's entity-only Instant
+      # Answer API is running solo, with no allowlist and no keyed backend
+      # (Brave/Google CSE) to cover the open-ended queries it can't answer.
+      # Used to decide whether "no candidates" is worth a nudge to set
+      # BRAVE_SEARCH_API_KEY / GOOGLE_CSE_KEY+GOOGLE_CSE_CX (see Find and
+      # Doctor) rather than a plain "nothing found".
+      def self.only_duckduckgo?(backends) = backends.map(&:name) == ["duckduckgo"]
+
       def self.get_json(uri, params: {}, headers: {})
         uri = uri.dup
         uri.query = URI.encode_www_form(params) unless params.empty?

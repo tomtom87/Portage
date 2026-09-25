@@ -42,8 +42,9 @@ portage doctor
 portage find --query "burton snowboards" --json
 
 # No URL: lists candidate offers, and (in a terminal) lets you pick one to
-# price out with --dry-run — no charge either way.
-portage buy --query "burton snowboards" --max-price 600 --dry-run --json
+# price out with --dry-run — no charge either way. --query is optional here:
+# a bare arg that doesn't look like a URL/domain is read as the query.
+portage buy "burton snowboards" --max-price 600 --dry-run --json
 
 # Have a URL? Skip search — goes straight to its /.well-known/ucp manifest.
 portage buy https://some-ucp-store.example --query "hoodie" --yes --payment-token "$TOKEN"
