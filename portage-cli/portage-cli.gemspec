@@ -28,6 +28,9 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
+  # portage-console's REPL. A default gem through Ruby 3.4 but only a bundled
+  # gem from 4.0 on, so it has to be declared to load under Homebrew's Ruby.
+  spec.add_dependency "irb", ">= 1.6"
   spec.add_dependency "portage-ucp", "~> 0.9"
   spec.add_dependency "portage-ucp-client", "~> 0.6", ">= 0.6.2"
   spec.add_dependency "portage-ucp-journal", "~> 0.1"
