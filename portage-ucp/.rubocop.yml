@@ -69,6 +69,12 @@ Metrics/ParameterLists:
     # same one-keyword-per-injectable rationale as dispatcher.rb above, which
     # journal: (§37) now shares.
     - "lib/portage/ucp/mcp/server.rb"
+    # WebhookEndpoint#initialize's trusted_proxies:/passthrough_headers:/
+    # passthrough_forwarded: (docs/plans/proxy-support.md Phase 3) are three
+    # more independently-defaultable knobs alongside the four it already
+    # had — same one-keyword-per-config-field rationale as manifest.rb
+    # above, not a sign the method needs splitting.
+    - "lib/portage/ucp/rack/webhook_endpoint.rb"
 
 Style/HashSlice:
   Enabled: false
@@ -128,6 +134,13 @@ Metrics/ClassLength:
     # (§9a/Phase 0-3, order-ledger.md, storage-abstraction-journal.md), not
     # unrelated responsibilities piling up.
     - "lib/portage/ucp/dispatcher.rb"
+    # ForwardedRequest (docs/plans/proxy-support.md Phase 3) covers one
+    # cohesive job — making sense of X-Forwarded-*/Forwarded from a trusted
+    # peer — across several small, independently-testable accessors
+    # (client_ip, scheme, host, own_origin, passthrough_headers) plus their
+    # private RFC 7239/X-Forwarded-For parsing helpers. Breadth across one
+    # protocol's fields, not unrelated responsibilities piling up.
+    - "lib/portage/ucp/rack/forwarded_request.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:
