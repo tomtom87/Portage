@@ -1,0 +1,211 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Renders the Formula/portage.rb for the tomtom87/homebrew-portage tap: every
+# gem `portage` needs at runtime — portage-cli itself, its own transitive
+# dependencies, and every first-party adapter/webmcp/decision gem bundled by
+# default (docs/plans/homebrew-distribution.md, "Bundle all first-party
+# adapters") — pinned to an exact version with a sha256 fetched from
+# rubygems.org. No hand-maintained resource list: re-run this after any
+# bundled gem is released and the formula's `resource` blocks follow.
+#
+# Usage: script/homebrew-formula [--out PATH] [--latest-published]
+#
+# Writes to stdout unless --out is given. By default first-party gems are
+# pinned to this checkout's version.rb (run it right after a release);
+# --latest-published takes every gem's newest rubygems.org release instead,
+# for a checkout that has already moved past the last release.
+#
+# Stdlib only (rubygems, net/http, json, erb) so this runs with just
+# `ruby script/homebrew-formula` — no Bundler, no third-party gems — since
+# it also has to run unmodified from Homebrew's own CI checkout.
+
+require "rubygems"
+require "net/http"
+require "fileutils"
+require "uri"
+require "json"
+require "erb"
+require "optparse"
+
+ROOT = File.expand_path("..", __dir__)
+
+# The gem this repo builds, keyed by the directory (== gem name) it lives
+# in. portage-cli is the formula's entry point; the rest are bundled
+# unconditionally because none of them pull in a third-party dependency
+# portage-cli doesn't already need (see the plan's Context section).
+FIRST_PARTY_GEMS = %w[
+  portage-cli
+  portage-ucp
+  portage-ucp-client
+  portage-ucp-journal
+  portage-ucp-webmcp
+  portage-ucp-decision
+  portage-ucp-shopify
+  portage-ucp-wix
+  portage-ucp-woocommerce
+  portage-ucp-bigcommerce
+  portage-ucp-magento
+  portage-ucp-etsy
+  portage-ucp-instagram
+].freeze
+
+# Roots of the dependency walk: portage-cli plus every gem it doesn't
+# hard-depend on but that the formula bundles anyway (adapters, webmcp,
+# decision). Walking from these covers the same ground as walking from
+# portage-cli alone would if it declared them all as dependencies.
+BUNDLE_ROOTS = (FIRST_PARTY_GEMS - %w[portage-ucp portage-ucp-client portage-ucp-journal]).freeze
+
+MAIN_GEM = "portage-cli"
+
+RUBYGEMS_API = "https://rubygems.org"
+
+# One pinned gem: exact version plus its rubygems.org sha256.
+Resolved = Struct.new(:version, :sha256, keyword_init: true)
+
+def http_get_json(path)
+  uri = URI("#{RUBYGEMS_API}#{path}")
+  response = Net::HTTP.get_response(uri)
+  raise "GET #{uri} failed: #{response.code} #{response.message}" unless response.is_a?(Net::HTTPSuccess)
+
+  JSON.parse(response.body)
+end
+
+# All published (non-prerelease, non-yanked) *pure-Ruby* ("ruby" platform)
+# versions of a rubygems.org gem, each a Hash with at least "number" and
+# "sha". Some gems (bigdecimal, json, ...) also publish per-platform
+# variants (java, x86_64-linux, ...) under the *same* version number with
+# a *different* sha256 — installing via a plain `gem install NAME` (no
+# --platform) always resolves the "ruby" one, and `gem install --install-dir`
+# in the formula does the same, so that's the only sha256 a downloaded
+# `.gem` will ever actually match.
+def rubygems_versions(name)
+  http_get_json("/api/v1/versions/#{name}.json")
+    .reject { |v| v["prerelease"] || v["yanked"] }
+    .select { |v| v["platform"] == "ruby" }
+end
+
+def rubygems_runtime_deps(name, version)
+  detail = http_get_json("/api/v2/rubygems/#{name}/versions/#{version}.json")
+  detail.fetch("dependencies", {}).fetch("runtime", [])
+end
+
+def first_party_gemspec(name)
+  Gem::Specification.load(File.join(ROOT, name, "#{name}.gemspec")) ||
+    raise("could not load #{name}.gemspec")
+end
+
+# Picks the highest published version of `name` satisfying every
+# requirement string collected for it so far, aborting loudly on a
+# conflict rather than silently picking something that might not work —
+# this only bundles a handful of well-behaved gems, so a real conflict
+# here means something needs a human to look at it, not a resolver.
+def pick_third_party_version(name, requirements)
+  # rubygems.org hands back comma-joined requirement strings (e.g.
+  # ">= 2.0, < 3.5"); Gem::Requirement wants each clause split out.
+  req = Gem::Requirement.new(requirements.flat_map { |r| r.split(",").map(&:strip) })
+  candidates = rubygems_versions(name).select { |v| req.satisfied_by?(Gem::Version.new(v["number"])) }
+  raise "no published version of #{name} satisfies #{requirements.inspect}" if candidates.empty?
+
+  candidates.max_by { |v| Gem::Version.new(v["number"]) }
+end
+
+# Walks the runtime-dependency graph from BUNDLE_ROOTS, resolving every
+# gem (first- and third-party alike) to one exact version + sha256.
+# First-party versions come from this checkout's own version.rb (the
+# source of truth for what's about to ship); third-party versions are
+# resolved against rubygems.org, intersecting every requirement collected
+# for that gem across all of its requesters.
+class Resolver
+  def initialize(latest_published: false)
+    @latest_published = latest_published
+    @resolved = {}
+    @third_party_requirements = Hash.new { |h, k| h[k] = [] }
+  end
+
+  def resolve!(root_names)
+    root_names.each do |name|
+      @latest_published ? visit_third_party(name, ">= 0") : visit_first_party(name)
+    end
+    @resolved
+  end
+
+  private
+
+  def visit_first_party(name)
+    return if @resolved.key?(name)
+
+    spec = first_party_gemspec(name)
+    version = spec.version.to_s
+    @resolved[name] = Resolved.new(version: version, sha256: nil)
+    fetch_and_fill_sha!(name, version)
+
+    spec.runtime_dependencies.each do |dep|
+      if FIRST_PARTY_GEMS.include?(dep.name)
+        visit_first_party(dep.name)
+      else
+        # Gem::Requirement#to_s joins multi-clause requirements with " " (e.g.
+        # ">= 2.0 < 3.5" instead of ">= 2.0, < 3.5"); as_list keeps them
+        # separate so downstream comma-splitting doesn't need to know which
+        # format it's looking at.
+        visit_third_party(dep.name, dep.requirement.as_list.join(", "))
+      end
+    end
+  end
+
+  def visit_third_party(name, requirement_str)
+    @third_party_requirements[name] << requirement_str
+    return if @resolved.key?(name) && requirement_satisfied?(name, requirement_str)
+
+    best = pick_third_party_version(name, @third_party_requirements[name])
+    @resolved[name] = Resolved.new(version: best["number"], sha256: best["sha"])
+
+    rubygems_runtime_deps(name, best["number"]).each do |dep|
+      visit_third_party(dep["name"], dep["requirements"])
+    end
+  end
+
+  def requirement_satisfied?(name, requirement_str)
+    req = Gem::Requirement.new(requirement_str.split(",").map(&:strip))
+    req.satisfied_by?(Gem::Version.new(@resolved[name].version))
+  end
+
+  # First-party gems are pinned by local version.rb, not by rubygems.org's
+  # resolver, but the formula still needs their published sha256 (the
+  # non-negotiable "pinned and verified" constraint applies to every
+  # resource, not just third-party ones).
+  def fetch_and_fill_sha!(name, version)
+    match = rubygems_versions(name).find { |v| v["number"] == version }
+    raise "#{name} #{version} (from #{name}/lib/**/version.rb) isn't published on rubygems.org yet — " \
+          "publish it first, then re-run this script" unless match
+
+    @resolved[name].sha256 = match["sha"]
+  end
+end
+
+def gem_url(name, version)
+  "#{RUBYGEMS_API}/gems/#{name}-#{version}.gem"
+end
+
+out_path = nil
+latest_published = false
+OptionParser.new do |opts|
+  opts.on("--out PATH", "Write the formula here instead of stdout") { |v| out_path = v }
+  opts.on("--latest-published", "Pin first-party gems to their newest rubygems.org release, " \
+                                "not this checkout's version.rb") { latest_published = true }
+end.parse!(ARGV)
+
+resolved = Resolver.new(latest_published: latest_published).resolve!(BUNDLE_ROOTS)
+main = resolved.fetch(MAIN_GEM)
+resources = resolved.reject { |name, _| name == MAIN_GEM }.sort_by { |name, _| name }
+
+template = File.read(File.join(__dir__, "templates", "portage.rb.erb"))
+rendered = ERB.new(template, trim_mode: "-").result(binding)
+
+if out_path
+  FileUtils.mkdir_p(File.dirname(out_path))
+  File.write(out_path, rendered)
+  warn "Wrote #{out_path} (#{MAIN_GEM} #{main.version}, #{resources.size} bundled resources)"
+else
+  $stdout.write(rendered)
+end

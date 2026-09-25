@@ -6,6 +6,16 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `portage --version` (also `-v` and `portage version`) prints the gem's
+  version and exits 0. Needed so a packaged install — the Homebrew
+  formula's offline `test do` block, or anyone else scripting around a
+  release — can confirm which build is on `PATH` without hitting the
+  network.
+- **`portage-console` failed to start on Ruby 4.0.** It requires `irb`,
+  which stopped being a default gem in Ruby 4.0 (it's a bundled gem now),
+  and the gemspec never declared it, so any isolated install
+  (Homebrew's, or anything under Bundler) raised `LoadError: cannot load
+  such file -- irb`. `irb` is now a runtime dependency.
 - **Did the shopper finish the checkout? `portage orders reconcile`.**
   Every checkout `portage buy` hands to the shopper's own browser
   (`requires_escalation`, `permission_denied`, `no_payment_token`,

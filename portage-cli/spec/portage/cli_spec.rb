@@ -17,6 +17,13 @@ RSpec.describe Portage::Cli do
       expect { expect(described_class.run(["nope"])).to eq(1) }.to output.to_stderr
     end
 
+    it "prints the version and returns 0 for --version, -v, and version" do
+      %w[--version -v version].each do |flag|
+        expect { expect(described_class.run([flag])).to eq(0) }
+          .to output("#{Portage::Cli::VERSION}\n").to_stdout
+      end
+    end
+
     it "prints usage and returns 1 when buy has no url" do
       expect { expect(described_class.run(["buy"])).to eq(1) }.to output.to_stderr
     end
