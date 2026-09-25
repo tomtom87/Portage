@@ -65,7 +65,13 @@ Resolved = Struct.new(:version, :sha256, keyword_init: true)
 
 def http_get_json(path)
   uri = URI("#{RUBYGEMS_API}#{path}")
-  response = Net::HTTP.get_response(uri)
+  # rubygems.org sits behind a CDN that keeps serving a gem's pre-push
+  # version list for a while after `gem push`, which made a just-published
+  # first-party gem look unpublished. Same header `rake publish_all`'s
+  # own lookup sends.
+  response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+    http.request(Net::HTTP::Get.new(uri, "Cache-Control" => "no-cache", "Accept" => "application/json"))
+  end
   raise "GET #{uri} failed: #{response.code} #{response.message}" unless response.is_a?(Net::HTTPSuccess)
 
   JSON.parse(response.body)
