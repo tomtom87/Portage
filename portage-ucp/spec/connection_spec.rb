@@ -465,4 +465,150 @@ RSpec.describe Portage::Ucp::Support::Connection do
       hop&.stop
     end
   end
+
+  # Phase 3 of docs/plans/proxy-support.md: Support::PassthroughContext is
+  # the fiber-local seam an inbound Rack endpoint (CallEndpoint,
+  # WebhookEndpoint, ...) sets around the outbound calls it makes while
+  # serving one request. These specs exercise Support::Connection's own
+  # PassthroughHttp side of that seam directly, with a real LocalProxy
+  # standing in for the outbound target so the actual wire headers can be
+  # inspected -- the endpoint-level "only from a trusted peer" gate is
+  # covered separately, in the WebMCP/webhook endpoint specs.
+  describe "passthrough headers (Phase 3)" do
+    PassthroughContext = Portage::Ucp::Support::PassthroughContext unless defined?(PassthroughContext)
+
+    it "reaches the outbound request while a PassthroughContext is active" do
+      target = LocalProxy.new
+      proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+      PassthroughContext.with(headers: { "X-Shop-Locale" => "en-GB" }) do
+        described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+          http.get("/x", {})
+        end
+      end
+
+      expect(target.last_request.header("x-shop-locale")).to eq("en-GB")
+    ensure
+      target&.stop
+    end
+
+    it "does not appear on an outbound call made outside of any PassthroughContext" do
+      target = LocalProxy.new
+      proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+      described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+        http.get("/x", {})
+      end
+
+      expect(target.last_request.header("x-shop-locale")).to be_nil
+    ensure
+      target&.stop
+    end
+
+    it "does not leak into a call made after the PassthroughContext block ends" do
+      target = LocalProxy.new
+      proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+      PassthroughContext.with(headers: { "X-Shop-Locale" => "en-GB" }) do
+        described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+          http.get("/x", {})
+        end
+      end
+      target.last_request # drain the first (in-context) request
+
+      described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+        http.get("/x", {})
+      end
+
+      expect(target.last_request.header("x-shop-locale")).to be_nil
+    ensure
+      target&.stop
+    end
+
+    it "restores the previous (outer) context rather than clearing it outright, for nested calls" do
+      target = LocalProxy.new
+      proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+      PassthroughContext.with(headers: { "X-Outer" => "1" }) do
+        PassthroughContext.with(headers: { "X-Inner" => "1" }) { nil }
+
+        described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+          http.get("/x", {})
+        end
+      end
+
+      recorded = target.last_request
+      expect(recorded.header("x-outer")).to eq("1")
+      expect(recorded.header("x-inner")).to be_nil
+    ensure
+      target&.stop
+    end
+
+    describe "forwarded: append|replace|drop" do
+      it "drop (the default) never touches the outbound Forwarded/X-Forwarded-For headers" do
+        target = LocalProxy.new
+        proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+        PassthroughContext.with(headers: {}, forwarded: "drop", chain_entry: "203.0.113.7") do
+          described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+            http.get("/x", {})
+          end
+        end
+
+        recorded = target.last_request
+        expect(recorded.header("x-forwarded-for")).to be_nil
+        expect(recorded.header("forwarded")).to be_nil
+      ensure
+        target&.stop
+      end
+
+      it "replace overwrites whatever chain the caller's own request already carried" do
+        target = LocalProxy.new
+        proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+        PassthroughContext.with(headers: {}, forwarded: "replace", chain_entry: "203.0.113.7") do
+          described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+            http.get("/x", { "X-Forwarded-For" => "198.51.100.9" })
+          end
+        end
+
+        recorded = target.last_request
+        expect(recorded.header("x-forwarded-for")).to eq("203.0.113.7")
+        expect(recorded.header("forwarded")).to eq("for=203.0.113.7")
+      ensure
+        target&.stop
+      end
+
+      it "append adds this hop onto the end of the caller's own chain" do
+        target = LocalProxy.new
+        proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+        PassthroughContext.with(headers: {}, forwarded: "append", chain_entry: "203.0.113.7") do
+          described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+            http.get("/x", { "X-Forwarded-For" => "198.51.100.9" })
+          end
+        end
+
+        recorded = target.last_request
+        expect(recorded.header("x-forwarded-for")).to eq("198.51.100.9, 203.0.113.7")
+      ensure
+        target&.stop
+      end
+
+      it "append with no pre-existing chain just sets this hop's entry" do
+        target = LocalProxy.new
+        proxy = ProxyConfig.new(routes: { "probe" => :direct })
+
+        PassthroughContext.with(headers: {}, forwarded: "append", chain_entry: "203.0.113.7") do
+          described_class.start(URI("http://#{target.host}:#{target.port}/x"), route: :probe, proxy: proxy) do |http|
+            http.get("/x", {})
+          end
+        end
+
+        expect(target.last_request.header("x-forwarded-for")).to eq("203.0.113.7")
+      ensure
+        target&.stop
+      end
+    end
+  end
 end

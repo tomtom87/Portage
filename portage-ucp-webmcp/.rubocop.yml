@@ -25,6 +25,24 @@ Metrics/AbcSize:
 
 Metrics/ParameterLists:
   Max: 6
+  Exclude:
+    # CallEndpoint#initialize's trusted_proxies:/forwarded_host_allowed:/
+    # passthrough_headers:/passthrough_forwarded: (docs/plans/proxy-support.md
+    # Phase 3) are four more independently-defaultable browser-facing-guard
+    # knobs alongside the ones it already had (allowed_origins:,
+    # require_origin:, plus RequestLimits' own max_body_bytes:/call_timeout:
+    # via **limit_opts) — one keyword per orthogonal config field, not a
+    # sign the method needs splitting.
+    - "lib/portage/ucp/webmcp/rack/call_endpoint.rb"
+
+Metrics/ClassLength:
+  Exclude:
+    # CallEndpoint (docs/plans/proxy-support.md Phase 3) covers one cohesive
+    # job — the browser-facing WebMCP call endpoint's routing, CORS, JSON-RPC
+    # framing, and reverse-proxy trust/passthrough — across several small,
+    # independently-testable private methods, not unrelated responsibilities
+    # piling up.
+    - "lib/portage/ucp/webmcp/rack/call_endpoint.rb"
 
 Lint/UnusedMethodArgument:
   Exclude:
