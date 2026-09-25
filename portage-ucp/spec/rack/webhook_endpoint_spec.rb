@@ -89,4 +89,78 @@ RSpec.describe Portage::Ucp::Rack::WebhookEndpoint do
       expect(event).to include("reason" => "bad_request")
     end
   end
+
+  # Phase 3 of docs/plans/proxy-support.md.
+  describe "reverse-proxy support" do
+    # Signs `payload` and posts it straight to `target_app` (bypassing
+    # Rack::Test's own session so each example can build its own endpoint
+    # instance with different trusted_proxies/passthrough options), with
+    # `env_overrides` merged in on top (REMOTE_ADDR, X-Forwarded-*, ...).
+    def call_with(target_app, payload, env_overrides = {})
+      body = JSON.generate(payload)
+      signature = OpenSSL::HMAC.hexdigest("SHA256", secret, body)
+      env = Rack::MockRequest.env_for("/webhooks/order", method: "POST", input: body,
+                                                         "HTTP_X_UCP_SIGNATURE" => signature)
+      env.merge!(env_overrides)
+      target_app.call(env)
+    end
+
+    describe "client_ip" do
+      let(:trusted_app) do
+        described_class.new(secret: secret, on_order_event: ->(order) { events << order }, logger: logger,
+                            trusted_proxies: ["10.0.0.0/8"])
+      end
+
+      it "resolves the right-most-untrusted hop as client_ip when the peer is trusted" do
+        call_with(trusted_app, manifest_order_payload,
+                  "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_FORWARDED_FOR" => "198.51.100.7")
+
+        event = logged_events.find { |e| e["event"] == "order_webhook_received" }
+        expect(event).to include("client_ip" => "198.51.100.7")
+      end
+
+      it "ignores X-Forwarded-For from an untrusted peer" do
+        call_with(trusted_app, manifest_order_payload,
+                  "REMOTE_ADDR" => "203.0.113.9", "HTTP_X_FORWARDED_FOR" => "198.51.100.7")
+
+        event = logged_events.find { |e| e["event"] == "order_webhook_received" }
+        expect(event).to include("client_ip" => "203.0.113.9")
+      end
+    end
+
+    describe "passthrough headers" do
+      let(:captured) { [] }
+      let(:on_order_event) { ->(_order) { captured << Portage::Ucp::Support::PassthroughContext.current } }
+      let(:trusted_app) do
+        described_class.new(secret: secret, on_order_event: on_order_event, logger: logger,
+                            trusted_proxies: ["10.0.0.0/8"], passthrough_headers: ["X-Shop-Locale"],
+                            passthrough_forwarded: "append")
+      end
+
+      it "raises at construction time for a protected passthrough header" do
+        expect do
+          described_class.new(secret: secret, on_order_event: on_order_event, passthrough_headers: ["User-Agent"])
+        end.to raise_error(Portage::Ucp::Support::ProxyConfig::ConfigError, /User-Agent/)
+      end
+
+      it "is active for on_order_event when the peer is trusted, with the allowlisted header" do
+        call_with(trusted_app, manifest_order_payload, "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_SHOP_LOCALE" => "en-GB")
+
+        expect(captured.first).to include(headers: { "X-Shop-Locale" => "en-GB" }, forwarded: "append")
+      end
+
+      it "is not active when the peer is untrusted" do
+        call_with(trusted_app, manifest_order_payload,
+                  "REMOTE_ADDR" => "203.0.113.9", "HTTP_X_SHOP_LOCALE" => "en-GB")
+
+        expect(captured.first).to be_nil
+      end
+
+      it "clears once on_order_event returns, so it never leaks into the next webhook" do
+        call_with(trusted_app, manifest_order_payload, "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_SHOP_LOCALE" => "en-GB")
+
+        expect(Portage::Ucp::Support::PassthroughContext.current).to be_nil
+      end
+    end
+  end
 end
