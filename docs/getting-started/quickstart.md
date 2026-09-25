@@ -11,14 +11,28 @@ wins, and `portage doctor` warns when that's not the one you meant (`which -a
 portage` to check). On Linux, stored payment tokens and proxy passwords need
 `secret-tool` from your distro (e.g. `libsecret-tools`). Details: [installation](../cli-reference.md#installation).
 
-Set your shipping address before buying (`.env.example` in the repo root lists every variable), then
-check your setup:
+Set your shipping address before buying. `portage` loads `~/.portage/.env` on startup
+(`.env.example` in the repo root lists every variable it reads). Then check your setup.
+
+`~/.portage/.env`:
 
 ```bash
-export PORTAGE_SHIP_STREET="1 Main St" PORTAGE_SHIP_CITY="Erie" \
-       PORTAGE_SHIP_COUNTRY="US" PORTAGE_SHIP_POSTAL_CODE="16501"
+PORTAGE_SHIP_STREET="1 Main St"
+PORTAGE_SHIP_CITY="Erie"
+PORTAGE_SHIP_COUNTRY="US"
+PORTAGE_SHIP_POSTAL_CODE="16501"
+```
+
+```bash
+chmod 600 ~/.portage/.env
 portage doctor
 ```
+
+!!! warning "Only `~/.portage/.env` loads automatically"
+    A `.env` in the current directory is never loaded. A cloned repo's `.env` could
+    otherwise route your traffic through its proxy or point purchases at another
+    store without you noticing. Use a project file on purpose with
+    `PORTAGE_ENV_FILE=.env`. [Why](../cli-reference.md#why-env-is-never-loaded-automatically).
 
 ```bash
 # Search the web for stores that sell it — zero setup, DuckDuckGo's Instant

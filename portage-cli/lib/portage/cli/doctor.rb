@@ -4,6 +4,7 @@ require_relative "confidence_check"
 require_relative "user_agent"
 require_relative "proxy_settings"
 require_relative "shipping_profile"
+require_relative "dot_env"
 
 module Portage
   module Cli
@@ -26,19 +27,27 @@ module Portage
         def to_h = super.compact
       end
 
-      def initialize(adapter_class: nil, proxy_settings: ProxySettings.new, install_doctor: InstallDoctor.new)
+      SELLER_CHECKS = "authenticator, rate limiter, signing keys, payment handlers".freeze
+
+      # @param seller [Boolean] run the seller-side checks against
+      #   Portage::Ucp.configuration. `portage doctor` passes true only when
+      #   --require or --adapter loaded a seller's setup: in a bare shopper
+      #   process that configuration is always the unconfigured default, so
+      #   those four warnings were noise on every fresh install.
+      def initialize(adapter_class: nil, proxy_settings: ProxySettings.new, install_doctor: InstallDoctor.new,
+                     seller: true, dot_env_path: DotEnv.loaded_path)
         @adapter_class = adapter_class
         @proxy_settings = proxy_settings
         @install_doctor = install_doctor
+        @seller = seller
+        @dot_env_path = dot_env_path
       end
 
       def call
         [
           *@install_doctor.findings,
-          authenticator_finding,
-          rate_limiter_finding,
-          signing_keys_finding,
-          payment_handlers_finding,
+          dot_env_finding,
+          *seller_findings,
           decision_backend_finding,
           user_agent_finding,
           shipping_finding,
@@ -51,6 +60,31 @@ module Portage
       private
 
       def config = Portage::Ucp.configuration
+
+      def seller_findings
+        return [authenticator_finding, rate_limiter_finding, signing_keys_finding, payment_handlers_finding] if @seller
+
+        [Finding.new(check: "seller", level: "info",
+                     message: "Seller checks (#{SELLER_CHECKS}) skipped — pass --require with your app's " \
+                              "initializer, or --adapter, to run them.")]
+      end
+
+      # Which env file DotEnv loaded, and a warning when it's readable by
+      # other users: it's where store credentials and payment tokens end up.
+      def dot_env_finding
+        return unless @dot_env_path
+
+        mode = File.stat(@dot_env_path).mode & 0o777
+        details = { path: @dot_env_path, mode: format("%o", mode) }
+        return Finding.new(check: "env_file", level: "info", message: "Loaded #{@dot_env_path}", details: details) \
+          if mode.nobits?(0o077)
+
+        Finding.new(check: "env_file", details: details,
+                    message: "#{@dot_env_path} is readable by other users (mode #{details[:mode]}) and may hold " \
+                             "credentials — run `chmod 600 #{@dot_env_path}`.")
+      rescue SystemCallError
+        nil
+      end
 
       def authenticator_finding
         return unless config.authenticator.is_a?(Portage::Ucp::UnconfiguredAuthenticator)
@@ -115,8 +149,8 @@ module Portage
                                            .select { |var| ENV[var].to_s.empty? }
         return if missing.empty?
 
-        Finding.new(check: "shipping", message: "#{shipping_gap(missing)} Export them in your shell; " \
-                                                ".env.example lists every PORTAGE_SHIP_* variable.")
+        Finding.new(check: "shipping", message: "#{shipping_gap(missing)} Set them in ~/.portage/.env " \
+                                                "(.env.example lists every variable) or your shell.")
       end
 
       def shipping_gap(missing)

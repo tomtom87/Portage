@@ -52,6 +52,58 @@ RSpec.describe Portage::Cli::Doctor do
     expect(finding.to_h).to eq(check: "x", message: "y", level: "warning")
   end
 
+  describe "seller checks" do
+    it "skips them, with one info line saying how to run them, when seller: false" do
+      findings = with_env(no_proxy_env.merge(shipping_env)) do
+        described_class.new(install_doctor: install_doctor, seller: false).call
+      end
+
+      expect(findings.map(&:check)).not_to include("authenticator", "rate_limiter", "signing_keys",
+                                                   "payment_handlers")
+      seller = findings.find { |f| f.check == "seller" }
+      expect(seller).not_to be_warning
+      expect(seller.message).to include("--require")
+    end
+  end
+
+  describe "the env file" do
+    around do |example|
+      Dir.mktmpdir do |dir|
+        @env_path = File.join(dir, ".env")
+        File.write(@env_path, "PORTAGE_SHIP_CITY=Erie\n")
+        example.run
+      end
+    end
+
+    def env_finding(mode)
+      File.chmod(mode, @env_path)
+      with_env(no_proxy_env) do
+        described_class.new(install_doctor: install_doctor, dot_env_path: @env_path).call
+                       .find { |f| f.check == "env_file" }
+      end
+    end
+
+    it "reports which file was loaded" do
+      finding = env_finding(0o600)
+
+      expect(finding).not_to be_warning
+      expect(finding.details).to eq(path: @env_path, mode: "600")
+    end
+
+    it "warns when other users can read it" do
+      finding = env_finding(0o644)
+
+      expect(finding).to be_warning
+      expect(finding.message).to include("chmod 600")
+    end
+
+    it "says nothing when no env file was loaded" do
+      findings = with_env(no_proxy_env) { described_class.new(install_doctor: install_doctor, dot_env_path: nil).call }
+
+      expect(findings.map(&:check)).not_to include("env_file")
+    end
+  end
+
   describe "the shipping address" do
     def shipping_finding(env)
       blank = shipping_env.transform_values { nil }

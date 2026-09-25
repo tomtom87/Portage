@@ -424,10 +424,15 @@ installed, then lists anything that needs fixing:
   earlier on `PATH` shadows this one (see "Two copies on PATH" above).
 - `shipping`: warns when `PORTAGE_SHIP_*` is missing or incomplete (see
   "Shipping address" below), naming the variables to set.
+- `env_file`: which env file was loaded (see "Environment file" below).
+  Warns when other users can read it.
+- The confidence gate's backend, the User-Agent, and proxy settings.
 - Seller-side checks against `Portage::Ucp.configuration` (authenticator,
-  rate limiter, signing keys, payment handlers; pass `--require` to load
-  your app's initializer first), the confidence gate's backend, the
-  User-Agent, and proxy settings.
+  rate limiter, signing keys, payment handlers). These only run when you
+  pass `--require` with your app's initializer (Rails:
+  `--require ./config/environment`) or `--adapter`. Without them doctor
+  would only ever see the unconfigured defaults, so it just notes that it
+  skipped them.
 
 With `--json` the output is an array of findings, each with `check`,
 `message`, `level` (`warning` or `info`) and, for the install checks,
@@ -602,21 +607,58 @@ gives up after 5 seconds and reports `notify_error` instead.
 `portage find`'s offer order comes from `Support::OfferRanking`: buyable
 first, then cheapest, then unpriced.
 
+### Environment file
+
+`portage` and `portage-console` load `~/.portage/.env` on startup, so your
+shipping address, search keys and adapter credentials can live in one file
+rather than your shell profile. `.env.example` at the repo root lists every
+variable. Rules:
+
+- Variables already set in your shell win over the file.
+- Empty values are skipped, so blanks copied from `.env.example` set nothing.
+- `KEY=value`, `export KEY=value`, `"double"` (with `\n` and `\"` escapes) and
+  `'single'` quotes all work; `#` starts a comment.
+- `PORTAGE_ENV_FILE=path` loads a different file instead, for example
+  `PORTAGE_ENV_FILE=.env` for a project checkout's own.
+
+Keep it private (`chmod 600 ~/.portage/.env`); `portage doctor` warns if
+other users can read it.
+
+#### Why `./.env` is never loaded automatically
+
+Many tools load a `.env` from whatever directory you run them in. Portage
+deliberately doesn't, because `portage` spends money and handles payment
+tokens, and the directory you happen to be in isn't something you chose
+to trust. If it did, running `portage` inside a cloned repo, a downloaded
+project or a shared folder would silently apply that directory's
+settings, for example:
+
+- `PORTAGE_PROXY` plus `PORTAGE_PROXY_CA`, routing your store traffic
+  through someone else's intercepting proxy, where they can read it;
+- a notify webhook that sends your checkout URLs and order details to
+  someone else;
+- store credentials or `PORTAGE_STORES`, pointing purchases at a different
+  store than you think.
+
+So only `~/.portage/.env`, a file you created in your own Portage
+directory, loads automatically. To use a project's `.env`, name it on
+purpose: `PORTAGE_ENV_FILE=.env portage ...`, after reading what's in it.
+
 ### Shipping address
 
-Set your shipping address via env rather than a flag, the same way as
-adapter credentials (`.env.example` at the repo root lists them all).
-`portage doctor` warns until the required ones are set:
+Set your shipping address in `~/.portage/.env` (or your shell) rather than
+a flag, the same way as adapter credentials. `portage doctor` warns until
+the required ones are set:
 
 ```bash
-export PORTAGE_SHIP_STREET="1 Main St"
-export PORTAGE_SHIP_CITY="Erie"
-export PORTAGE_SHIP_REGION="PA"          # optional
-export PORTAGE_SHIP_COUNTRY="US"
-export PORTAGE_SHIP_POSTAL_CODE="16501"
-export PORTAGE_SHIP_FIRST_NAME="Ada"     # optional
-export PORTAGE_SHIP_LAST_NAME="Lovelace" # optional
-export PORTAGE_SHIP_PHONE="+1..."        # optional
+PORTAGE_SHIP_STREET="1 Main St"
+PORTAGE_SHIP_CITY="Erie"
+PORTAGE_SHIP_REGION="PA"          # optional
+PORTAGE_SHIP_COUNTRY="US"
+PORTAGE_SHIP_POSTAL_CODE="16501"
+PORTAGE_SHIP_FIRST_NAME="Ada"     # optional
+PORTAGE_SHIP_LAST_NAME="Lovelace" # optional
+PORTAGE_SHIP_PHONE="+1..."        # optional
 ```
 
 `street`/`city`/`country`/`postal_code` are required — a partial profile

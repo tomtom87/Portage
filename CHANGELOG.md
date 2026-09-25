@@ -9,6 +9,14 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- The Homebrew formula's `test do` block now checks what `portage doctor
+  --json` reports (installed via Homebrew, every bundled adapter loads)
+  instead of its exit code, which depends on the user's setup
+  (`script/templates/portage.rb.erb`). Takes effect on the next
+  `rake homebrew:update`.
+- `.env.example` and the install docs point at `~/.portage/.env`, which
+  `portage-cli` 0.7.5 loads on startup.
+
 - **Homebrew-first install docs** (`docs/plans/homebrew-distribution.md`
   Phase 4). The README, quickstart, CLI tutorial and `portage-cli` README
   list `brew install tomtom87/portage/portage` first and `gem install

@@ -29,13 +29,28 @@ other. On Linux, stored payment tokens need `secret-tool` from your distro
 for details.
 
 Then set your shipping address (the country at least: without it some stores
-report in-stock items as out of stock) and check your setup:
+report in-stock items as out of stock) in `~/.portage/.env`, which `portage`
+loads on startup, and check your setup.
+
+`~/.portage/.env`:
 
 ```bash
-export PORTAGE_SHIP_STREET="1 Main St" PORTAGE_SHIP_CITY="Erie" \
-       PORTAGE_SHIP_COUNTRY="US" PORTAGE_SHIP_POSTAL_CODE="16501"
+PORTAGE_SHIP_STREET="1 Main St"
+PORTAGE_SHIP_CITY="Erie"
+PORTAGE_SHIP_COUNTRY="US"
+PORTAGE_SHIP_POSTAL_CODE="16501"
+```
+
+```bash
+chmod 600 ~/.portage/.env
 portage doctor
 ```
+
+!!! warning "Only `~/.portage/.env` loads automatically"
+    A `.env` in the current directory is never loaded. A cloned repo's `.env` could
+    otherwise route your traffic through its proxy or point purchases at another
+    store without you noticing. Use a project file on purpose with
+    `PORTAGE_ENV_FILE=.env`. [Why](cli-reference.md#why-env-is-never-loaded-automatically).
 
 `doctor` reports how Portage was installed, the Ruby it runs on and which
 adapters load, then lists anything to fix.

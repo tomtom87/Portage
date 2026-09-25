@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.7.5] - 2026-09-25
+
+- **`portage` loads `~/.portage/.env` on startup** (`Portage::Cli::DotEnv`),
+  so the shipping address, search keys and adapter credentials can live in
+  one file instead of a shell profile. `portage-console` does too. The
+  real environment always wins, empty values are skipped, and
+  `PORTAGE_ENV_FILE` names a different file. A `./.env` in the working
+  directory is never loaded automatically, so running `portage` inside a
+  cloned repo can't pick up that repo's proxy, webhook or credential
+  settings. Stdlib only, so the Homebrew formula gains no resource.
+  `portage doctor` reports the loaded file (`env_file`) and warns when
+  other users can read it.
+- **`portage doctor` runs the seller-side checks only for a seller.** The
+  authenticator, rate limiter, signing keys and payment handlers checks
+  inspect `Portage::Ucp.configuration`, which in a bare `portage` process
+  is always the unconfigured default. So every fresh install got four
+  warnings that meant nothing to a shopper and made doctor exit 1. They
+  now run only with `--require` or `--adapter`; otherwise one info line
+  says they were skipped. `Doctor.new` keeps running them by default
+  (`seller: true`) for library callers.
+
 ## [0.7.4] - 2026-09-25
 
 - **`portage doctor` reports how it was installed, and warns when another
