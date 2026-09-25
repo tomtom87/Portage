@@ -7,8 +7,19 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.10.0] - 2026-09-25
 
+- **Proxy support across every gem** (`docs/plans/proxy-support.md`
+  Phases 0-3). Core gains `Support::Connection`, `Support::ProxyConfig`,
+  `Support::PassthroughContext` and `Rack::ForwardedRequest`; the CLI gains
+  `--proxy*` flags, `PORTAGE_PROXY*` env vars, a `proxy` section in
+  `config.json` and proxy checks in `doctor`. The release set is
+  `portage-ucp` 0.10.0, `portage-ucp-client` 0.6.3, `portage-ucp-webmcp`
+  0.1.1, `portage-ucp-decision` 0.1.1, `portage-cli` 0.7.3,
+  `portage-ucp-shopify` 0.5.1 and `portage-ucp-instagram` 0.1.5. Every gem
+  that calls the new core APIs now requires `portage-ucp` `~> 0.10`, and
+  `portage-cli` requires `portage-ucp-client` `>= 0.6.3`. Their old floors
+  let them resolve against published gems that lacked those APIs.
 - Documentation only, no code change. Fixes a `NoMethodError`-shaped bug
   repeated in every bundled adapter's `exe/` (`portage-ucp-shopify`/`-wix`/
   `-woocommerce`/`-bigcommerce`/`-magento`) and in the root README's

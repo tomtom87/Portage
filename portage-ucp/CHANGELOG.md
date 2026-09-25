@@ -4,7 +4,32 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.10.0] - 2026-09-25
+
+- **Proxy support** (`docs/plans/proxy-support.md` Phases 1 and 3).
+  `Support::Connection.start(uri, route:, proxy: ProxyConfig.current, ...)`
+  replaces every raw `Net::HTTP.start` call site. It resolves
+  `HTTPS_PROXY`/`https_proxy` for https targets (Net::HTTP's own `:ENV`
+  mode never read them) and honors `NO_PROXY`. It also supports
+  `ProxyConfig` routes and named chains: `:forward` proxies (natively, or
+  through a hand-rolled CONNECT tunnel when `proxy_headers` are set or
+  hops are chained), `:gateway` mode, `ca_file` and timeout overrides.
+  A hop failure raises `Portage::Ucp::ProxyError` naming the hop and the
+  redacted proxy host. `ProxyConfig::Profile` refuses `Authorization`,
+  `User-Agent`, `X-Shopify-*-Access-Token` and `X-Payment-Token` in
+  proxy/forward headers. `Support::HttpClient#json_request` takes
+  `route:` (default `:platform`); `Check` uses `:probe` and
+  `Support::TokenExchange` uses `:payment`.
+- `Rack::ForwardedRequest`, a fail-closed helper that trusts
+  `X-Forwarded-*`/`Forwarded` only from a configured `trusted_proxies`
+  list, resolves the right-most untrusted hop as the client IP, and lets
+  `X-Forwarded-Host` replace an endpoint's origin only for a trusted peer
+  and an allowlisted host. `Rack::WebhookEndpoint` uses it.
+- `Support::PassthroughContext`, a fiber-local scope that carries an
+  inbound request's allowlisted, trusted-peer-only headers and
+  `Forwarded`/`X-Forwarded-For` chain onto the outbound
+  `Support::Connection` calls made while serving it.
+- Adapter and CLI gems that call `Support::Connection` need `~> 0.10`.
 
 - `Support::TransactionLog#reserve`/`#complete` accept a fixed allowlist of
   optional attributes (`OPTIONAL_ATTRIBUTES`: `settled_by`, `handoff_reason`,

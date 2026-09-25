@@ -6,6 +6,12 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [0.1.1] - 2026-09-24
 
+- `Rack::CallEndpoint` resolves the caller through core's
+  `Rack::ForwardedRequest`: `X-Forwarded-*`/`Forwarded` are trusted only
+  from a configured `trusted_proxies` list, `server_context[:client_ip]`
+  (seen by the rate limiter and authenticator) is the right-most untrusted
+  hop, and `X-Forwarded-Host` never widens `allowed_origins`. Requires
+  `portage-ucp` `~> 0.10`.
 - An outbound call now waits out a tool that answers the page isn't ready,
   as it already waited out one the page dropped. Shopify storefronts reload
   after their own `add_to_cart`/`cancel_cart` and, until they're back, every

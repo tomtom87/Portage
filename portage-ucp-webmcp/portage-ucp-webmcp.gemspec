@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*.rb", "lib/**/*.js", "README.md", "LICENSE", "CHANGELOG.md"]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "portage-ucp", "~> 0.8"
+  spec.add_dependency "portage-ucp", "~> 0.10"
   spec.add_dependency "portage-ucp-client", "~> 0.6", ">= 0.6.2"
   spec.add_dependency "rack", "~> 3.0"
 
