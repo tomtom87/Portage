@@ -587,6 +587,54 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "doctor output" do
+    let(:findings) do
+      finding = Portage::Cli::Doctor::Finding
+      [finding.new(check: "install", message: "homebrew (/opt/homebrew/Cellar/portage/0.7.4)", level: "info",
+                   details: { method: "homebrew", path: "/opt/homebrew/Cellar/portage/0.7.4",
+                              prefix: "/opt/homebrew" }),
+       finding.new(check: "runtime", message: "Ruby 4.0.7", level: "info",
+                   details: { ruby_version: "4.0.7", ruby_path: "/opt/homebrew/opt/ruby/bin/ruby",
+                              portage_cli_version: Portage::Cli::VERSION }),
+       finding.new(check: "adapters", message: "shopify 0.5.1", level: "info",
+                   details: { adapters: [{ name: "portage-ucp-shopify", installed: true, loadable: true,
+                                           version: "0.5.1" }] }),
+       finding.new(check: "path", message: "shadowed", level: "warning",
+                   details: { first: "/mise/bin/portage", candidates: [] })]
+    end
+
+    def run_doctor(argv, result)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(instance_double(Portage::Cli::Doctor, call: result))
+      code = nil
+      output = capture_stdout { code = described_class.run(argv) }
+      [code, output]
+    end
+
+    it "includes install method, runtime, adapters and PATH data in --json" do
+      code, output = run_doctor(%w[doctor --json], findings)
+
+      parsed = JSON.parse(output)
+      expect(code).to eq(1)
+      expect(parsed).to be_an(Array)
+      by_check = parsed.to_h { |f| [f["check"], f] }
+      expect(by_check["install"]).to include("level" => "info",
+                                             "details" => include("method" => "homebrew", "prefix" => "/opt/homebrew"))
+      expect(by_check["runtime"]["details"]).to include("ruby_version" => "4.0.7",
+                                                        "portage_cli_version" => Portage::Cli::VERSION)
+      expect(by_check["adapters"]["details"]["adapters"].first).to include("name" => "portage-ucp-shopify",
+                                                                           "version" => "0.5.1")
+      expect(by_check["path"]).to include("level" => "warning", "details" => include("first" => "/mise/bin/portage"))
+    end
+
+    it "exits 0 when every finding is info, printing the report above 'No issues found.'" do
+      code, output = run_doctor(%w[doctor], findings.first(3))
+
+      expect(code).to eq(0)
+      expect(output).to eq("[install] homebrew (/opt/homebrew/Cellar/portage/0.7.4)\n[runtime] Ruby 4.0.7\n" \
+                           "[adapters] shopify 0.5.1\n\nNo issues found.\n")
+    end
+  end
+
   describe "configure/setup aliases" do
     %w[configure setup].each do |alias_name|
       it "routes #{alias_name} to the same command as doctor" do

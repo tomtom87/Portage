@@ -854,16 +854,24 @@ module Portage
       proxy_settings = apply_proxy_settings(opts[:proxy])
       return 1 unless proxy_settings
 
-      findings = Doctor.new(adapter_class: adapter_class, proxy_settings: proxy_settings).call
-      puts opts[:json] ? JSON.pretty_generate(findings.map(&:to_h)) : format_doctor(findings)
-      findings.empty? ? 0 : 1
+      report_doctor(Doctor.new(adapter_class: adapter_class, proxy_settings: proxy_settings).call, json: opts[:json])
     end
     private_class_method :run_doctor
 
-    def self.format_doctor(findings)
-      return "No issues found." if findings.empty?
+    def self.report_doctor(findings, json:)
+      puts json ? JSON.pretty_generate(findings.map(&:to_h)) : format_doctor(findings)
+      findings.none?(&:warning?) ? 0 : 1
+    end
+    private_class_method :report_doctor
 
-      findings.map { |f| "[#{f.check}] #{f.message}" }.join("\n")
+    # Info findings (install method, Ruby, adapters, PATH) first, then the
+    # warnings, which alone decide the exit code.
+    def self.format_doctor(findings)
+      info, warnings = findings.partition { |f| !f.warning? }
+      lines = info.map { |f| "[#{f.check}] #{f.message}" }
+      lines << "" unless info.empty?
+      lines.concat(warnings.empty? ? ["No issues found."] : warnings.map { |f| "[#{f.check}] #{f.message}" })
+      lines.join("\n")
     end
     private_class_method :format_doctor
 

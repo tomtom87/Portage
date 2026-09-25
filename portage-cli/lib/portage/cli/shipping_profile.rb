@@ -20,9 +20,14 @@ module Portage
 
       # @return [Portage::Ucp::PostalAddress, nil] nil unless every required
       #   field is set — a partial profile isn't enough to submit, and this
-      #   module never guesses at a missing field.
+      #   module never guesses at a missing field. An empty value counts as
+      #   unset, so a `.env` copied from `.env.example` with blanks left in
+      #   doesn't submit an address of empty strings.
       def self.from_env
-        attrs = ENV_VARS.filter_map { |key, var| [key, ENV.fetch(var, nil)] if ENV.key?(var) }.to_h
+        attrs = ENV_VARS.filter_map do |key, var|
+          value = ENV.fetch(var, nil)
+          [key, value] unless value.to_s.empty?
+        end.to_h
         return nil unless REQUIRED.all? { |key| attrs.key?(key) }
 
         Portage::Ucp::PostalAddress.new(**attrs)

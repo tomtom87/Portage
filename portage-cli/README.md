@@ -49,26 +49,81 @@ No single adapter gem is a hard dependency — install whichever
 
 ## Installation
 
-```ruby
-# Gemfile
-gem "portage-cli"
-```
+**Homebrew** (macOS and Linux) — recommended for using the CLI:
 
 ```bash
-bundle install
+brew install tomtom87/portage/portage
 ```
 
-Or standalone:
+The formula installs `portage-cli` plus every adapter gem (Shopify, Wix,
+WooCommerce, BigCommerce, Magento, Etsy, Instagram, WebMCP, Decision) into
+its own directory, running on Homebrew's own `ruby`, so it doesn't depend on
+or change whichever Ruby you use for anything else. It gives you `portage`
+and `portage-console`.
+
+**RubyGems** — on any Ruby ≥ 3.2, or when you only want some adapters:
 
 ```bash
 gem install portage-cli
+gem install portage-ucp-shopify   # optional: add only the adapters you need
 ```
+
+In an app's `Gemfile` instead:
+
+```ruby
+gem "portage-cli"
+```
+
+### Upgrading
+
+- Homebrew: `brew upgrade portage`. Your config and data in `~/.portage`
+  (policy, payment-method metadata, transaction log, order ledger,
+  `config.json`) are left alone, as they are by `brew uninstall`.
+- RubyGems: `gem update portage-cli` (and any adapter gems you added).
+
+Portage has no self-update command, by design: whichever tool installed it
+owns upgrades.
+
+### Linux: stored secrets need `secret-tool`
+
+On Linux, stored payment tokens (`portage payment enroll`) and proxy
+passwords (`password_ref`) live in the Secret Service (GNOME Keyring,
+KWallet) via the `secret-tool` command. It comes from your distribution,
+not from the formula or the gem:
+
+```bash
+sudo apt install libsecret-tools   # Debian/Ubuntu
+sudo dnf install libsecret         # Fedora
+```
+
+Without it (or without a live D-Bus session, e.g. over SSH or in CI),
+Portage uses the headless tier: the token comes from
+`PORTAGE_PAYMENT_TOKEN` and nothing is stored locally. On macOS the
+Keychain is used and nothing extra is needed.
+
+### Two copies on PATH
+
+A `gem install` copy and a Homebrew copy can both be installed, and your
+shell runs whichever `portage` comes first on `PATH`. A common case is an
+old gem copy in a mise, rbenv, asdf or rvm Ruby's `bin`, which then keeps
+running after `brew install` or `brew upgrade`. `portage doctor` warns
+about this. To check:
+
+```bash
+which -a portage
+```
+
+To fix it, keep one copy: `gem uninstall portage-cli` (with the Ruby that
+owns the gem copy active) to use Homebrew's, or `brew uninstall portage` to
+use the gem's. Or reorder `PATH` so the one you want comes first.
 
 ## Usage
 
+<!-- usage-start -->
 ```bash
 portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id ID]
-                                [--yes] [--dry-run] [--decision-backend jev|laya]
+                                [--yes] [--dry-run] [--auto-open|--no-auto-open]
+                                [--notify-webhook URL] [--decision-backend jev|laya]
                                 [--min-confidence N] [--json]
                                 [--wait [--wait-timeout DURATION|off]]
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
@@ -90,7 +145,12 @@ portage policy set [--per-transaction-cap N --currency CUR]
                     [--velocity-count N --velocity-window-seconds N]
                     [--allow HOST ...] [--clear-allowlist]
 portage orders reconcile [--checkout ID] [--json]
+portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]   # aliases: configure, setup
+portage generate adapter NAME [--dir DIR]
+portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
+portage --version
 ```
+<!-- usage-end -->
 
 `buy`/`find`/`compare`/`doctor`/`payment enroll` (the network-touching commands —
 `orders reconcile` doesn't take these) also accept:
@@ -342,6 +402,37 @@ plain-text `--wait` regardless of configuration), and `journal` (the order
 snapshot journal write, already unconditional — listing it just documents
 that).
 
+### Doctor
+
+```bash
+portage doctor          # aliases: portage configure, portage setup
+portage doctor --json
+```
+
+Checks this machine's setup without touching the network (apart from
+probing any proxy you've configured). It first reports how Portage is
+installed, then lists anything that needs fixing:
+
+- `install`: `homebrew` (with the Cellar path) or `gem` (with the gem's
+  path).
+- `runtime`: the Ruby version and path it runs on, and the `portage-cli`
+  version.
+- `adapters`: which first-party adapter gems load, and at which version.
+  Missing adapters are expected on a gem install; on Homebrew, which
+  bundles them all, a missing one is a warning.
+- `path`: which `portage` your shell actually runs. Warns when another copy
+  earlier on `PATH` shadows this one (see "Two copies on PATH" above).
+- `shipping`: warns when `PORTAGE_SHIP_*` is missing or incomplete (see
+  "Shipping address" below), naming the variables to set.
+- Seller-side checks against `Portage::Ucp.configuration` (authenticator,
+  rate limiter, signing keys, payment handlers; pass `--require` to load
+  your app's initializer first), the confidence gate's backend, the
+  User-Agent, and proxy settings.
+
+With `--json` the output is an array of findings, each with `check`,
+`message`, `level` (`warning` or `info`) and, for the install checks,
+`details`. Doctor exits `1` when there's at least one warning, else `0`.
+
 ### Proxy
 
 `buy`, `find`, `compare`, `doctor`, and `payment enroll` accept the flags below,
@@ -511,12 +602,11 @@ gives up after 5 seconds and reports `notify_error` instead.
 `portage find`'s offer order comes from `Support::OfferRanking`: buyable
 first, then cheapest, then unpriced.
 
-### Shipping address (own-store checkouts only)
+### Shipping address
 
-When buying against your own store (`portage buy`'s step 2 adapter-credentials
-fallback, described at the top of this file) and that adapter supports
-`dev.ucp.shopping.fulfillment`, set a default shipping address via env
-rather than a flag, same posture as adapter credentials:
+Set your shipping address via env rather than a flag, the same way as
+adapter credentials (`.env.example` at the repo root lists them all).
+`portage doctor` warns until the required ones are set:
 
 ```bash
 export PORTAGE_SHIP_STREET="1 Main St"
@@ -529,12 +619,26 @@ export PORTAGE_SHIP_LAST_NAME="Lovelace" # optional
 export PORTAGE_SHIP_PHONE="+1..."        # optional
 ```
 
-`street`/`city`/`country`/`postal_code` are required — a partial profile is
-treated as no profile at all. Once the merchant prices shipping options
-against that address, `portage buy` auto-picks the cheapest per fulfillment
-group; there's no interactive rate picker, since this drives one automated
-purchase. Native (non-adapter) UCP stores don't get this yet — see
-`portage-ucp`'s design log for why.
+`street`/`city`/`country`/`postal_code` are required — a partial profile
+(or one with empty values) is treated as no profile at all.
+
+The variables are used in two ways:
+
+- **Native UCP stores** (`buy` and `find` over HTTP) get
+  `PORTAGE_SHIP_COUNTRY`, `_REGION` and `_POSTAL_CODE` (plus
+  `PORTAGE_CURRENCY` and `PORTAGE_LANGUAGE`, if set) as UCP buyer context,
+  which a store uses to pick the market it prices and stocks in. These
+  work on their own, without the full address.
+  Without at least the country, a live Shopify store can report in-stock
+  items as out of stock.
+- **Your own store** (`portage buy`'s adapter-credentials fallback,
+  described at the top of this file), when its adapter supports
+  `dev.ucp.shopping.fulfillment`, also gets the full address as the
+  checkout's shipping destination. Once the merchant prices shipping
+  options against it, `portage buy` auto-picks the cheapest per fulfillment
+  group; there's no interactive rate picker, since this drives one
+  automated purchase. Native (non-adapter) UCP stores don't get the full
+  address yet — see `portage-ucp`'s design log for why.
 
 ## Buying without a URL
 

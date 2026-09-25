@@ -6,12 +6,39 @@ empty.
 
 ## Install
 
+With Homebrew (macOS or Linux), which installs the CLI and every adapter gem
+on Homebrew's own Ruby:
+
+```bash
+brew install tomtom87/portage/portage
+```
+
+Or with RubyGems, on any Ruby ≥ 3.2, adding only the adapters you want:
+
 ```bash
 gem install portage-cli
 ```
 
-Pulls in `portage-ucp`, `portage-ucp-client`, and `portage-ucp-journal` as
-dependencies. All are published on RubyGems.
+The gem pulls in `portage-ucp`, `portage-ucp-client`, and `portage-ucp-journal`
+as dependencies. Upgrade later with `brew upgrade portage` or
+`gem update portage-cli`; neither touches `~/.portage`. If you have both,
+whichever `portage` comes first on `PATH` wins; `which -a portage` shows which,
+and `portage doctor` warns when a copy you didn't mean to run is shadowing the
+other. On Linux, stored payment tokens need `secret-tool` from your distro
+(e.g. `libsecret-tools`). See the [CLI reference](cli-reference.md#installation)
+for details.
+
+Then set your shipping address (the country at least: without it some stores
+report in-stock items as out of stock) and check your setup:
+
+```bash
+export PORTAGE_SHIP_STREET="1 Main St" PORTAGE_SHIP_CITY="Erie" \
+       PORTAGE_SHIP_COUNTRY="US" PORTAGE_SHIP_POSTAL_CODE="16501"
+portage doctor
+```
+
+`doctor` reports how Portage was installed, the Ruby it runs on and which
+adapters load, then lists anything to fix.
 
 ## Search only — no charge
 
@@ -105,8 +132,8 @@ DuckDuckGo-only is a keyless fallback, not a real search engine. To make
   `PORTAGE_STORES` (comma-separated) — costs no network call, always
   considered regardless of query, good for stores you already trust.
 
-None of these are documented in `.env.example` today — add them there if
-you're setting one up for a team.
+All of these, and the `PORTAGE_SHIP_*` address, are listed in the repo's
+`.env.example`.
 
 ## Seeding the allowlist from a directory site
 
@@ -158,10 +185,10 @@ equivalents, and `~/.portage/config.json`'s `"proxy"` section) are the
 Portage-specific way to configure this — see [`proxy.md`](proxy.md) for corporate
 egress, a rotating residential pool, an API gateway, mitmproxy for debugging, and
 nginx/Cloudflare in front of the MCP/WebMCP endpoints, and
-[`../portage-cli/README.md`](../portage-cli/README.md#proxy) for the full flag/env
+the [CLI reference](cli-reference.md#proxy) for the full flag/env
 reference. Below that layer, the plain `http_proxy`/`HTTPS_PROXY`/`NO_PROXY` env
 vars are still the fallback for any route left unconfigured — see the root
-[`README.md`](../README.md#running-behind-a-proxy) for the stdlib quirks worth
+[`README.md`](https://github.com/tomtom87/Portage#running-behind-a-proxy) for the stdlib quirks worth
 knowing there. `portage doctor` reports the effective proxy per route, credentials
 redacted.
 

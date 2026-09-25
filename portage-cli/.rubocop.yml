@@ -68,6 +68,10 @@ Metrics/ClassLength:
     # handlers, capabilities) — breadth of one flat findings list, not a
     # class doing unrelated things.
     - "lib/portage/cli/doctor.rb"
+    # Same rationale — one `*_finding` method per install check (install
+    # method, runtime, adapters, PATH shadowing), plus the small path/prefix
+    # helpers they share (docs/plans/homebrew-distribution.md Phase 4).
+    - "lib/portage/cli/install_doctor.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and

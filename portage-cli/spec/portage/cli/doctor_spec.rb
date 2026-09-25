@@ -20,12 +20,61 @@ RSpec.describe Portage::Cli::Doctor do
       "PORTAGE_PROXY_CA" => nil, "PORTAGE_PROXY_HEADERS" => nil }
   end
 
-  it "flags every collaborator still at its unconfigured default" do
-    with_env(no_proxy_env.merge("PORTAGE_DECISION_BACKEND" => nil)) do
-      findings = described_class.new.call
+  # InstallDoctor's own findings (install/runtime/adapters/path) are covered
+  # in install_doctor_spec.rb against a fake filesystem; here it gets an
+  # empty PATH so the real one can't add a shadowing warning.
+  let(:install_doctor) { Portage::Cli::InstallDoctor.new(path: "") }
 
-      expect(findings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
+  def shipping_env
+    { "PORTAGE_SHIP_STREET" => "1 Main St", "PORTAGE_SHIP_CITY" => "Erie", "PORTAGE_SHIP_COUNTRY" => "US",
+      "PORTAGE_SHIP_POSTAL_CODE" => "16501" }
+  end
+
+  def warnings(**opts) = described_class.new(install_doctor: install_doctor, **opts).call.select(&:warning?)
+
+  it "flags every collaborator still at its unconfigured default" do
+    with_env(no_proxy_env.merge(shipping_env).merge("PORTAGE_DECISION_BACKEND" => nil)) do
+      expect(warnings.map(&:check)).to contain_exactly("authenticator", "rate_limiter", "signing_keys",
                                                        "payment_handlers")
+    end
+  end
+
+  it "leads with the install/runtime/adapters report as info, not warnings" do
+    findings = with_env(no_proxy_env) { described_class.new(install_doctor: install_doctor).call }
+
+    expect(findings.first(3).map(&:check)).to eq(%w[install runtime adapters])
+    expect(findings.first(3)).to all(satisfy { |f| !f.warning? })
+  end
+
+  it "keeps to_h free of empty details, so --json output of existing checks is unchanged but for level" do
+    finding = described_class::Finding.new(check: "x", message: "y")
+
+    expect(finding.to_h).to eq(check: "x", message: "y", level: "warning")
+  end
+
+  describe "the shipping address" do
+    def shipping_finding(env)
+      blank = shipping_env.transform_values { nil }
+      with_env(no_proxy_env.merge(blank).merge(env)) { warnings.find { |f| f.check == "shipping" } }
+    end
+
+    it "says nothing once every required PORTAGE_SHIP_* field is set" do
+      expect(shipping_finding(shipping_env)).to be_nil
+    end
+
+    it "names every required variable when none are set, including the market consequence" do
+      finding = shipping_finding({})
+
+      expect(finding.message).to include("No shipping address set", "PORTAGE_SHIP_STREET", "PORTAGE_SHIP_CITY",
+                                         "PORTAGE_SHIP_COUNTRY", "PORTAGE_SHIP_POSTAL_CODE", "out of stock",
+                                         ".env.example")
+    end
+
+    it "names only the missing ones for a partial address, treating an empty value as unset" do
+      finding = shipping_finding(shipping_env.merge("PORTAGE_SHIP_CITY" => "", "PORTAGE_SHIP_POSTAL_CODE" => nil))
+
+      expect(finding.message).to include("missing PORTAGE_SHIP_CITY, PORTAGE_SHIP_POSTAL_CODE", "treated as none")
+      expect(finding.message).not_to include("out of stock")
     end
   end
 
@@ -37,8 +86,9 @@ RSpec.describe Portage::Cli::Doctor do
       config.payment_handlers = [{ name: "stripe" }]
     end
 
-    with_env(no_proxy_env.merge("PORTAGE_DECISION_BACKEND" => "jev", "JEV_API_KEY" => "test-key")) do
-      expect(described_class.new.call).to be_empty
+    with_env(no_proxy_env.merge(shipping_env).merge("PORTAGE_DECISION_BACKEND" => "jev",
+                                                    "JEV_API_KEY" => "test-key")) do
+      expect(warnings).to be_empty
     end
   end
 
