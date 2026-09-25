@@ -635,6 +635,26 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "doctor seller checks" do
+    def doctor_kwargs(argv)
+      captured = nil
+      allow(Portage::Cli::Doctor).to receive(:new) { |**opts|
+        captured = opts
+        instance_double(Portage::Cli::Doctor, call: [])
+      }
+      capture_stdout { described_class.run(argv) }
+      captured
+    end
+
+    it "skips them in a bare shopper run" do
+      expect(doctor_kwargs(%w[doctor])).to include(seller: false)
+    end
+
+    it "runs them once --adapter names a seller's adapter" do
+      expect(doctor_kwargs(%w[doctor --adapter Portage::Ucp::Adapter])).to include(seller: true)
+    end
+  end
+
   describe "configure/setup aliases" do
     %w[configure setup].each do |alias_name|
       it "routes #{alias_name} to the same command as doctor" do

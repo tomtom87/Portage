@@ -42,14 +42,17 @@ class Portage < Formula
   test do
     assert_match version.to_s, shell_output("#{bin}/portage --version").strip
 
-    # `doctor` never touches the network (it only inspects local
-    # Portage::Ucp::Configuration), so this exercises a full offline load
-    # of portage-cli plus every bundled gem without a store or network
-    # fixture. Findings are non-empty on a freshly installed config (no
-    # authenticator/rate_limiter/signing keys set up yet), hence exit 1.
-    output = shell_output("#{bin}/portage doctor --json", 1)
-    findings = JSON.parse(output)
-    assert_kind_of Array, findings
-    refute_predicate findings, :empty?
+    # `doctor` is offline and loads portage-cli plus every bundled adapter, so
+    # it checks the whole install without a store or network fixture. Its
+    # exit code depends on the user's setup (a fresh HOME has no shipping
+    # address, so it warns), so this checks the report instead: the keg is
+    # detected as a Homebrew install and every bundled adapter loads.
+    # Doctor's messages aren't ASCII; pipe_output's string takes the locale's
+    # encoding, which isn't UTF-8 in every test environment.
+    findings = JSON.parse(pipe_output("#{bin}/portage doctor --json").dup.force_encoding("UTF-8"))
+    install = findings.find { |f| f["check"] == "install" }
+    assert_equal "homebrew", install.dig("details", "method")
+    adapters = findings.find { |f| f["check"] == "adapters" }
+    assert_equal "info", adapters["level"], adapters["message"]
   end
 end

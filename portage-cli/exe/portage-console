@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require "portage/cli/dot_env"
+Portage::Cli::DotEnv.load
+
 require "irb"
 require "portage/cli/console"
 

@@ -1,6 +1,11 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# Before anything reads ENV: ~/.portage/.env (or PORTAGE_ENV_FILE), never
+# overriding the real environment. See Portage::Cli::DotEnv.
+require "portage/cli/dot_env"
+Portage::Cli::DotEnv.load
+
 require "portage/cli"
 
 exit(Portage::Cli.run(ARGV))

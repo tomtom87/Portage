@@ -854,7 +854,9 @@ module Portage
       proxy_settings = apply_proxy_settings(opts[:proxy])
       return 1 unless proxy_settings
 
-      report_doctor(Doctor.new(adapter_class: adapter_class, proxy_settings: proxy_settings).call, json: opts[:json])
+      doctor = Doctor.new(adapter_class: adapter_class, proxy_settings: proxy_settings,
+                          seller: !(opts[:require] || opts[:adapter]).nil?)
+      report_doctor(doctor.call, json: opts[:json])
     end
     private_class_method :run_doctor
 
