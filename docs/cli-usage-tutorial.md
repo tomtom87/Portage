@@ -149,20 +149,21 @@ portage find --query "usb-c cable" --max-price 20 --json
 ## Running behind a proxy
 
 ```bash
-http_proxy=http://user:pass@proxy.internal:3128 no_proxy=localhost,127.0.0.1 \
-  portage buy --query "hoodie" --dry-run --json
+portage buy --query "hoodie" --dry-run --json \
+  --proxy http://user:pass@proxy.internal:3128 --no-proxy localhost,127.0.0.1
 ```
 
-Use `http_proxy` (lowercase or `HTTP_PROXY`), not `HTTPS_PROXY` — confirmed against a
-real local proxy (see `docs/plans/proxy-support.md` Phase 0): every raw `Net::HTTP.start`
-call site in `portage-cli`/`portage-ucp`/the adapter gems resolves its proxy from Ruby
-stdlib's own `:ENV` default, which only ever reads `http_proxy`/`HTTP_PROXY` — for both
-`http://` and `https://` targets — and never `https_proxy`/`HTTPS_PROXY`. Setting only
-`HTTPS_PROXY` (the usual convention elsewhere) silently proxies nothing here; that's a
-real gap, tracked as Phase 1, not a typo in this example. `portage doctor` reports the
-effective proxy it detected, credentials redacted. Full details, including `no_proxy`
-matching rules and the one exception (`portage-ucp-client`'s Faraday-based UCP tool
-calls, which *do* honor `HTTPS_PROXY`): see the root [`README.md`](../README.md#running-behind-a-proxy).
+`--proxy`/`--no-proxy` (and their `PORTAGE_PROXY`/`PORTAGE_NO_PROXY` env
+equivalents, and `~/.portage/config.json`'s `"proxy"` section) are the
+Portage-specific way to configure this — see [`proxy.md`](proxy.md) for corporate
+egress, a rotating residential pool, an API gateway, mitmproxy for debugging, and
+nginx/Cloudflare in front of the MCP/WebMCP endpoints, and
+[`../portage-cli/README.md`](../portage-cli/README.md#proxy) for the full flag/env
+reference. Below that layer, the plain `http_proxy`/`HTTPS_PROXY`/`NO_PROXY` env
+vars are still the fallback for any route left unconfigured — see the root
+[`README.md`](../README.md#running-behind-a-proxy) for the stdlib quirks worth
+knowing there. `portage doctor` reports the effective proxy per route, credentials
+redacted.
 
 ## Known issue: `Client.discover` can't parse real 2026-08-25 manifests
 

@@ -92,6 +92,17 @@ portage policy set [--per-transaction-cap N --currency CUR]
 portage orders reconcile [--checkout ID] [--json]
 ```
 
+`buy`/`find`/`compare`/`doctor`/`payment enroll` (the network-touching commands —
+`orders reconcile` doesn't take these) also accept:
+
+```
+[--proxy URL] [--proxy-mode forward|gateway] [--proxy-header "Name: value"]
+[--no-proxy HOSTS] [--proxy-route ROUTE=URL|direct] [--proxy-chain URL,URL,...]
+[--proxy-passthrough HEADER] [--proxy-ca FILE] [--no-env-proxy]
+```
+
+See "Proxy" below.
+
 - `--query` — search term. Against the store's catalog when you name a store,
   against the search backends when you don't.
 - `--qty` — quantity, default `1`.
@@ -330,6 +341,57 @@ native notification), `terminal` (a printed line — forced on for a
 plain-text `--wait` regardless of configuration), and `journal` (the order
 snapshot journal write, already unconditional — listing it just documents
 that).
+
+### Proxy
+
+`buy`, `find`, `compare`, `doctor`, and `payment enroll` accept the flags below,
+resolved (per field, flag > env > `~/.portage/config.json`) into a
+`Portage::Ucp::Support::ProxyConfig` by `Portage::Cli::ProxySettings` — see
+[`docs/proxy.md`](../docs/proxy.md) for corporate egress, a rotating residential
+pool, an API gateway, mitmproxy for debugging, and nginx/Cloudflare in front of the
+MCP/WebMCP endpoints, worked through end to end.
+
+| Flag | Meaning |
+| --- | --- |
+| `--proxy URL` | The default proxy's URL (`http://user:pass@host:port`). Overrides only `proxy.default.url`; every other configured field (`no_proxy`, `routes`, `chains`, ...) stays as set in config.json. |
+| `--proxy-mode forward\|gateway` | The default profile's mode. `forward` (the default) is a standard HTTP proxy; `gateway` is a URL-rewriting gateway — see `docs/proxy.md`. |
+| `--proxy-header "Name: value"` | Repeatable. Sent only to the proxy (on the `CONNECT` request, or the gateway request) — never to the real target. `Authorization`/`User-Agent`/`X-Shopify-*-Access-Token`/`X-Payment-Token` are refused here, always. |
+| `--no-proxy HOSTS` | Comma-separated hostnames/suffixes/CIDRs (or a bare `*`) to always bypass the proxy for, whatever the route resolves to. |
+| `--proxy-route ROUTE=URL\|direct` | Repeatable. Points one fixed route (`store`, `search`, `notify`, `payment`, `platform`, `probe`) at its own URL, or forces it `direct` regardless of `default`. |
+| `--proxy-chain URL,URL,...` | An ad-hoc multi-hop chain for this run — each hop is `forward` unless prefixed `gateway+https://...`. Overrides the whole `default` profile (not just its `url`), since a chain has no single "url" field to merge with config.json's own. |
+| `--proxy-passthrough HEADER` | Repeatable, server commands only. Allowlists an inbound request header to ride along on outbound calls made while serving it — see `docs/proxy.md`'s passthrough section. Refuses a protected header name at parse time. |
+| `--proxy-ca FILE` | A PEM file trusted in addition to the system store — for a TLS-intercepting corporate proxy or a debugging proxy like mitmproxy. |
+| `--no-env-proxy` | Ignore `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` (and their lowercase forms) entirely for this run — otherwise they're still the fallback for any route nothing else configured. |
+
+**Env vars** (checked when the matching flag is absent, before config.json):
+
+| Var | Matches |
+| --- | --- |
+| `PORTAGE_PROXY` | `--proxy` |
+| `PORTAGE_PROXY_MODE` | `--proxy-mode` |
+| `PORTAGE_NO_PROXY` | `--no-proxy` |
+| `PORTAGE_PROXY_CA` | `--proxy-ca` |
+| `PORTAGE_PROXY_HEADERS` | A JSON object of header name → value, merged under any `--proxy-header` flags (flags win on a name collision). |
+
+Below all of the above, the standard `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` (and
+lowercase) variables are still the fallback for any route nothing here configures
+at all — existing environments keep working unless `--no-env-proxy` is set. The
+**`payment` route is always forced `direct`** unless a proxy is named for it
+explicitly (`--proxy-route payment=...` or config.json's `routes.payment`) — it
+never inherits a bare `default`/env proxy the way every other route does, so an
+egress proxy nobody meant to hand payment tokens to never sees them by accident.
+
+`${ENV_VAR}` inside a config.json header value (`proxy_headers`, `forward_headers.add`)
+is expanded from the process environment at resolve time, so a secret can live in
+the environment rather than the file itself. A proxy password can also live in
+`password_ref` (resolved through the same macOS Keychain/Linux Secret Service tiers
+`portage payment` uses, under its own `portage-cli-proxy` service name) instead of
+plaintext in the URL — `portage doctor` warns when it finds a plaintext one anyway.
+
+`portage doctor` reports, per route, what's effectively configured (credentials
+redacted), whether each configured proxy/gateway is actually reachable, and flags
+plaintext proxy credentials and an intercepting proxy (`ca_file` or `gateway` mode)
+sitting on the `payment` route.
 
 ### WebMCP (library use, opt-in)
 
