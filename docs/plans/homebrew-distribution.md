@@ -137,3 +137,15 @@ None of these need a Homebrew dependency on macOS.
 2. **Create the tap** `tomtom87/homebrew-portage`, for example with `brew tap-new tomtom87/portage` and pushing it to GitHub, which also gives the tap `brew test-bot` CI workflows. Then run `script/homebrew-formula --out <tap>/Formula/portage.rb`, commit, and push. Check `brew install tomtom87/portage/portage` from a clean machine or VM, including Intel and Linux.
 3. **Phase 2** (release automation) as specified above. The generator's stdout/`--out` interface and its clear "not published yet" error are meant for the Action's poll-then-generate step.
 4. **Phase 4 note:** the local install printed Homebrew's own caveat, `portage` is shadowed by a `gem install` copy in the mise Ruby's bin, which is exactly the case the planned `doctor` PATH warning targets.
+
+### Update (2026-09-25): released, tapped, and no GitHub Actions
+
+- All seven gems are on rubygems (`portage-ucp` 0.10.0, `portage-cli` 0.7.3, …). `tomtom87/homebrew-portage` is public with `Formula/portage.rb`, and `brew install tomtom87/portage/portage` works on macOS arm64.
+- The account is on GitHub's free plan with Actions unavailable, so the tap's `brew test-bot` workflows and dependabot config were removed. **This replaces Phase 2's Action and rules out Phase 3's CI-built bottles.**
+- Phase 2 is instead `rake homebrew:update`, which `rake publish_all` runs after its last push (`SKIP_HOMEBREW=1` skips it). It:
+  - regenerates the formula into the local tap checkout (`brew --repository tomtom87/portage`), retrying while rubygems' CDN still reports a just-pushed gem as unpublished;
+  - stops if nothing changed;
+  - otherwise installs from source, then runs `brew test`, `brew style` and `brew audit --strict --online`;
+  - commits `portage <version>` and pushes (`NO_PUSH=1` stops after the commit).
+  It is the tap's only test run.
+- Still unverified: macOS x86_64 and Linux Homebrew.
