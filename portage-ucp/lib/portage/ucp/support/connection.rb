@@ -3,6 +3,7 @@ require "socket"
 require "openssl"
 require "uri"
 require_relative "proxy_config"
+require_relative "passthrough_context"
 
 module Portage
   module Ucp
@@ -75,15 +76,23 @@ module Portage
         # straight to the matching *_start; anything else — a multi-hop
         # chain, or a single :forward hop that needs custom CONNECT headers
         # (open decision 2) — goes through the hand-rolled tunnel.
-        def self.dispatch(chain, uri, open_timeout:, read_timeout:, &)
+        # Phase 3 of docs/plans/proxy-support.md: whatever the block
+        # receives is wrapped in PassthroughHttp first, uniformly across
+        # every dispatch path (direct included), so an inbound request's
+        # passthrough headers/Forwarded chain (Support::PassthroughContext,
+        # set by the Rack endpoint serving that request) land on outbound
+        # calls no matter which route resolved. A no-op (returns the real
+        # object unwrapped) outside of any PassthroughContext.with block.
+        def self.dispatch(chain, uri, open_timeout:, read_timeout:, &block)
+          wrapped = ->(http) { block.call(PassthroughHttp.wrap(http)) }
           if single_hop?(chain, :direct?)
-            direct_start(uri, open_timeout: open_timeout, read_timeout: read_timeout, &)
+            direct_start(uri, open_timeout: open_timeout, read_timeout: read_timeout, &wrapped)
           elsif single_hop?(chain, :gateway?)
-            gateway_start(uri, chain.first, open_timeout: open_timeout, read_timeout: read_timeout, &)
+            gateway_start(uri, chain.first, open_timeout: open_timeout, read_timeout: read_timeout, &wrapped)
           elsif native_forward?(chain)
-            forward_start(uri, chain.first, open_timeout: open_timeout, read_timeout: read_timeout, &)
+            forward_start(uri, chain.first, open_timeout: open_timeout, read_timeout: read_timeout, &wrapped)
           else
-            tunnel_start(uri, chain, open_timeout: open_timeout, read_timeout: read_timeout, &)
+            tunnel_start(uri, chain, open_timeout: open_timeout, read_timeout: read_timeout, &wrapped)
           end
         end
         private_class_method :dispatch
@@ -312,6 +321,67 @@ module Portage
           ssl_socket
         end
         private_class_method :start_tls
+
+        # Phase 3 of docs/plans/proxy-support.md: applies the current
+        # fiber's Support::PassthroughContext (an inbound request's
+        # allowlisted headers, plus how to build the outbound
+        # Forwarded/X-Forwarded-For chain) to every request this block
+        # makes, regardless of which route/hop kind resolved. `.wrap`
+        # returns `http` itself, untouched, whenever there is no
+        # PassthroughContext in flight (the overwhelmingly common case —
+        # most outbound calls happen outside of any inbound request), so
+        # this never adds overhead to a call that isn't serving one.
+        class PassthroughHttp
+          def self.wrap(http) = Support::PassthroughContext.current ? new(http) : http
+
+          def initialize(http)
+            @http = http
+          end
+
+          def request(req)
+            apply!(req)
+            @http.request(req)
+          end
+
+          def get(path, headers = nil)
+            req = Net::HTTP::Get.new(path, headers || {})
+            apply!(req)
+            @http.request(req)
+          end
+
+          def post(path, data, headers = nil)
+            req = Net::HTTP::Post.new(path, headers || {})
+            req.body = data
+            apply!(req)
+            @http.request(req)
+          end
+
+          private
+
+          def apply!(req)
+            Support::PassthroughContext.headers.each { |name, value| req[name] = value }
+            apply_forwarded!(req)
+          end
+
+          # "drop" (the default, and whenever no chain_entry was resolved)
+          # never touches the outbound Forwarded/X-Forwarded-For headers at
+          # all; "replace" overwrites whatever the caller's own request
+          # already carried; "append" adds this hop onto the end of it.
+          def apply_forwarded!(req)
+            entry = Support::PassthroughContext.chain_entry
+            mode = Support::PassthroughContext.forwarded_mode
+            return if entry.nil? || mode == "drop"
+
+            req["X-Forwarded-For"] = chain_value(req["X-Forwarded-For"], entry, mode)
+            req["Forwarded"] = chain_value(req["Forwarded"], "for=#{entry}", mode, sep: ", ")
+          end
+
+          def chain_value(existing, entry, mode, sep: ", ")
+            return entry if mode == "replace" || existing.to_s.empty?
+
+            "#{existing}#{sep}#{entry}"
+          end
+        end
 
         # A Net::HTTP-alike bound to an already-established (and, for an
         # https:// target, already TLS-wrapped) socket that reached the

@@ -241,4 +241,152 @@ RSpec.describe Portage::Ucp::WebMcp::Rack::CallEndpoint do
       end
     end
   end
+
+  # Phase 3 of docs/plans/proxy-support.md.
+  describe "reverse-proxy support" do
+    def raw_call(payload, env_overrides = {})
+      body = JSON.generate(payload)
+      env = Rack::MockRequest.env_for("/", method: "POST", input: body, "CONTENT_TYPE" => "application/json")
+      env["HTTP_ORIGIN"] = origin
+      env.merge!(env_overrides)
+      app.call(env)
+    end
+
+    describe "Origin/X-Forwarded-Host" do
+      let(:endpoint_options) { { trusted_proxies: ["10.0.0.0/8"], forwarded_host_allowed: ["shop.example"] } }
+
+      it "does not let a spoofed X-Forwarded-Host from an untrusted peer widen what's accepted as same-origin" do
+        status, _headers, body = raw_call(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          "REMOTE_ADDR" => "203.0.113.9", "HTTP_X_FORWARDED_HOST" => "shop.example",
+          "HTTP_ORIGIN" => "http://shop.example"
+        )
+
+        expect(status).to eq(403)
+        expect(JSON.parse(body.first).dig("error", "code")).to eq(-32_600)
+      end
+
+      it "does not accept a forwarded host that isn't on forwarded_host_allowed, even from a trusted peer" do
+        status, = raw_call(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_FORWARDED_HOST" => "evil.example",
+          "HTTP_ORIGIN" => "http://evil.example"
+        )
+
+        expect(status).to eq(403)
+      end
+
+      it "accepts the request as same-origin once the forwarded host is both trusted and allowlisted" do
+        status, = raw_call(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_FORWARDED_HOST" => "shop.example",
+          "HTTP_ORIGIN" => "http://shop.example"
+        )
+
+        expect(status).to eq(200)
+      end
+
+      it "still accepts its own (unforwarded) origin — replacing, not widening, what counts as same-origin" do
+        status, = raw_call({ jsonrpc: "2.0", id: 1, method: "tools/list" }, "REMOTE_ADDR" => "10.0.0.5")
+
+        expect(status).to eq(200)
+      end
+    end
+
+    describe "client_ip reaching the RateLimiter" do
+      let(:seen_keys) { [] }
+      let(:rate_limiter) do
+        seen = seen_keys
+        Class.new(Portage::Ucp::RateLimiter) do
+          define_method(:check!) { |key, _capability| seen << key[:client_ip] }
+        end.new
+      end
+      let(:catalog) { Store.catalog(rate_limiter: rate_limiter) }
+      let(:endpoint_options) { { trusted_proxies: ["10.0.0.0/8"] } }
+      let(:mutating_params) do
+        { name: "create_cart",
+          arguments: { line_items: [{ product_id: "mug", quantity: 1 }], idempotency_key: "k-#{SecureRandom.hex(4)}" } }
+      end
+
+      it "keys on the resolved right-most-untrusted client, not the trusted proxy's own address" do
+        raw_call(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: mutating_params },
+          "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_FORWARDED_FOR" => "198.51.100.7",
+          "HTTP_X_CSRF_TOKEN" => Store::CSRF_TOKEN
+        )
+
+        expect(seen_keys).to eq(["198.51.100.7"])
+      end
+
+      it "keys on the plain socket peer when it isn't a trusted proxy, ignoring any X-Forwarded-For it sends" do
+        raw_call(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: mutating_params },
+          "REMOTE_ADDR" => "203.0.113.9", "HTTP_X_FORWARDED_FOR" => "198.51.100.7",
+          "HTTP_X_CSRF_TOKEN" => Store::CSRF_TOKEN
+        )
+
+        expect(seen_keys).to eq(["203.0.113.9"])
+      end
+    end
+
+    describe "passthrough headers" do
+      let(:endpoint_options) do
+        { trusted_proxies: ["10.0.0.0/8"], passthrough_headers: ["X-Shop-Locale"], passthrough_forwarded: "replace" }
+      end
+      let(:captured) { [] }
+      let(:search_params) { { name: "search_catalog", arguments: { query: "mug" } } }
+
+      # Same "override .dup/#handle on the catalog's own server" shape the
+      # existing call_timeout specs above already use — captures whatever
+      # Support::PassthroughContext looks like *during* the dispatched call,
+      # which is exactly what Support::Connection would see if the tool
+      # made an outbound call right then.
+      before do
+        server = catalog.server
+        def server.dup = self
+
+        captures = captured
+        server.define_singleton_method(:handle) do |payload|
+          captures << Portage::Ucp::Support::PassthroughContext.current
+          super(payload)
+        end
+      end
+
+      it "raises at construction time if a passthrough header is protected" do
+        expect do
+          described_class.new(catalog: catalog, passthrough_headers: ["Authorization"])
+        end.to raise_error(Portage::Ucp::Support::ProxyConfig::ConfigError, /Authorization/)
+      end
+
+      it "is active, with the allowlisted header, for a trusted peer's call" do
+        raw_call({ jsonrpc: "2.0", id: 1, method: "tools/call", params: search_params },
+                 "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_SHOP_LOCALE" => "en-GB")
+
+        expect(captured.first).to include(headers: { "X-Shop-Locale" => "en-GB" }, forwarded: "replace")
+      end
+
+      it "is not active for the same request from an untrusted peer" do
+        raw_call({ jsonrpc: "2.0", id: 1, method: "tools/call", params: search_params },
+                 "REMOTE_ADDR" => "203.0.113.9", "HTTP_X_SHOP_LOCALE" => "en-GB")
+
+        expect(captured.first).to be_nil
+      end
+
+      it "clears once the request finishes, so it never leaks into a later call" do
+        raw_call({ jsonrpc: "2.0", id: 1, method: "tools/call", params: search_params },
+                 "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_SHOP_LOCALE" => "en-GB")
+
+        expect(Portage::Ucp::Support::PassthroughContext.current).to be_nil
+      end
+
+      it "does not leak into a later request from a different (untrusted) peer either" do
+        raw_call({ jsonrpc: "2.0", id: 1, method: "tools/call", params: search_params },
+                 "REMOTE_ADDR" => "10.0.0.5", "HTTP_X_SHOP_LOCALE" => "en-GB")
+        raw_call({ jsonrpc: "2.0", id: 2, method: "tools/call", params: search_params },
+                 "REMOTE_ADDR" => "203.0.113.9", "HTTP_X_SHOP_LOCALE" => "en-GB")
+
+        expect(captured.last).to be_nil
+      end
+    end
+  end
 end
