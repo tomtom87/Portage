@@ -187,6 +187,84 @@ task :publish_all do
     puts "\n=== #{gem_dir} #{gemspec_version(gem_dir)} ==="
     build_and_verify_gem(gem_dir) { |gem_path| sh "gem push #{gem_path}" }
   end
+
+  if ENV["SKIP_HOMEBREW"]
+    puts "\nSKIP_HOMEBREW set — run `rake homebrew:update` once you're ready to update the tap."
+  else
+    puts "\nEvery gem is pushed. Updating the Homebrew tap (a failure here leaves " \
+         "the gems published; fix it and re-run `rake homebrew:update`)."
+    Rake::Task["homebrew:update"].invoke
+  end
+end
+
+HOMEBREW_TAP = "tomtom87/portage".freeze
+HOMEBREW_FORMULA = "#{HOMEBREW_TAP}/portage".freeze
+
+namespace :homebrew do
+  desc "Regenerate the tap's Formula/portage.rb from this checkout's versions, " \
+       "install and test it locally, then commit and push the tap. The tap has " \
+       "no CI, so this is its only test run. NO_PUSH=1 stops after the local " \
+       "commit."
+  task :update do
+    tap_dir = `brew --repository #{HOMEBREW_TAP}`.strip
+    abort "Homebrew tap not found at #{tap_dir} — run `brew tap #{HOMEBREW_TAP}` first" \
+      unless File.directory?(File.join(tap_dir, ".git"))
+
+    git = ->(args) { sh "git -C #{tap_dir} #{args}" }
+    tap_status = `git -C #{tap_dir} status --porcelain`
+    abort "Tap checkout #{tap_dir} has uncommitted changes:\n#{tap_status}" unless tap_status.empty?
+    git.call("pull --ff-only --quiet")
+
+    formula_path = File.join(tap_dir, "Formula", "portage.rb")
+    write_homebrew_formula(formula_path)
+
+    if `git -C #{tap_dir} status --porcelain`.empty?
+      puts "Formula/portage.rb is already up to date — nothing to commit."
+      next
+    end
+
+    # Test the working-tree formula itself, not a copy from Homebrew's API.
+    brew_env = { "HOMEBREW_NO_AUTO_UPDATE" => "1", "HOMEBREW_NO_INSTALL_FROM_API" => "1" }
+    installed = system(brew_env, "brew list --formula #{HOMEBREW_FORMULA} >/dev/null 2>&1")
+    begin
+      sh brew_env, "brew #{installed ? 'reinstall' : 'install'} --build-from-source #{HOMEBREW_FORMULA}"
+      sh brew_env, "brew test #{HOMEBREW_FORMULA}"
+      sh brew_env, "brew style #{HOMEBREW_FORMULA}"
+      sh brew_env, "brew audit --strict --online #{HOMEBREW_FORMULA}"
+    rescue RuntimeError
+      abort "The new formula failed locally; it's left uncommitted in #{formula_path} for inspection."
+    end
+
+    git.call("add Formula/portage.rb")
+    git.call("commit --quiet -m 'portage #{gemspec_version('portage-cli')}'")
+    if ENV["NO_PUSH"]
+      puts "NO_PUSH set — committed in #{tap_dir} but not pushed."
+    else
+      git.call("push --quiet")
+      puts "Pushed portage #{gemspec_version('portage-cli')} to #{HOMEBREW_TAP}."
+    end
+  end
+end
+
+# Runs script/homebrew-formula into `path`, retrying while rubygems.org still
+# answers that a just-pushed gem "isn't published". Its CDN keeps serving the
+# pre-push version list for a while even with `Cache-Control: no-cache`, so
+# straight after `publish_all` the first attempts routinely fail.
+def write_homebrew_formula(path, attempts: 20, delay: 15)
+  require "open3"
+
+  attempts.times do |attempt|
+    output, status = Open3.capture2e(RbConfig.ruby, "script/homebrew-formula", "--out", path)
+    if status.success?
+      puts output
+      return
+    end
+    abort "script/homebrew-formula failed:\n#{output}" unless output.include?("isn't published on rubygems.org yet")
+
+    puts "rubygems.org doesn't list every new version yet (attempt #{attempt + 1}/#{attempts}); retrying in #{delay}s…"
+    sleep delay
+  end
+  abort "Gave up waiting for rubygems.org to list the new versions. Re-run `rake homebrew:update` later."
 end
 
 AGENT_PROFILE_JSDELIVR_PATH = "gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json".freeze
