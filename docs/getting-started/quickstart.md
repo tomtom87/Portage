@@ -1,7 +1,23 @@
 # Quickstart: buying via the CLI (5 minutes)
 
 ```bash
-gem install portage-cli
+brew install tomtom87/portage/portage   # macOS and Linux Homebrew: bundles every adapter
+gem install portage-cli                 # or: any Ruby >= 3.2, add only the adapters you want
+```
+
+Upgrade with `brew upgrade portage` or `gem update portage-cli`; `~/.portage` is
+never touched. If both are installed, whichever `portage` comes first on `PATH`
+wins, and `portage doctor` warns when that's not the one you meant (`which -a
+portage` to check). On Linux, stored payment tokens and proxy passwords need
+`secret-tool` from your distro (e.g. `libsecret-tools`). Details: [installation](../cli-reference.md#installation).
+
+Set your shipping address before buying (`.env.example` in the repo root lists every variable), then
+check your setup:
+
+```bash
+export PORTAGE_SHIP_STREET="1 Main St" PORTAGE_SHIP_CITY="Erie" \
+       PORTAGE_SHIP_COUNTRY="US" PORTAGE_SHIP_POSTAL_CODE="16501"
+portage doctor
 ```
 
 ```bash
@@ -32,20 +48,15 @@ skill into your agent's skills directory instead of hand-rolling prompts — it 
 guardrails that matter when neither is. [`serve-via-ucp`](../skills/serve-via-ucp.md)
 is the merchant-side counterpart, for *setting up* a store's own UCP endpoint instead.
 
-## Other CLI commands
+## Usage
 
-`portage-cli` covers more than buying:
+Every `portage` subcommand; the [CLI reference](../cli-reference.md) has each one's flags
+and env vars.
 
-```bash
-portage compare <url> --product-id ID [--id VALUE ...] [--results N]  # where else is this sold?
-portage history [list|clear] [--purchases|--searches]                 # past searches/purchases
-portage payment list|enroll|set-default|remove|freeze|revoke          # stored payment tokens
-portage policy show|set                                               # spend caps, velocity, allowlist
-portage doctor                    # aliases: configure, setup
-portage generate adapter NAME | agent-profile
-```
+{% include-markdown "../../portage-cli/README.md" start="<!-- usage-start -->" end="<!-- usage-end -->" %}
 
-Full reference, flags, and env vars: [CLI reference](../cli-reference.md).
+`buy`, `find`, `compare`, `doctor` and `payment enroll` also take `--proxy*` flags
+(see [Running behind a proxy](../proxy.md)).
 
 ## Installing as a library instead
 

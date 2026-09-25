@@ -4,8 +4,7 @@
 are implemented and merged (`b6c8a4d`, `833c267`, `d3ac72c`, `d7bafa2`); this page is
 Phase 4 — how to actually point Portage at the proxy topologies people run in
 practice, and what to expect from each one. For the CLI flags/env vars themselves,
-see [`portage-cli/README.md`](../portage-cli/README.md) (mirrored at
-[CLI reference](cli-reference.md)).
+see the [CLI reference](cli-reference.md#proxy) (the `portage-cli` README).
 
 Everything here is **outbound egress** (`forward`/`gateway` modes) except the last
 section, which is **inbound** — a reverse proxy sitting in front of Portage's own

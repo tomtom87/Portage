@@ -71,6 +71,7 @@ plugins:
           - index.md
           - getting-started/quickstart.md
           - walkthrough.md
+          - cli-reference.md
           - cli-usage-tutorial.md
         Concepts:
           - concepts/ucp-overview.md
@@ -88,8 +89,6 @@ plugins:
           - library-usage.md
           - adapter-requirements.md
           - proxy.md
-        CLI reference:
-          - cli-reference.md
         Adapters:
           - adapters/feature-matrix.md
           - adapters/shopify.md
@@ -119,6 +118,7 @@ nav:
   - Getting started:
       - Quickstart: getting-started/quickstart.md
       - Walkthrough: walkthrough.md
+      - CLI reference: cli-reference.md
       - CLI usage tutorial: cli-usage-tutorial.md
   - Concepts:
       - UCP overview: concepts/ucp-overview.md
@@ -136,7 +136,6 @@ nav:
       - Library usage: library-usage.md
       - Adapter requirements: adapter-requirements.md
       - Running behind a proxy: proxy.md
-  - CLI reference: cli-reference.md
   - Adapters:
       - Feature matrix: adapters/feature-matrix.md
       - Shopify: adapters/shopify.md

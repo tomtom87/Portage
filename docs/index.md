@@ -8,7 +8,7 @@ any e-commerce stack, agnostic, versatile and fully customizable for any busines
 "Portage": a conduit for cargo overland between waterways a ship can't sail directly between.
 
 !!! info "Status"
-    `0.9.0`. APIs may still shift before `1.0`.
+    `0.10.0`. APIs may still shift before `1.0`.
 
 Start here: [Quickstart](getting-started/quickstart.md).
 
@@ -33,19 +33,19 @@ Thirteen gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 | Gem | Version | Role |
 |---|---|---|
-| [`portage-ucp`](core-gems/portage-ucp.md) | 0.9.0 | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. |
-| [`portage-ucp-client`](core-gems/portage-ucp-client.md) | 0.6.2 | Client SDK — connect to somebody else's manifest, or drive your own `Adapter`, as the shopper's agent. Loopback/stdio/HTTP behind one interface. |
-| [`portage-ucp-webmcp`](adapters/webmcp.md) | 0.1.0 | WebMCP transport onto the same `Adapter` contract — inbound (`document.modelContext`) and outbound (drives a page's WebMCP tools via a browser driver). |
-| [`portage-ucp-decision`](core-gems/portage-ucp-decision.md) | 0.1.0 | System One decision layer — offer ranking, escalation policy, a confidence gate (Jev/Laya), typed `PolicyGuard` wrapper. |
+| [`portage-ucp`](core-gems/portage-ucp.md) | 0.10.0 | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. |
+| [`portage-ucp-client`](core-gems/portage-ucp-client.md) | 0.6.3 | Client SDK — connect to somebody else's manifest, or drive your own `Adapter`, as the shopper's agent. Loopback/stdio/HTTP behind one interface. |
+| [`portage-ucp-webmcp`](adapters/webmcp.md) | 0.1.1 | WebMCP transport onto the same `Adapter` contract — inbound (`document.modelContext`) and outbound (drives a page's WebMCP tools via a browser driver). |
+| [`portage-ucp-decision`](core-gems/portage-ucp-decision.md) | 0.1.1 | System One decision layer — offer ranking, escalation policy, a confidence gate (Jev/Laya), typed `PolicyGuard` wrapper. |
 | [`portage-ucp-journal`](core-gems/portage-ucp-journal.md) | 0.1.1 | Buyer-side purchase journal + the injectable `Store` abstraction it's built on. |
-| [`portage-cli`](cli-reference.md) | 0.7.0 | Ships the `portage` command — `buy`, `find`, `compare`, `history`, `payment`, `policy`, `doctor`, `generate`. |
-| [`portage-ucp-shopify`](adapters/shopify.md) | 0.5.0 | Shopify — Admin + Storefront GraphQL APIs. |
+| [`portage-cli`](cli-reference.md) | 0.7.4 | Ships the `portage` command — `buy`, `find`, `compare`, `history`, `payment`, `policy`, `doctor`, `generate`. |
+| [`portage-ucp-shopify`](adapters/shopify.md) | 0.5.1 | Shopify — Admin + Storefront GraphQL APIs. |
 | [`portage-ucp-wix`](adapters/wix.md) | 0.1.4 | Wix — Stores Catalog and eCommerce REST APIs. |
 | [`portage-ucp-woocommerce`](adapters/woocommerce.md) | 0.2.1 | WooCommerce — Admin REST API and Store API. |
 | [`portage-ucp-bigcommerce`](adapters/bigcommerce.md) | 0.1.4 | BigCommerce — v3 Catalog/Carts/Checkouts and v2 Orders APIs. |
 | [`portage-ucp-magento`](adapters/magento.md) | 0.1.4 | Magento/Adobe Commerce — REST v1 (admin-token catalog/order, guest-cart cart/checkout). |
 | [`portage-ucp-etsy`](adapters/etsy.md) | 0.1.4 | Etsy — real catalog/order via Open API v3; checkout is redirect-link only (Etsy's public API has no cart/checkout endpoint). |
-| [`portage-ucp-instagram`](adapters/instagram.md) | 0.1.4 | Instagram/Facebook Shops — real catalog via Meta's Graph API Commerce Catalog; checkout is redirect-link only. `get_order` is deprecated (Meta removes Order Management endpoints 2026-10-27; after that, catalog search/product + checkout handoff only). |
+| [`portage-ucp-instagram`](adapters/instagram.md) | 0.1.5 | Instagram/Facebook Shops — real catalog via Meta's Graph API Commerce Catalog; checkout is redirect-link only. `get_order` is deprecated (Meta removes Order Management endpoints 2026-10-27; after that, catalog search/product + checkout handoff only). |
 
 A backend on some other stack writes its own thin `Adapter` subclass against `portage-ucp`
 directly. Every adapter gem ships the same `exe/` executable, `examples/portage_ucp.rb`
@@ -62,7 +62,8 @@ backend ([Serving /.well-known/ucp](well-known-ucp.md)).
 
 ## Requirements
 
-Ruby >= 3.2, and the `mcp` gem `~> 0.24` (pulled in by `portage-ucp`). Each adapter gem
+Ruby >= 3.2, and the `mcp` gem `~> 0.24` (pulled in by `portage-ucp`). The Homebrew
+formula brings its own Ruby, so a brew install of the CLI needs neither. Each adapter gem
 needs its backend's own credentials, read from env by its executable — see that gem's own
 docs page, or [Adapter requirements](adapter-requirements.md) for the full table.
 

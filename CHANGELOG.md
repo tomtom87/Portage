@@ -7,6 +7,22 @@ for changes to `portage-ucp`, an adapter, the client, or the CLI.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/);
 this project is pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- **Homebrew-first install docs** (`docs/plans/homebrew-distribution.md`
+  Phase 4). The README, quickstart, CLI tutorial and `portage-cli` README
+  list `brew install tomtom87/portage/portage` first and `gem install
+  portage-cli` second, with upgrading, Linux `secret-tool`, and PATH
+  shadowing covered. The README now shows the full `portage` usage block
+  under the quickstart in place of the shorter "Other CLI commands" list,
+  and the docs site's quickstart includes the same block from
+  `portage-cli/README.md`. The CLI reference moved under "Getting started",
+  above the CLI usage tutorial.
+- `.env.example` lists the `PORTAGE_SHIP_*` shipping address,
+  `PORTAGE_CURRENCY`/`PORTAGE_LANGUAGE`, and the search-backend keys.
+- Fixed three doc links that made `mkdocs build --strict` fail (links from
+  `docs/` to files outside it), and refreshed the stale gem version tables.
+
 ## [0.10.0] - 2026-09-25
 
 - **Proxy support across every gem** (`docs/plans/proxy-support.md`

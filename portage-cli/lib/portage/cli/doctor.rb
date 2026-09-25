@@ -3,6 +3,7 @@ require "uri"
 require_relative "confidence_check"
 require_relative "user_agent"
 require_relative "proxy_settings"
+require_relative "shipping_profile"
 
 module Portage
   module Cli
@@ -16,21 +17,31 @@ module Portage
     # process, so a host app passes `--require` to load its own initializer
     # first (Rails: `--require ./config/environment`).
     class Doctor
-      Finding = Struct.new(:check, :message, keyword_init: true)
+      # `level` is "warning" (something to fix; any one makes doctor exit 1)
+      # or "info" (a report, e.g. how portage was installed). `details` is
+      # structured data for `--json`; `to_h` drops it when there is none.
+      Finding = Struct.new(:check, :message, :level, :details, keyword_init: true) do
+        def initialize(level: "warning", **) = super
+        def warning? = level == "warning"
+        def to_h = super.compact
+      end
 
-      def initialize(adapter_class: nil, proxy_settings: ProxySettings.new)
+      def initialize(adapter_class: nil, proxy_settings: ProxySettings.new, install_doctor: InstallDoctor.new)
         @adapter_class = adapter_class
         @proxy_settings = proxy_settings
+        @install_doctor = install_doctor
       end
 
       def call
         [
+          *@install_doctor.findings,
           authenticator_finding,
           rate_limiter_finding,
           signing_keys_finding,
           payment_handlers_finding,
           decision_backend_finding,
           user_agent_finding,
+          shipping_finding,
           proxy_finding,
           *proxy_doctor_findings,
           *capability_findings
@@ -91,6 +102,36 @@ module Portage
                     message: "Configured User-Agent (PORTAGE_USER_AGENT or user_agent in " \
                              "~/.portage/config.json) contains a newline — every outbound request will " \
                              "raise instead of sending.")
+      end
+
+      # PORTAGE_SHIP_* (ShippingProfile, BuyerContext) has two jobs, and both
+      # fail quietly: with no complete address an own-store checkout goes
+      # out with no shipping destination, and with no PORTAGE_SHIP_COUNTRY a
+      # native UCP store gets no buyer context, so a live Shopify store
+      # builds a cart in no market and reports in-stock items as
+      # `merchandise_out_of_stock` (docs/ucp-tool-gating-investigation.md).
+      def shipping_finding
+        missing = ShippingProfile::REQUIRED.map { |key| ShippingProfile::ENV_VARS.fetch(key) }
+                                           .select { |var| ENV[var].to_s.empty? }
+        return if missing.empty?
+
+        Finding.new(check: "shipping", message: "#{shipping_gap(missing)} Export them in your shell; " \
+                                                ".env.example lists every PORTAGE_SHIP_* variable.")
+      end
+
+      def shipping_gap(missing)
+        country = ShippingProfile::ENV_VARS.fetch(:address_country)
+        gap = if missing.length == ShippingProfile::REQUIRED.length
+                "No shipping address set (#{missing.join(', ')})."
+              else
+                "Shipping address incomplete: missing #{missing.join(', ')}, and a partial address is " \
+                  "treated as none."
+              end
+        gap += " `portage buy` sends no shipping destination to your own store's checkout"
+        return "#{gap}." unless missing.include?(country)
+
+        "#{gap}, and without #{country} a native UCP store (e.g. Shopify) gets no market to price in " \
+          "and can report in-stock items as out of stock."
       end
 
       # Phase 0 of docs/plans/proxy-support.md: every raw Net::HTTP.start call
@@ -192,3 +233,4 @@ end
 # Doctor has to exist first (this file requires proxy_settings, not
 # proxy_doctor, at the top for exactly this reason).
 require_relative "proxy_doctor"
+require_relative "install_doctor"

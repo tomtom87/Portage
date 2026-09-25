@@ -1,6 +1,6 @@
 # Homebrew Distribution: `brew install portage`
 
-**Status:** Phase 1's in-repo half is done: the generator, `portage --version`, and the `irb` dependency fix. The tap repo doesn't exist yet. See [Handoff](#handoff-phase-1-status-and-next-steps) at the end.
+**Status:** Phases 1, 2 (as `rake homebrew:update`) and 4 are done; Phase 3 (bottles) is ruled out without GitHub Actions; Phase 5 is later. See the updates at the end.
 **Driver:** today `portage` installs only with `gem install portage-cli`. That assumes a working Ruby ≥ 3.2 and a writable gem home, and it puts the CLI's gems in the user's global gem set. Homebrew is how most macOS (and many Linux) developers expect to install a CLI, and the goal here is a one-line install on macOS. It should give a self-contained `portage` that doesn't depend on, or interfere with, whatever Ruby the user has.
 
 ## Context
@@ -81,10 +81,14 @@ None of these need a Homebrew dependency on macOS.
 
 ### Phase 3: Bottles
 
+**Ruled out (2026-09-25):** bottles are built by `brew test-bot` in the tap's GitHub Actions, and Actions isn't available on this account (see the update at the end). Installs build from source, which takes about 30 s on a machine with Xcode CLT.
+
 - `brew test-bot` in the tap builds bottles for the supported macOS versions (arm64 and Intel) and for Linux x86_64. `brew pr-pull` publishes them to the tap's GitHub Releases.
 - With bottles, `brew install` finishes in seconds with no compiler, which matters if Phase 1 found native extensions.
 
 ### Phase 4: Docs + doctor
+
+**Done (2026-09-25, `portage-cli` 0.7.4).** See the Phase 4 update at the end.
 
 - README quickstart: `brew install tomtom87/portage/portage` first, `gem install portage-cli` second.
 - `docs/cli-usage-tutorial.md` and `docs/getting-started/quickstart.md` get the same order.
@@ -98,7 +102,7 @@ None of these need a Homebrew dependency on macOS.
 ## Open decisions
 
 1. ~~Formula name~~: resolved as `portage` (see Naming).
-2. **Linux Secret Service:** declare `depends_on "libsecret" => :optional`, or document that `secret-tool` comes from the distro? Leaning towards documenting it, since it's a system D-Bus service anyway.
+2. ~~Linux Secret Service~~: resolved as "document it". `secret-tool` comes from the distro (e.g. `libsecret-tools`), not the formula, since the Secret Service is a system D-Bus service anyway. Documented in `portage-cli/README.md`'s installation section, the README quickstart and the CLI tutorial.
 3. Should the formula offer `--without-adapters` for a minimal install, or is bundling everything always fine? Leaning bundling always, since there are no extra third-party dependencies.
 4. Is a MacPorts port also wanted? Out of scope unless requested.
 
@@ -149,3 +153,11 @@ None of these need a Homebrew dependency on macOS.
   - commits `portage <version>` and pushes (`NO_PUSH=1` stops after the commit).
   It is the tap's only test run.
 - Still unverified: macOS x86_64 and Linux Homebrew.
+
+### Update (2026-09-25): Phase 4 done, Phase 3 ruled out
+
+- **Docs.** Install instructions now put `brew install tomtom87/portage/portage` first and `gem install portage-cli` second, in the root README, `docs/getting-started/quickstart.md`, `docs/cli-usage-tutorial.md` and `portage-cli/README.md` (which is also the published CLI reference). They also cover upgrading (`brew upgrade portage` / `gem update portage-cli`, `~/.portage` untouched, no self-update), `secret-tool` on Linux (open decision 2), and a gem copy and a brew copy shadowing each other on `PATH` (`which -a portage`, `gem uninstall portage-cli` or reorder `PATH`).
+- **`portage doctor`** (`portage-cli` 0.7.4, `InstallDoctor`) reports the install method (`homebrew` when this gem or its Ruby is under `HOMEBREW_PREFIX/Cellar/portage/`, else `gem`), the Ruby version and path, and which first-party adapters load. It warns when a Homebrew install is missing an adapter, and when the `portage` first on `PATH` isn't this install, comparing resolved Cellar locations rather than raw paths. It doesn't shell out to `brew`. Findings gained a `level` (`warning`/`info`) and `details`; `--json` is still an array, so the formula's `test do` block still passes unchanged.
+- **Verified:** the branch's doctor under the mise Ruby reports `gem`. Under Homebrew's Ruby, from a fake keg (`HOMEBREW_PREFIX` pointed at a temp prefix whose `Cellar/portage/<v>` holds the branch's `lib`, with the real keg's `libexec` as `GEM_HOME`), it reports `homebrew`, loads all nine adapters, and warns that the mise gem copy shadows it. **Not verified:** the released 0.7.4 inside the real `/opt/homebrew` keg, since that needs the release.
+- **Phase 3 is ruled out** while GitHub Actions is unavailable: nothing can run `brew test-bot` to build bottles. Revisit if Actions becomes available.
+

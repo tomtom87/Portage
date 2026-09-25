@@ -4,6 +4,41 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [0.7.4] - 2026-09-25
+
+- **`portage doctor` reports how it was installed, and warns when another
+  `portage` shadows it** (`docs/plans/homebrew-distribution.md` Phase 4).
+  New findings, all offline and without shelling out to `brew`:
+  - `install`: `homebrew` (with the Cellar keg) when this gem or its Ruby
+    lives under `HOMEBREW_PREFIX/Cellar/portage/` (`$HOMEBREW_PREFIX`,
+    then `/opt/homebrew`, `/usr/local`, `/home/linuxbrew/.linuxbrew`),
+    otherwise `gem` with the gem's own path;
+  - `runtime`: the Ruby version and `RbConfig.ruby` path, plus the
+    `portage-cli` version;
+  - `adapters`: each first-party adapter gem (plus `webmcp` and
+    `decision`), whether it loads and at which version. A gem install
+    without adapters is normal; a Homebrew install missing one is a
+    warning, since the formula bundles them all. A broken adapter is
+    reported, never raised;
+  - `path`: every `portage` on `PATH`, compared by resolved Cellar
+    location rather than raw path. Warns when a Homebrew install is
+    shadowed by an earlier `portage` (typically a `gem install` copy in a
+    mise/rbenv/asdf/rvm Ruby), naming the winner and how to fix it, and
+    when a gem install is shadowed by a Homebrew one.
+- `portage doctor` also warns when the `PORTAGE_SHIP_*` address is missing
+  or incomplete, naming the missing variables. Without
+  `PORTAGE_SHIP_COUNTRY` a native UCP store gets no buyer context, which
+  is how a live Shopify store ended up reporting in-stock items as out of
+  stock.
+- `doctor` findings now carry a `level` (`warning` or `info`) and, for the
+  new checks, structured `details`, both in `--json`. The JSON is still a
+  top-level array. Only warnings make doctor exit 1; the text output lists
+  info findings first, then the warnings or `No issues found.`.
+- `ShippingProfile` treats an empty `PORTAGE_SHIP_*` value as unset, the
+  way `BuyerContext` and the WooCommerce billing fallback already did, so
+  a `.env` copied from `.env.example` with blanks left in no longer
+  submits an address of empty strings.
+
 ## [0.7.3] - 2026-09-25
 
 - **Proxy support** (`docs/plans/proxy-support.md` Phases 2-3). Every

@@ -11,12 +11,28 @@ Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Mo
 
 "Portage": a conduit for cargo overland between waterways a ship can't sail directly between.
 
-> **Status**: `0.9.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
+> **Status**: `0.10.0`. APIs may still shift before `1.0` — see the [design log](docs/design-log.md).
 
 ## Quickstart: buying via the CLI (5 minutes)
 
 ```bash
-gem install portage-cli
+brew install tomtom87/portage/portage   # macOS and Linux Homebrew: bundles every adapter
+gem install portage-cli                 # or: any Ruby >= 3.2, add only the adapters you want
+```
+
+Upgrade with `brew upgrade portage` or `gem update portage-cli`; `~/.portage` is
+never touched. If both are installed, whichever `portage` comes first on `PATH`
+wins, and `portage doctor` warns when that's not the one you meant (`which -a
+portage` to check). On Linux, stored payment tokens and proxy passwords need
+`secret-tool` from your distro (e.g. `libsecret-tools`). Details: [installation](portage-cli/README.md#installation).
+
+Set your shipping address before buying ([`.env.example`](.env.example) lists every variable), then
+check your setup:
+
+```bash
+export PORTAGE_SHIP_STREET="1 Main St" PORTAGE_SHIP_CITY="Erie" \
+       PORTAGE_SHIP_COUNTRY="US" PORTAGE_SHIP_POSTAL_CODE="16501"
+portage doctor
 ```
 
 ```bash
@@ -47,6 +63,45 @@ skill into your agent's skills directory instead of hand-rolling prompts — it 
 guardrails that matter when neither is. [`skills/serve-via-ucp`](skills/serve-via-ucp/SKILL.md)
 is the merchant-side counterpart, for *setting up* a store's own UCP endpoint instead.
 
+## Usage
+
+Every `portage` subcommand (flags and env vars for each: [`portage-cli/README.md`](portage-cli/README.md),
+also published as the [CLI reference](https://portage.readthedocs.io/en/latest/cli-reference/)):
+
+```bash
+portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id ID]
+                                [--yes] [--dry-run] [--auto-open|--no-auto-open]
+                                [--notify-webhook URL] [--decision-backend jev|laya]
+                                [--min-confidence N] [--json]
+                                [--wait [--wait-timeout DURATION|off]]
+portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
+portage find --query "..." [--max-price N] [--limit N] [--json]
+portage compare <url> --product-id ID [--id VALUE ...] [--results N]
+                       [--max-price N] [--json]
+portage history [list] [--purchases|--searches] [--limit N] [--json]
+portage history clear [--purchases|--searches]
+portage payment list [--json]
+portage payment enroll <url> [--label NAME] [--json]
+                              [--scope-merchant HOST ...] [--scope-max-amount N] [--scope-currency CUR]
+portage payment set-default <id>
+portage payment remove <id>
+portage payment freeze <id>
+portage payment revoke <id>
+portage policy show [--json]
+portage policy set [--per-transaction-cap N --currency CUR]
+                    [--rolling-cap N --rolling-window-seconds N --currency CUR]
+                    [--velocity-count N --velocity-window-seconds N]
+                    [--allow HOST ...] [--clear-allowlist]
+portage orders reconcile [--checkout ID] [--json]
+portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]   # aliases: configure, setup
+portage generate adapter NAME [--dir DIR]
+portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
+portage --version
+```
+
+`buy`, `find`, `compare`, `doctor` and `payment enroll` also take `--proxy*` flags
+(see [Running behind a proxy](#running-behind-a-proxy)).
+
 ## Which doc do I want?
 
 **Shoppers & agent builders** (automating purchases): [cli-usage-tutorial](docs/cli-usage-tutorial.md)
@@ -68,19 +123,19 @@ Thirteen gems, mirroring how Faraday/Devise split core-vs-adapter:
 
 | Gem | Version | Role |
 |---|---|---|
-| [`portage-ucp`](portage-ucp/) | 0.9.0 | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. |
-| [`portage-ucp-client`](portage-ucp-client/) | 0.6.2 | Client SDK — connect to somebody else's manifest, or drive your own `Adapter`, as the shopper's agent. Loopback/stdio/HTTP behind one interface. |
-| [`portage-ucp-webmcp`](portage-ucp-webmcp/) | 0.1.0 | WebMCP transport onto the same `Adapter` contract — inbound (`document.modelContext`) and outbound (drives a page's WebMCP tools via a browser driver). |
-| [`portage-ucp-decision`](portage-ucp-decision/) | 0.1.0 | System One decision layer — offer ranking, escalation policy, a confidence gate (Jev/Laya), typed `PolicyGuard` wrapper. |
+| [`portage-ucp`](portage-ucp/) | 0.10.0 | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. |
+| [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Client SDK — connect to somebody else's manifest, or drive your own `Adapter`, as the shopper's agent. Loopback/stdio/HTTP behind one interface. |
+| [`portage-ucp-webmcp`](portage-ucp-webmcp/) | 0.1.1 | WebMCP transport onto the same `Adapter` contract — inbound (`document.modelContext`) and outbound (drives a page's WebMCP tools via a browser driver). |
+| [`portage-ucp-decision`](portage-ucp-decision/) | 0.1.1 | System One decision layer — offer ranking, escalation policy, a confidence gate (Jev/Laya), typed `PolicyGuard` wrapper. |
 | [`portage-ucp-journal`](portage-ucp-journal/) | 0.1.1 | Buyer-side purchase journal + the injectable `Store` abstraction it's built on. |
-| [`portage-cli`](portage-cli/) | 0.7.0 | Ships the `portage` command — `buy`, `find`, `compare`, `history`, `payment`, `policy`, `doctor`, `generate`. |
-| [`portage-ucp-shopify`](portage-ucp-shopify/) | 0.5.0 | Shopify — Admin + Storefront GraphQL APIs. |
+| [`portage-cli`](portage-cli/) | 0.7.4 | Ships the `portage` command — `buy`, `find`, `compare`, `history`, `payment`, `policy`, `doctor`, `generate`. |
+| [`portage-ucp-shopify`](portage-ucp-shopify/) | 0.5.1 | Shopify — Admin + Storefront GraphQL APIs. |
 | [`portage-ucp-wix`](portage-ucp-wix/) | 0.1.4 | Wix — Stores Catalog and eCommerce REST APIs. |
 | [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | 0.2.1 | WooCommerce — Admin REST API and Store API. |
 | [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | 0.1.4 | BigCommerce — v3 Catalog/Carts/Checkouts and v2 Orders APIs. |
 | [`portage-ucp-magento`](portage-ucp-magento/) | 0.1.4 | Magento/Adobe Commerce — REST v1 (admin-token catalog/order, guest-cart cart/checkout). |
 | [`portage-ucp-etsy`](portage-ucp-etsy/) | 0.1.4 | Etsy — real catalog/order via Open API v3; checkout is redirect-link only (Etsy's public API has no cart/checkout endpoint). |
-| [`portage-ucp-instagram`](portage-ucp-instagram/) | 0.1.4 | Instagram/Facebook Shops — real catalog via Meta's Graph API Commerce Catalog; checkout is redirect-link only. `get_order` is deprecated (Meta removes Order Management endpoints 2026-10-27; after that, catalog search/product + checkout handoff only). |
+| [`portage-ucp-instagram`](portage-ucp-instagram/) | 0.1.5 | Instagram/Facebook Shops — real catalog via Meta's Graph API Commerce Catalog; checkout is redirect-link only. `get_order` is deprecated (Meta removes Order Management endpoints 2026-10-27; after that, catalog search/product + checkout handoff only). |
 
 A backend on some other stack writes its own thin `Adapter` subclass against `portage-ucp`
 directly. Every adapter gem ships the same `exe/` executable, `examples/portage_ucp.rb`
@@ -91,21 +146,6 @@ implement catalog/order for real — full per-capability breakdown in
 Universal Commerce Agent app covers checkout+order with no code — this gem is for the
 `cart`/`catalog` capabilities it doesn't advertise, a signed manifest, and every other
 backend ([`docs/well-known-ucp.md`](docs/well-known-ucp.md)).
-
-## Other CLI commands
-
-`portage-cli` covers more than buying:
-
-```bash
-portage compare <url> --product-id ID [--id VALUE ...] [--results N]  # where else is this sold?
-portage history [list|clear] [--purchases|--searches]                 # past searches/purchases
-portage payment list|enroll|set-default|remove|freeze|revoke          # stored payment tokens
-portage policy show|set                                               # spend caps, velocity, allowlist
-portage doctor                    # aliases: configure, setup
-portage generate adapter NAME | agent-profile
-```
-
-Full reference, flags, and env vars: [`portage-cli/README.md`](portage-cli/README.md).
 
 ## Running behind a proxy
 
@@ -162,7 +202,8 @@ context, and the design log for the full Phase 0 write-up.
 
 ## Requirements
 
-Ruby >= 3.2, and the `mcp` gem `~> 0.24` (pulled in by `portage-ucp`). Each adapter gem
+Ruby >= 3.2, and the `mcp` gem `~> 0.24` (pulled in by `portage-ucp`). The Homebrew
+formula brings its own Ruby, so a brew install of the CLI needs neither. Each adapter gem
 needs its backend's own credentials, read from env by its executable — see that gem's own
 README, or [`docs/adapter-requirements.md`](docs/adapter-requirements.md) for the full table.
 
