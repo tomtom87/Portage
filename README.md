@@ -3,9 +3,9 @@
 [![gem version](https://img.shields.io/gem/v/portage-ucp)](https://rubygems.org/gems/portage-ucp)
 ![ruby](https://img.shields.io/badge/ruby-%3E%3D%203.2-red)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-[![docs](https://img.shields.io/badge/docs-readthedocs-blue)](https://portage-ucp.readthedocs.io/en/latest/)
+[![docs](https://img.shields.io/badge/docs-readthedocs-blue)](https://portage.readthedocs.io/en/latest/)
 
-**Docs**: [portage-ucp.readthedocs.io](https://portage-ucp.readthedocs.io/en/latest/)
+**Docs**: [portage.readthedocs.io](https://portage.readthedocs.io/en/latest/)
 
 Ruby gems that expose a commerce backend to AI shopping agents over **MCP** ([Model Context Protocol](https://modelcontextprotocol.io)) and **UCP** ([Universal Commerce Protocol](https://ucp.dev)) at once. Open-source, for any Ruby app on any e-commerce stack, agnostic, versatile and fully customizable for any business logic.
 
