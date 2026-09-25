@@ -4,8 +4,25 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.7.3] - 2026-09-25
 
+- **Proxy support** (`docs/plans/proxy-support.md` Phases 2-3). Every
+  network command (`buy`, `find`, `compare`, `doctor`, `payment enroll`)
+  takes `--proxy`, `--proxy-mode`, `--proxy-header`, `--no-proxy`,
+  `--proxy-route`, `--proxy-chain`, `--proxy-passthrough`, `--proxy-ca` and
+  `--no-env-proxy`, resolved per field against `PORTAGE_PROXY*` env vars
+  and `~/.portage/config.json`'s `proxy` section into core's
+  `Support::ProxyConfig`. `proxy.password_ref` resolves through Keychain or
+  Secret Service (service `portage-cli-proxy`). The payment route stays
+  direct unless a proxy is named for it explicitly, so payment traffic no
+  longer inherits a bare `$http_proxy`/`$https_proxy`. `portage doctor`
+  probes each configured proxy through `Support::Connection` and warns on
+  plaintext credentials in `config.json`.
+- Requires `portage-ucp` `~> 0.10` (for `Support::Connection` and
+  `ProxyConfig`) and `portage-ucp-client` `>= 0.6.3` (for
+  `Client::USER_AGENT`, which the default User-Agent is built from). Both
+  floors were too low before: against `portage-ucp` 0.9.0 or
+  `portage-ucp-client` 0.6.2, `require "portage/cli"` raised `NameError`.
 - `portage --version` (also `-v` and `portage version`) prints the gem's
   version and exits 0. Needed so a packaged install — the Homebrew
   formula's offline `test do` block, or anyone else scripting around a

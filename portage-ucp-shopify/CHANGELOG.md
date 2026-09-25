@@ -4,7 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.5.1] - 2026-09-25
+
+- `Client#post` now goes through `Portage::Ucp::Support::Connection.start`
+  (route `:platform`) instead of a raw `Net::HTTP.start`, so Admin API calls
+  honor `HTTPS_PROXY`/`https_proxy`, `NO_PROXY` and any `ProxyConfig` the
+  host process installs. Requires `portage-ucp` `~> 0.10`, the first release
+  with `Support::Connection`.
 
 - Fixes a `NoMethodError` at launch: `exe/portage-ucp-shopify` handed the
   server `Server.build(adapter:).start`, but `Server.build` returns a plain

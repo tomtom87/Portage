@@ -6,6 +6,10 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [0.6.3] - 2026-09-24
 
+- `Client.connect(url:, proxy:)` and `Client.discover(url, proxy:)` take a
+  `proxy:` option (a URL string, Hash or `URI`), passed straight to
+  Faraday's own `proxy=` on the Streamable HTTP transport. Faraday already
+  reads the env proxy vars itself; this adds an explicit override.
 - Every store-facing request now identifies itself: `Client::USER_AGENT`
   (`"portage-ucp-client/<ver> (+https://github.com/tomtom87/Portage)"`) is
   sent on the manifest GET and every UCP transport call, via

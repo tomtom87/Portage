@@ -4,8 +4,13 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
-## [Unreleased]
+## [0.1.5] - 2026-09-25
 
+- `AccessTokenFetcher#fetch` now goes through
+  `Portage::Ucp::Support::Connection.start` (route `:platform`) instead of a
+  raw `Net::HTTP.start`, so the token exchange honors `HTTPS_PROXY`,
+  `NO_PROXY` and any installed `ProxyConfig`. Requires `portage-ucp`
+  `~> 0.10`, the first release with `Support::Connection`.
 - **Fix:** `Client#get` never retried anything — a transient Meta 429/5xx (or
   the platform's own throttling codes 4/17/32/613, which arrive as a bare
   HTTP 400) surfaced straight to the caller as a one-shot failure instead of

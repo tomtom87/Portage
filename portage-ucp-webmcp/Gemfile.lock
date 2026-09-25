@@ -9,7 +9,7 @@ PATH
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.9.0)
+    portage-ucp (0.10.0)
       base64 (~> 0.2)
       json_schemer (~> 2.5)
       mcp (~> 0.24)
@@ -19,7 +19,7 @@ PATH
   remote: .
   specs:
     portage-ucp-webmcp (0.1.1)
-      portage-ucp (~> 0.8)
+      portage-ucp (~> 0.10)
       portage-ucp-client (~> 0.6, >= 0.6.2)
       rack (~> 3.0)
 
