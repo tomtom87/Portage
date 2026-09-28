@@ -6,6 +6,11 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`Presets::SHOPIFY.checkout_selectors`** now has two fallbacks, taken
+  from a live Shopify checkout (docs/design-log.md §50): `email` →
+  `input[autocomplete='shipping email']` and `shipping tel` →
+  `input[autocomplete='shipping tel-national']`. Shopify names both fields
+  differently from the tokens `WebmcpAutofillFields` asks for.
 - **Docs for Phases 1-3** (docs/plans/webmcp-universal-outbound.md Phase 4,
   no code change): the README's "Stores that don't run Portage" section now
   documents `Presets`/`preset:`, `Matcher`/the read-vs-mutating confirm

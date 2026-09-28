@@ -3238,3 +3238,95 @@ doesn't set one (`Preset#checkout_selectors = self[:checkout_selectors] ||
 `Presets` already applies to `detect` missing and `Matcher` applies to a
 score below its floor — nowhere in this plan does "we don't know" get
 silently upgraded to a guess.
+
+## 50. WebMCP live checks against a real Shopify checkout (2026-09-28)
+
+The three live checks `docs/plans/webmcp-universal-outbound.md` left open
+ran against The Light Yard (a `:shopify` store in entry 46's sweep). Setup:
+headed Chrome through Ferrum, `WebMcp.polyfill_js` injected before page
+scripts, `ScriptEvaluator.ferrum(page, headless: false)`, one £39 variant
+at qty 1, and a fake identity (Portage Test, `@example.com` email, a
+`07700 900000` phone, 1 Example Street, Chesterfield). `portage buy
+--dry-run` can't get here: `cli.rb:263-265` never passes `webmcp_bridge:`,
+so `Buy#webmcp_flow` returns nil at `buy.rb:298`. The script drove the
+library directly instead, mirroring `#webmcp_handoff_checkout_flow`:
+`connect(preset: :shopify)` → `create_cart` → `get_cart` →
+`proceed_to_checkout` on the bridge. Nothing was clicked or submitted,
+nothing went into the page except through `Autofill.call`, and the cart was
+cleared afterwards. The scripts and screenshots are in
+`tmp/live-checks-2026-09-28/`.
+
+**Check 1: the checkout URL in another browser. Passed for the cart.** The
+URL shape after hand-off:
+
+```
+https://thelightyard.co.uk/checkouts/cn/<REDACTED>/en-th?_r=<REDACTED>&auto_redirect=<REDACTED>&edge_redirect=<REDACTED>&skip_shop_pay=<REDACTED>
+```
+
+The `en-th` locale and THB prices came from the run machine's geo-IP. The
+currency switched to GBP once a UK address was filled. Opened in a second
+Chrome with a clean `user-data-dir`, Shopify redirected to a different
+checkout path, but the same line item was there at qty 1 with the same
+price. The contact and shipping values autofilled in the first browser were
+not: the second browser's form was empty. So the cart can move to the
+shopper's browser, but an autofilled checkout can't. When autofill has run,
+hand-off stays in the bridge's own browser.
+
+**Check 2: does autofill reach real fields? Not as committed.**
+`assets/autofill.js` doesn't parse. Its header comment says
+`PORTAGE_SHIP_*/buyer context`, and that `*/` closes the comment. Every
+`Autofill.call` in a real browser raises `BridgeError: … SyntaxError:
+Unexpected identifier 'context'`. Node reports the same error for the file
+on its own. The Phase 3 specs stub `#autofill` and never evaluate the
+asset, the same gap entry 47 describes for a double standing in for its
+collaborator. The check script then swapped in the asset with only that
+comment text changed (lib code untouched), to see how far the rest gets:
+
+| Requested token | Page field (`autocomplete`) | Result |
+|---|---|---|
+| `shipping given-name`, `shipping family-name`, `shipping address-line1`, `shipping address-level2`, `shipping postal-code` | same token | filled by autocomplete |
+| `shipping country` | Shopify's autofill-capture input (`shipping country`), which Shopify copies into the `countryCode` `<select>` (`shipping country-name`) | filled; the select changed on its own |
+| `email` | `shipping email` | missed; filled with the new fallback selector |
+| `shipping tel` | `shipping tel-national` | missed; filled with the new fallback selector |
+
+Every field is in the top document. None is in a shadow root, and none
+rendered late. Shopify's hidden-looking `autofill_*` capture inputs share
+tokens with the real fields. `findByAutocomplete` takes the first match in
+DOM order, which is the real field. Once Shopify switched the real address
+input to `autocomplete="none"` (its address-lookup combobox), a retry
+filled the capture input instead, and Shopify copied it across. Only the
+fields listed above changed value. The page's text inputs `shop_pay_approval_id`
+and discount code were untouched, and it has no `type="hidden"` or
+`password` input and no `cc-*`/`transaction-*` token. The card fields are
+six `checkout.pci.shopifyinc.com` iframes, which autofill can't reach.
+Shopify filled "Name on card" from the shipping name itself, inside its PCI
+iframe, which autofill.js can't touch. `Presets::SHOPIFY.checkout_selectors`
+now holds the two selectors that closed the gap. Both match on Shopify's
+own `autocomplete` value, not its generated ids. With them, `Autofill.call`
+returned `outcome: :filled` with all 8 tokens and `unmatched: []`.
+
+Not reached: a `<select>` through the selector fallback. `fillField` uses
+`HTMLInputElement`'s value setter for anything that isn't a textarea, so a
+selector pointing at a `<select>` would probably throw. Country never hit
+that path here because the capture input matched first.
+
+**Check 3: cheapest rate. Nothing to choose.** The rates appeared within a
+few seconds of the address being filled, with no click. For about a second
+Shopify shows two disabled skeleton radios (`shippingMethods-first`/`-second`,
+no label, no price), then replaces them. For this address there was one rate, and a single rate has
+no radio at all:
+
+```html
+<fieldset id="shipping_methods"><legend>Choose a shipping method</legend>
+  <div role="group"><div><h3><p><strong>Standard</strong></p></h3>
+    <div id="shipping_methods-…-details"><p>1 to 2 business days</p><p>Signature required</p></div></div>
+    <div id="shipping_methods-…-secondary"><strong>£50.00</strong></div></div></fieldset>
+```
+
+`selectCheapestRate` returned `[]`, which is correct: there was no choice
+to make. It says nothing about a real multi-rate picker. Two things there
+are unverified: whether each price sits in the radio's `<label>` (the
+single rate puts it in a sibling `-secondary` div), and `RATE_PRICE`'s
+currency list, which has no `฿`/`THB` and would miss rates on a checkout
+still in Thai baht. Trimmed markup is in
+`tmp/live-checks-2026-09-28/rate-picker.html`.

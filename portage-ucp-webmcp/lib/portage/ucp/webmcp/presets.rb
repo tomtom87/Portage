@@ -50,14 +50,20 @@ module Portage
                           update_cart_lines cancel_cart proceed_to_checkout manage_orders
                           search_shop_policies_and_faqs].freeze,
           handoff_checkout: "proceed_to_checkout",
-          # No live check has confirmed any selector against a real Shopify
-          # checkout page (Phase 3 shipped with no browser/live storefront
-          # available this session — see the plan's Progress log). Left
-          # empty rather than guessed: Shopify Checkout's own contact/
-          # shipping fields are documented to carry standard `autocomplete`
-          # values, so `Autofill`'s own attribute match should reach them
-          # without a fallback — but that's unverified, not assumed safe.
-          checkout_selectors: {}.freeze
+          # Taken live on 2026-09-28 against The Light Yard's checkout
+          # (design-log §50). Shopify prefixes every contact/shipping token
+          # with the "shipping" section and uses different detail tokens for
+          # two of the fields WebmcpAutofillFields asks for: the email field
+          # is `shipping email` (not `email`) and the phone field is
+          # `shipping tel-national` (not `shipping tel`). Both selectors
+          # match on that attribute, not on Shopify's generated ids. Every
+          # other field matched by its own autocomplete value. `shipping
+          # country` hits Shopify's own autofill-capture input, which
+          # Shopify copies into the country `<select>` itself.
+          checkout_selectors: {
+            "email" => "input[autocomplete='shipping email']",
+            "shipping tel" => "input[autocomplete='shipping tel-national']"
+          }.freeze
         ).freeze
 
         ALL = { shopify: SHOPIFY }.freeze
