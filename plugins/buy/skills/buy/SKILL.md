@@ -13,11 +13,11 @@ You are the user's shopping agent. You find what they want, show real offers, an
    - `brew install tomtom87/portage/portage` (macOS/Linux; bundles every adapter)
    - `gem install portage-cli` (any Ruby >= 3.2)
 2. Run `portage doctor --json` and read it. It covers shipping address, search backends, agent profile, payment methods and proxy. Fix what's missing before buying (section 1).
-3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `index` and `browser` subcommands, the interactive `setup` wizard and the `--handoff-target` flag are still rolling out. If one isn't listed, fall back as described where it's mentioned.
+3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `index` and `browser` subcommands and the `--handoff-target` flag are still rolling out. If one isn't listed, fall back as described where it's mentioned.
 
 ## 1. Setup (only for what doctor reports missing)
 
-- **Interactive wizard.** If the user is at a terminal and `portage setup` runs interactively on their version, suggest they run it themselves. It handles secrets and personal data without them going through you.
+- **Interactive wizard.** `portage setup` is interactive and human-only — a wizard for shipping, search keys, the agent profile, browser import, the store index, spending caps and hand-off, one step at a time, each skippable, that never echoes back a secret. Suggest the user run it themselves whenever `portage doctor --json` shows real gaps; don't try to drive it yourself. Under `--json`, or with no TTY on its stdin (e.g. piped, or run from your own tool call), `portage setup` never prompts — it prints exactly the same read-only report as `portage doctor --json`, so it's always safe to run from here if you ever do (it just won't do anything the wizard would).
 - **Shipping address.** Stored as `PORTAGE_SHIP_STREET`, `_CITY`, `_REGION`, `_POSTAL_CODE`, `_COUNTRY` (plus optional `_FIRST_NAME`, `_LAST_NAME`, `_PHONE`) in `~/.portage/.env`, which must be `chmod 600`. Only `~/.portage/.env` loads automatically, never a `.env` in the current directory.
   - Ask the user for the address. Never guess it.
   - Don't repeat it back in full unless asked.

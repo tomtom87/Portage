@@ -9,6 +9,19 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`portage setup` interactive wizard, and the `buy` skill knows it's
+  human-only** (`docs/plans/buy-skill-and-local-browser.md` Phase 4 — full
+  change is in `portage-cli/CHANGELOG.md`). `portage setup` now runs a
+  seven-step wizard on a TTY (shipping, search keys, agent profile,
+  browser import, local index, spending caps, hand-off); `doctor`/
+  `configure` offer it too, but only on a fresh install with nothing
+  configured at all. `--json` or no TTY stays exactly today's read-only
+  doctor report either way. `plugins/buy/skills/buy/SKILL.md` now tells
+  the agent to suggest the user run `portage setup` themselves rather than
+  drive it, and that under `--json`/no TTY it's the same report as
+  `portage doctor --json`. `plugins/buy/.claude-plugin/plugin.json` bumped
+  to `0.3.1`. `claude plugin validate .` and `claude plugin validate
+  plugins/buy` still pass.
 - **Browser import (Tier A) and the `buy` skill's `browser import` steps**
   (`docs/plans/buy-skill-and-local-browser.md` Phase 3 — full change is in
   `portage-cli/CHANGELOG.md`). `portage browser import` turns the user's

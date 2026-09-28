@@ -6,6 +6,44 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`portage setup` — interactive setup wizard** (`docs/plans/
+  buy-skill-and-local-browser.md` Phase 4). On a TTY, `portage setup` (and
+  `portage doctor`/`configure` when `Doctor#nothing_configured?` — no
+  `.env` file loaded, no shipping address, no policy at all) now walks
+  through seven skippable steps: shipping address, search API keys, the
+  agent profile, browser import, the local store index, spending policy
+  caps, and hand-off. Under `--json` or with no TTY on stdin, every one of
+  `doctor`/`configure`/`setup` stays exactly today's read-only report —
+  proven by spec, not just described. New `Portage::Cli::SetupWizard` (`lib/
+  portage/cli/setup_wizard.rb` + `setup_wizard/prompt.rb` +
+  `setup_wizard/steps/{shipping,search_keys,agent_profile,browser_import,
+  index_build,policy,handoff}.rb`). Each step delegates to the real command
+  it configures — `portage generate agent-profile`, `portage browser
+  import` (with its own confirm-before-save prompt intact), `portage index
+  build`, `portage policy set` — rather than reimplementing any of them, so
+  the wizard has nothing UCP- or network-specific of its own to get wrong.
+  `Portage::Cli::DotEnv` gains `.update!`, the wizard's only writer to
+  `~/.portage/.env`: updates a key in place (never duplicating it on a
+  re-run), keeps every other line and comment untouched, creates
+  `~/.portage` if needed, and is mode 0600 from the very first byte —
+  a brand-new file is created with that mode already set (`File.open`,
+  not `File.write` then `File.chmod`, which would briefly leave it at the
+  process umask's default), and an existing file is chmod'd 600 *before*
+  anything is written into it. Every secret prompt (Brave/Google CSE API
+  keys) reads via `IO#noecho` on a real terminal and never echoes the
+  value back, even in the wizard's own summary; Enter on any question
+  keeps whatever's already set rather than clearing it, so re-running the
+  wizard is always safe. `Steps::Policy` rejects a non-numeric or
+  non-positive spending cap ("abc", "12x", "0") rather than silently
+  coercing it to a 0 cap via `String#to_f`, and reuses
+  `Portage::Cli.to_minor_units` (private, via `send`) for the major-to-
+  minor-units conversion instead of a second implementation. The hand-off
+  step configures the one hand-off setting that exists today
+  (`CheckoutHandoff`'s auto-open toggle) and explains that a fuller choice
+  of hand-off targets and the hand-off-only host list are Phase 5, not
+  invented here — a deliberately easy seam for that phase to extend rather
+  than a guess at its shape. `portage-cli`: 727 → 783 examples (+56), 0
+  failures; `rubocop` clean, no new cop disables.
 - **`portage browser import` — bookmarks and history as index seeds**
   (`docs/plans/buy-skill-and-local-browser.md` Phase 3, Tier A).
   `portage browser import [--browser chrome|edge|brave|arc|firefox|safari]

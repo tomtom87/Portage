@@ -17,6 +17,7 @@ require_relative "cli/history"
 require_relative "cli/payment_methods"
 require_relative "cli/proxy_settings"
 require_relative "cli/doctor"
+require_relative "cli/setup_wizard"
 require_relative "cli/handoff_reconciler"
 require_relative "cli/handoff_waiter"
 require_relative "cli/reconcile_notifier"
@@ -66,7 +67,7 @@ module Portage
                                     [--exclude HOST,HOST] [--dry-run] [--yes] [--json]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
              portage configure [--require FILE] [--adapter CLASS_NAME] [--json]  (alias for doctor)
-             portage setup [--require FILE] [--adapter CLASS_NAME] [--json]      (alias for doctor)
+             portage setup [--json]  (interactive wizard on a TTY; --json/no TTY: today's doctor report)
              portage generate adapter NAME [--dir DIR]
              portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
              portage --version
@@ -81,7 +82,7 @@ module Portage
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
                  "orders" => :run_orders, "index" => :run_index, "browser" => :run_browser,
                  "doctor" => :run_doctor,
-                 "configure" => :run_doctor, "setup" => :run_doctor, "generate" => :run_generate }.freeze
+                 "configure" => :run_doctor, "setup" => :run_setup, "generate" => :run_generate }.freeze
 
     VERSION_FLAGS = %w[--version -v version].freeze
 
@@ -1136,7 +1137,12 @@ module Portage
     end
     private_class_method :parse_doctor_options
 
-    def self.run_doctor(argv)
+    # `wizard: :force` is `portage setup`, always offering the wizard on a
+    # TTY; `:auto` is `doctor`/`configure`, which only offers it when
+    # Doctor#nothing_configured? — the read-only report is what every other
+    # run of `doctor` still gets, exactly as before this phase
+    # (docs/plans/buy-skill-and-local-browser.md Phase 4).
+    def self.run_doctor(argv, wizard: :auto)
       opts = parse_doctor_options(argv)
       require File.expand_path(opts[:require]) if opts[:require]
       adapter_class = opts[:adapter] && Object.const_get(opts[:adapter])
@@ -1145,9 +1151,30 @@ module Portage
 
       doctor = Doctor.new(adapter_class: adapter_class, proxy_settings: proxy_settings,
                           seller: !(opts[:require] || opts[:adapter]).nil?)
+      return run_setup_wizard if run_wizard?(wizard, opts, doctor)
+
       report_doctor(doctor.call, json: opts[:json])
     end
     private_class_method :run_doctor
+
+    def self.run_setup(argv) = run_doctor(argv, wizard: :force)
+    private_class_method :run_setup
+
+    # --json or no TTY on stdin always stays today's read-only report,
+    # whichever command name was used — a piped/CI/agent run never blocks
+    # on a prompt it can't answer.
+    def self.run_wizard?(mode, opts, doctor)
+      return false if opts[:json] || !$stdin.tty?
+      return true if mode == :force
+
+      doctor.nothing_configured?
+    end
+    private_class_method :run_wizard?
+
+    def self.run_setup_wizard
+      SetupWizard.new.call
+    end
+    private_class_method :run_setup_wizard
 
     def self.report_doctor(findings, json:)
       puts json ? JSON.pretty_generate(findings.map(&:to_h)) : format_doctor(findings)
