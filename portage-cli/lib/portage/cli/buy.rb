@@ -11,6 +11,9 @@ require_relative "decisions"
 require_relative "confidence_check"
 require_relative "checkout_handoff"
 require_relative "notifier"
+require_relative "handoff_only"
+require_relative "handoff_target"
+require_relative "handoff_agents"
 require_relative "user_agent"
 require_relative "homepage_fetch"
 require_relative "permissive_authenticator"
@@ -53,6 +56,13 @@ module Portage
       #   webhook URL a dead-end checkout_url is POSTed to — nil (the
       #   default) defers to PORTAGE_NOTIFY_WEBHOOK_URL / config.json (see
       #   Notifier).
+      # @param handoff_target [HandoffTarget, nil] docs/plans/
+      #   buy-skill-and-local-browser.md Phase 5 — which of default/print/
+      #   profile/agent:<name> a hand-off dispatches to. nil (the default)
+      #   builds one from PORTAGE_HANDOFF_TARGET/config.json with no
+      #   per-invocation override — `Cli.run_buy` builds and validates one
+      #   from `--handoff-target` up front instead, the same posture as
+      #   `confidence_check:`.
       # @param confidence_check [ConfidenceCheck, nil] the opt-in confidence
       #   gate in front of an unattended completion. nil (the default) builds
       #   one from PORTAGE_DECISION_BACKEND / PORTAGE_MIN_CONFIDENCE, which is
@@ -102,9 +112,9 @@ module Portage
       # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- all keywords; one per flag, plus
       # injectable collaborators, each assigned to its own ivar
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
-                     auto_open: nil, notify_webhook: nil, confidence_check: nil, transaction_log: nil,
-                     max_price: nil, webmcp_bridge: nil, webmcp_mappings: nil, webmcp_mapping_confirm: nil,
-                     autofill: nil, webmcp_autofill_confirm: nil, json: false)
+                     auto_open: nil, notify_webhook: nil, handoff_target: nil, confidence_check: nil,
+                     transaction_log: nil, max_price: nil, webmcp_bridge: nil, webmcp_mappings: nil,
+                     webmcp_mapping_confirm: nil, autofill: nil, webmcp_autofill_confirm: nil, json: false)
         # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
         raw = url.to_s.strip
         @uri = URI.parse(raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}")
@@ -116,6 +126,7 @@ module Portage
         @product_id = product_id
         @auto_open = auto_open
         @notify_webhook = notify_webhook
+        @handoff_target = handoff_target
         @confidence_check = confidence_check
         @transaction_log = transaction_log
         @max_price = max_price
@@ -132,6 +143,8 @@ module Portage
       POLICY_LINK_TYPES = /policy|policies|terms|contact|privacy|legal|imprint/i
 
       def call
+        return handoff_only_report if handoff_only?
+
         session = discover(@uri)
         return native_flow(session) if session
 
@@ -151,6 +164,65 @@ module Portage
       end
 
       private
+
+      # --- Step 0: hand-off-only hosts (Tier C) ---
+
+      # Checked before anything else in #call so a hand-off-only host never
+      # sees a single request from this process — no UCP probe, no
+      # homepage fetch, no cart (docs/plans/buy-skill-and-local-browser.md
+      # Phase 5, decision 5). Amazon by default; ~/.portage/config.json's
+      # "handoff_only_hosts" is the user's own list (see HandoffOnly).
+      def handoff_only?
+        @handoff_only ||= HandoffOnly.new
+        @handoff_only.host?(@uri.host)
+      end
+
+      # No checkout was ever built — there's nothing to browse or complete,
+      # just a link and why. `checkout_url` is built, never fetched: the
+      # product page/cart-add URL when a product id is known (Amazon's own
+      # URL shape only — that's the only pattern this phase knows), or the
+      # retailer's own search URL for the query, or (a user-added host with
+      # no known pattern) the origin's homepage.
+      def handoff_only_report
+        url = handoff_only_checkout_url
+        handoff = @dry_run ? nil : dispatch_handoff_only(url)
+        build_report(source: "handoff_only", outcome: "handoff_only", browse: false, checkout: false,
+                     checkout_url: url, legal_notice: HandoffOnly::LEGAL_NOTICE, handoff: handoff,
+                     message: "#{@uri.host} restricts automated purchasing agents — Portage opens the page " \
+                              "and you buy.")
+      end
+
+      def dispatch_handoff_only(url)
+        payload = handoff_notify_payload({}, url, reason: "handoff_only", source: "handoff_only",
+                                                  message: "Hand-off-only retailer — no automated checkout " \
+                                                           "was attempted.", warnings: [], over_cap: false)
+        finalize_handoff(url, dispatch_to_target(url, payload), notified: false, notify_error: nil)
+      end
+
+      def handoff_only_checkout_url
+        return amazon_checkout_url if HandoffOnly.amazon?(@uri.host)
+
+        origin_homepage
+      end
+
+      def amazon_checkout_url
+        return amazon_cart_add_url if @product_id
+        return amazon_search_url unless @query.to_s.strip.empty?
+
+        origin_homepage
+      end
+
+      def amazon_search_url
+        "#{origin}/s?k=#{URI.encode_www_form_component(@query.to_s)}"
+      end
+
+      def amazon_cart_add_url
+        "#{origin}/gp/aws/cart/add.html?ASIN.1=#{URI.encode_www_form_component(@product_id.to_s)}&Quantity.1=#{@qty}"
+      end
+
+      def origin_homepage = "#{origin}/"
+
+      def origin = "#{@uri.scheme}://#{@uri.host}"
 
       # --- Step 1: native UCP manifest ---
 
@@ -1122,18 +1194,71 @@ module Portage
         over_cap = precheck_mode? && over_spend_cap?(checkout)
         record_pending_handoff(checkout, reason: reason)
 
-        opened = over_cap ? false : CheckoutHandoff.new(auto_open: @auto_open).call(url)
-        error = notifier.call(handoff_notify_payload(checkout, url, reason: reason, source: source, message: message,
-                                                                    warnings: warnings, over_cap: over_cap))
-        result = { url: url, opened: opened, notified: notifier.enabled? && error.nil?, notify_error: error }
-        over_cap ? result.merge(over_cap: true) : result
+        payload = handoff_notify_payload(checkout, url, reason: reason, source: source, message: message,
+                                                        warnings: warnings, over_cap: over_cap)
+        dispatch = over_cap ? { target: handoff_target.label, opened: false } : dispatch_to_target(url, payload)
+        error = notifier.call(payload)
+        finalize_handoff(url, dispatch, notified: notifier.enabled? && error.nil?, notify_error: error,
+                                        over_cap: over_cap)
       end
 
+      # Same payload for both `--notify-webhook` and `agent:<name>`
+      # (docs/plans/buy-skill-and-local-browser.md Phase 5, decision 3): the
+      # checkout URL plus the approved cart summary — items, qty (each
+      # item's own `quantity`), total (`totals`) and store. Reused as-is
+      # for #handoff_only_report with `checkout: {}` — no cart was ever
+      # built there, so `checkout_id`/`totals`/`items` come back nil/empty,
+      # never fabricated.
       def handoff_notify_payload(checkout, url, reason:, source:, message:, warnings:, over_cap:)
         payload = { event: "checkout_handoff", reason: reason, message: message, store: @uri.to_s,
                     query: @query, checkout_url: url, checkout_id: checkout["id"], source: source,
-                    totals: checkout["totals"], warnings: warnings }
+                    totals: checkout["totals"], items: checkout_items(checkout), warnings: warnings }
         over_cap ? payload.merge(over_cap: true) : payload
+      end
+
+      # docs/plans/buy-skill-and-local-browser.md Phase 5 — routes a
+      # hand-off to whichever target `--handoff-target`/PORTAGE_HANDOFF_TARGET/
+      # config.json resolved to. `payload` is only used by the `agent`
+      # branch; building it unconditionally is cheap and keeps this method
+      # a plain dispatch with no branching on whether it's needed.
+      def dispatch_to_target(url, payload)
+        case handoff_target.kind
+        when "print" then { target: "print", opened: false }
+        when "profile"
+          { target: "profile", opened: false,
+            message: "The Portage browser profile isn't built yet (Phase 6) — showing the link instead." }
+        when "agent" then dispatch_to_agent(payload)
+        else { target: "default", opened: CheckoutHandoff.new(auto_open: @auto_open).call(url) }
+        end
+      end
+
+      def dispatch_to_agent(payload)
+        agent = handoff_agents.lookup(handoff_target.agent_name)
+        unless agent
+          return { target: handoff_target.label, opened: false, agent_delivered: false,
+                   agent_error: "#{handoff_target.agent_name.inspect} isn't approved in " \
+                                "~/.portage/config.json's handoff_agents — showing the link instead." }
+        end
+
+        error = agent.call(payload)
+        { target: handoff_target.label, opened: false, agent_delivered: error.nil?, agent_error: error }
+      end
+
+      def finalize_handoff(url, dispatch, notified:, notify_error:, over_cap: false)
+        result = { url: url, opened: dispatch[:opened], notified: notified, notify_error: notify_error,
+                   handoff_target: dispatch[:target] }
+        result[:agent_delivered] = dispatch[:agent_delivered] if dispatch.key?(:agent_delivered)
+        result[:agent_error] = dispatch[:agent_error] if dispatch.key?(:agent_error)
+        result[:target_message] = dispatch[:message] if dispatch[:message]
+        over_cap ? result.merge(over_cap: true) : result
+      end
+
+      def handoff_target
+        @handoff_target ||= HandoffTarget.new
+      end
+
+      def handoff_agents
+        @handoff_agents ||= HandoffAgents.new
       end
 
       # Never raises: a record that can't be written is a warning on the

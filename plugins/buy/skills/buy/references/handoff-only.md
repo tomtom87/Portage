@@ -3,11 +3,19 @@
 Some retailers restrict automated agents in their terms of use. Portage treats them as **hand-off only** by default:
 
 - **Amazon**, every marketplace (amazon.com, .co.uk, .de, .ca, .co.jp, …). Its Conditions of Use restrict robots and automated data extraction. In November 2025 it sued Perplexity over an agent that shopped through users' own logged-in sessions. Using the user's own browser and account was not a defence.
-- Any host the CLI reports with `handoff_only: true`. The list is the user's config, seeded with Amazon. The user can add or remove hosts. Removing one only changes the message: Portage has no code that automates a site without UCP or WebMCP.
+- Any host in `~/.portage/config.json`'s `handoff_only_hosts` (`portage doctor --json`'s `handoff` finding shows the current list). Absent, that key defaults to every Amazon marketplace; once present, the user's list *is* the list — they can drop Amazon or add other hosts. Removing one only changes the message: Portage has no code that automates a site without UCP or WebMCP.
+
+## What `portage buy` does automatically
+
+On a hand-off-only host, `portage buy <url> --query "..."` returns outcome `handoff_only` **before making any request to that host** — no UCP probe, no page fetch, no cart. The report carries:
+
+- `checkout_url`: the product page or a cart-add URL when a product ID is known (Amazon only, today); otherwise the retailer's own search URL for the query (Amazon) or, for a host with no known URL pattern, its homepage. Always built, never fetched.
+- `legal_notice`: the facts-only disclaimer below.
+- `handoff`: how that URL was delivered — the same `--handoff-target` rules as any other hand-off (`default` opens it, `print` just reports it, `agent:<name>` passes it to an approved agent). See [references/outcomes.md](outcomes.md).
 
 ## What you do
 
-1. Give the user the product page, or the cart-add link if you have the product ID, and say they'll complete the purchase themselves.
+1. Give the user the `checkout_url` and say they'll complete the purchase themselves — `portage buy` may have already opened it for them via the `default` hand-off target.
 2. Explain in one line: "Amazon doesn't allow automated purchasing agents, so I've opened the page for you to buy it."
 3. Don't fetch the site's pages, scrape prices, drive a browser on it, or fill its forms, including with your own browser tools. The user editing the list doesn't make you the one who automates the site.
 

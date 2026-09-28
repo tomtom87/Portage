@@ -9,6 +9,22 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Hand-off targets + hand-off-only hosts, and the `buy` skill knows both**
+  (`docs/plans/buy-skill-and-local-browser.md` Phase 5 — full change is in
+  `portage-cli/CHANGELOG.md`). `portage buy --handoff-target
+  default|print|profile|agent:<name>` decides where a dead-end checkout
+  URL goes, including an approved external agent invoked by command or
+  webhook with the same cart-summary payload `--notify-webhook` sends.
+  Amazon (every marketplace) and any host in the user's
+  `handoff_only_hosts` config are hand-off only: `portage buy` returns
+  `handoff_only` without ever sending that host a request, and `find`/
+  `index build`/`browser import` never probe one either. `portage doctor`
+  and `portage setup`'s Hand-off step both surface the current target, the
+  hand-off-only list and the as-is/no-warranty disclaimer.
+  `plugins/buy/skills/buy/SKILL.md`, `references/outcomes.md` and
+  `references/handoff-only.md` updated; `plugins/buy/.claude-plugin/
+  plugin.json` bumped to `0.4.0`. `claude plugin validate .` and `claude
+  plugin validate plugins/buy` still pass.
 - **`portage setup` interactive wizard, and the `buy` skill knows it's
   human-only** (`docs/plans/buy-skill-and-local-browser.md` Phase 4 — full
   change is in `portage-cli/CHANGELOG.md`). `portage setup` now runs a

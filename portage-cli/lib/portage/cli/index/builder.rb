@@ -4,6 +4,7 @@ require "portage/ucp/client"
 require_relative "../user_agent"
 require_relative "../classifier"
 require_relative "../probe_cache"
+require_relative "../handoff_only"
 require_relative "store"
 require_relative "product_store"
 require_relative "known_cache"
@@ -48,7 +49,7 @@ module Portage
 
         def initialize(stores: Store.new, products: ProductStore.new, cache: ProbeCache.new, sources: nil,
                        throttle: THROTTLE, max_new_probes: MAX_NEW_PROBES, out: $stdout, now: Time.now,
-                       known_cache: KnownCache.new)
+                       known_cache: KnownCache.new, handoff_only: nil)
           @stores = stores
           @products = products
           @cache = cache
@@ -58,6 +59,7 @@ module Portage
           @out = out
           @now = now
           @known_cache = known_cache
+          @handoff_only = handoff_only || HandoffOnly.new
         end
 
         # @param queries [Array<String>, nil] passed through to every
@@ -88,10 +90,14 @@ module Portage
         end
 
         # `portage index add URL` — verifies and stores one origin
-        # directly, no source involved.
+        # directly, no source involved. A hand-off-only origin (Tier C,
+        # HandoffOnly) is recorded without ever probing it — the user
+        # explicitly named it, but that's still not a request this process
+        # sends.
         def add(url)
           origin = origin_of(url)
           return { added: false, message: "Not a valid http(s) URL: #{url}" } unless origin
+          return store_manual_handoff_only(origin) if handoff_only_origin?(origin)
 
           session = probe(origin)
           store_manual(origin, session)
@@ -137,6 +143,7 @@ module Portage
             update_existing(origin, group) unless dry_run
             return
           end
+          return handoff_only_new_origin(origin, group, dry_run: dry_run) if handoff_only_origin?(origin)
           return state[:capped] = true if state[:probes] >= @max_new_probes
 
           throttle(state[:probes])
@@ -148,6 +155,33 @@ module Portage
 
           state[:verified] << origin
           store_new(origin, session, group) unless dry_run
+        end
+
+        # Never spends a probe (docs/plans/buy-skill-and-local-browser.md
+        # Phase 5) — recorded straight as `handoff_only: true`, same as a
+        # `store_new` verdict but with no capabilities and no request ever
+        # made.
+        def handoff_only_new_origin(origin, group, dry_run:)
+          return if dry_run
+
+          @stores.upsert(origin, platform: platform_of(group), capabilities: [],
+                                 categories: merge_categories({}, group), sources: merged_sources(nil, group),
+                                 last_verified: @now.to_i, handoff_only: true)
+        end
+
+        def handoff_only_origin?(origin) = @handoff_only.host?(host_of(origin))
+
+        def host_of(origin)
+          URI.parse(origin).host
+        rescue URI::InvalidURIError
+          nil
+        end
+
+        def store_manual_handoff_only(origin)
+          existing = @stores.find(origin)
+          sources = ((existing && existing["sources"]) || []) + ["manual"]
+          @stores.upsert(origin, sources: sources.uniq, last_verified: @now.to_i, handoff_only: true)
+          { added: true, origin: origin, message: "Added #{origin} — hand-off only, never probed." }
         end
 
         def update_existing(origin, group)
@@ -221,19 +255,39 @@ module Portage
           "title:#{slug}"
         end
 
+        # Skips by whether the origin is *currently* hand-off only
+        # (`handoff_only_origin?`, checked against live config), never by
+        # the flag a previous run happened to store — those disagree in
+        # both directions: an origin whose UCP probe simply failed is
+        # stored `handoff_only: true` too (#store_new/#store_manual) but
+        # isn't on the Tier C list and should keep getting re-verified in
+        # case it comes online, while a stale entry recorded *before* the
+        # user added its host to `handoff_only_hosts` is stored
+        # `handoff_only: false` and must stop being probed the moment that
+        # config changes, without waiting for some other source to
+        # re-sight it. An origin caught by the live check gets its stored
+        # flag flipped to match — no request, just a `last_verified` bump
+        # so it isn't re-checked again until the next stale window.
         def reverify_stale(dry_run:)
           probes = 0
           @stores.all.select { |e| stale?(e) }.each do |entry|
+            origin = entry["origin"]
+            next reverify_now_handoff_only(origin, dry_run: dry_run) if handoff_only_origin?(origin)
             break if probes >= @max_new_probes
 
             throttle(probes)
             probes += 1
-            origin = entry["origin"]
             progress("Re-verifying #{origin}...")
             session = probe(origin)
             @stores.upsert(origin, capabilities: capabilities_of(session), last_verified: @now.to_i) \
               if session && !dry_run
           end
+        end
+
+        def reverify_now_handoff_only(origin, dry_run:)
+          return if dry_run
+
+          @stores.upsert(origin, handoff_only: true, last_verified: @now.to_i)
         end
 
         def stale?(entry)

@@ -13,7 +13,7 @@ You are the user's shopping agent. You find what they want, show real offers, an
    - `brew install tomtom87/portage/portage` (macOS/Linux; bundles every adapter)
    - `gem install portage-cli` (any Ruby >= 3.2)
 2. Run `portage doctor --json` and read it. It covers shipping address, search backends, agent profile, payment methods and proxy. Fix what's missing before buying (section 1).
-3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `index` and `browser` subcommands and the `--handoff-target` flag are still rolling out. If one isn't listed, fall back as described where it's mentioned.
+3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `index` and `browser` subcommands and the `--handoff-target` flag ship in a recent-enough `portage`, not every install. If one isn't listed, fall back as described where it's mentioned.
 
 ## 1. Setup (only for what doctor reports missing)
 
@@ -70,9 +70,11 @@ You are the user's shopping agent. You find what they want, show real offers, an
 Most stores don't let a third-party agent complete payment. That's normal, not a failure. Portage builds the cart and checkout, then hands off:
 
 - **`default`**: opens the checkout URL in the user's own browser. Their account, region, saved addresses and saved cards all apply, and they press pay. This is today's behaviour: `--auto-open` / `--no-auto-open`, `PORTAGE_AUTO_OPEN_CHECKOUT`.
-- **`profile`**: available if `--handoff-target` exists. A dedicated Portage browser profile the user has signed into, where approved address autofill can run. It still stops at payment, and the user clicks pay.
-- **`agent:<name>`**: available if listed. Passes the checkout URL and approved cart summary to an external agent the user has approved, such as OpenClaw, or to a store's approved agentic checkout. It passes a URL, never credentials.
+- **`profile`**: accepted if `--handoff-target` exists, but the Portage browser profile itself (Phase 6) isn't built yet — it opens nothing and behaves like `print`, saying so in the report.
+- **`agent:<name>`**: available if listed. Passes the checkout URL and approved cart summary (items, qty, total, store — the same JSON `--notify-webhook` sends) to an external agent the user has approved once, such as OpenClaw, or to a store's approved agentic checkout. It passes a URL, never credentials, payment tokens or shipping details. An agent that isn't approved in the user's `~/.portage/config.json` is never invoked — the report explains why and falls back to `print`.
 - **`print`**: just report the URL.
+- Select one with `portage buy ... --handoff-target default|print|profile|agent:<name>` (or `PORTAGE_HANDOFF_TARGET`/`portage setup`). An unrecognized value is a usage error.
+- Every hand-off report's `handoff` object carries `handoff_target` (which one actually ran) alongside `opened`/`notified`/`notify_error`, plus `agent_delivered`/`agent_error` for an `agent:<name>` target.
 
 Always tell the user plainly: "Your cart is ready at <store>. Open <checkout_url> to review and pay."
 

@@ -346,6 +346,25 @@ opt-in guardrail, not a default-deny one. Per-token scopes (merchant/amount
 limits bound to one enrolled card) are set via `portage payment enroll
 --scope-*` above, not here.
 
+### Hand-off targets and hand-off-only hosts
+
+Most checkouts end in a hand-off, not a `purchased` outcome — see the next
+section. `--handoff-target default|print|profile|agent:<name>`
+(`PORTAGE_HANDOFF_TARGET`, or `~/.portage/config.json`'s `"handoff_target"`)
+decides where that link goes: `default` opens it in your own browser (today's
+behaviour); `print` just reports it; `profile` is accepted but the Portage
+browser profile isn't built yet; `agent:<name>` hands the checkout URL and
+cart summary to an external agent you've approved once in
+`~/.portage/config.json`'s `"handoff_agents"` (a command or an `https`
+webhook — never invoked unless `"approved": true`, and never given
+credentials, payment tokens or shipping details). Amazon (every marketplace)
+and any host in `"handoff_only_hosts"` are **hand-off only**: `portage buy`
+never sends that host a request at all — it opens the page (or its search
+results) and you buy it yourself. `portage doctor` reports the current
+target and host list. Portage is open-source software provided as-is,
+without warranty of any kind (MIT) — how it's used on any site, and
+compliance with that site's terms, is your own responsibility.
+
 ### Orders reconcile
 
 Nearly every real checkout `portage buy` can't finish itself hands the

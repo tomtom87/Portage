@@ -6,9 +6,9 @@ RSpec.describe Portage::Cli::HandoffReconciler do
   let(:journal) { instance_double(Portage::Ucp::Journal::PurchaseJournal, record_checkout: nil) }
   let(:notifier) { instance_double(Portage::Cli::Notifier, call: nil) }
 
-  def reconciler(spend_mode: "block")
+  def reconciler(spend_mode: "block", handoff_only: nil)
     described_class.new(transaction_log: transaction_log, order_ledger: order_ledger, journal: journal,
-                        notifier: notifier, spend_mode: spend_mode)
+                        notifier: notifier, spend_mode: spend_mode, handoff_only: handoff_only)
   end
 
   def reserve_pending(checkout_id: "chk_1", store_url: "https://shop.example", expires_at: nil,
@@ -43,6 +43,25 @@ RSpec.describe Portage::Cli::HandoffReconciler do
 
       expect(result.settled).to be false
       expect(result.note).to eq("not a shopper handoff")
+    end
+  end
+
+  # Defense in depth (docs/plans/buy-skill-and-local-browser.md Phase 5):
+  # Buy's `handoff_only` outcome never actually reserves a TransactionLog
+  # record (no checkout was ever built), so this record shouldn't exist in
+  # practice — but #reconnect is the one place every reconcile path fetches
+  # a store again, so it's guarded here too.
+  describe "a record whose store_url is hand-off only" do
+    it "never sends a request, and settles nothing" do
+      Portage::Cli::Config.load.set("handoff_only_hosts", ["amazon.co.uk"])
+      reserve_pending(store_url: "https://www.amazon.co.uk")
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+
+      result = reconciler.call(transaction_log.find("portage-buy:shop.example:chk_1"))
+
+      expect(result.settled).to be false
+      expect(result.note).to include("hand-off only")
+      expect(a_request(:any, /.*/)).not_to have_been_made
     end
   end
 

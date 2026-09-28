@@ -281,4 +281,78 @@ RSpec.describe Portage::Cli::Index::Builder do
       expect(builder(sources: []).remove("nope.example")[:removed]).to be false
     end
   end
+
+  describe "Tier C: hand-off-only hosts (docs/plans/buy-skill-and-local-browser.md Phase 5)" do
+    let(:handoff_only) { Portage::Cli::HandoffOnly.new(config: Portage::Cli::Config.load) }
+
+    before { Portage::Cli::Config.load.set("handoff_only_hosts", ["amazon.co.uk"]) }
+
+    it "#build never probes a new hand-off-only origin, and records it as such" do
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+      source = fake_source("shopify_catalog", [{ origin: "https://www.amazon.co.uk",
+                                                 url: "https://www.amazon.co.uk/dp/x", title: "Kettle", brand: nil,
+                                                 gtin: nil }])
+
+      result = builder(sources: [source], handoff_only: handoff_only).build
+
+      entry = stores.find("https://www.amazon.co.uk")
+      expect(entry).to include("handoff_only" => true, "capabilities" => [])
+      expect(result[:verified]).to eq([])
+    end
+
+    it "#add never probes a hand-off-only URL either" do
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+
+      result = builder(sources: [], handoff_only: handoff_only).add("https://www.amazon.co.uk/anything")
+
+      expect(result[:added]).to be true
+      expect(stores.find("https://www.amazon.co.uk")).to include("handoff_only" => true)
+    end
+
+    it "#refresh never re-probes an existing hand-off-only entry" do
+      stores.upsert("https://www.amazon.co.uk", handoff_only: true, last_verified: 1)
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+
+      builder(sources: [], handoff_only: handoff_only).refresh
+    end
+
+    # Regression: #reverify_stale used to skip by the entry's *stored*
+    # `handoff_only` flag rather than the live config — but a store whose
+    # UCP probe simply failed (not a Tier C host at all) is stored
+    # `handoff_only: true` too (#store_new/#store_manual), so it would
+    # never be re-verified again even though it isn't on the hand-off-only
+    # list and might come online.
+    it "#refresh still re-probes a stale entry stored handoff_only: true whose host isn't on the Tier C list" do
+      stores.upsert("https://dead.example", handoff_only: true, last_verified: 1)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(full_caps))
+
+      builder(sources: [], handoff_only: handoff_only).refresh
+
+      expect(Portage::Ucp::Client).to have_received(:discover).with("https://dead.example", anything)
+      expect(stores.find("https://dead.example")).to include("capabilities" => %w[catalog cart checkout])
+    end
+
+    # Regression: a store recorded (and verified) *before* the user added
+    # its host to handoff_only_hosts was stored `handoff_only: false`, and
+    # the old flag-based skip would keep probing it forever — the live
+    # config, not the stale stored flag, has to decide.
+    it "#refresh never probes a stale entry stored handoff_only: false whose host is now on the Tier C list, " \
+       "and flips its stored flag" do
+      stores.upsert("https://www.amazon.co.uk", handoff_only: false, capabilities: %w[catalog], last_verified: 1)
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+
+      builder(sources: [], handoff_only: handoff_only).refresh
+
+      expect(stores.find("https://www.amazon.co.uk")).to include("handoff_only" => true)
+    end
+
+    it "#refresh does nothing to a hand-off-only entry under --dry-run" do
+      stores.upsert("https://www.amazon.co.uk", handoff_only: false, last_verified: 1)
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+
+      builder(sources: [], handoff_only: handoff_only).refresh(dry_run: true)
+
+      expect(stores.find("https://www.amazon.co.uk")).to include("handoff_only" => false)
+    end
+  end
 end

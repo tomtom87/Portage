@@ -325,4 +325,43 @@ RSpec.describe Portage::Cli::Find do
       expect(report[:candidates].map { |c| c[:origin] }).to eq(["https://sofa.example"])
     end
   end
+
+  describe "Tier C: hand-off-only hosts (docs/plans/buy-skill-and-local-browser.md Phase 5)" do
+    # HandoffOnly.new (Find's default) reads Config.load, which
+    # spec_helper.rb already redirects to a per-example tmpdir — no double
+    # needed, and this exercises the real host+subdomain matching.
+    before { Portage::Cli::Config.load.set("handoff_only_hosts", ["amazon.co.uk"]) }
+
+    it "never probes a candidate on the hand-off-only list, even when a backend surfaces it" do
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+
+      report = find(backends: [backend("duckduckgo", ["https://www.amazon.co.uk/s?k=kettle"])]).call
+
+      expect(report[:candidates].first[:handoff_only]).to be true
+    end
+
+    it "never probes a search-engine URL pointing at a hand-off-only origin" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      find(backends: [backend("duckduckgo", ["https://www.amazon.co.uk/s?k=kettle", "https://shop.example"])]).call
+
+      expect(Portage::Ucp::Client).to have_received(:discover).with("https://shop.example", anything)
+      expect(Portage::Ucp::Client).not_to have_received(:discover).with("https://www.amazon.co.uk", anything)
+    end
+
+    it "still lists it as a candidate, marked handoff_only: true, never as a probed store" do
+      report = find(backends: [backend("duckduckgo", ["https://www.amazon.co.uk/s?k=kettle"])]).call
+
+      expect(report[:stores]).to eq([{ origin: "https://www.amazon.co.uk", source: "duckduckgo", checkout: false,
+                                       handoff_only: true }])
+    end
+
+    it "marks a probed, non-hand-off-only store handoff_only: false" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = find(backends: [backend("duckduckgo", ["https://shop.example"])]).call
+
+      expect(report[:stores].first[:handoff_only]).to be false
+    end
+  end
 end

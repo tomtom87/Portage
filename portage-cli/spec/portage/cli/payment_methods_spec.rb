@@ -71,6 +71,16 @@ RSpec.describe Portage::Cli::PaymentMethods do
       session
     end
 
+    it "never probes a hand-off-only host — no request at all, and nothing to set up" do
+      Portage::Cli::Config.load.set("handoff_only_hosts", ["amazon.co.uk"])
+      expect(Portage::Ucp::Client).not_to receive(:discover)
+
+      result = payment_methods.enroll("https://www.amazon.co.uk", poll_interval: 0, sleeper: ->(_s) {}) { nil }
+
+      expect(result).to eq(status: "handoff_only", host: "www.amazon.co.uk")
+      expect(a_request(:any, /.*/)).not_to have_been_made
+    end
+
     it "yields the setup_url before polling, then stores the token once complete" do
       session = fake_session
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)

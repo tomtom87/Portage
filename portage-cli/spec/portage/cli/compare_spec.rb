@@ -50,6 +50,16 @@ RSpec.describe Portage::Cli::Compare do
     expect(report[:message]).to include("Not a store URL")
   end
 
+  it "never probes a hand-off-only origin — no request at all" do
+    Portage::Cli::Config.load.set("handoff_only_hosts", ["amazon.co.uk"])
+    expect(Portage::Ucp::Client).not_to receive(:discover)
+
+    report = compare(origin_url: "https://www.amazon.co.uk/dp/x").call
+
+    expect(report[:message]).to include("hand-off only")
+    expect(a_request(:any, /.*/)).not_to have_been_made
+  end
+
   it "reports a non-UCP origin store instead of raising" do
     stub_discover("https://origin.example" => nil)
 

@@ -2,6 +2,8 @@
 
 Branch on `outcome`, never on `message`. **Only `purchased` means money moved.** Whenever a report carries a `checkout_url`, give it to the user.
 
+A hand-off outcome's `handoff` object (when present) says what actually happened with that URL: `url`, `opened` (browser opened for `default`), `notified`/`notify_error` (`--notify-webhook`), `handoff_target` (which of `default`/`print`/`profile`/`agent:<name>` ran — see `--handoff-target` below), and, for `agent:<name>`, `agent_delivered`/`agent_error`.
+
 ## Done
 
 | Outcome | Meaning | Do |
