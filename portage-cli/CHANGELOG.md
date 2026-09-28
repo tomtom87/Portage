@@ -6,6 +6,48 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`portage-cli/known-stores/{stores,products}.json` — a repo-committed,
+  jsdelivr-hosted list every install fetches on top of its own local index**
+  (`docs/plans/buy-skill-and-local-browser.md` Phase 2c). Same schema as
+  `~/.portage/index/{stores,products}.json` (Phase 2b), published over the
+  same `@main` jsdelivr channel `AgentProfileUrl` already uses
+  (`Portage::Cli::KnownStoresUrl`), and cached at
+  `~/.portage/index/known-{stores,products}.json`
+  (`Portage::Cli::Index::KnownCache`). Fetched lazily the first time
+  `SearchBackends::Index` needs it and no cache exists yet, refreshed
+  unconditionally by `portage index refresh`, and refreshed by `doctor`
+  whenever it finds the cache older than 7 days — every fetch is a single
+  short-timeout GET per file, swallowed on any failure (offline, timeout,
+  bad JSON, a non-2xx response) exactly like `SearchBackends`/
+  `OfferSources::ShopifyCatalog`, so a missing or stale cache just means
+  `find` works the way it did before this phase. A fetched entry is
+  validated (must parse as a Hash of Hashes) and stripped of any
+  `price`/`amount`/`stock` field before it's cached. `SearchBackends::Index`
+  now merges this cache *underneath* the user's own
+  `Index::Store`/`Index::ProductStore` entries — a known entry only shows
+  up when the user's own index doesn't already have that origin/key, so a
+  local `index add`/`index build` finding always wins — and is now
+  `available?` from the known cache alone, with no local index at all.
+  Still the same untrusted posture either way: an offer built from either
+  source carries `source: "index"`, never a `merchant_allowlist`/`--yes`
+  shortcut.
+- **`portage index build`/`refresh --export DIR`** writes a PR-ready copy
+  of your own local index into `DIR/{stores,products}.json` — the same
+  shape as `known-stores/` in the repo, so publishing a new entry is
+  "run this, `git add`, open a PR." A new `Index::Exporter` drops any store
+  entry whose only `sources` is `"browser"` (history/bookmark-derived —
+  Phase 3) outright, strips `"browser"` out of the `sources` of any entry
+  that also has a real source, and keeps a product only if at least one of
+  its `stores[].origin` survived that same filter (trimming its `stores`
+  array down to just those origins) — nothing personal ships in an export.
+- **`rake agent_profile:purge` is now an alias for `rake
+  jsdelivr:purge[agent_profile]`.** The new `jsdelivr:purge` task (root
+  `Rakefile`) covers every file this repo publishes over jsdelivr's
+  `@main` channel by short name — `agent_profile`, `known_stores`,
+  `known_products` — and purges all of them when called with no argument.
+- Seeded `known-stores/{stores,products}.json` with a real
+  `portage index build --sources shopify_catalog --export known-stores`
+  run: 221 stores, 396 products, all `source: "shopify_catalog"`.
 - **`portage index` — a local store and product index you build yourself**
   (`docs/plans/buy-skill-and-local-browser.md` Phase 2b). New commands:
   `portage index build [--sources a,b] [--queries FILE] [--dry-run]`,

@@ -106,6 +106,11 @@ to `main`: `raw.githubusercontent.com` served the per-action ids while
 bundle exec rake agent_profile:purge
 ```
 
+(`agent_profile:purge` is now an alias for `rake jsdelivr:purge[agent_profile]` — the same
+task also purges `known-stores/{stores,products}.json`, the other file this repo publishes
+over the same `@main` channel; see [buy-skill-and-local-browser.md](plans/buy-skill-and-local-browser.md)
+Phase 2c. Run `rake jsdelivr:purge` with no argument to purge everything at once.)
+
 Pinning `@<full-sha>` instead of `@main` avoids the whole class of problem —
 jsdelivr treats a sha path as immutable and can't serve a stale one — at the
 cost of updating `.env.example` on every profile change. Either is fine; what

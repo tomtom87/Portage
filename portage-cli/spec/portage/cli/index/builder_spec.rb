@@ -161,7 +161,51 @@ RSpec.describe Portage::Cli::Index::Builder do
     end
   end
 
+  describe "#build with --export" do
+    it "also writes a PR-ready export when export: is given" do
+      source = fake_source("shopify_catalog", [{ origin: "https://shop.example", url: nil, title: "Trail Boots",
+                                                 brand: nil, gtin: nil }])
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(full_caps))
+
+      Dir.mktmpdir do |export_dir|
+        result = builder(sources: [source]).build(export: export_dir)
+
+        expect(result[:exported]).to include(stores: 1, products: 1, dir: export_dir)
+        expect(JSON.parse(File.read(File.join(export_dir, "stores.json")))).to have_key("https://shop.example")
+      end
+    end
+
+    it "doesn't export when export: is nil" do
+      source = fake_source("shopify_catalog", [{ origin: "https://shop.example", url: nil, title: nil, brand: nil,
+                                                 gtin: nil }])
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(full_caps))
+
+      result = builder(sources: [source]).build
+
+      expect(result).not_to have_key(:exported)
+    end
+  end
+
   describe "#refresh" do
+    it "refreshes the known-stores cache unconditionally" do
+      known_cache = instance_double(Portage::Cli::Index::KnownCache, refresh!: true)
+
+      described_class.new(stores: stores, products: products, cache: cache, sources: [], throttle: 0,
+                          known_cache: known_cache).refresh
+
+      expect(known_cache).to have_received(:refresh!)
+    end
+
+    it "doesn't refresh the known-stores cache under --dry-run" do
+      known_cache = instance_double(Portage::Cli::Index::KnownCache)
+      allow(known_cache).to receive(:refresh!)
+
+      described_class.new(stores: stores, products: products, cache: cache, sources: [], throttle: 0,
+                          known_cache: known_cache).refresh(dry_run: true)
+
+      expect(known_cache).not_to have_received(:refresh!)
+    end
+
     it "re-verifies a stale entry and bumps last_verified when it still answers" do
       stores.upsert("https://old.example", capabilities: [], last_verified: Time.now.to_i - (8 * 24 * 60 * 60))
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session(full_caps))

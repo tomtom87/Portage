@@ -8,6 +8,7 @@ require_relative "user_agent"
 require_relative "classifier"
 require_relative "index/store"
 require_relative "index/product_store"
+require_relative "index/known_cache"
 
 module Portage
   module Cli
@@ -246,13 +247,25 @@ module Portage
       # one thing stores.yml can't do: match a query against a *product* the
       # index has seen (by name or GTIN) and put that product's own stores
       # first, ahead of a category guess.
+      #
+      # Phase 2c: also draws on the repo's own known-stores cache
+      # (Index::KnownCache) — fetched lazily the first time this backend is
+      # asked for anything and no cache exists yet — merged *underneath*
+      # the user's own Store/ProductStore entries: a known entry only shows
+      # up when the user's own index doesn't already have that origin/key,
+      # so a local `index add`/`index build` finding always wins. Still the
+      # same untrusted posture either way — an offer built from either
+      # source carries `source: "index"`, never a merchant_allowlist/--yes
+      # shortcut (see this class's own header comment).
       class Index
         PER_CATEGORY_CAP = 3
         TOTAL_CAP = 12
 
-        def initialize(stores: Portage::Cli::Index::Store.new, products: Portage::Cli::Index::ProductStore.new)
+        def initialize(stores: Portage::Cli::Index::Store.new, products: Portage::Cli::Index::ProductStore.new,
+                       known: Portage::Cli::Index::KnownCache.new)
           @stores = stores
           @products = products
+          @known = known
         end
 
         def name = "index"
@@ -270,11 +283,39 @@ module Portage
         private
 
         def store_entries
-          @store_entries ||= @stores.all
+          @store_entries ||= merge_under_own(@stores.all, known_stores, key: "origin")
         end
 
         def product_entries
-          @product_entries ||= @products.all
+          @product_entries ||= merge_under_own(@products.all, known_products, key: "key")
+        end
+
+        # `entry[key]` is always present on both sides — Store#upsert seeds
+        # "origin" and ProductStore#upsert seeds "key" the same way on a
+        # brand-new entry, and KnownCache's own fetch just carries whatever
+        # `portage index build --export` wrote, in the same schema.
+        def merge_under_own(own, known, key:)
+          own_keys = own.map { |e| e[key] }
+          own + known.reject { |e| own_keys.include?(e[key]) }
+        end
+
+        def known_stores
+          ensure_known_cache!
+          @known.stores.values
+        end
+
+        def known_products
+          ensure_known_cache!
+          @known.products.values
+        end
+
+        # Fetched at most once per instance — a cache miss found here means
+        # "still no cache", not "try again this call".
+        def ensure_known_cache!
+          return if @known_cache_checked
+
+          @known_cache_checked = true
+          @known.fetch_if_missing!
         end
 
         def origins_for_products(query)

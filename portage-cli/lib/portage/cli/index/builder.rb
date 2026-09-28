@@ -6,6 +6,8 @@ require_relative "../classifier"
 require_relative "../probe_cache"
 require_relative "store"
 require_relative "product_store"
+require_relative "known_cache"
+require_relative "exporter"
 require_relative "sources"
 
 module Portage
@@ -36,7 +38,8 @@ module Portage
         TOP_CATEGORIES = 5
 
         def initialize(stores: Store.new, products: ProductStore.new, cache: ProbeCache.new, sources: nil,
-                       throttle: THROTTLE, max_new_probes: MAX_NEW_PROBES, out: $stdout, now: Time.now)
+                       throttle: THROTTLE, max_new_probes: MAX_NEW_PROBES, out: $stdout, now: Time.now,
+                       known_cache: KnownCache.new)
           @stores = stores
           @products = products
           @cache = cache
@@ -45,23 +48,34 @@ module Portage
           @max_new_probes = max_new_probes
           @out = out
           @now = now
+          @known_cache = known_cache
         end
 
         # @param queries [Array<String>, nil] passed through to every
         #   source that takes one (today, just shopify_catalog).
+        # @param export [String, nil] a directory to also write a PR-ready
+        #   `{stores,products}.json` into (see Exporter) — nil (the
+        #   default) skips it.
         # @return [Hash] a run summary — sources_run, candidates,
-        #   new_origins_checked, verified, products_added, capped.
-        def build(queries: nil, dry_run: false)
+        #   new_origins_checked, verified, products_added, capped, and
+        #   (with `export:`) exported.
+        def build(queries: nil, dry_run: false, export: nil)
           sightings = gather(queries)
-          apply(sightings, dry_run: dry_run)
+          result = apply(sightings, dry_run: dry_run)
+          result[:exported] = Exporter.new(stores: @stores, products: @products).export(export) if export
+          result
         end
 
         # Re-verifies every entry older than 7 days (bumping last_verified
-        # only for the ones still answering), then runs an ordinary #build,
-        # which itself adds anything new the sources turn up.
-        def refresh(queries: nil, dry_run: false)
+        # only for the ones still answering), refreshes the known-stores
+        # cache unconditionally (Phase 2c — this is one of the three
+        # triggers the plan names, alongside a first-run fetch and a stale
+        # `doctor` check), then runs an ordinary #build, which itself adds
+        # anything new the sources turn up.
+        def refresh(queries: nil, dry_run: false, export: nil)
+          @known_cache.refresh! unless dry_run
           reverify_stale(dry_run: dry_run)
-          build(queries: queries, dry_run: dry_run).merge(refreshed: true)
+          build(queries: queries, dry_run: dry_run, export: export).merge(refreshed: true)
         end
 
         # `portage index add URL` — verifies and stores one origin

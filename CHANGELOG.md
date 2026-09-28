@@ -9,6 +9,19 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Known-stores list moves into the repo, fetched over jsdelivr**
+  (`docs/plans/buy-skill-and-local-browser.md` Phase 2c — full change is in
+  `portage-cli/CHANGELOG.md`). `portage-cli/known-stores/{stores,
+  products}.json` are committed, same schema as the local index, seeded
+  with a real `portage index build --sources shopify_catalog --export`
+  run (221 stores, 396 products). Every install fetches them lazily over
+  the same jsdelivr `@main` channel `agent-profile.json` already uses,
+  caches them under the user's own index, and always lets the user's own
+  entries win. `rake agent_profile:purge` generalizes into `rake
+  jsdelivr:purge` (covers `known-stores/` too; the old task name still
+  works as an alias). `buy` skill's index bullet gets one added sentence
+  noting `find` may already have candidates before the user runs `index
+  build`; `plugins/buy/.claude-plugin/plugin.json` bumped to `0.2.1`.
 - **`buy` skill: covers the new `portage index` commands** (`docs/plans/buy-skill-and-local-browser.md`
   Phase 2b — full change is in `portage-cli/CHANGELOG.md`). `plugins/buy/skills/buy/SKILL.md`'s
   setup section now describes `index build/refresh/show/add/remove/sources`

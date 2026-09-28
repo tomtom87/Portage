@@ -674,6 +674,21 @@ RSpec.describe Portage::Cli do
       end
     end
 
+    it "passes --export through to the builder and reports what was written" do
+      builder = instance_double(Portage::Cli::Index::Builder,
+                                build: { sources_run: [], candidates: 0, new_origins_checked: [], verified: [],
+                                         capped: false, products_added: 0,
+                                         exported: { dir: "/tmp/out", stores: 2, products: 3 } })
+      allow(Portage::Cli::Index::Builder).to receive(:new).and_return(builder)
+
+      output = capture_stdout do
+        expect(described_class.run(%w[index build --export /tmp/out])).to eq(0)
+      end
+
+      expect(builder).to have_received(:build).with(hash_including(export: "/tmp/out"))
+      expect(output).to include("Exported 2 store(s), 3 product(s) to /tmp/out.")
+    end
+
     it "refreshes instead of building fresh when given 'refresh'" do
       builder = instance_double(Portage::Cli::Index::Builder)
       allow(builder).to receive(:refresh).and_return({ sources_run: [], candidates: 0, new_origins_checked: [],

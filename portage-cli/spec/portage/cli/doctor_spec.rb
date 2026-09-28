@@ -245,9 +245,10 @@ RSpec.describe Portage::Cli::Doctor do
   end
 
   describe "the local index (docs/plans/buy-skill-and-local-browser.md Phase 2b)" do
-    def index_finding(stores:, products:)
-      described_class.new(install_doctor: install_doctor, index_stores: stores, index_products: products)
-                     .call.find { |f| f.check == "index" }
+    def index_finding(stores:, products:, known_cache: instance_double(Portage::Cli::Index::KnownCache,
+                                                                       stale?: false, exists?: false))
+      described_class.new(install_doctor: install_doctor, index_stores: stores, index_products: products,
+                          known_cache: known_cache).call.find { |f| f.check == "index" }
     end
 
     it "says there's no index yet when stores.json doesn't exist" do
@@ -268,6 +269,51 @@ RSpec.describe Portage::Cli::Doctor do
 
       expect(finding.level).to eq("info")
       expect(finding.message).to include("2 store(s)", "3 product(s)", "3 day(s) ago")
+    end
+
+    describe "the known-stores cache (Phase 2c)" do
+      let(:stores) { instance_double(Portage::Cli::Index::Store, exists?: false) }
+      let(:products) { instance_double(Portage::Cli::Index::ProductStore) }
+
+      it "says it hasn't been fetched yet when there's no cache" do
+        known_cache = instance_double(Portage::Cli::Index::KnownCache, stale?: true, exists?: false)
+        allow(known_cache).to receive(:refresh!)
+
+        finding = index_finding(stores: stores, products: products, known_cache: known_cache)
+
+        expect(finding.message).to include("not fetched yet")
+      end
+
+      it "reports the known cache's own counts and age once it exists" do
+        known_stores = { "a" => {}, "b" => {} }
+        known_products = { "c" => {} }
+        known_cache = instance_double(
+          Portage::Cli::Index::KnownCache, stale?: false, exists?: true, age: 2 * 86_400,
+                                           stores: known_stores, products: known_products
+        )
+
+        finding = index_finding(stores: stores, products: products, known_cache: known_cache)
+
+        expect(finding.message).to include("2 store(s)", "1 product(s)", "2 day(s) ago")
+      end
+
+      it "refreshes the known cache when it's stale, and never raises if that fails" do
+        known_cache = instance_double(Portage::Cli::Index::KnownCache, exists?: false)
+        allow(known_cache).to receive(:stale?).and_return(true)
+        allow(known_cache).to receive(:refresh!).and_raise(StandardError, "offline")
+
+        expect { index_finding(stores: stores, products: products, known_cache: known_cache) }.not_to raise_error
+      end
+
+      it "doesn't refresh the known cache when it isn't stale" do
+        known_cache = instance_double(Portage::Cli::Index::KnownCache, stale?: false, exists?: true, age: 60,
+                                                                       stores: {}, products: {})
+        allow(known_cache).to receive(:refresh!)
+
+        index_finding(stores: stores, products: products, known_cache: known_cache)
+
+        expect(known_cache).not_to have_received(:refresh!)
+      end
     end
   end
 
