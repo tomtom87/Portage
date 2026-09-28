@@ -18,7 +18,7 @@ A hand-off outcome's `handoff` object (when present) says what actually happened
 |---|---|---|
 | `express_stop` | Cart and checkout built (WebMCP); the store's own express-pay finishes it | Give `checkout_url`. The user pays. |
 | `requires_escalation` | The store needs a human step (verification, terms, 3-D Secure) | Give `checkout_url`. Don't retry. |
-| `handoff_only` | Hand-off-only retailer (e.g. Amazon), legal reasons | Give `checkout_url` and `legal_notice`. Never automate. |
+| `handoff_only` | Hand-off-only retailer (e.g. Amazon, or Walmart/eBay/Best Buy/Etsy), legal reasons or no purchase automation exists | Give `checkout_url` and `legal_notice`. Never automate. |
 | `no_payment_token` | No payment method enrolled for this store | Give `checkout_url`, or suggest `portage payment enroll <store>`. |
 | `permission_denied` | The store doesn't let this agent complete payment | Give `checkout_url`. Normal for most stores. |
 | `policy_blocked` | Over a spending cap, velocity limit, or not on the merchant allowlist | Explain which (`decisions`). Only change policy if the user explicitly asks. |

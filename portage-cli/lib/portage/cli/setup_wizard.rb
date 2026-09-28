@@ -1,6 +1,7 @@
 require_relative "setup_wizard/prompt"
 require_relative "setup_wizard/steps/shipping"
 require_relative "setup_wizard/steps/search_keys"
+require_relative "setup_wizard/steps/retailer_keys"
 require_relative "setup_wizard/steps/agent_profile"
 require_relative "setup_wizard/steps/browser_import"
 require_relative "setup_wizard/steps/index_build"
@@ -14,12 +15,15 @@ module Portage
     # decide *whether* to run this (a real TTY, no --json, and either the
     # command was `setup` outright or `doctor`/`configure` found nothing
     # configured at all; see Doctor#nothing_configured?); this class is
-    # just the seven steps themselves, once that decision is already made.
+    # just the steps themselves, once that decision is already made
+    # (Phase 4 shipped seven; Phase 7 added RetailerKeys as an eighth, opt
+    # -in step between search keys and the agent profile).
     #
     # Every step: says what it's for, offers to skip (Enter keeps its own
-    # default — "on" for the foundational steps, "off" for the two that are
-    # opt-in network/filesystem sweeps: browser import and index build),
-    # and re-runs cleanly — Enter on any individual question inside a step
+    # default — "on" for the foundational steps, "off" for the ones that
+    # are opt-in: browser import and index build's network/filesystem
+    # sweeps, and RetailerKeys' per-retailer credentials), and re-runs
+    # cleanly — Enter on any individual question inside a step
     # always keeps whatever's already set, never clears it. No step raises
     # its own error class: each one leans on the command it delegates to
     # (`portage generate agent-profile`, `portage browser import`, `portage
@@ -36,7 +40,7 @@ module Portage
         already have set is cleared just by pressing Enter.
       TEXT
 
-      STEPS = [Steps::Shipping, Steps::SearchKeys, Steps::AgentProfile, Steps::BrowserImport,
+      STEPS = [Steps::Shipping, Steps::SearchKeys, Steps::RetailerKeys, Steps::AgentProfile, Steps::BrowserImport,
                Steps::IndexBuild, Steps::Policy, Steps::Handoff].freeze
 
       def initialize(input: $stdin, output: $stdout)

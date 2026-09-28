@@ -1530,6 +1530,61 @@ RSpec.describe Portage::Cli::Buy do
       end
     end
 
+    describe "Phase 7: retailer offer source hosts (docs/plans/buy-skill-and-local-browser.md Phase 7)" do
+      it "routes walmart.com straight to hand-off, using the exact page picked from find" do
+        expect(Portage::Ucp::Client).not_to receive(:discover)
+        expect(Portage::Cli::HomepageFetch).not_to receive(:call)
+
+        report = described_class.new(url: "https://www.walmart.com/ip/kettle/123", query: "kettle",
+                                     dry_run: true).call
+
+        expect(a_request(:any, /.*/)).not_to have_been_made
+        expect(report[:outcome]).to eq("handoff_only")
+        expect(report[:checkout_url]).to eq("https://www.walmart.com/ip/kettle/123")
+        expect(report[:legal_notice]).to eq(Portage::Cli::HandoffOnly::LEGAL_NOTICE)
+      end
+
+      it "does the same for ebay.com and bestbuy.com — neither has an adapter this gem ships" do
+        %w[https://www.ebay.com/itm/1 https://www.bestbuy.com/site/1.p].each do |url|
+          report = described_class.new(url: url, query: "kettle", dry_run: true).call
+
+          expect(report[:outcome]).to eq("handoff_only")
+          expect(report[:checkout_url]).to eq(url)
+        end
+      end
+
+      it "routes an ordinary buyer to hand-off on etsy.com when no ETSY_* seller credentials are set" do
+        with_env("ETSY_ACCESS_TOKEN" => nil, "ETSY_API_KEY" => nil, "ETSY_SHOP_ID" => nil) do
+          report = described_class.new(url: "https://www.etsy.com/listing/123", query: "kettle",
+                                       dry_run: true).call
+
+          expect(report[:outcome]).to eq("handoff_only")
+          expect(report[:checkout_url]).to eq("https://www.etsy.com/listing/123")
+        end
+      end
+
+      it "leaves etsy.com to the existing seller adapter once the shop owner's own ETSY_* creds are set" do
+        with_env("ETSY_ACCESS_TOKEN" => "tok", "ETSY_API_KEY" => "key", "ETSY_SHOP_ID" => "1") do
+          allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
+          allow(Portage::Cli::HomepageFetch).to receive(:call).and_return([nil, {}])
+
+          report = described_class.new(url: "https://www.etsy.com/listing/123", query: "kettle",
+                                       dry_run: true).call
+
+          expect(report[:outcome]).not_to eq("handoff_only")
+        end
+      end
+
+      it "a non-Amazon retail-offer host still never opens on --dry-run" do
+        allow(Portage::Cli::CheckoutHandoff).to receive(:new)
+
+        report = described_class.new(url: "https://www.bestbuy.com/site/1.p", query: "kettle", dry_run: true).call
+
+        expect(report[:handoff]).to be_nil
+        expect(Portage::Cli::CheckoutHandoff).not_to have_received(:new)
+      end
+    end
+
     describe "--handoff-target" do
       def dead_end_checkout
         incomplete_checkout.merge("links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }])

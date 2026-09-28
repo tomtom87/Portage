@@ -12,6 +12,7 @@ require_relative "confidence_check"
 require_relative "checkout_handoff"
 require_relative "notifier"
 require_relative "handoff_only"
+require_relative "offer_sources"
 require_relative "handoff_target"
 require_relative "handoff_agents"
 require_relative "user_agent"
@@ -179,7 +180,31 @@ module Portage
       # "handoff_only_hosts" is the user's own list (see HandoffOnly).
       def handoff_only?
         @handoff_only ||= HandoffOnly.new
-        @handoff_only.host?(@uri.host)
+        return true if @handoff_only.host?(@uri.host)
+        return true if OfferSources.retail_handoff_host?(@uri.host)
+
+        etsy_buyer_host?
+      end
+
+      # Phase 7 (docs/plans/buy-skill-and-local-browser.md):
+      # portage-ucp-etsy is a *seller*-side adapter — a shop owner with
+      # their own ETSY_* credentials set still reaches #adapter_flow
+      # unchanged below, the same "only your own store" rule every other
+      # adapter already gets (see the class comment at the top of this
+      # file). An ordinary buyer with no Etsy credentials of their own
+      # gets routed to hand-off here instead of a homepage fetch +
+      # platform detection that would just be scraping a stranger's
+      # listing — the buyer-side offer OfferSources::EtsyListings hands
+      # `find` has nothing this process can check out anyway.
+      def etsy_buyer_host?
+        HandoffOnly.matches_any?(@uri.host, %w[etsy.com]) && !etsy_adapter_configured?
+      end
+
+      def etsy_adapter_configured?
+        platform = Portage::Ucp::Resolver::PLATFORMS.find { |p| p.name == "Etsy" }
+        return false unless platform
+
+        Portage::Ucp::Resolver.missing_env(platform, Portage::Ucp::Resolver.env_for(platform)).empty?
       end
 
       # No checkout was ever built — there's nothing to browse or complete,
@@ -206,6 +231,7 @@ module Portage
 
       def handoff_only_checkout_url
         return amazon_checkout_url if HandoffOnly.amazon?(@uri.host)
+        return @uri.to_s if OfferSources.retail_handoff_host?(@uri.host) || etsy_buyer_host?
 
         origin_homepage
       end

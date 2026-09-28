@@ -279,6 +279,41 @@ RSpec.describe Portage::Cli::Doctor do
     end
   end
 
+  describe "retailer offer sources (docs/plans/buy-skill-and-local-browser.md Phase 7)" do
+    def retailer_finding(env = {})
+      with_env(env) do
+        described_class.new(install_doctor: install_doctor).call.find do |f|
+          f.check == "retailer_offer_sources"
+        end
+      end
+    end
+
+    def no_retailer_keys_env
+      { "WALMART_AFFILIATE_API_KEY" => nil, "EBAY_BROWSE_ACCESS_TOKEN" => nil, "BESTBUY_API_KEY" => nil,
+        "ETSY_LISTINGS_API_KEY" => nil, "AMAZON_CREATORS_ACCESS_TOKEN" => nil }
+    end
+
+    it "reports none configured on a fresh install, and that it's always info" do
+      finding = retailer_finding(no_retailer_keys_env)
+
+      expect(finding.level).to eq("info")
+      expect(finding.message).to include("No retailer offer sources configured")
+      expect(finding.details[:active]).to eq([])
+    end
+
+    it "lists exactly the retailers whose key is actually set" do
+      finding = retailer_finding(no_retailer_keys_env.merge("WALMART_AFFILIATE_API_KEY" => "k",
+                                                            "ETSY_LISTINGS_API_KEY" => "k"))
+
+      expect(finding.details[:active]).to eq(%w[walmart_affiliate etsy_listings])
+      expect(finding.message).to include("walmart_affiliate", "etsy_listings")
+    end
+
+    it "always says none of them can complete a purchase" do
+      expect(retailer_finding(no_retailer_keys_env).message).to include("none can complete a purchase")
+    end
+  end
+
   describe "the local index (docs/plans/buy-skill-and-local-browser.md Phase 2b)" do
     def index_finding(stores:, products:, known_cache: instance_double(Portage::Cli::Index::KnownCache,
                                                                        stale?: false, exists?: false))

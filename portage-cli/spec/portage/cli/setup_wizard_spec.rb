@@ -8,10 +8,11 @@ RSpec.describe Portage::Cli::SetupWizard do
     [result, output.string]
   end
 
-  it "lists the seven steps in the plan's own order" do
+  it "lists the eight steps in the plan's own order (Phase 7 added RetailerKeys)" do
     expect(described_class::STEPS).to eq([
                                            Portage::Cli::SetupWizard::Steps::Shipping, Portage::Cli::SetupWizard::Steps::SearchKeys,
-                                           Portage::Cli::SetupWizard::Steps::AgentProfile, Portage::Cli::SetupWizard::Steps::BrowserImport,
+                                           Portage::Cli::SetupWizard::Steps::RetailerKeys, Portage::Cli::SetupWizard::Steps::AgentProfile,
+                                           Portage::Cli::SetupWizard::Steps::BrowserImport,
                                            Portage::Cli::SetupWizard::Steps::IndexBuild, Portage::Cli::SetupWizard::Steps::Policy,
                                            Portage::Cli::SetupWizard::Steps::Handoff
                                          ])
