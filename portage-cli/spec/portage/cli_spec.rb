@@ -53,7 +53,7 @@ RSpec.describe Portage::Cli do
       expect(captured).to include(url: "shop.example", max_price: 60_000)
     end
 
-    it "prints JSON when --json is given, and strips :json before building Buy" do
+    it "prints JSON when --json is given, and passes json: true to Buy (Phase 2's mapping-confirm gate reads it)" do
       captured = nil
       allow(Portage::Cli::Buy).to receive(:new) { |**opts|
         captured = opts
@@ -63,8 +63,20 @@ RSpec.describe Portage::Cli do
       output = nil
       expect { output = capture_stdout { described_class.run(%w[buy shop.example --json]) } }.not_to raise_error
 
-      expect(captured).not_to have_key(:json)
+      expect(captured).to include(json: true)
       expect(JSON.parse(output)["source"]).to eq("native_ucp")
+    end
+
+    it "passes json: false to Buy when --json isn't given" do
+      captured = nil
+      allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+        captured = opts
+        instance_double(Portage::Cli::Buy, call: report)
+      }
+
+      described_class.run(%w[buy shop.example --query cold])
+
+      expect(captured).to include(json: false)
     end
 
     it "builds Buy's confidence check from --decision-backend and --min-confidence" do

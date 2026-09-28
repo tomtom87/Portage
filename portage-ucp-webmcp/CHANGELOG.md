@@ -6,6 +6,26 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Schema matching for unknown pages** (docs/plans/webmcp-universal-outbound.md
+  Phase 2): `WebMcp::Matcher.propose(tools)` proposes a `tool_names:` mapping
+  for a page `Presets.detect` doesn't recognize, scoring each of the page's
+  tools against every UCP action it might be by name-token overlap
+  (`findProducts` ↔ `search_catalog`), input-schema shape (a `query` string
+  → search; `product_id`/`variant_id` + `quantity` → add to cart), and the
+  `readOnlyHint` annotation — never a tool's `description`, which is
+  untrusted page content. Returns a `Proposal` (`tool:`, `confidence:`,
+  `reason:`) per action scored above a floor; an action nothing scores
+  against is simply absent. No LLM in this gem. `Matcher.tool_names(proposal)`
+  flattens a proposal to the plain `tool_names:` shape. Confirming a
+  proposal, and persisting a confirmed mapping, is `portage-cli`'s job
+  (`WebmcpMappingConfirm`, `WebmcpMappings`) — nothing here calls a tool or
+  writes anything.
+- `WebMcp::Fingerprint`, extracted from `Presets.detect`'s own name-sorting:
+  `.names(tools)` (sorted tool names, what `Presets.detect` matches against)
+  and `.for(tools)` (a digest of every tool's name *and* its own input
+  schema — what `portage-cli`'s confirmed-mapping store keys a Phase 2
+  mapping by, so a lookalike page with the same tool names but a different
+  schema shape gets a different fingerprint).
 - `WebMcp.connect` with no `capabilities:` now derives them from the tools
   the page registers (`WebMcp::Capabilities`), so `Session#advertises?`
   answers `true`/`false` instead of `nil`. This reads the page once inside

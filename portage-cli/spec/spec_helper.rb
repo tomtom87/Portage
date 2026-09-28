@@ -18,6 +18,7 @@ RSpec.configure do |config|
   config.around do |example|
     Dir.mktmpdir do |dir|
       @transaction_log_path = File.join(dir, "transactions.json")
+      @webmcp_mappings_path = File.join(dir, "webmcp_mappings.json")
       example.run
     end
   end
@@ -25,6 +26,16 @@ RSpec.configure do |config|
   config.before do
     allow(Portage::Ucp::Support::TransactionLog).to receive(:new).and_wrap_original do |original, **kwargs|
       kwargs = { path: @transaction_log_path }.merge(kwargs) unless kwargs.key?(:store)
+      original.call(**kwargs)
+    end
+
+    # Same reasoning as TransactionLog above: `Buy`'s Phase 2 WebMCP mapping
+    # fallback (docs/plans/webmcp-universal-outbound.md) reads and can write
+    # `Portage::Cli::WebmcpMappings.load`'s default path — redirect it to a
+    # per-example tmpdir so no spec run ever touches the developer's real
+    # ~/.portage/webmcp_mappings.json.
+    allow(Portage::Cli::WebmcpMappings).to receive(:load).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @webmcp_mappings_path }.merge(kwargs) unless kwargs.key?(:path)
       original.call(**kwargs)
     end
   end

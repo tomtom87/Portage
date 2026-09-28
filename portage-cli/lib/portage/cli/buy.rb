@@ -17,6 +17,8 @@ require_relative "handoff_reconciler"
 require_relative "handoff_spend_mode"
 require_relative "webmcp"
 require_relative "webmcp_checkout_mode"
+require_relative "webmcp_mappings"
+require_relative "webmcp_mapping_confirm"
 
 module Portage
   module Cli
@@ -69,11 +71,26 @@ module Portage
       #   existed. Given one, attempted after native-UCP discovery finds
       #   nothing at this URL and before a platform-adapter fallback (see
       #   #webmcp_flow).
-      # rubocop:disable Metrics/ParameterLists -- all keywords; one per flag, plus injectable collaborators
+      # @param webmcp_mappings [Portage::Cli::WebmcpMappings, nil] Phase 2's
+      #   confirmed-mapping store (docs/plans/webmcp-universal-outbound.md).
+      #   nil (the default) builds the real `~/.portage/webmcp_mappings.json`
+      #   -backed one lazily, only if #webmcp_matched_session ever runs —
+      #   injectable so specs don't touch it.
+      # @param webmcp_mapping_confirm [Portage::Cli::WebmcpMappingConfirm, nil]
+      #   Phase 2's confirm-before-mutate gate. nil (the default) builds one
+      #   from whether stdin is a real TTY and `json:` is off — injectable so
+      #   a spec can simulate an interactive "y" without a real terminal.
+      # @param json [Boolean] whether this run is `--json` — Phase 2's
+      #   mapping confirmation prompt never fires under it (same posture as
+      #   "no TTY"), since a caller reading structured stdout has nowhere to
+      #   put an interactive prompt.
+      # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- all keywords; one per flag, plus
+      # injectable collaborators, each assigned to its own ivar
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
                      auto_open: nil, notify_webhook: nil, confidence_check: nil, transaction_log: nil,
-                     max_price: nil, webmcp_bridge: nil)
-        # rubocop:enable Metrics/ParameterLists
+                     max_price: nil, webmcp_bridge: nil, webmcp_mappings: nil, webmcp_mapping_confirm: nil,
+                     json: false)
+        # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
         raw = url.to_s.strip
         @uri = URI.parse(raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}")
         @query = query
@@ -87,6 +104,9 @@ module Portage
         @confidence_check = confidence_check
         @transaction_log = transaction_log
         @max_price = max_price
+        @webmcp_mappings = webmcp_mappings
+        @webmcp_mapping_confirm = webmcp_mapping_confirm
+        @json = json
         @webmcp_bridge = webmcp_bridge
         @decisions = {}
       end
@@ -250,13 +270,22 @@ module Portage
       # page's checkout capability came from a real `create_checkout` tool
       # or only from a preset's hand-off-only one — see
       # #webmcp_handoff_checkout_flow.
+      #
+      # When a plain connect (no preset, no tool_names:) doesn't advertise
+      # cart+checkout, and no preset matched, #webmcp_matched_session (Phase
+      # 2) is the fallback: a confirmed mapping from a prior run, or a fresh
+      # one proposed by `Matcher` and confirmed here. A page that already
+      # speaks either a preset's names or the plain UCP action names never
+      # reaches it at all — Transport's own tool_names:/bare-action
+      # resolution already covers both, with nothing to confirm.
       def webmcp_flow
         return nil unless @webmcp_bridge
         return webmcp_not_installed_report unless Portage::Cli::Webmcp.available?
 
         preset_name = webmcp_preset_name
-        session = Portage::Ucp::WebMcp.connect(bridge: @webmcp_bridge, preset: preset_name)
-        return nil unless session.advertises?(CART_CAP) && session.advertises?(CHECKOUT_CAP)
+        session, unresolved = webmcp_session(preset_name)
+        return unresolved if unresolved
+        return nil unless session
 
         return webmcp_token_unsupported_report if webmcp_checkout_mode == "token"
 
@@ -265,6 +294,87 @@ module Portage
              Portage::Ucp::Client::ServerError => e
         build_report(source: "webmcp", outcome: "webmcp_error", browse: false, checkout: false,
                      message: "WebMCP checkout failed: #{e.message}")
+      end
+
+      # Split out of #webmcp_flow just to keep its own branching (bridge
+      # given?, gem installed?, cart/checkout capable?, token mode?) from
+      # also carrying the Phase 2 fallback fork (Metrics/CyclomaticComplexity)
+      # — same reasoning as #run_webmcp_checkout's own split.
+      #
+      # @return [Array(Session, nil)] a cart/checkout-capable session.
+      # @return [Array(nil, nil)] no cart/checkout capability anywhere —
+      #   #webmcp_flow falls through to adapter detection, same as before
+      #   Phase 2 existed.
+      # @return [Array(nil, Hash)] a webmcp_mapping_unconfirmed report.
+      def webmcp_session(preset_name)
+        session = Portage::Ucp::WebMcp.connect(bridge: @webmcp_bridge, preset: preset_name)
+        return [session, nil] if webmcp_cart_and_checkout?(session)
+        return [nil, nil] if preset_name
+
+        matched, unresolved = webmcp_matched_session
+        return [nil, unresolved] if unresolved
+        return [nil, nil] unless webmcp_cart_and_checkout?(matched)
+
+        [matched, nil]
+      end
+
+      def webmcp_cart_and_checkout?(session)
+        session&.advertises?(CART_CAP) && session.advertises?(CHECKOUT_CAP)
+      end
+
+      # Phase 2 fallback (docs/plans/webmcp-universal-outbound.md): a
+      # previously confirmed mapping for this exact tool fingerprint is
+      # reused with no prompt (decision 3); otherwise `Matcher.propose`
+      # builds one and #webmcp_mapping_confirm decides whether it can be
+      # used — reads unconditionally, mutating actions only once approved.
+      #
+      # @return [Array(Session, nil)] a session built with the resolved
+      #   tool_names:, when there was anything to resolve.
+      # @return [Array(nil, nil)] nothing usable — the page has no tools a
+      #   candidate scored high enough against; #webmcp_flow's own
+      #   post-connect capability check reports it same as any other
+      #   cart/checkout-incapable page.
+      # @return [Array(nil, Hash)] a webmcp_mapping_unconfirmed report, when
+      #   a mutating action was proposed but couldn't be confirmed.
+      def webmcp_matched_session
+        tools = @webmcp_bridge.list_tools
+        tool_names = webmcp_mappings.lookup(tools)
+
+        if tool_names.nil?
+          proposal = Portage::Ucp::WebMcp::Matcher.propose(tools)
+          return [nil, nil] if proposal.empty?
+
+          tool_names = webmcp_mapping_confirm.call(proposal, tools)
+          return [nil, webmcp_mapping_unconfirmed_report(proposal)] if tool_names.nil?
+
+          webmcp_mappings.confirm!(tools, tool_names: tool_names, origin: @uri.host)
+        end
+
+        [Portage::Ucp::WebMcp.connect(bridge: @webmcp_bridge, preset: nil, tool_names: tool_names), nil]
+      end
+
+      def webmcp_mappings
+        @webmcp_mappings ||= Portage::Cli::WebmcpMappings.load
+      end
+
+      def webmcp_mapping_confirm
+        @webmcp_mapping_confirm ||= Portage::Cli::WebmcpMappingConfirm.new(interactive: !@json && $stdin.tty?)
+      end
+
+      def webmcp_mapping_unconfirmed_report(proposal)
+        build_report(
+          source: "webmcp", outcome: "webmcp_mapping_unconfirmed", browse: false, checkout: false,
+          message: "This page's WebMCP tools don't match a known preset. Here's the proposed mapping — " \
+                   "confirm it and retry, passing it back as tool_names:, or run this interactively (a real " \
+                   "TTY, no --json) to confirm it now.",
+          tool_names_proposal: webmcp_serialize_proposal(proposal)
+        )
+      end
+
+      def webmcp_serialize_proposal(proposal)
+        proposal.transform_values do |match|
+          { tool_name: match.tool, confidence: match.confidence, reason: match.reason }
+        end
       end
 
       def webmcp_preset_name

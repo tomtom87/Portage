@@ -14,7 +14,9 @@ require_relative "webmcp/jsonable"
 require_relative "webmcp/page_wait"
 require_relative "webmcp/transport"
 require_relative "webmcp/capabilities"
+require_relative "webmcp/fingerprint"
 require_relative "webmcp/presets"
+require_relative "webmcp/matcher"
 
 module Portage
   module Ucp

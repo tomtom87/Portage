@@ -1,5 +1,6 @@
 require "spec_helper"
 require "portage/ucp/webmcp"
+require "stringio"
 
 RSpec.describe Portage::Cli::Buy do
   # Never let #complete's `@payment_token ||= PaymentMethods.default`
@@ -1081,6 +1082,103 @@ RSpec.describe Portage::Cli::Buy do
         report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page).call
 
         expect(report[:checkout_url]).to eq("https://shop.example/checkouts/c1")
+      end
+    end
+
+    describe "Phase 2: schema matching for an unrecognized page's tools" do
+      around do |example|
+        Dir.mktmpdir do |dir|
+          @phase2_mappings_path = File.join(dir, "webmcp_mappings.json")
+          example.run
+        end
+      end
+
+      # A page whose tools use nobody-else's names — Presets.detect won't
+      # match, and the tools don't happen to be named after the bare UCP
+      # actions either, so #webmcp_flow's plain connect (no tool_names:)
+      # won't advertise cart/checkout and #webmcp_matched_session (Matcher)
+      # is what has to get this page bought at all. Real connect, real
+      # Transport, real Matcher — no instance_double standing in for any of
+      # them, same posture as the regression/Phase 1 tests above.
+      def matcher_shaped_page(product_result:, checkout_result:)
+        schemas = {
+          "findProducts" => { "properties" => { "query" => {} } },
+          "fetchProductDetails" => { "properties" => { "product_id" => {} } },
+          "viewCart" => { "properties" => { "cart_id" => {} } },
+          "addItemToCart" => { "properties" => { "product_id" => {}, "quantity" => {} } },
+          "startCheckout" => { "properties" => { "line_items" => {} } }
+        }
+        answers = { "findProducts" => product_result, "startCheckout" => checkout_result }
+        Class.new do
+          define_method(:list_tools) do
+            schemas.map { |name, props| { "name" => name, "inputSchema" => props, "description" => "#{name}." } }
+          end
+          define_method(:execute_tool) { |name, _input| answers.fetch(name, {}) }
+        end.new
+      end
+
+      let(:matched_checkout) do
+        { "id" => "chk_2", "status" => "ready_for_complete", "totals" => [],
+          "continue_url" => "https://shop.example/cart/c/chk_2" }
+      end
+
+      it "buys through a proposed mapping once the shopper confirms it interactively" do
+        stub_no_native_manifest
+        page = matcher_shaped_page(product_result: { "products" => [product] }, checkout_result: matched_checkout)
+        confirm = Portage::Cli::WebmcpMappingConfirm.new(interactive: true, input: StringIO.new("y\n"),
+                                                         output: StringIO.new)
+
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page,
+                                     webmcp_mapping_confirm: confirm).call
+
+        expect(report[:source]).to eq("webmcp")
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:checkout_url]).to eq("https://shop.example/cart/c/chk_2")
+      end
+
+      it "stops with webmcp_mapping_unconfirmed and hands back the proposal when it can't be confirmed" do
+        stub_no_native_manifest
+        page = matcher_shaped_page(product_result: { "products" => [product] }, checkout_result: matched_checkout)
+        confirm = Portage::Cli::WebmcpMappingConfirm.new(interactive: false)
+
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page,
+                                     webmcp_mapping_confirm: confirm).call
+
+        expect(report[:source]).to eq("webmcp")
+        expect(report[:outcome]).to eq("webmcp_mapping_unconfirmed")
+        expect(report[:tool_names_proposal]["create_cart"][:tool_name]).to eq("addItemToCart")
+        expect(report[:tool_names_proposal]["create_checkout"][:tool_name]).to eq("startCheckout")
+      end
+
+      it "reuses a previously confirmed mapping with no prompt at all, keyed by the tool fingerprint" do
+        stub_no_native_manifest
+        page = matcher_shaped_page(product_result: { "products" => [product] }, checkout_result: matched_checkout)
+        mappings = Portage::Cli::WebmcpMappings.new(path: @phase2_mappings_path, data: {})
+        mappings.confirm!(page.list_tools, tool_names: { "search_catalog" => "findProducts",
+                                                         "create_cart" => "addItemToCart",
+                                                         "create_checkout" => "startCheckout" })
+        # interactive: false proves no prompt is needed — a confirmed mapping
+        # skips WebmcpMappingConfirm entirely.
+        confirm = Portage::Cli::WebmcpMappingConfirm.new(interactive: false)
+
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page,
+                                     webmcp_mappings: mappings, webmcp_mapping_confirm: confirm).call
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:checkout_url]).to eq("https://shop.example/cart/c/chk_2")
+      end
+
+      it "never falls back to Matcher for a page that already answers the bare UCP action names" do
+        stub_no_native_manifest
+        answers = { "search_catalog" => { "products" => [product] }, "create_cart" => {},
+                    "create_checkout" => webmcp_checkout }
+        page = Class.new do
+          define_method(:list_tools) { answers.keys.map { |name| { "name" => name, "inputSchema" => {} } } }
+          define_method(:execute_tool) { |name, _input| answers.fetch(name) }
+        end.new
+        expect(Portage::Ucp::WebMcp::Matcher).not_to receive(:propose)
+
+        described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page).call
       end
     end
 

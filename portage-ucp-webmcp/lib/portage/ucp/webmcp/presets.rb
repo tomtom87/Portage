@@ -51,7 +51,7 @@ module Portage
         #   unrecognized page, or a known platform whose tool set has since
         #   changed).
         def self.detect(tools)
-          names = tools.map { |tool| (tool["name"] || tool[:name]).to_s }.sort
+          names = Fingerprint.names(tools)
           ALL.find { |_key, preset| preset.fingerprint.sort == names }&.first
         end
 
