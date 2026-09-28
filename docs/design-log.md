@@ -3381,13 +3381,22 @@ select is left as it was.
 
 **Rate prices in any currency.** `RATE_PRICE` only knew
 USD/EUR/GBP/CAD/AUD and `$£€`. Entry 50 saw this checkout in THB until the
-UK address switched it to GBP. It now takes any `\p{Sc}` symbol or any
-three-letter uppercase code, before or after the amount. The amount can
-carry thousands separators: the old pattern would have read `฿1,950.00` as
-1.95. The last separator counts as the decimal point only when one or two
-digits follow it. "Free" still counts as 0. Any three uppercase letters
-next to a number count as a currency, so a rate labelled "UPS 5.99" reads
-as 5.99. That is almost always the price anyway.
+UK address switched it to GBP. The first version of this fix widened it to
+one regex (any `\p{Sc}` symbol or any three capitals, before or after the
+amount), but a single leftmost-match regex read the wrong number. In
+"Royal Mail Tracked 48 £3.50" it matched "48 £", giving 48, and in "DPD 24
+hours £6.00" it took "DPD" as a code and read 24. Tracked 24/48 are Royal
+Mail's standard service names, and DPD/DHL/UPS/TNT/EMS are all three
+capitals, so both cases are common. `ratePrice(text)` now tries four
+patterns in turn and takes the first hit: symbol then amount, amount then
+symbol, ISO code then amount, amount then ISO code. The two ISO passes step
+through every match and accept only a real ISO 4217 code, taken from
+`Intl.supportedValuesOf("currency")` (Chrome 99+, Node 18+) and built once
+per autofill call. Where that isn't available, any three capitals still
+count. So "DHL 24 THB 150" reads as 150. The amount can carry thousands
+separators: the old pattern would have read `฿1,950.00` as 1.95. The last
+separator counts as the decimal point only when one or two digits follow
+it. "Free" still counts as 0.
 
 **Dry runs on the hand-off path.** `Buy#webmcp_handoff_checkout_flow` never
 checked `@dry_run`. A library caller passing `dry_run: true` still added to
