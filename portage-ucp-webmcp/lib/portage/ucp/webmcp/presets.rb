@@ -16,17 +16,12 @@ module Portage
         Preset = Struct.new(:tool_names, :wire, :fingerprint, :handoff_checkout, keyword_init: true)
 
         # Shopify's own WebMCP tools (`window.Shopify.actions`, not this
-        # gem's registrar). A live sweep across 6 Shopify storefronts
-        # (README "Shopify storefronts", 2026-09-23) counted 11 tools per
-        # store but only named 7 of them: `search_catalog`, `get_product`,
-        # `add_to_cart`, `get_cart`, `cancel_cart`, `update_cart_lines`,
-        # `proceed_to_checkout`. Those 7 are all this fingerprint lists —
-        # the other 4 aren't sourced anywhere in this repo, and this plan's
-        # own Phase 1 live check (rerunning that sweep under `preset:
-        # :auto`) is what's expected to fill them in or correct this list.
-        # Until that check runs, `detect` won't match a real Shopify page
-        # that registers the full 11 (see docs/plans/
-        # webmcp-universal-outbound.md, Phase 1 and the Progress log).
+        # gem's registrar). Fingerprint taken live on 2026-09-28: ColourPop,
+        # tentree, Kylie Cosmetics, Brooklinen, Allbirds, Billabong and The
+        # Light Yard all register exactly these 11 tools, with identical
+        # input schemas (Gymshark and Fashion Nova register none). Shopify
+        # can change this set without notice; when it does, `detect` misses
+        # and the page is treated as unknown rather than mapped wrongly.
         #
         # `update_cart_lines` (addresses existing cart lines by line id, not
         # by variant) and `proceed_to_checkout` (a navigation, not data)
@@ -35,12 +30,15 @@ module Portage
         # section. `proceed_to_checkout` is instead named as
         # `handoff_checkout:`, the hand-off-only checkout tool Capabilities
         # counts as checkout (decision 1) and Buy's WebMCP flow calls
-        # directly rather than through Session.
+        # directly rather than through Session. `browse_store`,
+        # `show_variant`, `manage_orders` and `search_shop_policies_and_faqs`
+        # are left unmapped: none has been checked against a Session method.
         SHOPIFY = Preset.new(
           tool_names: { create_cart: "add_to_cart" },
           wire: :auto,
-          fingerprint: %w[search_catalog get_product add_to_cart get_cart cancel_cart update_cart_lines
-                          proceed_to_checkout].freeze,
+          fingerprint: %w[search_catalog browse_store get_product show_variant add_to_cart get_cart
+                          update_cart_lines cancel_cart proceed_to_checkout manage_orders
+                          search_shop_policies_and_faqs].freeze,
           handoff_checkout: "proceed_to_checkout"
         ).freeze
 

@@ -44,7 +44,8 @@ RSpec.describe Portage::Ucp::WebMcp do
     def shopify_bridge
       FakeBridge.new.register("search_catalog").register("add_to_cart").register("get_product")
                 .register("get_cart").register("cancel_cart").register("update_cart_lines")
-                .register("proceed_to_checkout")
+                .register("proceed_to_checkout").register("browse_store").register("show_variant")
+                .register("manage_orders").register("search_shop_policies_and_faqs")
     end
 
     it "auto-detects a known preset and applies its tool_names:/wire: (the default)" do

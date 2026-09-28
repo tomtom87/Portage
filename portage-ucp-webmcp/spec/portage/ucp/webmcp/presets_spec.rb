@@ -3,8 +3,9 @@ require "spec_helper"
 RSpec.describe Portage::Ucp::WebMcp::Presets do
   describe ".detect" do
     it "matches Shopify's fingerprint regardless of tool order" do
-      tools = %w[proceed_to_checkout cancel_cart update_cart_lines get_product add_to_cart search_catalog
-                 get_cart].map { |name| { "name" => name } }
+      tools = %w[proceed_to_checkout manage_orders cancel_cart update_cart_lines show_variant get_product
+                 add_to_cart search_shop_policies_and_faqs browse_store search_catalog get_cart]
+              .map { |name| { "name" => name } }
 
       expect(described_class.detect(tools)).to eq(:shopify)
     end

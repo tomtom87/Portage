@@ -22,11 +22,8 @@ pre-1.0, so APIs may still shift between minor versions.
   `WebMcp::Presets::SHOPIFY` is the first entry: `tool_names: {create_cart:
   "add_to_cart"}`, and a `handoff_checkout: "proceed_to_checkout"` naming
   the tool that only navigates the browser to Shopify's own checkout. Its
-  fingerprint only lists the 7 of the ~11 tools a 2026-09-23 storefront
-  sweep (README "Shopify storefronts") actually named — the rest aren't
-  sourced anywhere in this repo, so `detect` won't yet match a real
-  Shopify page registering the full set. A rerun of that sweep under
-  `preset: :auto` is still pending (see the plan's Progress log).
+  fingerprint is the 11 tools seven live Shopify storefronts registered
+  on 2026-09-28, all with identical input schemas.
 - `WebMcp::Capabilities.for` takes a new `handoff_checkout:` (a preset's
   hand-off-only checkout tool name) — a page that answers it now counts as
   advertising checkout even with no `create_checkout` tool at all.

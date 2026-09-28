@@ -1042,8 +1042,9 @@ RSpec.describe Portage::Cli::Buy do
       # fingerprint (Presets::SHOPIFY): no create_checkout tool at all, so
       # #webmcp_flow can only reach checkout through proceed_to_checkout.
       def shopify_shaped_page(cart:, handoff_result:, location: nil)
-        names = %w[search_catalog get_product add_to_cart get_cart cancel_cart update_cart_lines
-                   proceed_to_checkout]
+        names = %w[search_catalog browse_store get_product show_variant add_to_cart get_cart
+                   update_cart_lines cancel_cart proceed_to_checkout manage_orders
+                   search_shop_policies_and_faqs]
         answers = { "search_catalog" => { "products" => [product] }, "add_to_cart" => {}, "get_cart" => cart,
                     "proceed_to_checkout" => handoff_result }
         found_at = location
