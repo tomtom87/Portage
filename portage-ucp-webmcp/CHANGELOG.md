@@ -19,10 +19,15 @@ pre-1.0, so APIs may still shift between minor versions.
   matches (case-insensitive, trimmed), using `HTMLSelectElement`'s own value
   setter. No matching option reports the token as `unmatched` instead of
   throwing on the input setter.
-- **Shipping-rate prices in any currency.** `selectCheapestRate` now reads
-  any Unicode currency symbol (`\p{Sc}`, so `฿`, `¥`, `₹` …) or three-letter
-  ISO code, before or after the amount, and handles thousands separators
-  (`฿1,950.00` is 1950, not 1.95). "Free" still counts as 0.
+- **Shipping-rate prices in any currency.** `selectCheapestRate` reads a
+  price through a new `ratePrice`, which tries four patterns in order and
+  takes the first hit: currency symbol (`\p{Sc}`, so `฿`, `¥`, `₹` …) then
+  amount, amount then symbol, ISO code then amount, amount then ISO code.
+  An ISO code only counts if it's in `Intl.supportedValuesOf("currency")`
+  (any three capitals where that's missing). So "Royal Mail Tracked 48
+  £3.50" reads as 3.50 and "DPD 24 hours £6.00" as 6, not 48 or 24.
+  Thousands separators are handled (`฿1,950.00` is 1950, not 1.95), and
+  "Free" still counts as 0.
 - **`Presets::SHOPIFY.checkout_selectors`** now has two fallbacks, taken
   from a live Shopify checkout (docs/design-log.md §50): `email` →
   `input[autocomplete='shipping email']` and `shipping tel` →

@@ -62,15 +62,19 @@
   ];
   var CHALLENGE_TITLE = /checking your browser|verify you are human|attention required|just a moment/i;
   // A rate's price: any currency symbol (Unicode \p{Sc}: $ £ € ฿ ¥ ₹ …) or a
-  // three-letter ISO code, before or after the amount ("£50.00", "฿1,950.00",
-  // "THB 1,950.00", "12,50 €"). The amount allows thousands separators (a
-  // comma, a dot, or the no-break spaces some locales use), so
+  // three-letter ISO 4217 code, before or after the amount ("£50.00",
+  // "฿1,950.00", "THB 1,950.00", "12,50 €"). The amount allows thousands
+  // separators (a comma, a dot, or the no-break spaces some locales use), so
   // "฿1,950.00" reads as 1950, not 1.95. Checkout currency follows the
   // shopper's geo-IP until an address is filled (design-log §50 saw THB on a
-  // UK store), so no fixed list of currencies is enough.
+  // UK store), so no fixed list of currencies is enough. See ratePrice for
+  // why these are tried one pattern at a time rather than as one regex.
   var AMOUNT = "(\\d{1,3}(?:[.,\\u00a0\\u202f]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)";
-  var CURRENCY = "(?:\\p{Sc}|(?<![A-Za-z])[A-Z]{3}(?![A-Za-z]))";
-  var RATE_PRICE = new RegExp(CURRENCY + "\\s?" + AMOUNT + "|" + AMOUNT + "\\s?" + CURRENCY, "u");
+  var ISO_CODE = "(?<![A-Za-z])([A-Z]{3})(?![A-Za-z])";
+  var SYMBOL_THEN_AMOUNT = new RegExp("\\p{Sc}\\s?" + AMOUNT, "u");
+  var AMOUNT_THEN_SYMBOL = new RegExp(AMOUNT + "\\s?\\p{Sc}", "u");
+  var CODE_THEN_AMOUNT = { pattern: ISO_CODE + "\\s?" + AMOUNT, code: 1, amount: 2 };
+  var AMOUNT_THEN_CODE = { pattern: AMOUNT + "\\s?" + ISO_CODE, code: 2, amount: 1 };
 
   function isChallengePage() {
     var found = CHALLENGE_SELECTORS.some(function (selector) {
@@ -168,6 +172,46 @@
     return !!el && fillField(el, value);
   }
 
+  // Real ISO 4217 codes, when the browser can list them (Chrome 99+,
+  // Node 18+), so a carrier name that happens to be three capitals (DPD,
+  // DHL, UPS, TNT, EMS) isn't read as a currency. Without the list, any
+  // three capitals count. Built at most once per autofill call.
+  var isoCodes;
+  function isIsoCode(code) {
+    if (isoCodes === undefined) {
+      isoCodes = null;
+      try {
+        if (typeof Intl !== "undefined" && typeof Intl.supportedValuesOf === "function") {
+          isoCodes = new Set(Intl.supportedValuesOf("currency"));
+        }
+      } catch (error) {
+        isoCodes = null;
+      }
+    }
+    return !isoCodes || isoCodes.has(code);
+  }
+
+  function firstIsoMatch(text, pass) {
+    var re = new RegExp(pass.pattern, "gu");
+    var m;
+    while ((m = re.exec(text)) !== null) {
+      if (isIsoCode(m[pass.code])) return m[pass.amount];
+      re.lastIndex = m.index + 1;
+    }
+    return null;
+  }
+
+  // One pass per shape, most specific first, so a number that merely sits
+  // next to a price isn't taken for it: in "Royal Mail Tracked 48 £3.50" a
+  // single leftmost-match regex read "48 £" (48); in "DPD 24 hours £6.00" it
+  // read "DPD 24" (24). A symbol before the amount is the usual shape, so
+  // it goes first; ISO codes only count once validated.
+  function ratePrice(text) {
+    var m = text.match(SYMBOL_THEN_AMOUNT) || text.match(AMOUNT_THEN_SYMBOL);
+    var raw = m ? m[1] : firstIsoMatch(text, CODE_THEN_AMOUNT) || firstIsoMatch(text, AMOUNT_THEN_CODE);
+    return raw === null ? null : parseAmount(raw);
+  }
+
   // "1,950.00" / "1.950,00" / "1 950" -> 1950; "12,50" -> 12.5. A trailing
   // separator with one or two digits after it is the decimal point; every
   // other separator groups thousands.
@@ -195,10 +239,9 @@
 
       var label = (radio.id && doc.querySelector("label[for='" + radio.id + "']")) || radio.closest("label");
       var text = ((label && label.textContent) || "").replace(/\s+/g, " ").trim();
-      var match = text.match(RATE_PRICE);
-      if (!match && !/\bfree\b/i.test(text)) continue;
-
-      var price = match ? parseAmount(match[1] || match[2]) : 0;
+      var price = ratePrice(text);
+      if (price === null && !/\bfree\b/i.test(text)) continue;
+      if (price === null) price = 0;
       (groups[radio.name] = groups[radio.name] || []).push({ radio: radio, price: price, text: text });
     }
 

@@ -114,6 +114,34 @@ RSpec.describe "assets/autofill.js against a checkout page" do
       expect(evaluator.autofill({})["rate"]).to eq(["Courier 12,50 €"])
     end
 
+    # Each label is paired against one whose price only wins if the first is
+    # read correctly, so the pick shows what the price was read as.
+    def cheapest_of(*labels)
+      install(labels.each_with_index.flat_map { |text, i| [label("r#{i}", text), radio("r#{i}")] })
+      evaluator.autofill({})["rate"]
+    end
+
+    it "reads the price, not a service number before the symbol (Royal Mail Tracked 24/48)" do
+      expect(cheapest_of("Royal Mail Tracked 48 £3.50", "Royal Mail Tracked 24 £4.99"))
+        .to eq(["Royal Mail Tracked 48 £3.50"])
+    end
+
+    it "doesn't read a three-letter carrier name as a currency code (DPD 24 hours £6.00 is 6)" do
+      expect(cheapest_of("DPD 24 hours £6.00", "Standard £10.00")).to eq(["DPD 24 hours £6.00"])
+    end
+
+    it "skips a carrier name to reach a real ISO code when there's no symbol (DHL 24 THB 150 is 150)" do
+      expect(cheapest_of("DHL 24 THB 150", "Economy THB 100")).to eq(["Economy THB 100"])
+    end
+
+    it "still reads a symbol after the amount (12,50 € is 12.5)" do
+      expect(cheapest_of("Post 13,00 €", "Courier 12,50 €")).to eq(["Courier 12,50 €"])
+    end
+
+    it "still reads thousands separators (฿1,950.00 is 1950)" do
+      expect(cheapest_of("Express ฿1,950.00", "Standard ฿100.00")).to eq(["Standard ฿100.00"])
+    end
+
     it "still treats a Free rate as the cheapest" do
       install([label("r1", "Standard £4.99"), radio("r1"), label("r2", "Free collection"), radio("r2")])
 
