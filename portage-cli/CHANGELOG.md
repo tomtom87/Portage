@@ -6,6 +6,19 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Docs release for Phases 1-7** (`docs/plans/buy-skill-and-local-browser.md`
+  Phase 8). `README.md` here gains full documentation of everything the
+  above entries shipped that wasn't written up yet: the usage banner now
+  lists `index`, `browser import`, `browser profile` and `setup`; new
+  sections cover Tiers A/B/C, `--handoff-target`/hand-off-only hosts (now
+  reflecting Phase 6's built `profile` target and Phase 7's retail hosts),
+  categories/routing, the local store index and its sources, browser
+  import, the Portage browser profile, the five retailer offer source env
+  vars, and the `setup` wizard's step order; the Search backends table
+  gains the `Index` backend and a note on `OfferSources` merging offers
+  directly. `Doctor`'s bullet list documents the `index`/`handoff`/
+  `retailer_offer_sources` findings added in Phases 2b/5/7. No code
+  changed.
 - **Retailer offer sources, hand-off only** (`docs/plans/
   buy-skill-and-local-browser.md` Phase 7). `Portage::Cli::OfferSources`
   gains five official, opt-in buyer-side retailer APIs alongside

@@ -9,6 +9,27 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Docs + `buy` skill release** (`docs/plans/buy-skill-and-local-browser.md`
+  Phase 8, the plan's last phase). Documents everything Phases 1-7 shipped —
+  offer sources/Shopify Catalog, categories/`Classifier`, the local store
+  index (`portage index build/refresh/show/add/remove/sources` and the
+  repo's published known-stores list), `portage browser import`, the
+  `portage setup` wizard, `--handoff-target default|print|profile|agent:
+  <name>`, hand-off-only hosts (Tier C) and the as-is/MIT disclaimer, and
+  `portage browser profile init|open|status` — in the root README, the CLI
+  reference (`portage-cli/README.md`, single-sourced into the site),
+  `docs/cli-usage-tutorial.md`, and a new `docs/skills/buy.md` page (added
+  to `mkdocs.yml`'s nav). `skills/shop-via-ucp` now points to the fuller
+  `buy` plugin for hosts with a plugin system. `plugins/buy/.claude-plugin/
+  plugin.json` bumped to `0.6.1`; the skill states the minimum
+  `portage-cli` version its references assume. `docs/design-log.md` gains
+  entry 52 on the three tiers and why Tier C is hand-off only (Amazon's
+  Conditions of Use and its 2025 suit against Perplexity, and that a
+  user-edited host list only ever changes the message — there's no
+  automation code for a site without UCP or WebMCP for removing a host to
+  unlock). The clean-session `/buy` dry run the plan's own Phase 0/8
+  checklist calls for still needs an interactive Claude Code session this
+  environment doesn't have — left pending, same as Phase 0's note.
 - **Retailer offer sources, hand-off only** (`docs/plans/
   buy-skill-and-local-browser.md` Phase 7 — full change is in
   `portage-cli/CHANGELOG.md`). Five official, opt-in buyer-side retailer

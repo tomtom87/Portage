@@ -105,6 +105,7 @@ plugins:
           - core-gems/portage-ucp-decision.md
           - core-gems/portage-ucp-journal.md
         Skills:
+          - skills/buy.md
           - skills/shop-via-ucp.md
           - skills/serve-via-ucp.md
         Other:
@@ -152,6 +153,7 @@ nav:
       - portage-ucp-decision: core-gems/portage-ucp-decision.md
       - portage-ucp-journal: core-gems/portage-ucp-journal.md
   - Skills:
+      - buy (plugin): skills/buy.md
       - shop-via-ucp: skills/shop-via-ucp.md
       - serve-via-ucp: skills/serve-via-ucp.md
   - Security: security.md

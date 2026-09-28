@@ -123,8 +123,9 @@ use the gem's. Or reorder `PATH` so the one you want comes first.
 ```bash
 portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id ID]
                                 [--yes] [--dry-run] [--auto-open|--no-auto-open]
-                                [--notify-webhook URL] [--decision-backend jev|laya]
-                                [--min-confidence N] [--json]
+                                [--notify-webhook URL]
+                                [--handoff-target default|print|profile|agent:NAME]
+                                [--decision-backend jev|laya] [--min-confidence N] [--json]
                                 [--wait [--wait-timeout DURATION|off]]
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
@@ -145,7 +146,19 @@ portage policy set [--per-transaction-cap N --currency CUR]
                     [--velocity-count N --velocity-window-seconds N]
                     [--allow HOST ...] [--clear-allowlist]
 portage orders reconcile [--checkout ID] [--json]
-portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]   # aliases: configure, setup
+portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
+portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
+portage index show [--stores|--products] [--json]
+portage index add <url> [--json]
+portage index remove <host> [--json]
+portage index sources [--json]
+portage browser import [--browser chrome|edge|brave|arc|firefox|safari] [--profile-root DIR]
+                       [--history-days 90] [--include-product-pages] [--max-probes 200]
+                       [--exclude HOST,HOST] [--dry-run] [--yes] [--json]
+portage browser profile init|open|status [--browser chrome|edge|brave|arc] [--port N]
+                       [--url URL (open only)] [--json]
+portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]   # alias: configure
+portage setup [--json]   # interactive wizard on a TTY; --json/no TTY: today's doctor report
 portage generate adapter NAME [--dir DIR]
 portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
 portage --version
@@ -188,6 +201,8 @@ See "Proxy" below.
   `PORTAGE_MIN_CONFIDENCE`, then `0.8`. The flag is always checked; the env
   var is read (and checked) only while a backend is selected, so a stale
   value can't block a buy that doesn't use the gate.
+- `--handoff-target default|print|profile|agent:NAME` — where a dead-end
+  checkout's link goes. See "Hand-off targets and hand-off-only hosts" below.
 - `--json` — machine-readable report instead of the human-readable summary.
 
 Exits `0` when a checkout completed (or a dry-run/browse/search resolved
@@ -346,24 +361,206 @@ opt-in guardrail, not a default-deny one. Per-token scopes (merchant/amount
 limits bound to one enrolled card) are set via `portage payment enroll
 --scope-*` above, not here.
 
+### Tiers: how a purchase actually finishes
+
+Most stores don't let a third-party agent complete payment. `portage buy`
+never pretends otherwise — it builds the cart/checkout it can, then hands
+off through one of three tiers, from least to most involved:
+
+| Tier | What | Default | Guardrail |
+| --- | --- | --- | --- |
+| A | Hand off to your own default browser; optionally seed the store index from your bookmarks/history (`portage browser import`) | Hand-off on; import opt-in | Domains only; you see and approve the imported list; nothing leaves the machine |
+| B | A dedicated Portage browser profile drives the cart via WebMCP, then hands off there for you to pay (`portage browser profile`) | Off | Never your default profile; a domain allowlist (the store plus its checkout host); stops at payment — you click pay, your browser's own card autofill fills it |
+| C | Hand-off-only hosts (Amazon, and any host you add) — Portage opens the page or a search/cart-add URL and you buy | On by default, host list is yours to edit | No scraping, no page reads, no UCP probe — just a URL, built not fetched |
+
+**Never, in any tier:** Portage reading your browser's password, cookie or
+autofill store; Portage attaching to your default browser profile; Portage
+solving or bypassing a CAPTCHA; card data passing through Portage.
+
 ### Hand-off targets and hand-off-only hosts
 
 Most checkouts end in a hand-off, not a `purchased` outcome — see the next
 section. `--handoff-target default|print|profile|agent:<name>`
 (`PORTAGE_HANDOFF_TARGET`, or `~/.portage/config.json`'s `"handoff_target"`)
-decides where that link goes: `default` opens it in your own browser (today's
-behaviour); `print` just reports it; `profile` is accepted but the Portage
-browser profile isn't built yet; `agent:<name>` hands the checkout URL and
-cart summary to an external agent you've approved once in
-`~/.portage/config.json`'s `"handoff_agents"` (a command or an `https`
-webhook — never invoked unless `"approved": true`, and never given
-credentials, payment tokens or shipping details). Amazon (every marketplace)
-and any host in `"handoff_only_hosts"` are **hand-off only**: `portage buy`
-never sends that host a request at all — it opens the page (or its search
-results) and you buy it yourself. `portage doctor` reports the current
-target and host list. Portage is open-source software provided as-is,
-without warranty of any kind (MIT) — how it's used on any site, and
+decides where that link goes:
+
+- `default` (Tier A) — opens it in your own browser. Today's behaviour:
+  `--auto-open`/`--no-auto-open`, `PORTAGE_AUTO_OPEN_CHECKOUT`.
+- `print` — just reports the URL.
+- `profile` (Tier B) — drives the dedicated Portage browser profile (see
+  "Portage browser profile" below) instead of your own. With no profile
+  attached (not opened yet, or `portage-ucp-webmcp` isn't installed), it
+  reports that and falls back to reporting the link.
+- `agent:<name>` — hands the checkout URL and cart summary (items, qty,
+  total, store — the same JSON `--notify-webhook` sends) to an external
+  agent you've approved once in `~/.portage/config.json`'s
+  `"handoff_agents"` (a command, run with a scrubbed environment and the
+  payload on stdin, or an `https` webhook — never invoked unless
+  `"approved": true`, and never given credentials, payment tokens or
+  shipping details beyond what the checkout URL already holds).
+
+An unrecognized value is a usage error (`invalid_option` under `--json`),
+checked before the buy starts.
+
+Amazon (every marketplace TLD), walmart.com, ebay.com and bestbuy.com
+(unconditionally — no adapter, no UCP for any of them to opt back into), and
+any host in `~/.portage/config.json`'s `"handoff_only_hosts"` are **Tier C,
+hand-off only**: `portage buy` never sends that host a request at all — no
+UCP probe, no page fetch, no cart — it opens the page (or a cart-add/search
+URL when a product id is known) and you buy it yourself. Absent that config
+key, the default list is every Amazon marketplace; once present, your list
+*is* the list — drop Amazon or add another host, and removing one only
+changes the message, since there's no code here that automates a site
+without UCP or WebMCP. `find`, `index build` and `browser import` all skip
+probing a hand-off-only host too, though they may still list it as a
+candidate you already know about. `portage doctor` reports the current
+target and host list. **Portage is open-source software provided as-is,
+without warranty of any kind (MIT)** — how it's used on any site, and
 compliance with that site's terms, is your own responsibility.
+
+### Categories and routing
+
+`portage find` classifies your query and a store's title/description/URL
+slug against `known-stores/categories.yml` (the top two levels of Google's
+published product taxonomy, ~200 nodes shipped in the gem;
+`~/.portage/categories.yml` overrides or extends it). A tagged
+`stores.yml`/index entry (`{url:, categories: [...]}`) only spends one of a
+query's probe slots when its categories actually match — capped at 3 stores
+per category and 12 total — so a large personal allowlist or a big local
+index doesn't crowd out the store that actually sells what you asked for. An
+entry with no matching category is still reached when you name it by host or
+brand.
+
+### Local store index (`portage index`)
+
+A fresh install only knows the stores you type into `stores.yml` or that a
+search backend returns for one query. `portage index` gives `find` a
+standing, local list of stores and products to route queries to instead,
+built from sources you can read (`portage index sources`):
+
+```bash
+portage index build                          # every default source
+portage index build --sources shopify_catalog,stores_file
+portage index build --queries queries.txt    # one query per line, instead of the built-in taxonomy sweep
+portage index refresh                        # re-verify entries older than 7 days, add new ones
+portage index show --stores --json
+portage index show --products --json
+portage index add https://some-shop.example
+portage index remove some-shop.example
+portage index sources                        # name, what each fetches, source file path
+```
+
+Stored at `~/.portage/index/{stores,products}.json`, **never in git** and
+**never containing a price or stock field** — those are always fetched live.
+Each new origin gets exactly one `/.well-known/ucp` probe (capped at 500 new
+probes per run), throttled, with progress output. Sources:
+
+| Source | Fetches | Default |
+| --- | --- | --- |
+| `shopify_catalog` | Merchant origins and product identities, one query per top-level taxonomy node, from `catalog.shopify.com`'s open catalog | on |
+| `stores_file` | Your own `~/.portage/stores.yml` | on |
+| `browser` | Whatever `portage browser import` (below) already saved — this source itself never reads a browser | on, but yields nothing unless you've run `browser import` |
+| `wikidata` | Retailers'/brands' official sites via a public SPARQL query | opt-in (`--sources wikidata`) |
+| `webmcp_sweep` | Which WebMCP preset an origin matches, when a bridge is attached | opt-in, needs a bridge |
+
+**The index is untrusted data, on the same footing as any other `find`
+candidate.** It never feeds `Policy#merchant_allowlist` and never counts as
+"you picked a store" for `--yes` — a search ranker (which an index entry
+still is) never gets to complete a purchase on its own.
+
+**Known-stores, fetched, not built by you.** The repo itself publishes
+`known-stores/{stores,products}.json` — built the same way, just by the
+maintainer — over jsdelivr's `@main` CDN. `find` uses it automatically
+(cached at `~/.portage/index/known-*.json`, refreshed on `index
+build`/`refresh` or when `doctor` sees it's more than 7 days stale) even
+before you ever run `index build` yourself; your own entries always win over
+it on a conflict. `index build --export DIR` writes a PR-ready copy with
+personal (browser-derived) entries stripped, for anyone who wants to
+contribute a store they found to the shared list.
+
+### Browser import (Tier A)
+
+```bash
+portage browser import --dry-run --json
+portage browser import --browser chrome --history-days 90 --max-probes 200
+portage browser import --yes --exclude some-domain-you-declined.example
+```
+
+Reads your browser's bookmarks and history — Chromium family's `History`
+(SQLite)/`Bookmarks` (JSON), Firefox's `places.sqlite`, Safari's
+`History.db`/`Bookmarks.plist` (needs Full Disk Access on macOS; the command
+explains the prompt and never works around it) — reduces every row to a bare
+domain, and decides each one locally first against the hand-off-only list,
+the local index and the known-stores cache before spending one of at most
+`--max-probes` (default 200) `/.well-known/ucp` probes on an unknown one.
+Kept domains are classified (page titles, bookmark folder names, URL slugs)
+into the same categories `find` routes by, weighted by visit count.
+**Nothing is saved without your approval:** a dry run (or any non-interactive
+run without `--yes`) only shows what it *would* keep; `--yes` (after you've
+reviewed the list, optionally with `--exclude host,host` for ones you don't
+want) writes them to the local index as `sources: ["history"]`/`["bookmark"]`
+entries. `--include-product-pages` (off by default) also keeps product page
+titles/URLs as product entries.
+
+**Never reads cookies, saved passwords, or autofill data**, on any browser —
+only the two files named above, verified by a spec that opens a fixture
+profile full of `Login Data`/`Cookies`/`Web Data` decoys and asserts none of
+them were touched.
+
+### Portage browser profile (Tier B)
+
+```bash
+portage browser profile init      # create the dedicated profile directory
+portage browser profile open      # launch it, remote debugging on
+portage browser profile status
+```
+
+A dedicated Chromium-family profile (Chrome, Edge, Brave or Arc — Firefox
+and Safari aren't supported for driving) under `~/.portage/browser/`,
+launched with remote debugging scoped to *that* profile only — never your
+default one; Chrome 136+ refuses remote debugging on the default profile
+anyway. Sign into your shopping sites there once. With
+`portage buy ... --handoff-target profile`, the cart is built in this same
+browser via WebMCP (when the store supports it) and the checkout opens there
+for you to pay — driving is limited to a domain allowlist (the store being
+bought from, plus its checkout host); navigating anywhere else stops the
+run. Payment is filled by the browser's own saved-card autofill, triggered
+by your own gesture — Portage never touches a payment field and never
+clicks pay. Requires `gem install portage-ucp-webmcp`.
+
+### Retailer offer sources
+
+Official, opt-in buyer-side APIs that add more real offers to `portage
+find`, each gated on its own key set in `~/.portage/.env` (or via `portage
+setup`, below):
+
+| Retailer | Env var |
+| --- | --- |
+| Walmart Affiliate API | `WALMART_AFFILIATE_API_KEY` |
+| eBay Browse API (Buy It Now only) | `EBAY_BROWSE_ACCESS_TOKEN` (optional `EBAY_MARKETPLACE_ID`) |
+| Best Buy Products API | `BESTBUY_API_KEY` |
+| Etsy Open API v3 (buyer-side `findAllListingsActive`) | `ETSY_LISTINGS_API_KEY` |
+| Amazon Creators API | `AMAZON_CREATORS_ACCESS_TOKEN` (optional `AMAZON_CREATORS_MARKETPLACE`) |
+
+With none set, `find` behaves exactly as it did before these existed. Every
+offer from any of these five still ends in hand-off — none of them has a
+checkout `portage buy` can drive, so walmart.com/ebay.com/bestbuy.com are
+hand-off only unconditionally and Amazon/Etsy follow the rules in "Hand-off
+targets and hand-off-only hosts" above (Etsy only when *your own* seller
+credentials aren't already configured for `portage-ucp-etsy`). `portage
+doctor` reports which of the five are active.
+
+### The `portage setup` wizard
+
+On a TTY, `portage setup` (or `portage doctor`/`portage configure` when
+nothing is configured yet) walks through setup interactively, one skippable
+step at a time, never echoing a secret back: shipping address, search API
+keys, retailer offer source keys, the agent profile, browser import, index
+build, spending policy caps, and hand-off target/hand-off-only hosts. Each
+step delegates to the real command it configures — nothing is
+reimplemented — so it behaves exactly like running that command yourself.
+Under `--json`, or with no TTY on stdin (piped, CI, or a tool call), `setup`
+never prompts: it prints exactly `doctor --json`'s read-only report.
 
 ### Orders reconcile
 
@@ -424,8 +621,9 @@ that).
 ### Doctor
 
 ```bash
-portage doctor          # aliases: portage configure, portage setup
+portage doctor          # alias: portage configure
 portage doctor --json
+portage setup           # same report, but interactive on a TTY — see below
 ```
 
 Checks this machine's setup without touching the network (apart from
@@ -446,6 +644,12 @@ installed, then lists anything that needs fixing:
 - `env_file`: which env file was loaded (see "Environment file" below).
   Warns when other users can read it.
 - The confidence gate's backend, the User-Agent, and proxy settings.
+- `index`: local and known-stores index counts and staleness (see "Local
+  store index" below).
+- `handoff`: the current `--handoff-target` default and the hand-off-only
+  host list, plus the as-is/no-warranty disclaimer.
+- `retailer_offer_sources`: which of the five retailer offer source keys are
+  set, and a reminder that none of them can complete a purchase.
 - Seller-side checks against `Portage::Ucp.configuration` (authenticator,
   rate limiter, signing keys, payment handlers). These only run when you
   pass `--require` with your app's initializer (Rails:
@@ -590,6 +794,7 @@ with the same value, as `[outcome]`.
 | `policy_blocked` | Your spend policy denied it; `decisions.policy.reason` says why. | yes |
 | `low_confidence` | The confidence gate held it. | yes |
 | `permission_denied` | The store doesn't let this agent complete checkout. | yes |
+| `handoff_only` | Tier C: Amazon or another hand-off-only host. `legal_notice` explains why; see "Hand-off targets and hand-off-only hosts". | yes (built, never fetched) |
 | `store_refused` | The store refused a cart/checkout call (e.g. sold out). | when the store gave one |
 | `no_match` | Nothing in the store's results matched. | no |
 | `browse_only` | The store has a catalog but no UCP checkout. | when an adapter offers a link |
@@ -756,7 +961,8 @@ already refuses to commit against a merchant.
 
 | Backend | Credentials | Notes |
 | --- | --- | --- |
-| Allowlist | `~/.portage/stores.yml` (YAML array of URLs) or `PORTAGE_STORES` (comma-separated) | Stores you already trust. Checked first, costs no network call. |
+| Allowlist | `~/.portage/stores.yml` (YAML array of URLs, optionally tagged `{url:, categories: [...]}`) or `PORTAGE_STORES` (comma-separated, untagged) | Stores you already trust. Checked first, costs no network call. Tagged entries are routed by category (see "Categories and routing" above); untagged ones are always a candidate. |
+| Index | `~/.portage/index/` (your own `portage index build`) plus the repo's published known-stores list | Ranked between Allowlist and DuckDuckGo. Sits out entirely until an index actually exists — a fresh install's behavior is unchanged. Also matches a query against an indexed *product* by name or GTIN, not just a store. |
 | DuckDuckGo | none | The [Instant Answer API](https://api.duckduckgo.com/api). Answers *entity* queries, not web queries: `burton snowboards` resolves to burton.com, `snowboard` resolves to nothing. |
 | Brave | `BRAVE_SEARCH_API_KEY` | Real web results. Set this up if you want open-ended queries to work. |
 | Google | `GOOGLE_CSE_KEY` + `GOOGLE_CSE_CX` | Programmable Search JSON API. |
@@ -764,6 +970,13 @@ already refuses to commit against a merchant.
 Backends that have no credentials sit out; DuckDuckGo is the keyless default
 because it's the only no-key engine with a real API, and its narrowness is the
 price of not scraping.
+
+Separate from all of the above, `portage find`/`buy` also merge in offers
+directly from `OfferSources` — `ShopifyCatalog` (no key,
+`catalog.shopify.com`'s open catalog, always on) and the retailer offer
+sources (opt-in, keyed — see "Retailer offer sources" above). These skip the
+origin-probe step entirely, since a catalog result already names the
+merchant's own product page.
 
 ### Console
 

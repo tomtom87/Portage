@@ -70,11 +70,27 @@ own README lists what it reads). Full walkthrough, incl. seeding a store allowli
 what to do when the free search backend comes back empty:
 [`docs/cli-usage-tutorial.md`](docs/cli-usage-tutorial.md).
 
-**Pointing an agent at it:** drop the [`skills/shop-via-ucp`](skills/shop-via-ucp/SKILL.md)
-skill into your agent's skills directory instead of hand-rolling prompts — it prefers
-`portage-ucp-client`/`portage` over raw MCP calls when available, and encodes the
-guardrails that matter when neither is. [`skills/serve-via-ucp`](skills/serve-via-ucp/SKILL.md)
-is the merchant-side counterpart, for *setting up* a store's own UCP endpoint instead.
+**Pointing an agent at it:** in Claude Code or another host with the plugin system,
+install the [`buy` plugin](plugins/buy/skills/buy/SKILL.md) (this repo is also a plugin
+marketplace — `.claude-plugin/marketplace.json`) instead of hand-rolling prompts. It's
+the full agent-facing interface to everything above: search with no store in hand,
+a local store index seeded from your own bookmarks/history or the repo's published
+known-stores list, the `portage setup` wizard, hand-off to your own browser or a
+dedicated Portage profile, and Tier C hosts (Amazon and friends) that restrict
+automated agents in their own terms. On a host with no plugin system, drop the smaller
+[`skills/shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill into your agent's skills
+directory instead — it prefers `portage-ucp-client`/`portage` over raw MCP calls when
+available, and encodes the guardrails that matter when neither is.
+[`skills/serve-via-ucp`](skills/serve-via-ucp/SKILL.md) is the merchant-side
+counterpart, for *setting up* a store's own UCP endpoint instead.
+
+**Tiers, for how a purchase finishes.** Most stores don't let a third party complete
+payment, so `buy` hands off: **Tier A** opens the checkout in your own browser (the
+default); **Tier B** (opt-in) drives a dedicated Portage browser profile up to the
+point of payment, then you pay; **Tier C** is hosts whose terms restrict automated
+purchasing agents (Amazon, on by default, user-editable) — Portage opens the page and
+you buy it yourself, with no scraping and no automation of any kind. Full detail:
+[`portage-cli/README.md`](portage-cli/README.md#tiers-how-a-purchase-actually-finishes).
 
 ## Usage
 
@@ -84,7 +100,9 @@ also published as the [CLI reference](https://portage.readthedocs.io/en/latest/c
 ```bash
 portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id ID]
                                 [--yes] [--dry-run] [--auto-open|--no-auto-open]
-                                [--notify-webhook URL] [--decision-backend jev|laya]
+                                [--notify-webhook URL]
+                                [--handoff-target default|print|profile|agent:NAME]
+                                [--decision-backend jev|laya]
                                 [--min-confidence N] [--json]
                                 [--wait [--wait-timeout DURATION|off]]
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
@@ -106,7 +124,13 @@ portage policy set [--per-transaction-cap N --currency CUR]
                     [--velocity-count N --velocity-window-seconds N]
                     [--allow HOST ...] [--clear-allowlist]
 portage orders reconcile [--checkout ID] [--json]
-portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]   # aliases: configure, setup
+portage index build/refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR]
+portage index show [--stores|--products] [--json]
+portage index add <url> / remove <host> / sources
+portage browser import [--browser chrome|edge|brave|arc|firefox|safari] [--dry-run] [--yes]
+portage browser profile init|open|status [--browser chrome|edge|brave|arc]
+portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]   # alias: configure
+portage setup [--json]   # interactive wizard on a TTY
 portage generate adapter NAME [--dir DIR]
 portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
 portage --version
@@ -118,7 +142,8 @@ portage --version
 ## Which doc do I want?
 
 **Shoppers & agent builders** (automating purchases): [cli-usage-tutorial](docs/cli-usage-tutorial.md)
-· [walkthrough](docs/walkthrough.md) · [shop-via-ucp skill](skills/shop-via-ucp/SKILL.md) ·
+· [walkthrough](docs/walkthrough.md) · [buy skill/plugin](docs/skills/buy.md) ·
+[shop-via-ucp skill](skills/shop-via-ucp/SKILL.md) ·
 [agent-profile](docs/agent-profile.md) · [tool-gating troubleshooting](docs/ucp-tool-gating-investigation.md)
 
 **Merchants** (serving your own UCP endpoint): [well-known-ucp](docs/well-known-ucp.md) ·
