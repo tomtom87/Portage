@@ -8,6 +8,7 @@ require_relative "cli/buyer_context"
 require_relative "cli/catalog_products"
 require_relative "cli/agent_profile_url"
 require_relative "cli/offer_sources"
+require_relative "cli/index"
 require_relative "cli/buy"
 require_relative "cli/find"
 require_relative "cli/compare"
@@ -53,6 +54,12 @@ module Portage
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
              portage orders reconcile [--checkout ID] [--json]
+             portage index build [--sources a,b] [--queries FILE] [--dry-run] [--json]
+             portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--json]
+             portage index show [--stores|--products] [--json]
+             portage index add <url> [--json]
+             portage index remove <host> [--json]
+             portage index sources [--json]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
              portage configure [--require FILE] [--adapter CLASS_NAME] [--json]  (alias for doctor)
              portage setup [--require FILE] [--adapter CLASS_NAME] [--json]      (alias for doctor)
@@ -68,8 +75,8 @@ module Portage
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
-                 "orders" => :run_orders, "doctor" => :run_doctor, "configure" => :run_doctor,
-                 "setup" => :run_doctor, "generate" => :run_generate }.freeze
+                 "orders" => :run_orders, "index" => :run_index, "doctor" => :run_doctor,
+                 "configure" => :run_doctor, "setup" => :run_doctor, "generate" => :run_generate }.freeze
 
     VERSION_FLAGS = %w[--version -v version].freeze
 
@@ -854,6 +861,132 @@ module Portage
       parts.join(" — ")
     end
     private_class_method :format_reconcile_result
+
+    # --- index (docs/plans/buy-skill-and-local-browser.md Phase 2b) ---
+
+    INDEX_SUBCOMMANDS = {
+      "build" => ->(argv) { run_index_build(argv, refresh: false) },
+      "refresh" => ->(argv) { run_index_build(argv, refresh: true) },
+      "show" => ->(argv) { run_index_show(argv) },
+      "add" => ->(argv) { run_index_add(argv) },
+      "remove" => ->(argv) { run_index_remove(argv) },
+      "sources" => ->(argv) { run_index_sources(argv) }
+    }.freeze
+
+    def self.run_index(argv)
+      sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      return INDEX_SUBCOMMANDS[sub].call(argv) if INDEX_SUBCOMMANDS.key?(sub)
+
+      warn USAGE
+      1
+    end
+    private_class_method :run_index
+
+    def self.parse_index_build_options(argv)
+      opts = { sources: nil, queries: nil, dry_run: false, json: false }
+      OptionParser.new do |parser|
+        parser.on("--sources LIST") { |v| opts[:sources] = v.split(",").map(&:strip) }
+        parser.on("--queries FILE") { |v| opts[:queries] = v }
+        parser.on("--dry-run") { opts[:dry_run] = true }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+      opts[:queries] &&= File.readlines(opts[:queries]).map(&:strip).reject(&:empty?)
+      opts
+    end
+    private_class_method :parse_index_build_options
+
+    def self.run_index_build(argv, refresh:)
+      opts = parse_index_build_options(argv)
+      builder = Index::Builder.new(sources: index_sources(opts[:sources]), out: opts[:json] ? nil : $stdout)
+      result = if refresh
+                 builder.refresh(queries: opts[:queries], dry_run: opts[:dry_run])
+               else
+                 builder.build(queries: opts[:queries], dry_run: opts[:dry_run])
+               end
+      puts opts[:json] ? JSON.pretty_generate(result) : format_index_build(result)
+      0
+    end
+    private_class_method :run_index_build
+
+    def self.index_sources(names) = names ? Index::Sources.by_name(names) : nil
+    private_class_method :index_sources
+
+    def self.format_index_build(result)
+      lines = ["Ran #{result[:sources_run].join(', ')} — #{result[:candidates]} candidate(s)."]
+      lines << "Checked #{result[:new_origins_checked].length} new origin(s), " \
+               "#{result[:verified].length} verified UCP."
+      lines << "Hit the #{Index::Builder::MAX_NEW_PROBES}-probe cap for this run." if result[:capped]
+      lines << "#{result[:products_added]} product sighting(s) recorded." if result[:products_added]
+      lines.join("\n")
+    end
+    private_class_method :format_index_build
+
+    def self.run_index_show(argv)
+      opts = { kind: nil, json: false }
+      OptionParser.new do |parser|
+        parser.on("--stores") { opts[:kind] = "stores" }
+        parser.on("--products") { opts[:kind] = "products" }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+
+      result = { stores: opts[:kind] == "products" ? [] : Index::Store.new.all,
+                 products: opts[:kind] == "stores" ? [] : Index::ProductStore.new.all }
+      puts opts[:json] ? JSON.pretty_generate(result) : format_index_show(result)
+      0
+    end
+    private_class_method :run_index_show
+
+    def self.format_index_show(result)
+      lines = ["Stores:"]
+      result[:stores].each { |s| lines << "  #{s['origin']} (#{Array(s['sources']).join(', ')})" }
+      lines << "(none)" if result[:stores].empty?
+      lines << "Products:"
+      result[:products].each { |p| lines << "  #{p['title'] || p['key']}" }
+      lines << "(none)" if result[:products].empty?
+      lines.join("\n")
+    end
+    private_class_method :format_index_show
+
+    def self.run_index_add(argv)
+      json = argv.delete("--json") ? true : false
+      url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      unless url
+        warn USAGE
+        return 1
+      end
+
+      result = Index::Builder.new.add(url)
+      puts json ? JSON.pretty_generate(result) : result[:message]
+      result[:added] ? 0 : 1
+    end
+    private_class_method :run_index_add
+
+    def self.run_index_remove(argv)
+      json = argv.delete("--json") ? true : false
+      host = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      unless host
+        warn USAGE
+        return 1
+      end
+
+      result = Index::Builder.new.remove(host)
+      puts json ? JSON.pretty_generate(result) : result[:message]
+      result[:removed] ? 0 : 1
+    end
+    private_class_method :run_index_remove
+
+    def self.run_index_sources(argv)
+      json = argv.delete("--json") ? true : false
+      sources = Index::Sources.all.map { |s| { name: s.name, description: s.description, path: s.source_path } }
+      puts json ? JSON.pretty_generate(sources) : format_index_sources(sources)
+      0
+    end
+    private_class_method :run_index_sources
+
+    def self.format_index_sources(sources)
+      sources.map { |s| "#{s[:name]}: #{s[:description]}#{" (#{s[:path]})" if s[:path]}" }.join("\n")
+    end
+    private_class_method :format_index_sources
 
     # --- doctor ---
 

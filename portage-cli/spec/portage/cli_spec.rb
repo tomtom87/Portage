@@ -304,6 +304,22 @@ RSpec.describe Portage::Cli do
       expect(captured.call).to include(url: "shop.example", query: "cold")
       expect(Portage::Cli::Find).not_to have_received(:new)
     end
+
+    # docs/plans/buy-skill-and-local-browser.md Phase 2b: the local index
+    # is untrusted data, so an offer sourced from it must never let --yes
+    # alone complete a buy — the same interactive-pick gate a web-search
+    # offer gets, not a shortcut.
+    it "an index-sourced offer never counts as 'picked a store' for --yes with no tty" do
+      indexed_offer = offer.merge(source: "index")
+      found_from_index = found.merge(offers: [indexed_offer])
+      allow(Portage::Cli::Find).to receive(:new).and_return(instance_double(Portage::Cli::Find,
+                                                                            call: found_from_index))
+      allow(Portage::Cli::Buy).to receive(:new)
+
+      capture_stdout { expect(described_class.run(["buy", "--query", "cold", "--yes"])).to eq(0) }
+
+      expect(Portage::Cli::Buy).not_to have_received(:new)
+    end
   end
 
   describe "history" do
@@ -620,6 +636,103 @@ RSpec.describe Portage::Cli do
 
     it "prints usage for an unknown orders subcommand" do
       expect { expect(described_class.run(%w[orders nope])).to eq(1) }.to output.to_stderr
+    end
+  end
+
+  describe "index (docs/plans/buy-skill-and-local-browser.md Phase 2b)" do
+    it "builds the index and prints a summary" do
+      builder = instance_double(Portage::Cli::Index::Builder,
+                                build: { sources_run: ["stores_file"], candidates: 2, new_origins_checked: ["a"],
+                                         verified: ["a"], capped: false, products_added: 1 })
+      allow(Portage::Cli::Index::Builder).to receive(:new).and_return(builder)
+
+      output = capture_stdout { expect(described_class.run(%w[index build])).to eq(0) }
+
+      expect(output).to include("stores_file").and include("1 verified")
+    end
+
+    it "passes --sources and --queries through to the builder" do
+      allow(Portage::Cli::Index::Sources).to receive(:by_name).with(["stores_file"]).and_return([:stub])
+      captured = nil
+      allow(Portage::Cli::Index::Builder).to receive(:new) { |**opts|
+        captured = opts
+        instance_double(Portage::Cli::Index::Builder, build: { sources_run: [], candidates: 0,
+                                                               new_origins_checked: [], verified: [], capped: false,
+                                                               products_added: 0 })
+      }
+
+      Dir.mktmpdir do |dir|
+        queries_file = File.join(dir, "queries.txt")
+        File.write(queries_file, "hiking boots\ncoffee\n")
+
+        capture_stdout do
+          described_class.run(["index", "build", "--sources", "stores_file", "--queries",
+                               queries_file])
+        end
+
+        expect(captured[:sources]).to eq([:stub])
+      end
+    end
+
+    it "refreshes instead of building fresh when given 'refresh'" do
+      builder = instance_double(Portage::Cli::Index::Builder)
+      allow(builder).to receive(:refresh).and_return({ sources_run: [], candidates: 0, new_origins_checked: [],
+                                                       verified: [], capped: false, products_added: 0 })
+      allow(Portage::Cli::Index::Builder).to receive(:new).and_return(builder)
+
+      capture_stdout { described_class.run(%w[index refresh]) }
+
+      expect(builder).to have_received(:refresh)
+    end
+
+    it "shows stores and products as JSON" do
+      allow(Portage::Cli::Index::Store).to receive(:new)
+        .and_return(instance_double(Portage::Cli::Index::Store, all: [{ "origin" => "https://a.example" }]))
+      allow(Portage::Cli::Index::ProductStore).to receive(:new)
+        .and_return(instance_double(Portage::Cli::Index::ProductStore, all: [{ "title" => "Widget" }]))
+
+      output = capture_stdout { expect(described_class.run(%w[index show --json])).to eq(0) }
+
+      expect(JSON.parse(output)).to eq({ "stores" => [{ "origin" => "https://a.example" }],
+                                         "products" => [{ "title" => "Widget" }] })
+    end
+
+    it "shows only stores with --stores" do
+      allow(Portage::Cli::Index::Store).to receive(:new)
+        .and_return(instance_double(Portage::Cli::Index::Store, all: [{ "origin" => "https://a.example" }]))
+      allow(Portage::Cli::Index::ProductStore).to receive(:new)
+        .and_return(instance_double(Portage::Cli::Index::ProductStore, all: [{ "title" => "Widget" }]))
+
+      output = capture_stdout { described_class.run(%w[index show --stores --json]) }
+
+      expect(JSON.parse(output)["products"]).to eq([])
+    end
+
+    it "adds a URL to the index" do
+      builder = instance_double(Portage::Cli::Index::Builder)
+      allow(builder).to receive(:add).with("https://shop.example")
+                                     .and_return({ added: true, origin: "https://shop.example", message: "Added." })
+      allow(Portage::Cli::Index::Builder).to receive(:new).and_return(builder)
+
+      expect(capture_stdout { described_class.run(%w[index add https://shop.example]) }).to include("Added.")
+    end
+
+    it "removes a host from the index" do
+      builder = instance_double(Portage::Cli::Index::Builder)
+      allow(builder).to receive(:remove).with("shop.example").and_return({ removed: true, message: "Removed." })
+      allow(Portage::Cli::Index::Builder).to receive(:new).and_return(builder)
+
+      expect(capture_stdout { described_class.run(%w[index remove shop.example]) }).to include("Removed.")
+    end
+
+    it "lists every source, name/description/path" do
+      output = capture_stdout { expect(described_class.run(%w[index sources])).to eq(0) }
+
+      expect(output).to include("shopify_catalog").and include("stores_file").and include("wikidata")
+    end
+
+    it "prints usage for an unknown index subcommand" do
+      expect { expect(described_class.run(%w[index nope])).to eq(1) }.to output.to_stderr
     end
   end
 

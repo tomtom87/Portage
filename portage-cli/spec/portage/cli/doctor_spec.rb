@@ -244,6 +244,33 @@ RSpec.describe Portage::Cli::Doctor do
     end
   end
 
+  describe "the local index (docs/plans/buy-skill-and-local-browser.md Phase 2b)" do
+    def index_finding(stores:, products:)
+      described_class.new(install_doctor: install_doctor, index_stores: stores, index_products: products)
+                     .call.find { |f| f.check == "index" }
+    end
+
+    it "says there's no index yet when stores.json doesn't exist" do
+      stores = instance_double(Portage::Cli::Index::Store, exists?: false)
+      products = instance_double(Portage::Cli::Index::ProductStore)
+
+      finding = index_finding(stores: stores, products: products)
+
+      expect(finding.level).to eq("info")
+      expect(finding.message).to include("No local index yet", "portage index build")
+    end
+
+    it "reports counts and staleness once one exists" do
+      stores = instance_double(Portage::Cli::Index::Store, exists?: true, all: [1, 2], oldest_verified_age: 3 * 86_400)
+      products = instance_double(Portage::Cli::Index::ProductStore, all: [1, 2, 3])
+
+      finding = index_finding(stores: stores, products: products)
+
+      expect(finding.level).to eq("info")
+      expect(finding.message).to include("2 store(s)", "3 product(s)", "3 day(s) ago")
+    end
+  end
+
   describe "the configured User-Agent" do
     before { allow(Portage::Cli::Config).to receive(:load).and_return(Portage::Cli::Config.new(data: {})) }
 

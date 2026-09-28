@@ -7,6 +7,7 @@ require_relative "shipping_profile"
 require_relative "dot_env"
 require_relative "search_backends"
 require_relative "agent_profile_url"
+require_relative "index"
 
 module Portage
   module Cli
@@ -37,12 +38,15 @@ module Portage
       #   process that configuration is always the unconfigured default, so
       #   those four warnings were noise on every fresh install.
       def initialize(adapter_class: nil, proxy_settings: ProxySettings.new, install_doctor: InstallDoctor.new,
-                     seller: true, dot_env_path: DotEnv.loaded_path)
+                     seller: true, dot_env_path: DotEnv.loaded_path, index_stores: Index::Store.new,
+                     index_products: Index::ProductStore.new)
         @adapter_class = adapter_class
         @proxy_settings = proxy_settings
         @install_doctor = install_doctor
         @seller = seller
         @dot_env_path = dot_env_path
+        @index_stores = index_stores
+        @index_products = index_products
       end
 
       def call
@@ -53,6 +57,7 @@ module Portage
           decision_backend_finding,
           search_backend_finding,
           agent_profile_finding,
+          index_finding,
           user_agent_finding,
           shipping_finding,
           proxy_finding,
@@ -168,6 +173,25 @@ module Portage
                     message: "PORTAGE_AGENT_PROFILE not set — falling back to the repo's own published " \
                              "profile (#{url}). Run `portage generate agent-profile` and set " \
                              "PORTAGE_AGENT_PROFILE to your own for production use.")
+      end
+
+      # `portage index build/refresh` (Phase 2b) writes ~/.portage/index/
+      # {stores,products}.json — always info, never a warning: a fresh
+      # install with no index still works, `find` just has less to route
+      # by than one that's run `portage index build`.
+      def index_finding
+        return Finding.new(check: "index", level: "info", message: index_message) if @index_stores.exists?
+
+        Finding.new(check: "index", level: "info",
+                    message: "No local index yet — run `portage index build` to give `find` a list of " \
+                             "stores/products on top of stores.yml and web search.")
+      end
+
+      def index_message
+        age = @index_stores.oldest_verified_age
+        staleness = age ? "oldest entry verified #{age / 86_400} day(s) ago" : "no entries verified yet"
+        "Local index: #{@index_stores.all.length} store(s), #{@index_products.all.length} product(s) " \
+          "(#{staleness}). Run `portage index refresh` to re-verify entries older than 7 days."
       end
 
       # PORTAGE_USER_AGENT / config.json's "user_agent" (UserAgent) is sent

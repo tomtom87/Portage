@@ -23,6 +23,14 @@ RSpec.configure do |config|
       # doesn't exist, so redirecting it to a tmpdir just means "no
       # ~/.portage/categories.yml override", never a real one leaking in.
       @classifier_user_path = File.join(dir, "categories.yml")
+      # Index::Store/ProductStore — same reasoning: a spec that never
+      # passes its own `path:`/`stores:`/`products:` (Doctor's default,
+      # SearchBackends::Index's default, Cli.run_index_*'s own
+      # `Index::Store.new`) must never read or write the developer's real
+      # ~/.portage/index/{stores,products}.json.
+      @index_stores_path = File.join(dir, "index", "stores.json")
+      @index_products_path = File.join(dir, "index", "products.json")
+      @index_browser_path = File.join(dir, "index", "browser-import.json")
       example.run
     end
   end
@@ -51,6 +59,21 @@ RSpec.configure do |config|
     allow(Portage::Cli::Classifier).to receive(:categories_for).and_wrap_original do |original, text, **kwargs|
       kwargs = { user_path: @classifier_user_path }.merge(kwargs) unless kwargs.key?(:user_path)
       original.call(text, **kwargs)
+    end
+
+    allow(Portage::Cli::Index::Store).to receive(:new).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @index_stores_path }.merge(kwargs) unless kwargs.key?(:path)
+      original.call(**kwargs)
+    end
+
+    allow(Portage::Cli::Index::ProductStore).to receive(:new).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @index_products_path }.merge(kwargs) unless kwargs.key?(:path)
+      original.call(**kwargs)
+    end
+
+    allow(Portage::Cli::Index::Sources::Browser).to receive(:new).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @index_browser_path }.merge(kwargs) unless kwargs.key?(:path)
+      original.call(**kwargs)
     end
   end
 

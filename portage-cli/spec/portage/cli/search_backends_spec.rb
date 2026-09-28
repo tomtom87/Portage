@@ -261,4 +261,129 @@ RSpec.describe Portage::Cli::SearchBackends do
       end
     end
   end
+
+  describe Portage::Cli::SearchBackends::Index do
+    let(:stores) { instance_double(Portage::Cli::Index::Store) }
+    let(:products) { instance_double(Portage::Cli::Index::ProductStore) }
+    let(:backend) { described_class.new(stores: stores, products: products) }
+
+    def store_entry(origin, categories: {})
+      { "origin" => origin, "categories" => categories }
+    end
+
+    it "is unavailable when the index is empty" do
+      allow(stores).to receive(:all).and_return([])
+      allow(products).to receive(:all).and_return([])
+
+      expect(backend.available?).to be false
+    end
+
+    it "routes by category the same way a tagged stores.yml does" do
+      allow(stores).to receive(:all).and_return([store_entry("https://a.example", categories: { "1" => 3 })])
+      allow(products).to receive(:all).and_return([])
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+      expect(backend.search("sofa")).to eq(["https://a.example"])
+    end
+
+    it "matches a product by name and puts its stores ahead of a category guess" do
+      allow(stores).to receive(:all).and_return([store_entry("https://category.example", categories: { "1" => 1 })])
+      allow(products).to receive(:all).and_return(
+        [{ "title" => "Trail Boots", "aliases" => [], "gtin" => nil,
+           "stores" => [{ "origin" => "https://product.example" }] }]
+      )
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+      expect(backend.search("trail boots")).to eq(["https://product.example", "https://category.example"])
+    end
+
+    it "matches a product by GTIN" do
+      allow(stores).to receive(:all).and_return([])
+      allow(products).to receive(:all).and_return(
+        [{ "title" => "Widget", "aliases" => [], "gtin" => "0123456789012",
+           "stores" => [{ "origin" => "https://gtin-match.example" }] }]
+      )
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return([])
+
+      expect(backend.search("0123456789012")).to eq(["https://gtin-match.example"])
+    end
+
+    it "matches a product by name on a whole-word basis, both directions" do
+      allow(stores).to receive(:all).and_return([])
+      allow(products).to receive(:all).and_return(
+        [{ "title" => "Men's Hiking Boot", "aliases" => [], "gtin" => nil,
+           "stores" => [{ "origin" => "https://boots.example" }] }]
+      )
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return([])
+
+      expect(backend.search("hiking boots")).to eq(["https://boots.example"])
+    end
+
+    it "never matches on a substring the way the pre-2a Classifier bug did (tea/steam, bag/bagel)" do
+      allow(stores).to receive(:all).and_return([])
+      allow(products).to receive(:all).and_return(
+        [{ "title" => "Steam Mop", "aliases" => [], "gtin" => nil,
+           "stores" => [{ "origin" => "https://steam.example" }] },
+         { "title" => "Teak Bench", "aliases" => [], "gtin" => nil,
+           "stores" => [{ "origin" => "https://teak.example" }] },
+         { "title" => "Bag", "aliases" => [], "gtin" => nil,
+           "stores" => [{ "origin" => "https://bag.example" }] }]
+      )
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return([])
+
+      expect(backend.search("tea")).to eq([])
+      expect(backend.search("bagel")).to eq([])
+    end
+
+    it "matches nothing for an empty or whitespace-only query" do
+      allow(stores).to receive(:all).and_return([])
+      allow(products).to receive(:all).and_return(
+        [{ "title" => "Anything", "aliases" => [], "gtin" => nil,
+           "stores" => [{ "origin" => "https://a.example" }] }]
+      )
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return([])
+
+      expect(backend.search("")).to eq([])
+      expect(backend.search("   ")).to eq([])
+    end
+
+    it "ranks stores within a matching category by that category's own weight, highest first" do
+      entries = [
+        store_entry("https://low.example", categories: { "1" => 1 }),
+        store_entry("https://high.example", categories: { "1" => 5 }),
+        store_entry("https://mid.example", categories: { "1" => 2 })
+      ]
+      allow(stores).to receive(:all).and_return(entries)
+      allow(products).to receive(:all).and_return([])
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+      expect(backend.search("sofa", limit: 12))
+        .to eq(["https://high.example", "https://mid.example", "https://low.example"])
+    end
+
+    it "never returns more than the total cap across categories" do
+      entries = (1..15).map { |i| store_entry("https://s#{i}.example", categories: { (i % 5).to_s => 1 }) }
+      allow(stores).to receive(:all).and_return(entries)
+      allow(products).to receive(:all).and_return([])
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(%w[0 1 2 3 4])
+
+      expect(backend.search("anything", limit: 12).length).to eq(described_class::TOTAL_CAP)
+    end
+
+    it "is untrusted: an index-sourced offer never reaches Policy#merchant_allowlist" do
+      allow(stores).to receive(:all).and_return([store_entry("https://a.example", categories: { "1" => 1 })])
+      allow(products).to receive(:all).and_return([])
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+      Dir.mktmpdir do |dir|
+        policy_path = File.join(dir, "policy.json")
+        policy = Portage::Ucp::Policy.load(path: policy_path)
+
+        backend.search("sofa")
+
+        expect(policy.merchant_allowlist).to eq([])
+        expect(File.exist?(policy_path)).to be false
+      end
+    end
+  end
 end

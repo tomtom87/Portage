@@ -68,6 +68,10 @@ module Portage
       # nothing below this length could ever whole-word match one anyway.
       MIN_WORD_LENGTH = 3
 
+      # Public rather than private — SearchBackends::Index (Phase 2b) tokenizes
+      # a query and a product's title/aliases the same way this module does
+      # internally, so a query and a product name land in the same word
+      # space instead of re-implementing this split.
       def self.tokenize(text)
         string = text.to_s
         slug_words = SLUG_PATTERNS.filter_map { |pattern| pattern.match(string)&.[](1) }
@@ -75,7 +79,6 @@ module Portage
         (slug_words + string.split(/[^\p{Alpha}]+/)).map(&:downcase)
                                                     .select { |word| word.length >= MIN_WORD_LENGTH }
       end
-      private_class_method :tokenize
 
       # --- Scoring one node against the tokenized input ---
 
@@ -95,10 +98,14 @@ module Portage
       # substrings match in both directions regardless of word boundaries
       # ("carpet" contains "pet", "chair" contains "hair", "scarf" contains
       # "car"), which is real noise, not stemming.
+      # Public — see .tokenize's own comment; SearchBackends::Index (Phase
+      # 2b) matches a query's tokens against a product's title/alias tokens
+      # with this same whole-word (plus plural) rule, rather than a
+      # substring check that goes both ways ("tea" in "steam"/"teak", "bag"
+      # in "bagel").
       def self.word_match?(word, keyword)
         word == keyword || plural_of?(word, keyword) || plural_of?(keyword, word) || ies_y_match?(word, keyword)
       end
-      private_class_method :word_match?
 
       # @return [Boolean] true when `plural` is `singular` plus a trailing
       # "s" or "es" ("boot"/"boots", "watch"/"watches").
