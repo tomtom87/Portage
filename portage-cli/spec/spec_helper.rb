@@ -38,6 +38,15 @@ RSpec.configure do |config|
       @known_stores_path = File.join(dir, "index", "known-stores.json")
       @probe_cache_path = File.join(dir, "discovery-cache.json")
       @known_products_path = File.join(dir, "index", "known-products.json")
+      # Config/Policy — `portage setup`'s wizard (docs/plans/
+      # buy-skill-and-local-browser.md Phase 4) is the first thing in
+      # portage-cli to call Portage::Cli::Config.load and
+      # Portage::Ucp::Policy.load with no explicit path from inside a
+      # `Cli.run` call (Doctor#nothing_configured?, the wizard's Handoff/
+      # Policy steps) — same reasoning as every redirect above: never the
+      # developer's real ~/.portage/config.json or ~/.portage/policy.json.
+      @config_path = File.join(dir, "config.json")
+      @policy_path = File.join(dir, "policy.json")
       example.run
     end
   end
@@ -113,6 +122,16 @@ RSpec.configure do |config|
     # that doesn't stub something else for these URLs itself.
     stub_request(:get, Portage::Cli::KnownStoresUrl::STORES).to_return(status: 404)
     stub_request(:get, Portage::Cli::KnownStoresUrl::PRODUCTS).to_return(status: 404)
+
+    allow(Portage::Cli::Config).to receive(:load).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @config_path }.merge(kwargs) unless kwargs.key?(:path)
+      original.call(**kwargs)
+    end
+
+    allow(Portage::Ucp::Policy).to receive(:load).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @policy_path }.merge(kwargs) unless kwargs.key?(:path)
+      original.call(**kwargs)
+    end
   end
 
   # `Cli.apply_proxy_settings` (docs/plans/proxy-support.md Phase 2) sets

@@ -401,4 +401,36 @@ RSpec.describe Portage::Cli::Doctor do
       expect(finding.message).not_to include("is not")
     end
   end
+
+  # docs/plans/buy-skill-and-local-browser.md Phase 4 — the trigger for
+  # `doctor`/`configure` to offer the setup wizard on a TTY (Cli.run_wizard?).
+  # Conservative by design: any one of the three foundational settings being
+  # present at all is enough to call this a real, if partial, setup.
+  describe "#nothing_configured?" do
+    def unset_shipping_env = Portage::Cli::ShippingProfile::ENV_VARS.values.to_h { |var| [var, nil] }
+
+    def nothing_configured?(dot_env_path:, env: {})
+      with_env(no_proxy_env.merge(unset_shipping_env).merge(env)) do
+        described_class.new(install_doctor: install_doctor, dot_env_path: dot_env_path).nothing_configured?
+      end
+    end
+
+    it "is true with no env file, no shipping address and no policy" do
+      expect(nothing_configured?(dot_env_path: nil)).to be(true)
+    end
+
+    it "is false once an env file was loaded, even with nothing else set" do
+      expect(nothing_configured?(dot_env_path: "/wherever/.env")).to be(false)
+    end
+
+    it "is false once a shipping address is set, with no env file loaded" do
+      expect(nothing_configured?(dot_env_path: nil, env: shipping_env)).to be(false)
+    end
+
+    it "is false once any policy at all is set, with no env file or shipping address" do
+      Portage::Ucp::Policy.load.set("merchant_allowlist", ["shop.example.com"])
+
+      expect(nothing_configured?(dot_env_path: nil)).to be(false)
+    end
+  end
 end

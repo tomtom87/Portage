@@ -50,6 +50,20 @@ module Portage
         @known_cache = known_cache
       end
 
+      # `portage setup` always offers its wizard on a TTY; a bare `portage
+      # doctor`/`configure` only offers it once, on a fresh install, rather
+      # than on every run of someone who's already configured most of this
+      # (docs/plans/buy-skill-and-local-browser.md Phase 4). Conservative on
+      # purpose: true only when *all three* of the foundational settings —
+      # no `.env` file was loaded, no shipping address, no policy at all —
+      # are still untouched. Running `portage index build`/`browser import`
+      # without ever touching shipping/policy still counts as "nothing
+      # configured" here; those are the wizard's own later, opt-in steps,
+      # not what decides whether it's worth offering in the first place.
+      def nothing_configured?
+        @dot_env_path.nil? && ShippingProfile.from_env.nil? && Portage::Ucp::Policy.load.to_h.empty?
+      end
+
       def call
         [
           *@install_doctor.findings,

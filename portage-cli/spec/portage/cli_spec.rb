@@ -969,6 +969,74 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "setup wizard (docs/plans/buy-skill-and-local-browser.md Phase 4)" do
+    def doctor_double(nothing_configured:)
+      instance_double(Portage::Cli::Doctor, call: [], nothing_configured?: nothing_configured)
+    end
+
+    it "`doctor --json` stays exactly today's report even on a TTY with nothing configured" do
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(doctor_double(nothing_configured: true))
+      expect(Portage::Cli::SetupWizard).not_to receive(:new)
+
+      code = nil
+      output = capture_stdout { code = described_class.run(%w[doctor --json]) }
+
+      expect(code).to eq(0)
+      expect(JSON.parse(output)).to eq([])
+    end
+
+    it "a piped/no-TTY `doctor` stays exactly today's report, even with nothing configured" do
+      allow($stdin).to receive(:tty?).and_return(false)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(doctor_double(nothing_configured: true))
+      expect(Portage::Cli::SetupWizard).not_to receive(:new)
+
+      described_class.run(%w[doctor])
+    end
+
+    it "a bare `doctor` on a TTY stays the report when something's already configured" do
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(doctor_double(nothing_configured: false))
+      expect(Portage::Cli::SetupWizard).not_to receive(:new)
+
+      capture_stdout { described_class.run(%w[doctor]) }
+    end
+
+    it "a bare `doctor` on a TTY offers the wizard when nothing at all is configured" do
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(doctor_double(nothing_configured: true))
+      wizard = instance_double(Portage::Cli::SetupWizard, call: 0)
+      expect(Portage::Cli::SetupWizard).to receive(:new).and_return(wizard)
+
+      expect(described_class.run(%w[doctor])).to eq(0)
+    end
+
+    it "`portage setup` on a TTY always offers the wizard, whatever's already configured" do
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(doctor_double(nothing_configured: false))
+      wizard = instance_double(Portage::Cli::SetupWizard, call: 0)
+      expect(Portage::Cli::SetupWizard).to receive(:new).and_return(wizard)
+
+      expect(described_class.run(%w[setup])).to eq(0)
+    end
+
+    it "`portage setup --json` stays today's doctor report, not the wizard" do
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(doctor_double(nothing_configured: true))
+      expect(Portage::Cli::SetupWizard).not_to receive(:new)
+
+      capture_stdout { described_class.run(%w[setup --json]) }
+    end
+
+    it "`portage setup` with no TTY on stdin stays today's doctor report" do
+      allow($stdin).to receive(:tty?).and_return(false)
+      allow(Portage::Cli::Doctor).to receive(:new).and_return(doctor_double(nothing_configured: true))
+      expect(Portage::Cli::SetupWizard).not_to receive(:new)
+
+      capture_stdout { described_class.run(%w[setup]) }
+    end
+  end
+
   def capture_stdout
     old = $stdout
     $stdout = StringIO.new
