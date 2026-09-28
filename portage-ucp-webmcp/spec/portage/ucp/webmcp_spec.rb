@@ -13,6 +13,15 @@ RSpec.describe Portage::Ucp::WebMcp do
       expect(session.advertises?("dev.ucp.shopping.catalog")).to be(true)
     end
 
+    it "derives capabilities from the page's tools when none are given" do
+      bridge = FakeBridge.new.register("search_catalog").register("create_cart")
+
+      session = described_class.connect(bridge: bridge)
+
+      expect(session.advertises?("dev.ucp.shopping.cart")).to be(true)
+      expect(session.advertises?("dev.ucp.shopping.checkout")).to be(false)
+    end
+
     it "builds the ScriptEvaluator bridge from evaluate:" do
       session = described_class.connect(evaluate: ->(_) { '{"ok":true,"value":[]}' })
       transport = session.instance_variable_get(:@transport)

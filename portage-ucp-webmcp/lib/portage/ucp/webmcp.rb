@@ -13,6 +13,7 @@ require_relative "webmcp/bridges/script_evaluator"
 require_relative "webmcp/jsonable"
 require_relative "webmcp/page_wait"
 require_relative "webmcp/transport"
+require_relative "webmcp/capabilities"
 
 module Portage
   module Ucp
@@ -37,14 +38,19 @@ module Portage
       #   )
       #   session.search_catalog(query: "mug")
       #
+      # @param capabilities [Array<String>, nil] nil (the default) derives
+      #   them from the tools the page registers right now (see
+      #   Capabilities), which reads the page once here, so a BridgeError can
+      #   raise from connect itself.
       # @param transport_options [Hash] forwarded to Transport (prefix:,
       #   tool_names:, wire:, reregister_wait:).
       def self.connect(bridge: nil, evaluate: nil, capabilities: nil, **transport_options)
         bridge ||= Bridges::ScriptEvaluator.new(evaluate: evaluate) if evaluate
         raise ArgumentError, "connect requires either bridge: or evaluate:" unless bridge
 
-        Portage::Ucp::Client::Session.new(transport: Transport.new(bridge: bridge, **transport_options),
-                                          capabilities: capabilities)
+        transport = Transport.new(bridge: bridge, **transport_options)
+        Portage::Ucp::Client::Session.new(transport: transport,
+                                          capabilities: capabilities || Capabilities.for(transport))
       end
 
       # Page script installing a spec-shaped `document.modelContext` where

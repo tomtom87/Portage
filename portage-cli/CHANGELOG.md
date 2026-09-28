@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Fix: `Buy#webmcp_flow` never ran against a real page. The Session
+  `WebMcp.connect` returned had `nil` capabilities, so the cart/checkout
+  check always fell through to adapter detection. Fixed in
+  `portage-ucp-webmcp` (capabilities now come from the page's tools); the
+  new `buy_spec` case goes through the real `connect`.
+
 ## [0.7.5] - 2026-09-25
 
 - **`portage` loads `~/.portage/.env` on startup** (`Portage::Cli::DotEnv`),

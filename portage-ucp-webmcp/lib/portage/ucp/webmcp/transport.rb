@@ -60,6 +60,10 @@ module Portage
           self
         end
 
+        # Whether a page tool answers `action` among the tools read so far
+        # (no re-read on a miss, unlike a call).
+        def answers?(action) = !find(candidates_for(action.to_s)).nil?
+
         def call_tool(name:, arguments:, meta: nil)
           tool = resolve(name.to_s)
           input = if wire_for(tool) == :ucp
@@ -104,9 +108,11 @@ module Portage
         # A page may register tools after load (or re-register on client-side
         # navigation), so one miss re-reads the page before giving up.
         def resolve(action)
-          candidates = [@tool_names[action], "#{@prefix}#{action}", action].compact.uniq
+          candidates = candidates_for(action)
           find(candidates) || refresh!.then { find(candidates) } || raise(not_found(action, candidates))
         end
+
+        def candidates_for(action) = [@tool_names[action], "#{@prefix}#{action}", action].compact.uniq
 
         def find(candidates)
           candidates.each do |candidate|
