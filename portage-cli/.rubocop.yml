@@ -72,6 +72,12 @@ Metrics/ClassLength:
     # method, runtime, adapters, PATH shadowing), plus the small path/prefix
     # helpers they share (docs/plans/homebrew-distribution.md Phase 4).
     - "lib/portage/cli/install_doctor.rb"
+    # Index::Builder implements one documented algorithm end to end —
+    # gather -> probe new origins -> verify -> categorize -> store ->
+    # record products, plus refresh/add/remove on the same data
+    # (docs/plans/buy-skill-and-local-browser.md Phase 2b) — breadth of one
+    # small method per step, not a class doing several unrelated things.
+    - "lib/portage/cli/index/builder.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and

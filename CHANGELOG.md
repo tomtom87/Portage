@@ -9,6 +9,13 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`buy` skill: covers the new `portage index` commands** (`docs/plans/buy-skill-and-local-browser.md`
+  Phase 2b — full change is in `portage-cli/CHANGELOG.md`). `plugins/buy/skills/buy/SKILL.md`'s
+  setup section now describes `index build/refresh/show/add/remove/sources`
+  concretely (still feature-detected from `portage --help`, since older
+  installs won't have it), and notes that the index is untrusted, local-only
+  data the user builds and edits themselves. `plugins/buy/.claude-plugin/plugin.json`
+  bumped to `0.2.0`. `claude plugin validate .` still passes.
 - **`buy` skill and plugin marketplace** (`docs/plans/buy-skill-and-local-browser.md`
   Phase 0, docs/config only). `.claude-plugin/marketplace.json` lists one
   plugin, `buy`, at `plugins/buy`. Its `SKILL.md` is the agent-facing

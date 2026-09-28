@@ -6,6 +6,8 @@ require "portage/ucp"
 require "portage/ucp/support/connection"
 require_relative "user_agent"
 require_relative "classifier"
+require_relative "index/store"
+require_relative "index/product_store"
 
 module Portage
   module Cli
@@ -32,10 +34,12 @@ module Portage
       ].freeze
 
       # Ordered cheapest/most-trusted first: your own allowlist costs no
-      # network call and needs no key, DuckDuckGo needs no key, the keyed
-      # engines only participate when their credentials are actually present.
+      # network call and needs no key, the local index next (still no
+      # network call, but untrusted — see Index's own comment), DuckDuckGo
+      # needs no key, the keyed engines only participate when their
+      # credentials are actually present.
       def self.default
-        [Allowlist.new, DuckDuckGo.new, Brave.new, GoogleCse.new].select(&:available?)
+        [Allowlist.new, Index.new, DuckDuckGo.new, Brave.new, GoogleCse.new].select(&:available?)
       end
 
       # True when the only thing standing between the caller and a real web
@@ -111,6 +115,12 @@ module Portage
 
         # @return [Array<String>] URLs, routed by #categorized_search.
         def search(query, limit: 10) = categorized_search(query, [limit, TOTAL_CAP].min).map { |e| e[:url] }
+
+        # @return [Array<Hash>] every entry (url:, categories:), untouched
+        #   by any query — Index::Sources::StoresFile reuses this to seed
+        #   the local index from the same file, rather than re-parsing
+        #   stores.yml itself.
+        def stores = entries
 
         private
 
@@ -217,6 +227,132 @@ module Portage
           return nil if url.empty?
 
           { url: url, categories: Array(entry["categories"]).map(&:to_s) }
+        end
+      end
+
+      # `~/.portage/index/stores.json` — origins `portage index build`
+      # found and verified itself (docs/plans/buy-skill-and-local-browser.md
+      # Phase 2b). Unlike Allowlist, this data is **untrusted**: nothing
+      # here was ever typed in by the user, so an entry never skips a probe
+      # (Find still re-verifies it through ProbeCache like any other
+      # candidate URL) and never becomes a `merchant_allowlist`/`--yes`
+      # shortcut — it's just another URL a search backend handed back,
+      # ranked below Allowlist and above the web-search backends in
+      # SearchBackends.default (search_backends_spec.rb has specs proving
+      # both non-shortcuts).
+      #
+      # Routes the same way Allowlist routes a tagged stores.yml (up to
+      # PER_CATEGORY_CAP per matching category, TOTAL_CAP overall), plus
+      # one thing stores.yml can't do: match a query against a *product* the
+      # index has seen (by name or GTIN) and put that product's own stores
+      # first, ahead of a category guess.
+      class Index
+        PER_CATEGORY_CAP = 3
+        TOTAL_CAP = 12
+
+        def initialize(stores: Portage::Cli::Index::Store.new, products: Portage::Cli::Index::ProductStore.new)
+          @stores = stores
+          @products = products
+        end
+
+        def name = "index"
+
+        def available? = !store_entries.empty? || !product_entries.empty?
+
+        def search(query, limit: 10)
+          return [] if store_entries.empty? && product_entries.empty?
+
+          product_origins = origins_for_products(query)
+          category_origins = origins_for_categories(Classifier.categories_for(query), exclude: product_origins)
+          (product_origins + category_origins).uniq.first([limit, TOTAL_CAP].min)
+        end
+
+        private
+
+        def store_entries
+          @store_entries ||= @stores.all
+        end
+
+        def product_entries
+          @product_entries ||= @products.all
+        end
+
+        def origins_for_products(query)
+          matches = product_entries.select { |product| product_matches?(product, query) }
+          matches.flat_map { |product| Array(product["stores"]).map { |s| s["origin"] } }.uniq
+        end
+
+        # Whole-word matching, built on the same Classifier.tokenize/
+        # .word_match? a title/query is classified into categories with
+        # (docs/plans/buy-skill-and-local-browser.md Phase 2a) — a plain
+        # substring check goes both ways regardless of word boundaries
+        # ("tea" inside "steam"/"teak", "bag" inside "bagel"), which is
+        # exactly the false-positive class 2a already fixed for category
+        # keywords and this backend was still exposed to.
+        #
+        # A match is either every one of the query's tokens found among the
+        # title/alias's own tokens (a short query naming a longer title,
+        # e.g. "hiking boots" -> "Men's Hiking Boot"), or the reverse (a
+        # longer query that names the whole title/alias as a phrase, e.g.
+        # "where can I buy a trail boot"). An empty/whitespace-only query
+        # tokenizes to nothing and matches no product.
+        def product_matches?(product, query)
+          return true if gtin_match?(product, query)
+
+          # Checked after GTIN, not before: a purely numeric query (the
+          # normal shape of a GTIN) tokenizes to nothing at all —
+          # Classifier.tokenize splits on runs of non-alpha characters — so
+          # gating on "any tokens" first would refuse a valid barcode
+          # lookup before #gtin_match? ever got to compare it.
+          query_tokens = Classifier.tokenize(query)
+          return false if query_tokens.empty?
+
+          [product["title"], *Array(product["aliases"])].compact.any? { |text| title_matches?(query_tokens, text) }
+        end
+
+        # Exact match against the whole (stripped, downcased) query, never a
+        # substring — a GTIN is a barcode, not a word Classifier.tokenize
+        # would even keep (it splits on runs of non-alpha characters, so a
+        # purely numeric query tokenizes to nothing).
+        def gtin_match?(product, query)
+          gtin = product["gtin"]
+          !gtin.to_s.empty? && query.to_s.strip.downcase == gtin.to_s.downcase
+        end
+
+        def title_matches?(query_tokens, text)
+          title_tokens = Classifier.tokenize(text)
+          return false if title_tokens.empty?
+
+          all_match?(query_tokens, title_tokens) || all_match?(title_tokens, query_tokens)
+        end
+
+        def all_match?(these, those)
+          these.all? { |a| those.any? { |b| Classifier.word_match?(a, b) } }
+        end
+
+        def origins_for_categories(category_ids, exclude:)
+          picked = []
+          category_ids.each do |category_id|
+            entries_for_category(category_id, exclude + picked).each do |origin|
+              break if picked.length >= TOTAL_CAP
+
+              picked << origin
+            end
+          end
+          picked
+        end
+
+        # Ranked by this category's own weight (how many of the store's
+        # products the Classifier put there — see Index::Builder's
+        # #merge_categories), highest first, before PER_CATEGORY_CAP cuts
+        # it off, so a store barely tagged into a category doesn't take a
+        # slot from one the Classifier weighted heavily into it.
+        def entries_for_category(category_id, exclude)
+          matches = store_entries.select do |e|
+            Array(e["categories"]&.keys).include?(category_id) && !exclude.include?(e["origin"])
+          end
+          ranked = matches.sort_by { |e| -e["categories"][category_id].to_i }
+          ranked.first(PER_CATEGORY_CAP).map { |e| e["origin"] }
         end
       end
 

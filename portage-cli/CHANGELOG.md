@@ -6,6 +6,42 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`portage index` — a local store and product index you build yourself**
+  (`docs/plans/buy-skill-and-local-browser.md` Phase 2b). New commands:
+  `portage index build [--sources a,b] [--queries FILE] [--dry-run]`,
+  `index refresh` (re-verifies entries older than 7 days, then builds
+  fresh), `index show [--stores|--products] [--json]`, `index add URL`,
+  `index remove HOST`, `index sources`. Storage is
+  `~/.portage/index/stores.json` and `products.json` — **never checked
+  into git, never prices or stock** (those stay live), and `doctor` reports
+  whether each file exists and how old its oldest verified entry is. One
+  small source file each under `lib/portage/cli/index/sources/`:
+  `shopify_catalog` (reuses `OfferSources::ShopifyCatalog` rather than
+  duplicating its catalog-search/variant-URL logic; one query per
+  top-level taxonomy node by default — 21 nodes, its own keyword rather
+  than its full taxon name — or `--queries FILE`; not fanned out
+  per-country, since `BuyerContext.from_env` already applies whatever
+  locale the user has set), `stores_file` (the user's own `stores.yml`,
+  via a new public `Allowlist#stores` reader), `browser` (reads Phase 3's
+  eventual output file if present, yields nothing otherwise — Phase 3
+  doesn't exist yet), `wikidata` (SPARQL for retail chains' official
+  sites, CC0 — off by default, opt in with `--sources wikidata`: a live,
+  read-only trial run returned real hits, but most skew toward chains with
+  no UCP/WebMCP support at all), `webmcp_sweep` (needs a browser bridge
+  that doesn't exist yet — skips cleanly). Every new origin gets one
+  `/.well-known/ucp` probe through the existing `ProbeCache`, throttled,
+  with progress output, capped at 500 per run. A new
+  `SearchBackends::Index` applies Phase 2a's per-category/total routing
+  caps to index entries, ranking a category's own matches by its weight
+  (highest first), and additionally matches a query against a product by
+  name or GTIN — whole-word, on the same `Classifier.tokenize`/
+  `.word_match?` the category router itself uses (now public), never a
+  substring — putting that product's own stores first; ranked between
+  `Allowlist` and the web-search backends in `SearchBackends.default`. The
+  index is untrusted data: it never writes
+  `Portage::Ucp::Policy#merchant_allowlist`, and an index-sourced offer
+  never lets `--yes` alone complete a buy — the same interactive-pick gate
+  a web-search offer already gets.
 - **`Classifier` and `known-stores/categories.yml`: a shared category
   taxonomy for `find` routing** (`docs/plans/buy-skill-and-local-browser.md`
   Phase 2a). `known-stores/categories.yml` ships in the gem — the top two
