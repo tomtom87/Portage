@@ -12,6 +12,29 @@ pre-1.0, so APIs may still shift between minor versions.
   `connect`, so a `BridgeError` can now raise from `connect` itself.
   `Transport#answers?(action)` reports whether a page tool answers an
   action after `tool_names:`/`prefix:` resolution.
+- **Platform presets** (docs/plans/webmcp-universal-outbound.md Phase 1):
+  `WebMcp.connect` takes a new `preset:` (default `:auto`), which detects a
+  known platform from the exact set of tool names the page registers right
+  now — never from page text, which is untrusted content a page could
+  forge — and applies its `tool_names:`/`wire:`. `nil` turns presets off;
+  a Symbol (`:shopify`) forces one without reading the page to detect it.
+  An explicit `tool_names:` still wins over the preset's own, key by key.
+  `WebMcp::Presets::SHOPIFY` is the first entry: `tool_names: {create_cart:
+  "add_to_cart"}`, and a `handoff_checkout: "proceed_to_checkout"` naming
+  the tool that only navigates the browser to Shopify's own checkout. Its
+  fingerprint only lists the 7 of the ~11 tools a 2026-09-23 storefront
+  sweep (README "Shopify storefronts") actually named — the rest aren't
+  sourced anywhere in this repo, so `detect` won't yet match a real
+  Shopify page registering the full set. A rerun of that sweep under
+  `preset: :auto` is still pending (see the plan's Progress log).
+- `WebMcp::Capabilities.for` takes a new `handoff_checkout:` (a preset's
+  hand-off-only checkout tool name) — a page that answers it now counts as
+  advertising checkout even with no `create_checkout` tool at all.
+- `Bridges::ScriptEvaluator#location` reads the tab's current URL
+  (`window.location.href`) through the same `evaluate:` callable every
+  other call uses. Optional on the Bridge contract — used by `portage-cli`
+  `Buy`'s hand-off checkout path to read the checkout URL after a tool
+  that only navigates the tab, when the tool's own result carries none.
 
 ## [0.1.1] - 2026-09-24
 

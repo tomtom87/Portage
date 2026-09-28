@@ -20,13 +20,22 @@ module Portage
           "dev.ucp.shopping.order" => %w[get_order]
         }.freeze
 
+        CHECKOUT = "dev.ucp.shopping.checkout".freeze
+
         # Reads the page's tools once, through the transport's cache.
         #
         # @param transport [Transport]
+        # @param handoff_checkout [String, nil] a preset's hand-off-only
+        #   checkout tool (e.g. Shopify's `proceed_to_checkout`) — decision 1
+        #   in docs/plans/webmcp-universal-outbound.md: a page that answers
+        #   it counts as advertising checkout even though it only navigates
+        #   the shopper to the store's own checkout, not `create_checkout`.
         # @return [Array<String>]
-        def self.for(transport)
+        def self.for(transport, handoff_checkout: nil)
           STARTING_ACTIONS.filter_map do |capability, actions|
-            capability if actions.any? { |action| transport.answers?(action) }
+            answers = actions.any? { |action| transport.answers?(action) }
+            answers ||= capability == CHECKOUT && handoff_checkout && transport.answers?(handoff_checkout)
+            capability if answers
           end
         end
       end

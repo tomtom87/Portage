@@ -963,7 +963,10 @@ RSpec.describe Portage::Cli::Buy do
   end
 
   describe "WebMCP outbound (docs/plans/handoff-reconcile.md Phase 4)" do
-    let(:bridge) { double("bridge") }
+    # list_tools: [] — an empty page, so Presets.detect (Phase 1) never
+    # matches it and #webmcp_flow passes preset: nil through to connect,
+    # same as before preset: existed.
+    let(:bridge) { double("bridge", list_tools: []) }
 
     def stub_no_native_manifest
       allow(Portage::Ucp::Client).to receive(:discover).and_return(nil)
@@ -1001,7 +1004,7 @@ RSpec.describe Portage::Cli::Buy do
     it "builds cart/checkout over WebMCP and always hands off (express_stop), never completing" do
       stub_no_native_manifest
       session = webmcp_session
-      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(session)
+      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge, preset: nil).and_return(session)
 
       report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1",
                                    webmcp_bridge: bridge).call
@@ -1032,9 +1035,57 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:checkout_url]).to eq("https://shop.example/cart/c/chk_1")
     end
 
+    describe "Phase 1: platform presets and the hand-off checkout path" do
+      # Same real-connect posture as the regression test above: Presets.detect
+      # runs against this page's own tool names — no instance_double standing
+      # in for #connect or for preset detection. Registers exactly Shopify's
+      # fingerprint (Presets::SHOPIFY): no create_checkout tool at all, so
+      # #webmcp_flow can only reach checkout through proceed_to_checkout.
+      def shopify_shaped_page(cart:, handoff_result:, location: nil)
+        names = %w[search_catalog get_product add_to_cart get_cart cancel_cart update_cart_lines
+                   proceed_to_checkout]
+        answers = { "search_catalog" => { "products" => [product] }, "add_to_cart" => {}, "get_cart" => cart,
+                    "proceed_to_checkout" => handoff_result }
+        found_at = location
+        Class.new do
+          define_method(:list_tools) { names.map { |name| { "name" => name, "inputSchema" => {} } } }
+          define_method(:execute_tool) { |name, _input| answers.fetch(name, {}) }
+          define_method(:location) { found_at } if found_at
+        end.new
+      end
+
+      let(:webmcp_cart) do
+        { "id" => "cart_1", "currency" => "USD", "totals" => [{ "type" => "total", "amount" => 500 }],
+          "line_items" => [{ "item" => { "id" => "p1", "price" => 500 }, "quantity" => 1 }] }
+      end
+
+      it "detects the Shopify preset from the page's own tools and hands off through proceed_to_checkout" do
+        stub_no_native_manifest
+        page = shopify_shaped_page(cart: webmcp_cart,
+                                   handoff_result: { "url" => "https://shop.example/checkouts/c1" })
+
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page).call
+
+        expect(report[:source]).to eq("webmcp")
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:checkout_url]).to eq("https://shop.example/checkouts/c1")
+        expect(report[:warnings]).to be_empty
+      end
+
+      it "falls back to the bridge's own location when the hand-off tool returns nothing url-shaped" do
+        stub_no_native_manifest
+        page = shopify_shaped_page(cart: webmcp_cart, handoff_result: {},
+                                   location: "https://shop.example/checkouts/c1")
+
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page).call
+
+        expect(report[:checkout_url]).to eq("https://shop.example/checkouts/c1")
+      end
+    end
+
     it "reserves a pending shopper handoff record for the express-stop checkout" do
       stub_no_native_manifest
-      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(webmcp_session)
+      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge, preset: nil).and_return(webmcp_session)
       transaction_log = Portage::Ucp::Support::TransactionLog.new
 
       described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
@@ -1046,7 +1097,7 @@ RSpec.describe Portage::Cli::Buy do
     it "skips a store with no cart/checkout capability over WebMCP, falling through to adapter detection" do
       stub_no_native_manifest
       no_checkout_session = instance_double(Portage::Ucp::Client::Session, advertises?: false)
-      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(no_checkout_session)
+      allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge, preset: nil).and_return(no_checkout_session)
       allow(Portage::Ucp::Resolver).to receive(:detect_platform).and_return(nil)
 
       report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
@@ -1081,7 +1132,7 @@ RSpec.describe Portage::Cli::Buy do
 
       it "refuses rather than silently behaving like express_stop" do
         stub_no_native_manifest
-        allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(webmcp_session)
+        allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge, preset: nil).and_return(webmcp_session)
 
         report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge).call
 

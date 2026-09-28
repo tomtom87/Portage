@@ -242,20 +242,90 @@ module Portage
       # That hand-off feeds Phases 1-3 completely unchanged: reason
       # `express_stop` reserves a pending record, notifies, and later
       # reconciles exactly like any other hand-off.
+      #
+      # `preset_name` is resolved once here (docs/plans/
+      # webmcp-universal-outbound.md Phase 1, decision 1) and handed to
+      # `connect` explicitly (a nil/Symbol either way skips its own
+      # detection) so the same answer also tells this method whether the
+      # page's checkout capability came from a real `create_checkout` tool
+      # or only from a preset's hand-off-only one — see
+      # #webmcp_handoff_checkout_flow.
       def webmcp_flow
         return nil unless @webmcp_bridge
         return webmcp_not_installed_report unless Portage::Cli::Webmcp.available?
 
-        session = Portage::Ucp::WebMcp.connect(bridge: @webmcp_bridge)
+        preset_name = webmcp_preset_name
+        session = Portage::Ucp::WebMcp.connect(bridge: @webmcp_bridge, preset: preset_name)
         return nil unless session.advertises?(CART_CAP) && session.advertises?(CHECKOUT_CAP)
 
         return webmcp_token_unsupported_report if webmcp_checkout_mode == "token"
 
-        full_buy(session, source: "webmcp", force_handoff: true)
+        run_webmcp_checkout(session, preset_name)
       rescue Portage::Ucp::WebMcp::BridgeError, Portage::Ucp::WebMcp::ToolNotFoundError,
              Portage::Ucp::Client::ServerError => e
         build_report(source: "webmcp", outcome: "webmcp_error", browse: false, checkout: false,
                      message: "WebMCP checkout failed: #{e.message}")
+      end
+
+      def webmcp_preset_name
+        Portage::Ucp::WebMcp::Presets.detect(@webmcp_bridge.list_tools)
+      end
+
+      # Split out of #webmcp_flow just to keep that method's own branching
+      # (bridge given?, gem installed?, cart/checkout capable?, token mode?)
+      # from also carrying this preset-shaped fork (Metrics/CyclomaticComplexity).
+      def run_webmcp_checkout(session, preset_name)
+        handoff_tool = preset_name && Portage::Ucp::WebMcp::Presets.fetch(preset_name).handoff_checkout
+        return webmcp_handoff_checkout_flow(session, handoff_tool) if handoff_tool
+
+        full_buy(session, source: "webmcp", force_handoff: true)
+      end
+
+      # A preset whose fingerprint has no `create_checkout` tool at all —
+      # Shopify's is the only one so far (see Presets::SHOPIFY) — can't run
+      # #full_buy's `session.create_checkout`; there's nothing on the page to
+      # call it against. Builds a cart, reads it back through the (already
+      # cart/checkout-capable, per the gate in #webmcp_flow) session so
+      # #reconcile_checkout has a `get_cart`-shaped document to check against
+      # (there's no checkout document either), then calls the preset's
+      # `handoff_checkout` tool directly on the bridge — after the cart
+      # read-back, not before, so any post-mutation "page not ready" gap
+      # (see Transport's own retry) has already been waited out by then.
+      #
+      # The checkout URL comes from whatever the hand-off tool itself
+      # returns, or — Shopify's `proceed_to_checkout` is a navigation, not
+      # data, and returns nothing url-shaped (README "Shopify storefronts")
+      # — from the bridge's own `#location` once the tab has navigated
+      # there, when the bridge offers one (Bridges::ScriptEvaluator does).
+      def webmcp_handoff_checkout_flow(session, handoff_tool)
+        products = safe_search(session)
+        product = select_product(products)
+        unless product
+          return build_report(source: "webmcp", outcome: "no_match", browse: true, checkout: true,
+                              products: products, message: no_match_message)
+        end
+
+        created = session.create_cart(line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
+                                      context: buyer_context, meta: agent_meta)
+        cart = session.get_cart(cart_id: created["id"], meta: agent_meta)
+        warnings = reconcile_checkout(product, cart)
+
+        result = @webmcp_bridge.execute_tool(handoff_tool, {})
+        webmcp_handoff_report("webmcp", products, cart.merge("continue_url" => url_from_handoff(result)), warnings)
+      end
+
+      # Best-effort: the hand-off tool's own result shape isn't documented
+      # anywhere in this repo (see Presets::SHOPIFY's comment on
+      # `update_cart_lines`/`proceed_to_checkout`), so this only recognizes
+      # the shapes any WebMCP tool result already comes back in — a bare URL
+      # string, or a Hash carrying one under `url`/`continue_url` — before
+      # falling back to the bridge's own location.
+      def url_from_handoff(result)
+        from_result = case result
+                      when String then result if result.start_with?("http")
+                      when Hash then result["url"] || result["continue_url"]
+                      end
+        from_result || (@webmcp_bridge.location if @webmcp_bridge.respond_to?(:location))
       end
 
       def webmcp_checkout_mode
