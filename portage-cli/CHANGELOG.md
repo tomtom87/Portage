@@ -6,6 +6,14 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`find --max-price` now filters offer-source offers too.** Offers from
+  `OfferSources` (`ShopifyCatalog`, the retailer APIs) skipped the
+  `--max-price` check that probed stores' offers go through, so a
+  `--max-price 150` search could list a £190 catalog offer. Unpriced offers
+  still stay in, as before. `find`'s summary also counts stores from the
+  offers themselves ("Found 1 offer(s) across 1 store(s)."), not just the
+  probed ones, which reported "0 UCP store(s)" for catalog-only results.
+  Both found by the clean-session `/buy` check.
 - **Docs release for Phases 1-7** (`docs/plans/buy-skill-and-local-browser.md`
   Phase 8). `README.md` here gains full documentation of everything the
   above entries shipped that wasn't written up yet: the usage banner now

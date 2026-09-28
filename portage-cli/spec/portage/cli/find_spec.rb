@@ -247,11 +247,20 @@ RSpec.describe Portage::Cli::Find do
       expect(report[:offers].last[:product_id]).to eq("gid://shopify/ProductVariant/9")
     end
 
+    it "filters an offer source's offers above --max-price too, keeping unpriced ones" do
+      unpriced = catalog_offer.merge(product_id: "unpriced", amount: nil, currency: nil)
+
+      report = find(backends: [], max_price: 1000, offer_sources: [offer_source([catalog_offer, unpriced])]).call
+
+      expect(report[:offers].map { |o| o[:product_id] }).to eq(["unpriced"])
+    end
+
     it "still reports offers when no search backend found any candidates" do
       report = find(backends: [], offer_sources: [offer_source([catalog_offer])]).call
 
       expect(report[:candidates]).to be_empty
       expect(report[:offers]).to eq([catalog_offer])
+      expect(report[:message]).to eq("Found 1 offer(s) across 1 store(s).")
     end
 
     it "reports no candidates when both backends and offer sources come back empty" do
