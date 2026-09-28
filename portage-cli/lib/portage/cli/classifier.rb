@@ -1,0 +1,143 @@
+require "yaml"
+
+module Portage
+  module Cli
+    # "What category is this?" for anything shopping-shaped: a search query,
+    # a catalog product's title/description, a stores.yml/index entry, or
+    # (Phase 3) a browser history/bookmark entry — one classifier, so a
+    # store tagged from its product mix and a query typed by a shopper land
+    # in the same category space and can be matched against each other.
+    #
+    # Plain keyword matching against Google's own published product taxonomy
+    # (https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt),
+    # top two levels only (~200 nodes, `known-stores/categories.yml`, shipped
+    # in the gem so this works offline on a fresh brew/gem install). No LLM
+    # and no network call: it has to run on every `find` and stay instant.
+    # "Plain keyword" means a whole-word match (plus simple plural
+    # normalization, #word_match?), not a substring regex — a substring
+    # check matches in both directions ("carpet" contains "pet", "chair"
+    # contains "hair", "scarf" contains "car") and was a real source of
+    # false positives before this became whole-word.
+    module Classifier
+      # `known-stores/categories.yml`, from `lib/portage/cli/classifier.rb`.
+      KNOWN_PATH = File.expand_path("../../../known-stores/categories.yml", __dir__).freeze
+
+      # The user's own additions/overrides — same id overrides a shipped
+      # node's keywords, a new id extends the taxonomy. Absent by default;
+      # nothing here is required for the shipped file to work.
+      PATH = File.join(Dir.home, ".portage", "categories.yml").freeze
+
+      # `/products/<slug>`, `/collections/<slug>`, `/c/<slug>`,
+      # `/category/<slug>` — the URL shapes stores.yml/index/browser-import
+      # entries actually carry (docs/plans/buy-skill-and-local-browser.md
+      # Phase 2a/3).
+      SLUG_PATTERNS = [
+        %r{/products/([^/?#]+)},
+        %r{/collections/([^/?#]+)},
+        %r{/c/([^/?#]+)},
+        %r{/category/([^/?#]+)}
+      ].freeze
+
+      # @param text [String] a query, a product title/description, or a
+      #   store/product URL. Whichever it is, it's tokenized the same way
+      #   (see #tokenize) so the same node keywords match all of them.
+      # @param known_path [String] override for KNOWN_PATH — specs redirect
+      #   this the same way SearchBackends::Allowlist takes its own `path:`.
+      # @param user_path [String] override for PATH.
+      # @return [Array<String>] category ids, most keyword hits first. Ties
+      #   keep the shipped file's own order. Empty when nothing matches.
+      def self.categories_for(text, known_path: KNOWN_PATH, user_path: PATH)
+        words = tokenize(text)
+        return [] if words.empty?
+
+        scored = nodes(known_path, user_path).filter_map { |id, node| rank(id, node, words) }
+        scored.sort_by { |(_id, score, order)| [-score, order] }.map(&:first)
+      end
+
+      # --- Tokenizing the input ---
+
+      # A URL slug is words joined by `-`/`_` (`hand-cut-glass` — see
+      # AGENTS.md's own product terminology); everything else is just
+      # whitespace/punctuation-split. Both a URL's slug words and the plain
+      # words of a title/description/query are kept, so "hiking boots" and
+      # "https://shop.example/products/hiking-boots-mens" tokenize the same
+      # way.
+      # Below 3 letters, a token is noise ("a", "of", "is") rather than a
+      # keyword candidate — every generated keyword is at least this long
+      # too (see the script that built known-stores/categories.yml), so
+      # nothing below this length could ever whole-word match one anyway.
+      MIN_WORD_LENGTH = 3
+
+      def self.tokenize(text)
+        string = text.to_s
+        slug_words = SLUG_PATTERNS.filter_map { |pattern| pattern.match(string)&.[](1) }
+                                  .flat_map { |slug| slug.split(/[-_]/) }
+        (slug_words + string.split(/[^\p{Alpha}]+/)).map(&:downcase)
+                                                    .select { |word| word.length >= MIN_WORD_LENGTH }
+      end
+      private_class_method :tokenize
+
+      # --- Scoring one node against the tokenized input ---
+
+      def self.rank(id, node, words)
+        keywords = Array(node["keywords"])
+        hits = keywords.count { |keyword| words.any? { |word| word_match?(word, keyword) } }
+        return nil unless hits.positive?
+
+        [id, hits, node["order"].to_i]
+      end
+      private_class_method :rank
+
+      # Whole-word only, plus the plural forms a keyword list and a real
+      # query/title actually differ by: an exact match, one plus a trailing
+      # "s" or "es" ("boot"/"boots", "watch"/"watches"), or the "y"/"ies"
+      # swap ("battery"/"batteries"). Deliberately not a substring check —
+      # substrings match in both directions regardless of word boundaries
+      # ("carpet" contains "pet", "chair" contains "hair", "scarf" contains
+      # "car"), which is real noise, not stemming.
+      def self.word_match?(word, keyword)
+        word == keyword || plural_of?(word, keyword) || plural_of?(keyword, word) || ies_y_match?(word, keyword)
+      end
+      private_class_method :word_match?
+
+      # @return [Boolean] true when `plural` is `singular` plus a trailing
+      # "s" or "es" ("boot"/"boots", "watch"/"watches").
+      def self.plural_of?(plural, singular)
+        ["#{singular}s", "#{singular}es"].include?(plural)
+      end
+      private_class_method :plural_of?
+
+      # @return [Boolean] true when either side is the other's "ies" plural
+      # ("battery"/"batteries").
+      def self.ies_y_match?(word, keyword)
+        (word.end_with?("ies") && keyword == "#{word[0..-4]}y") ||
+          (keyword.end_with?("ies") && word == "#{keyword[0..-4]}y")
+      end
+      private_class_method :ies_y_match?
+
+      # --- Loading and merging the two files ---
+
+      # Re-read on every call rather than cached process-wide: `find` calls
+      # this once or twice per invocation, not in a hot loop, and a cached
+      # copy would miss an edit to ~/.portage/categories.yml until the next
+      # process start.
+      def self.nodes(known_path, user_path)
+        ordered = {}
+        load_yaml(known_path).each_with_index { |(id, node), i| ordered[id] = node.merge("order" => i) }
+        load_yaml(user_path).each_with_index { |(id, node), i| ordered[id] = node.merge("order" => ordered.size + i) }
+        ordered
+      end
+      private_class_method :nodes
+
+      def self.load_yaml(path)
+        return {} unless path && File.readable?(path)
+
+        data = YAML.safe_load_file(path)
+        data.is_a?(Hash) ? data : {}
+      rescue StandardError
+        {}
+      end
+      private_class_method :load_yaml
+    end
+  end
+end

@@ -23,7 +23,7 @@ Gem::Specification.new do |spec|
   spec.homepage = "https://github.com/tomtom87/Portage/tree/main/portage-cli"
   spec.required_ruby_version = ">= 3.2"
 
-  spec.files = Dir["lib/**/*.rb", "exe/*", "README.md", "LICENSE", "CHANGELOG.md"]
+  spec.files = Dir["lib/**/*.rb", "exe/*", "known-stores/*.yml", "README.md", "LICENSE", "CHANGELOG.md"]
   spec.bindir = "exe"
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]

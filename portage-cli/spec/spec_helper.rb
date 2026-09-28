@@ -19,6 +19,10 @@ RSpec.configure do |config|
     Dir.mktmpdir do |dir|
       @transaction_log_path = File.join(dir, "transactions.json")
       @webmcp_mappings_path = File.join(dir, "webmcp_mappings.json")
+      # Classifier::PATH — a file that (unlike the two above) usually
+      # doesn't exist, so redirecting it to a tmpdir just means "no
+      # ~/.portage/categories.yml override", never a real one leaking in.
+      @classifier_user_path = File.join(dir, "categories.yml")
       example.run
     end
   end
@@ -37,6 +41,16 @@ RSpec.configure do |config|
     allow(Portage::Cli::WebmcpMappings).to receive(:load).and_wrap_original do |original, **kwargs|
       kwargs = { path: @webmcp_mappings_path }.merge(kwargs) unless kwargs.key?(:path)
       original.call(**kwargs)
+    end
+
+    # Classifier.categories_for reads ~/.portage/categories.yml by default
+    # (Classifier::PATH) — redirect it the same way, so a developer machine
+    # that happens to have one never changes a spec's result. The shipped
+    # known-stores/categories.yml (KNOWN_PATH) is a repo asset, not a user
+    # file, and stays real.
+    allow(Portage::Cli::Classifier).to receive(:categories_for).and_wrap_original do |original, text, **kwargs|
+      kwargs = { user_path: @classifier_user_path }.merge(kwargs) unless kwargs.key?(:user_path)
+      original.call(text, **kwargs)
     end
   end
 

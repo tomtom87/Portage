@@ -261,4 +261,68 @@ RSpec.describe Portage::Cli::Find do
       expect(report[:message]).to include("BRAVE_SEARCH_API_KEY")
     end
   end
+
+  # Integration for Phase 2a's category routing (docs/plans/buy-skill-and-
+  # local-browser.md): a real Allowlist, reading a real (tmpdir) stores.yml,
+  # feeding Find exactly the way SearchBackends.default does — the unit
+  # coverage for the routing algorithm itself lives in search_backends_spec.
+  describe "category routing through a real Allowlist" do
+    around do |example|
+      Dir.mktmpdir do |dir|
+        @stores_path = File.join(dir, "stores.yml")
+        example.run
+      end
+    end
+
+    def allowlist_backend(entries)
+      File.write(@stores_path, entries.to_yaml)
+      Portage::Cli::SearchBackends::Allowlist.new(path: @stores_path, env: nil)
+    end
+
+    it "loads a bare URL list" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return([])
+
+      bare = allowlist_backend(["https://a.example", "https://b.example"])
+
+      report = find(backends: [bare]).call
+
+      expect(report[:candidates].map { |c| c[:origin] }).to contain_exactly("https://a.example", "https://b.example")
+    end
+
+    it "loads a tagged {url:, categories:} list" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["635"])
+
+      tagged = allowlist_backend([{ "url" => "https://a.example", "categories" => ["635"] },
+                                  { "url" => "https://b.example", "categories" => ["635"] }])
+
+      report = find(backends: [tagged]).call
+
+      expect(report[:candidates].map { |c| c[:origin] }).to contain_exactly("https://a.example", "https://b.example")
+    end
+
+    it "never probes more than 12 stores.yml entries for one query, even across several matching categories" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(%w[1 2 3 4 5])
+
+      entries = (1..20).map { |i| { "url" => "https://shop#{i}.example", "categories" => [((i % 5) + 1).to_s] } }
+
+      report = find(backends: [allowlist_backend(entries)]).call
+
+      expect(report[:candidates].length).to eq(described_class::MAX_PROBES)
+    end
+
+    it "never crowds out an untagged, unnamed store's slot once a tagged category match exists" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["635"])
+
+      entries = (1..10).map { |i| "https://random-#{i}.example" } +
+                [{ "url" => "https://sofa.example", "categories" => ["635"] }]
+
+      report = find(backends: [allowlist_backend(entries)]).call
+
+      expect(report[:candidates].map { |c| c[:origin] }).to eq(["https://sofa.example"])
+    end
+  end
 end

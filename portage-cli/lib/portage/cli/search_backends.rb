@@ -5,6 +5,7 @@ require "yaml"
 require "portage/ucp"
 require "portage/ucp/support/connection"
 require_relative "user_agent"
+require_relative "classifier"
 
 module Portage
   module Cli
@@ -72,13 +73,32 @@ module Portage
       end
 
       # Stores you've already decided you trust, listed in
-      # `~/.portage/stores.yml` (a bare YAML array of URLs) or `PORTAGE_STORES`
-      # (comma-separated — the PATH-style colon can't separate values that
-      # contain `https://`). Query-independent on purpose: the point of the file
-      # is "always consider these", and the store's own catalog search is what
-      # decides whether it stocks the thing.
+      # `~/.portage/stores.yml` (a bare YAML array of URLs, or an array
+      # mixing in `{url:, categories: [...]}` entries once you've tagged
+      # some) or `PORTAGE_STORES` (comma-separated — the PATH-style colon
+      # can't separate values that contain `https://`).
+      #
+      # Trust stays query-independent: every entry is *always* a candidate
+      # to `find`, on the same footing whether it's tagged or not, and the
+      # store's own catalog search is still what decides whether it stocks
+      # the thing. `categories:` only changes which of these already-trusted
+      # entries get spent on *this* query's dozen probe slots — a stores.yml
+      # with fifty tagged stores across a dozen categories used to crowd out
+      # web-search candidates on every single query; #search now routes by
+      # the query's own category instead of just taking the first N.
       class Allowlist
         PATH = File.join(Dir.home, ".portage", "stores.yml").freeze
+
+        # At most this many of a matching category's tagged stores per
+        # `#search` call, so one heavily-tagged category can't fill every
+        # probe slot by itself.
+        PER_CATEGORY_CAP = 3
+
+        # The hard ceiling regardless of the caller's own `limit:` — mirrors
+        # Find::MAX_PROBES (duplicated rather than required, to avoid
+        # search_backends.rb depending on find.rb) since this backend can be
+        # constructed and searched outside Find too.
+        TOTAL_CAP = 12
 
         def initialize(path: PATH, env: ENV.fetch("PORTAGE_STORES", nil))
           @path = path
@@ -89,22 +109,114 @@ module Portage
 
         def available? = !entries.empty?
 
-        def search(_query, limit: 10) = entries.first(limit)
+        # @return [Array<String>] URLs, routed by #categorized_search.
+        def search(query, limit: 10) = categorized_search(query, [limit, TOTAL_CAP].min).map { |e| e[:url] }
 
         private
 
-        def entries
-          @entries ||= (env_entries + file_entries).map { |e| e.to_s.strip }.reject(&:empty?).uniq
+        # Named entries always come first (an explicit "buy from <store>"
+        # outranks a category guess), then up to PER_CATEGORY_CAP tagged
+        # entries per matching category not already named. When no tagged
+        # entry matches any of the query's categories at all, this falls
+        # back to named entries plus every untagged entry — the pre-Phase-
+        # 2a behaviour for an all-untagged stores.yml — but never to every
+        # entry once a tagged match exists: a tagged-but-unrelated store
+        # stays excluded, which is the crowding this routing exists to fix.
+        def categorized_search(query, limit)
+          named = named_entries(query)
+          category_ids = Classifier.categories_for(query)
+          return fallback(named, limit) unless any_tagged_match?(category_ids)
+
+          remaining = [limit - named.length, 0].max
+          matched = by_category(category_ids, remaining, named)
+          (named + matched).uniq { |e| e[:url] }.first(limit)
         end
 
-        def env_entries = @env.to_s.split(",")
+        def any_tagged_match?(category_ids)
+          category_ids.any? { |category_id| entries.any? { |e| e[:categories].include?(category_id) } }
+        end
+
+        # Named entries plus every untagged entry, capped — not every
+        # entry: a tagged store whose categories didn't match the query
+        # stays out, the same as it would once a tagged match exists.
+        def fallback(named, limit)
+          (named + entries.select { |e| e[:categories].empty? }).uniq { |e| e[:url] }.first(limit)
+        end
+
+        def by_category(category_ids, limit, exclude)
+          picked = []
+          category_ids.each do |category_id|
+            entries_for_category(category_id, exclude).each do |entry|
+              break if picked.length >= limit
+
+              picked << entry unless picked.include?(entry)
+            end
+          end
+          picked
+        end
+
+        def entries_for_category(category_id, exclude)
+          entries.select { |e| e[:categories].include?(category_id) && !exclude.include?(e) }.first(PER_CATEGORY_CAP)
+        end
+
+        # host or bare name ("shop" out of "shop.example") mentioned in the
+        # query — the escape hatch for "buy from <store>" regardless of
+        # what it's tagged, or for an untagged store the caller named.
+        def named_entries(query)
+          entries.select { |e| named?(e, query) }
+        end
+
+        def named?(entry, query)
+          host = host_of(entry[:url])
+          return false if host.empty?
+
+          label = host.sub(/\Awww\./, "").split(".").first.to_s
+          downcased = query.to_s.downcase
+          downcased.include?(host) || (label.length > 2 && downcased.include?(label))
+        end
+
+        def host_of(url)
+          URI.parse(url).host.to_s.downcase
+        rescue URI::InvalidURIError
+          ""
+        end
+
+        def entries
+          @entries ||= (env_entries + file_entries).uniq { |e| e[:url] }
+        end
+
+        def env_entries
+          @env.to_s.split(",").map(&:strip).reject(&:empty?).map { |url| { url: url, categories: [] } }
+        end
 
         def file_entries
           return [] unless File.readable?(@path)
 
-          Array(YAML.safe_load_file(@path))
+          Array(YAML.safe_load_file(@path)).filter_map { |entry| normalize(entry) }
         rescue StandardError
           []
+        end
+
+        # A bare string (the format before Phase 2a, still the common case)
+        # or a `{url:, categories: [...]}` hash — both parse, per the plan's
+        # "the file stays a bare URL list; an entry becomes tagged only when
+        # it carries categories:".
+        def normalize(entry)
+          case entry
+          when String
+            url = entry.strip
+            url.empty? ? nil : { url: url, categories: [] }
+          when Hash
+            normalize_hash(entry)
+          end
+        end
+
+        def normalize_hash(entry)
+          entry = entry.transform_keys(&:to_s)
+          url = entry["url"].to_s.strip
+          return nil if url.empty?
+
+          { url: url, categories: Array(entry["categories"]).map(&:to_s) }
         end
       end
 
