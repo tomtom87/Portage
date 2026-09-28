@@ -31,6 +31,13 @@ RSpec.configure do |config|
       @index_stores_path = File.join(dir, "index", "stores.json")
       @index_products_path = File.join(dir, "index", "products.json")
       @index_browser_path = File.join(dir, "index", "browser-import.json")
+      # Index::KnownCache — same reasoning again, plus one more: with no
+      # cache file present a spec that exercises SearchBackends::Index/
+      # Doctor/Index::Builder without stubbing KnownCache itself will try
+      # one real fetch (WebMock's `disable_net_connect!` above turns that
+      # into a swallowed failure, same as offline — never a real request).
+      @known_stores_path = File.join(dir, "index", "known-stores.json")
+      @known_products_path = File.join(dir, "index", "known-products.json")
       example.run
     end
   end
@@ -75,6 +82,27 @@ RSpec.configure do |config|
       kwargs = { path: @index_browser_path }.merge(kwargs) unless kwargs.key?(:path)
       original.call(**kwargs)
     end
+
+    allow(Portage::Cli::Index::KnownCache).to receive(:new).and_wrap_original do |original, **kwargs|
+      original.call(stores_path: @known_stores_path, products_path: @known_products_path, **kwargs)
+    end
+
+    # SearchBackends::Index/Doctor/Index::Builder all fetch Index::KnownCache
+    # lazily the first time they're asked for anything and no cache exists
+    # yet (docs/plans/buy-skill-and-local-browser.md Phase 2c) — a spec
+    # that exercises any of them with no cache present (the common case:
+    # @known_stores_path/@known_products_path above never exist unless a
+    # spec writes them) would otherwise fire one real GET against the real
+    # jsdelivr URL. WebMock's own `disable_net_connect!` guard exception
+    # (WebMock::NetConnectNotAllowedError) is a bare Exception subclass,
+    # not a StandardError one, so KnownCache's `rescue StandardError`
+    # (deliberately as narrow as every other network call in this CLI —
+    # see SearchBackends/OfferSources::ShopifyCatalog) doesn't swallow it;
+    # stubbing the real URLs to a plain 404 here means that lazy fetch
+    # resolves the ordinary "no known cache" way instead, in every spec
+    # that doesn't stub something else for these URLs itself.
+    stub_request(:get, Portage::Cli::KnownStoresUrl::STORES).to_return(status: 404)
+    stub_request(:get, Portage::Cli::KnownStoresUrl::PRODUCTS).to_return(status: 404)
   end
 
   # `Cli.apply_proxy_settings` (docs/plans/proxy-support.md Phase 2) sets

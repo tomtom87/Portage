@@ -267,21 +267,49 @@ def write_homebrew_formula(path, attempts: 20, delay: 15)
   abort "Gave up waiting for rubygems.org to list the new versions. Re-run `rake homebrew:update` later."
 end
 
-AGENT_PROFILE_JSDELIVR_PATH = "gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json".freeze
+# Every file this repo publishes over jsdelivr's `@main` channel, by short
+# name — agent-profile.json (docs/agent-profile.md) plus, as of Phase 2c
+# (docs/plans/buy-skill-and-local-browser.md), the known-stores list
+# `portage index build --export` writes a PR into. One purge task covers
+# all of them (`rake jsdelivr:purge`) rather than growing a bespoke task
+# per published file.
+JSDELIVR_PATHS = {
+  "agent_profile" => "gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json",
+  "known_stores" => "gh/tomtom87/Portage@main/portage-cli/known-stores/stores.json",
+  "known_products" => "gh/tomtom87/Portage@main/portage-cli/known-stores/products.json"
+}.freeze
+
+def purge_jsdelivr_path(path)
+  require "net/http"
+
+  uri = URI("https://purge.jsdelivr.net/#{path}")
+  response = Net::HTTP.get_response(uri)
+  abort "jsdelivr purge failed for #{path}: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
+
+  puts "Purged https://cdn.jsdelivr.net/#{path}"
+end
+
+namespace :jsdelivr do
+  desc "Purge jsdelivr's CDN cache for one (rake jsdelivr:purge[known_stores]) or, with no argument, every " \
+       "file this repo publishes (see JSDELIVR_PATHS) — required after any change to one of them. @main is " \
+       "cached for up to a week; skipping this reproduces the §42 `Tool not found` registry miss against " \
+       "otherwise-correct, already-pushed code."
+  task :purge, [:name] do |_t, args|
+    names = args[:name] ? [args[:name]] : JSDELIVR_PATHS.keys
+    unknown = names - JSDELIVR_PATHS.keys
+    unless unknown.empty?
+      abort "Unknown jsdelivr path name(s): #{unknown.join(', ')} (known: #{JSDELIVR_PATHS.keys.join(', ')})"
+    end
+
+    names.each { |name| purge_jsdelivr_path(JSDELIVR_PATHS.fetch(name)) }
+  end
+end
 
 namespace :agent_profile do
-  desc "Purge jsdelivr's CDN cache for agent-profile.json — required after " \
-       "every change to it (see docs/agent-profile.md). @main is cached for " \
-       "up to a week; skipping this reproduces the §42 `Tool not found` " \
-       "registry miss against otherwise-correct, already-pushed code."
+  desc "Alias for `rake jsdelivr:purge[agent_profile]`, kept working so an existing habit/script " \
+       "(docs/agent-profile.md) doesn't break."
   task :purge do
-    require "net/http"
-
-    uri = URI("https://purge.jsdelivr.net/#{AGENT_PROFILE_JSDELIVR_PATH}")
-    response = Net::HTTP.get_response(uri)
-    abort "jsdelivr purge failed: #{response.code} #{response.body}" unless response.is_a?(Net::HTTPSuccess)
-
-    puts "Purged https://cdn.jsdelivr.net/#{AGENT_PROFILE_JSDELIVR_PATH}"
+    Rake::Task["jsdelivr:purge"].invoke("agent_profile")
   end
 end
 

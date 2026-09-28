@@ -54,8 +54,8 @@ module Portage
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
              portage orders reconcile [--checkout ID] [--json]
-             portage index build [--sources a,b] [--queries FILE] [--dry-run] [--json]
-             portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--json]
+             portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
+             portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
              portage index show [--stores|--products] [--json]
              portage index add <url> [--json]
              portage index remove <host> [--json]
@@ -883,11 +883,12 @@ module Portage
     private_class_method :run_index
 
     def self.parse_index_build_options(argv)
-      opts = { sources: nil, queries: nil, dry_run: false, json: false }
+      opts = { sources: nil, queries: nil, dry_run: false, json: false, export: nil }
       OptionParser.new do |parser|
         parser.on("--sources LIST") { |v| opts[:sources] = v.split(",").map(&:strip) }
         parser.on("--queries FILE") { |v| opts[:queries] = v }
         parser.on("--dry-run") { opts[:dry_run] = true }
+        parser.on("--export DIR") { |v| opts[:export] = v }
         parser.on("--json") { opts[:json] = true }
       end.parse!(argv)
       opts[:queries] &&= File.readlines(opts[:queries]).map(&:strip).reject(&:empty?)
@@ -899,9 +900,9 @@ module Portage
       opts = parse_index_build_options(argv)
       builder = Index::Builder.new(sources: index_sources(opts[:sources]), out: opts[:json] ? nil : $stdout)
       result = if refresh
-                 builder.refresh(queries: opts[:queries], dry_run: opts[:dry_run])
+                 builder.refresh(queries: opts[:queries], dry_run: opts[:dry_run], export: opts[:export])
                else
-                 builder.build(queries: opts[:queries], dry_run: opts[:dry_run])
+                 builder.build(queries: opts[:queries], dry_run: opts[:dry_run], export: opts[:export])
                end
       puts opts[:json] ? JSON.pretty_generate(result) : format_index_build(result)
       0
@@ -917,6 +918,10 @@ module Portage
                "#{result[:verified].length} verified UCP."
       lines << "Hit the #{Index::Builder::MAX_NEW_PROBES}-probe cap for this run." if result[:capped]
       lines << "#{result[:products_added]} product sighting(s) recorded." if result[:products_added]
+      if result[:exported]
+        lines << "Exported #{result[:exported][:stores]} store(s), #{result[:exported][:products]} " \
+                 "product(s) to #{result[:exported][:dir]}."
+      end
       lines.join("\n")
     end
     private_class_method :format_index_build

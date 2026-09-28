@@ -39,7 +39,7 @@ module Portage
       #   those four warnings were noise on every fresh install.
       def initialize(adapter_class: nil, proxy_settings: ProxySettings.new, install_doctor: InstallDoctor.new,
                      seller: true, dot_env_path: DotEnv.loaded_path, index_stores: Index::Store.new,
-                     index_products: Index::ProductStore.new)
+                     index_products: Index::ProductStore.new, known_cache: Index::KnownCache.new)
         @adapter_class = adapter_class
         @proxy_settings = proxy_settings
         @install_doctor = install_doctor
@@ -47,6 +47,7 @@ module Portage
         @dot_env_path = dot_env_path
         @index_stores = index_stores
         @index_products = index_products
+        @known_cache = known_cache
       end
 
       def call
@@ -179,12 +180,30 @@ module Portage
       # {stores,products}.json — always info, never a warning: a fresh
       # install with no index still works, `find` just has less to route
       # by than one that's run `portage index build`.
+      #
+      # Also one of Phase 2c's three refresh triggers: this refreshes the
+      # known-stores cache (Index::KnownCache) whenever it's stale (more
+      # than 7 days old, which a missing cache counts as too), so a
+      # long-running install's cache doesn't just sit there getting older
+      # every time `find` happens not to trigger the lazy first-run fetch.
+      # One short-timeout GET per file, swallowed on any failure exactly
+      # like KnownCache's own #refresh! — this never turns doctor into a
+      # warning, just a report of whatever the fetch (or its absence)
+      # leaves behind.
       def index_finding
-        return Finding.new(check: "index", level: "info", message: index_message) if @index_stores.exists?
+        refresh_known_cache_if_stale
+        return Finding.new(check: "index", level: "info", message: "#{index_message}\n#{known_cache_message}") \
+          if @index_stores.exists?
 
         Finding.new(check: "index", level: "info",
                     message: "No local index yet — run `portage index build` to give `find` a list of " \
-                             "stores/products on top of stores.yml and web search.")
+                             "stores/products on top of stores.yml and web search.\n#{known_cache_message}")
+      end
+
+      def refresh_known_cache_if_stale
+        @known_cache.refresh! if @known_cache.stale?
+      rescue StandardError
+        nil
       end
 
       def index_message
@@ -192,6 +211,18 @@ module Portage
         staleness = age ? "oldest entry verified #{age / 86_400} day(s) ago" : "no entries verified yet"
         "Local index: #{@index_stores.all.length} store(s), #{@index_products.all.length} product(s) " \
           "(#{staleness}). Run `portage index refresh` to re-verify entries older than 7 days."
+      end
+
+      def known_cache_message
+        unless @known_cache.exists?
+          return "Known-stores list (fetched from the repo, docs/plans/buy-skill-and-local-browser.md " \
+                 "Phase 2c): not fetched yet — offline, or the first fetch hasn't run."
+        end
+
+        age = @known_cache.age
+        days = age ? age / 86_400 : "?"
+        "Known-stores list: #{@known_cache.stores.length} store(s), #{@known_cache.products.length} " \
+          "product(s), fetched #{days} day(s) ago."
       end
 
       # PORTAGE_USER_AGENT / config.json's "user_agent" (UserAgent) is sent

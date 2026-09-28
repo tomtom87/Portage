@@ -385,5 +385,61 @@ RSpec.describe Portage::Cli::SearchBackends do
         expect(File.exist?(policy_path)).to be false
       end
     end
+
+    describe "the known-stores cache (docs/plans/buy-skill-and-local-browser.md Phase 2c)" do
+      let(:known) { instance_double(Portage::Cli::Index::KnownCache) }
+      let(:backend) { described_class.new(stores: stores, products: products, known: known) }
+
+      it "is available from the known cache alone, with no local index" do
+        allow(stores).to receive(:all).and_return([])
+        allow(products).to receive(:all).and_return([])
+        allow(known).to receive(:fetch_if_missing!)
+        allow(known).to receive(:stores).and_return({ "https://known.example" => store_entry("https://known.example") })
+        allow(known).to receive(:products).and_return({})
+
+        expect(backend.available?).to be true
+      end
+
+      it "routes a known-cache store the same way a local one is routed" do
+        allow(stores).to receive(:all).and_return([])
+        allow(products).to receive(:all).and_return([])
+        allow(known).to receive(:fetch_if_missing!)
+        allow(known).to receive(:stores).and_return(
+          { "https://known.example" => store_entry("https://known.example", categories: { "1" => 1 }) }
+        )
+        allow(known).to receive(:products).and_return({})
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+        expect(backend.search("sofa")).to eq(["https://known.example"])
+      end
+
+      it "lets the user's own entry for the same origin win over the known cache" do
+        allow(stores).to receive(:all).and_return([store_entry("https://both.example", categories: { "1" => 9 })])
+        allow(products).to receive(:all).and_return([])
+        allow(known).to receive(:fetch_if_missing!)
+        allow(known).to receive(:stores).and_return(
+          { "https://both.example" => store_entry("https://both.example", categories: { "1" => 1 }) }
+        )
+        allow(known).to receive(:products).and_return({})
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+        expect(backend.search("sofa")).to eq(["https://both.example"])
+        # The user's own weight (9) is what ranking sees — not the known cache's (1) — proven indirectly by
+        # there being exactly one candidate rather than the known entry also showing up as a duplicate.
+      end
+
+      it "fetches the known cache at most once per instance even across several calls" do
+        allow(stores).to receive(:all).and_return([])
+        allow(products).to receive(:all).and_return([])
+        allow(known).to receive(:stores).and_return({})
+        allow(known).to receive(:products).and_return({})
+        allow(known).to receive(:fetch_if_missing!)
+
+        backend.available?
+        backend.search("anything")
+
+        expect(known).to have_received(:fetch_if_missing!).once
+      end
+    end
   end
 end
