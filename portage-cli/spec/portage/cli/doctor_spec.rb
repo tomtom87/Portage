@@ -224,6 +224,26 @@ RSpec.describe Portage::Cli::Doctor do
     end
   end
 
+  describe "the agent profile used by find/buy" do
+    def agent_profile_finding(env = {})
+      with_env(env) { described_class.new.call.find { |f| f.check == "agent_profile" } }
+    end
+
+    it "says which profile is in use when PORTAGE_AGENT_PROFILE is set" do
+      finding = agent_profile_finding("PORTAGE_AGENT_PROFILE" => "https://example.com/agent-profile.json")
+
+      expect(finding.level).to eq("info")
+      expect(finding.message).to include("https://example.com/agent-profile.json")
+    end
+
+    it "names the repo's own published profile as the fallback when unset" do
+      finding = agent_profile_finding("PORTAGE_AGENT_PROFILE" => nil)
+
+      expect(finding.level).to eq("info")
+      expect(finding.message).to include("PORTAGE_AGENT_PROFILE not set", Portage::Cli::AgentProfileUrl::DEFAULT)
+    end
+  end
+
   describe "the configured User-Agent" do
     before { allow(Portage::Cli::Config).to receive(:load).and_return(Portage::Cli::Config.new(data: {})) }
 

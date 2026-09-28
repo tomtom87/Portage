@@ -4,6 +4,7 @@ require "json"
 require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/journal"
+require_relative "agent_profile_url"
 require_relative "payment_methods"
 require_relative "setting"
 require_relative "decisions"
@@ -789,11 +790,26 @@ module Portage
       # reached here, `buy <url> --max-price` checked out whatever the store
       # ranked first (confirmed live 2026-09-24: a $679.95 board on
       # burton.com under --max-price 600).
+      # A --product-id match also checks each product's own variants, not
+      # just its top-level id: OfferSources::ShopifyCatalog hands Find an
+      # offer whose product_id is the merchant's own variant gid (the
+      # catalog's own product id is a global one the merchant doesn't
+      # recognise — see that class), so the product carrying it is found by
+      # its variant, not its id.
       def select_product(products)
         products = products.select { |product| within_max_price?(product) }
         return products.find { |product| available?(product) } || products.first unless @product_id
 
-        products.find { |product| product_id_of(product) == @product_id }
+        products.find { |product| product_id_of(product) == @product_id || variant_matching(product, @product_id) }
+      end
+
+      # nil `id` matches nothing — a product's variants are never searched
+      # for a nil id, the same way #select_product's own `unless @product_id`
+      # branch never gets here without one.
+      def variant_matching(product, id)
+        return nil unless id
+
+        Array(product["variants"]).find { |variant| variant["id"] == id }
       end
 
       # Priced the way #reconcile_checkout expects the store to charge: the
@@ -837,6 +853,9 @@ module Portage
       # first variant, for the same reason #select_product skips sold-out
       # products (a live Brooklinen sheet set lists its sold-out size first).
       def line_item_id_of(product)
+        matched = variant_matching(product, @product_id)
+        return matched["id"] if matched
+
         variants = Array(product["variants"])
         (variants.find { |variant| variant_available?(variant) } || variants.first)&.dig("id") ||
           product_id_of(product)
@@ -1246,7 +1265,7 @@ module Portage
       # loopback path ignores it harmlessly, so it's cheapest to always pass
       # it rather than branch on which transport `session` happens to be.
       def agent_meta
-        { agent_profile: ENV.fetch("PORTAGE_AGENT_PROFILE", nil) }
+        { agent_profile: AgentProfileUrl.resolve }
       end
 
       # --- Homepage fetch (used by both the manifest-not-found path and the

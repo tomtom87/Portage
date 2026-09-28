@@ -6,6 +6,34 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`find` gains a second backend kind: `OfferSource`, and a first
+  implementation, `OfferSources::ShopifyCatalog`**
+  (`docs/plans/buy-skill-and-local-browser.md` Phase 1). Unlike the
+  URL-returning `SearchBackends`, an `OfferSource#offers(query, limit:,
+  context:)` answers offers directly — no `/.well-known/ucp` probe, and it
+  counts toward nothing in `Find::MAX_PROBES`. `Find#call` merges its
+  offers with the probed ones before `Decisions.rank`. `ShopifyCatalog`
+  calls Shopify's global catalog (`catalog.shopify.com/api/ucp/mcp`)
+  anonymously and turns every result into an offer on the *merchant's* own
+  origin: a catalog product's own id is a global one no merchant
+  recognises, but each `variants[].id` is the merchant's real
+  `ProductVariant` gid and `variants[].url` sits on the merchant's own
+  domain, so the offer's `store`/`product_id`/`url` come from the first
+  variant, not the product (live-verified 2026-09-28, query "hiking
+  boots", GB/GBP — the four distinct merchant origins in the top 10 all
+  answered `/.well-known/ucp`). `Buy#select_product` now also matches a
+  product by one of its variant ids, and `#line_item_id_of` checks that
+  exact variant out, so a `find`-picked catalog offer buys correctly with
+  no title re-search. 5s timeout; any failure (network, timeout, a
+  malformed result) is swallowed the same way a broken `SearchBackends`
+  backend already is.
+- **`PORTAGE_AGENT_PROFILE` now defaults to the repo's own published
+  profile** (`Portage::Cli::AgentProfileUrl::DEFAULT`, the same jsdelivr
+  URL `docs/agent-profile.md` already documents) when the env var is unset
+  or blank, instead of `find`/`buy` failing outright on a fresh install
+  that never copied `.env.example`. `portage doctor` reports which profile
+  is in use — the env var's value, or that it's falling back to the
+  default.
 - **Fixed: `dry_run: true` was ignored on the WebMCP hand-off path**
   (docs/design-log.md §51). `Buy#webmcp_handoff_checkout_flow` still added
   to the store's real cart, sent the bridge's tab to checkout and ran

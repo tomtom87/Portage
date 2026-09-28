@@ -18,8 +18,18 @@ RSpec.describe Portage::Cli::Find do
                                                    search_catalog: { "ucp" => 1, "products" => products })
   end
 
+  # offer_sources defaults to [] here rather than OfferSources.default: a
+  # live ShopifyCatalog would otherwise dial a real endpoint on every spec
+  # in this file that doesn't care about it — see "merges offer-source
+  # offers" below for the tests that do.
   def find(**overrides)
-    described_class.new(query: "cold brew", cache: cache, throttle: 0, **overrides)
+    described_class.new(query: "cold brew", cache: cache, throttle: 0, offer_sources: [], **overrides)
+  end
+
+  def offer_source(offers)
+    double = Object.new
+    allow(double).to receive(:offers).and_return(offers)
+    double
   end
 
   it "returns nothing without a query" do
@@ -207,5 +217,48 @@ RSpec.describe Portage::Cli::Find do
     allow(exploding).to receive(:search).and_raise(StandardError)
 
     expect { find(backends: [exploding]).call }.not_to raise_error
+  end
+
+  describe "offer sources" do
+    let(:catalog_offer) do
+      { store: "https://catalog-merchant.example", source: "shopify_catalog", checkout: nil,
+        product_id: "gid://shopify/ProductVariant/9", title: "Catalog Cold Brew", amount: 1500,
+        currency: "USD", url: "https://catalog-merchant.example/products/x" }
+    end
+
+    it "merges an offer source's offers with probed-store offers, with no probe of its own" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [product]))
+
+      report = find(backends: [backend("duckduckgo", ["https://shop.example"])],
+                    offer_sources: [offer_source([catalog_offer])]).call
+
+      expect(report[:offers].map { |o| o[:product_id] }).to contain_exactly("p1", "gid://shopify/ProductVariant/9")
+      expect(report[:candidates].map { |c| c[:origin] }).to eq(["https://shop.example"])
+    end
+
+    it "ranks a merged offer source offer against probed offers by buyable-then-price, same as any other offer" do
+      cheaper_unbuyable = catalog_offer.merge(amount: 100)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [product]))
+
+      report = find(backends: [backend("duckduckgo", ["https://shop.example"])],
+                    offer_sources: [offer_source([cheaper_unbuyable])]).call
+
+      expect(report[:offers].first[:product_id]).to eq("p1")
+      expect(report[:offers].last[:product_id]).to eq("gid://shopify/ProductVariant/9")
+    end
+
+    it "still reports offers when no search backend found any candidates" do
+      report = find(backends: [], offer_sources: [offer_source([catalog_offer])]).call
+
+      expect(report[:candidates]).to be_empty
+      expect(report[:offers]).to eq([catalog_offer])
+    end
+
+    it "reports no candidates when both backends and offer sources come back empty" do
+      report = find(backends: [], offer_sources: [offer_source([])]).call
+
+      expect(report[:offers]).to be_empty
+      expect(report[:message]).to include("BRAVE_SEARCH_API_KEY")
+    end
   end
 end

@@ -6,6 +6,7 @@ require_relative "proxy_settings"
 require_relative "shipping_profile"
 require_relative "dot_env"
 require_relative "search_backends"
+require_relative "agent_profile_url"
 
 module Portage
   module Cli
@@ -51,6 +52,7 @@ module Portage
           *seller_findings,
           decision_backend_finding,
           search_backend_finding,
+          agent_profile_finding,
           user_agent_finding,
           shipping_finding,
           proxy_finding,
@@ -147,6 +149,25 @@ module Portage
                              "open-ended search terms. Set BRAVE_SEARCH_API_KEY or GOOGLE_CSE_KEY+" \
                              "GOOGLE_CSE_CX for real web search, or list known stores in " \
                              "~/.portage/stores.yml.")
+      end
+
+      # `find`/`buy`/OfferSources::ShopifyCatalog need
+      # `meta.ucp-agent.profile` on every catalog/cart/checkout call
+      # (Transports::Http#wire_meta) — PORTAGE_AGENT_PROFILE names it, and
+      # AgentProfileUrl falls back to the repo's own published profile
+      # (docs/agent-profile.md) so a fresh install without one set still
+      # works well enough to try. Always info, never a warning — the
+      # fallback isn't broken, just worth knowing about before a real
+      # deployment.
+      def agent_profile_finding
+        url = AgentProfileUrl.resolve
+        return Finding.new(check: "agent_profile", level: "info", message: "Agent profile: #{url}") \
+          unless ENV.fetch("PORTAGE_AGENT_PROFILE", nil).to_s.strip.empty?
+
+        Finding.new(check: "agent_profile", level: "info",
+                    message: "PORTAGE_AGENT_PROFILE not set — falling back to the repo's own published " \
+                             "profile (#{url}). Run `portage generate agent-profile` and set " \
+                             "PORTAGE_AGENT_PROFILE to your own for production use.")
       end
 
       # PORTAGE_USER_AGENT / config.json's "user_agent" (UserAgent) is sent
