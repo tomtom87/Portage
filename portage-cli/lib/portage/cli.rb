@@ -260,7 +260,7 @@ module Portage
     private_class_method :prompt_for_offer
 
     def self.execute_buy(parsed, url, product_id: nil)
-      options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check])
+      options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check], json: !parsed[:json].nil?)
       options[:product_id] ||= product_id
       report = Buy.new(**options).call
       record_buy(report, options[:query])

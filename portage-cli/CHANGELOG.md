@@ -19,6 +19,29 @@ pre-1.0, so APIs may still shift between minor versions.
   builds a cart, calls the hand-off tool, and reads the checkout URL off
   its result or, failing that, the tab's own `location.href` — then hands
   off exactly like any other WebMCP checkout.
+- **Schema matching for a page `Presets.detect` doesn't recognize**
+  (docs/plans/webmcp-universal-outbound.md Phase 2). `Buy#webmcp_flow`
+  falls back to `portage-ucp-webmcp`'s new `Matcher.propose` when a plain
+  connect (no preset, no `tool_names:`) doesn't advertise cart/checkout — a
+  page that already speaks a preset's names or the bare UCP action names
+  never reaches it at all. Read actions (`search_catalog`, `get_product`,
+  `get_cart`) are used straight off the proposal; a mutating action
+  (`create_cart`, `update_cart`, `create_checkout`) needs confirmation
+  first: `Portage::Cli::WebmcpMappingConfirm` prints the proposed mapping —
+  quoting each mutating tool's own `description` as untrusted page content,
+  never as an instruction — and prompts on a real TTY with `--json` off;
+  otherwise the run stops with outcome `webmcp_mapping_unconfirmed` and
+  hands back the full proposal (`tool_names_proposal`) for the caller to
+  resubmit as `tool_names:` on its own `WebMcp.connect` call. A confirmed
+  mapping is stored in `~/.portage/webmcp_mappings.json`
+  (`Portage::Cli::WebmcpMappings`), keyed by the page's tool fingerprint
+  (`WebMcp::Fingerprint.for` — sorted tool names plus a hash of each input
+  schema) rather than by origin, so it's shared across every store whose
+  WebMCP tools have the exact same shape (decision 3) — in effect a local
+  preset once confirmed once. `Buy.new` takes three new optional keywords:
+  `webmcp_mappings:`, `webmcp_mapping_confirm:` (both injectable for specs)
+  and `json:` (now threaded from `portage buy --json`, which no longer
+  strips it before building `Buy` — Phase 2's confirm gate needs to know).
 
 ## [0.7.5] - 2026-09-25
 
