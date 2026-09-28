@@ -1,0 +1,19 @@
+{
+  "name": "portage",
+  "owner": {
+    "name": "Tom Whitbread",
+    "url": "https://github.com/tomtom87/Portage"
+  },
+  "metadata": {
+    "description": "Portage: find and buy things from real online stores over UCP, MCP and WebMCP, with the shopper in control of every payment."
+  },
+  "plugins": [
+    {
+      "name": "buy",
+      "source": "./plugins/buy",
+      "description": "Find and buy products from online stores through the portage CLI: search, compare, dry-run, checkout, hand-off to your own browser, order tracking, with spending caps and hard guardrails.",
+      "category": "commerce",
+      "keywords": ["shopping", "buy", "checkout", "ucp", "mcp", "webmcp", "ecommerce"]
+    }
+  ]
+}

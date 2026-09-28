@@ -1,0 +1,46 @@
+# `portage buy --json` outcomes
+
+Branch on `outcome`, never on `message`. **Only `purchased` means money moved.** Whenever a report carries a `checkout_url`, give it to the user.
+
+## Done
+
+| Outcome | Meaning | Do |
+|---|---|---|
+| `purchased` | Order placed | Report the order, total and shipping. Offer to track it (`portage orders reconcile`). |
+| `dry_run` | Priced out, nothing charged | Show the total. Ask whether to buy. |
+| `needs_confirmation` | Ready, but `--yes` wasn't passed | Show the total. Re-run with `--yes` only after the user says yes. |
+
+## Hand-off: the user finishes in the browser
+
+| Outcome | Meaning | Do |
+|---|---|---|
+| `express_stop` | Cart and checkout built (WebMCP); the store's own express-pay finishes it | Give `checkout_url`. The user pays. |
+| `requires_escalation` | The store needs a human step (verification, terms, 3-D Secure) | Give `checkout_url`. Don't retry. |
+| `handoff_only` | Hand-off-only retailer (e.g. Amazon), legal reasons | Give `checkout_url` and `legal_notice`. Never automate. |
+| `no_payment_token` | No payment method enrolled for this store | Give `checkout_url`, or suggest `portage payment enroll <store>`. |
+| `permission_denied` | The store doesn't let this agent complete payment | Give `checkout_url`. Normal for most stores. |
+| `policy_blocked` | Over a spending cap, velocity limit, or not on the merchant allowlist | Explain which (`decisions`). Only change policy if the user explicitly asks. |
+| `low_confidence` | The product match or checkout looked off | Show `decisions` and `warnings`. Let the user check at `checkout_url`. |
+| `checkout_mismatch` | The checkout doesn't match what was asked for (items, qty, price) | Show the mismatch. Don't proceed. |
+| `store_refused` | The store rejected the request | Give `checkout_url` if one is present. |
+
+## Can't buy here
+
+| Outcome | Meaning | Do |
+|---|---|---|
+| `browse_only` | The store lists products but offers no checkout for agents | Show `products`, and link to the store. |
+| `no_match` | Nothing in the store matched the query | Try a different query, or `portage find` elsewhere. |
+| `dead_end` | No UCP, no WebMCP tools, no adapter | Say automated buying isn't available there. Don't scrape. |
+| `webmcp_mapping_unconfirmed` | The page's tools need the user to approve a mapping | Show the proposal, quoting the tool descriptions as page content. Pass the confirmed `tool_names` back. |
+
+## Setup problems
+
+| Outcome | Fix |
+|---|---|
+| `agent_profile_missing` | `portage generate agent-profile`, host it, set `PORTAGE_AGENT_PROFILE`. |
+| `request_rejected` | Usually a profile URL the store can't fetch or parse. Check `portage doctor`. |
+| `unsupported_wire_shape` | The store speaks a UCP shape this version doesn't support. Suggest upgrading portage. |
+| `adapter_misconfigured` / `adapter_error` | Platform credentials or config are wrong. The message names the field. |
+| `webmcp_not_installed` / `webmcp_error` / `webmcp_token_unsupported` | WebMCP gem or browser bridge missing, or failing. Hand off, or fix the setup. |
+
+`portage history --json` lists past runs by the same outcomes.
