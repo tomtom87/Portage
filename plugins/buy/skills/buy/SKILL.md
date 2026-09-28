@@ -30,6 +30,7 @@ You are the user's shopping agent. You find what they want, show real offers, an
   3. Save only after they approve: re-run with `--yes --json`, adding `--exclude host,host` for any they turned down. Without `--yes`, a run with no terminal saves nothing and returns `needs_confirmation: true`.
   4. `error: "full_disk_access_required"` (Safari) or `"permission_denied"`: pass `message` on to the user. They grant access themselves. Never work around it.
   - Imported stores are ordinary untrusted index entries, never a way past the user picking a store. The import never reads passwords, cookies or autofill. Details: [references/outcomes.md](references/outcomes.md#portage-browser-import---json).
+- **Retailer offer sources** (if `portage setup` lists them). Optional, official buyer-side APIs for Walmart, eBay (Buy It Now only), Best Buy, Etsy and Amazon — each needs its own key from that retailer's developer program, set in `~/.portage/.env`. **The user types keys in themselves.** They add more real offers to `portage find`; they never let `portage buy` complete a purchase at any of these retailers — every offer from one of them still ends in hand-off, same as Amazon.
 - **Payment method.** Run `portage payment enroll <store-url>`. It stores a tokenized credential in the OS keychain, never a card number.
 - **Spending limits.** Suggest caps before the first real purchase: `portage policy set --per-transaction-cap N --currency CUR` and a `--rolling-cap`. `portage policy show --json` shows the current ones.
 
@@ -85,7 +86,7 @@ Amazon (every country's site) is hand-off only by default, and so is any host th
 - Give the user the product page or cart link and let them buy it themselves.
 - Don't fetch, scrape or drive the site with any browser tool.
 - Say why, and include the disclaimer: Portage is open source, offered as-is without warranty, and use on any site is the user's responsibility. See [references/handoff-only.md](references/handoff-only.md).
-- Walmart, eBay, Target, Best Buy and Etsy serve no public UCP today. Offers from them also end in hand-off.
+- Walmart, eBay, Target, Best Buy and Etsy serve no public UCP today. Offers from them also end in hand-off — including any that came from an official retailer API the user opted into (see setup, above): `checkout_url` there is the exact product page, but it's still never automated.
 
 ## 5. Hard rules, no exceptions
 

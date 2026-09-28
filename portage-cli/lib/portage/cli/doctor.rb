@@ -10,6 +10,7 @@ require_relative "agent_profile_url"
 require_relative "index"
 require_relative "handoff_target"
 require_relative "handoff_only"
+require_relative "offer_sources"
 
 module Portage
   module Cli
@@ -75,7 +76,7 @@ module Portage
           search_backend_finding,
           agent_profile_finding,
           index_finding,
-          handoff_finding,
+          handoff_finding, retailer_offer_sources_finding,
           user_agent_finding,
           shipping_finding,
           proxy_finding,
@@ -221,6 +222,27 @@ module Portage
         @known_cache.refresh! if @known_cache.stale?
       rescue StandardError
         nil
+      end
+
+      # Phase 7: which of the five retailer OfferSources are on. Always
+      # info — every one of them is opt-in by design, and `find` behaves
+      # identically with none configured. Every one of these still ends in
+      # hand-off no matter how many are enabled, so this finding says that
+      # plainly rather than implying more keys means more automation.
+      def retailer_offer_sources_finding
+        on = OfferSources.retailers.select(&:available?).map(&:name)
+        message = if on.empty?
+                    no_retailer_offer_sources_message
+                  else
+                    "Retailer offer sources active: #{on.join(', ')}. Every one still ends in hand-off; " \
+                      "none can complete a purchase."
+                  end
+        Finding.new(check: "retailer_offer_sources", level: "info", details: { active: on }, message: message)
+      end
+
+      def no_retailer_offer_sources_message
+        "No retailer offer sources configured (Walmart, eBay, Best Buy, Etsy, Amazon) — run `portage " \
+          "setup` to add keys. Every one still ends in hand-off; none can complete a purchase."
       end
 
       def index_message

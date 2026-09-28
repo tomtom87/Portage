@@ -6,6 +6,80 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Retailer offer sources, hand-off only** (`docs/plans/
+  buy-skill-and-local-browser.md` Phase 7). `Portage::Cli::OfferSources`
+  gains five official, opt-in buyer-side retailer APIs alongside
+  `ShopifyCatalog`: `WalmartAffiliate`, `EbayBrowse` (Buy It Now only —
+  `filter=buyingOptions:{FIXED_PRICE}`, checked again in code, and never
+  eBay's Order API/guest checkout, which takes raw card data),
+  `BestBuyProducts`, `EtsyListings` (Etsy Open API v3's
+  `findAllListingsActive`, the *buyer*-side surface — `portage-ucp-etsy`
+  stays the seller-side adapter, untouched) and `AmazonCreators`. Each is
+  gated on its own key/token env var (`WALMART_AFFILIATE_API_KEY`,
+  `EBAY_BROWSE_ACCESS_TOKEN`, `BESTBUY_API_KEY`, `ETSY_LISTINGS_API_KEY`,
+  `AMAZON_CREATORS_ACCESS_TOKEN`), `#available?` false and silently
+  excluded from `OfferSources.default` with none set — a fresh install's
+  `find` is unchanged. Every request goes through
+  `Portage::Ucp::Support::Connection` (via `SearchBackends.get_json`,
+  never raw `Net::HTTP`), 5s timeout, failures swallowed exactly like
+  `ShopifyCatalog`. None of the five is wired into `Index::Sources`, so
+  nothing they return is ever written to `~/.portage/index/
+  {stores,products}.json` — the plan's "honour each API's caching terms,
+  default to not persisting" is enforced by simply having no code path
+  that would.
+  **Amazon PA-API vs. Creators API (live web search, 2026-09-28):**
+  PA-API 5 is deprecated, retiring 2026-05-15 (already past), no longer
+  onboarding new integrations; Creators API is its OAuth2 successor.
+  `AmazonCreators` targets Creators API's search endpoint with a
+  user-supplied bearer token (no OAuth dance or refresh implemented here,
+  same "bring your own token" posture `EbayBrowse` uses for eBay's
+  Application Access Token) and reads the long-stable PA-API
+  `SearchItems`/`GetItems` item shape (`ASIN`/`DetailPageURL`/
+  `Offers.Listings[0].Price`), which Amazon's own docs describe Creators
+  API as continuing — **not live-checked**, no Associates account
+  available this session; a schema mismatch only drops an offer
+  (`#offer`'s nil guard), never a purchase-automation risk, since Amazon
+  is already Tier C.
+  Every offer ends in hand-off, never a completed purchase. Amazon
+  already routed through the existing Tier C `HandoffOnly` path
+  unchanged. `Buy#handoff_only?` now also checks
+  `OfferSources.retail_handoff_host?` (walmart.com/ebay.com/bestbuy.com,
+  unconditional — no adapter, no UCP, not a user-editable policy choice)
+  and a new `#etsy_buyer_host?` (etsy.com, *unless* the process already
+  has its own `ETSY_ACCESS_TOKEN`/`ETSY_API_KEY`/`ETSY_SHOP_ID` set, in
+  which case the existing `portage-ucp-etsy` seller-adapter flow still
+  applies unchanged) — every one of these hosts is checked before a
+  single UCP probe or homepage fetch, same "never even scraped" guarantee
+  Amazon already had. `handoff_only_checkout_url` returns the exact URL
+  passed to `portage buy` for these hosts (the real product page a
+  retailer offer source found), rather than falling back to the origin
+  homepage the way an unknown Tier C host still does.
+  `portage setup` gains an eighth, opt-in wizard step (`Steps::
+  RetailerKeys`, between search keys and the agent profile) for the five
+  keys, written to `~/.portage/.env`, never echoed back. `portage doctor`
+  gains a `retailer_offer_sources` finding (always info) naming which are
+  active and restating that none of them can complete a purchase.
+  **Open question 3 resolved:** kept in `portage-cli`'s `OfferSources`
+  (one class per retailer, one file), not split into per-retailer gems or
+  a `portage-ucp-retail` gem — Phase 1's seam (`OfferSource#offers`) is a
+  small interface with no adapter-style `Client`/`Adapter` pair to split
+  out, each source is ~50-70 lines with no shared state beyond
+  `OfferSources.origin_of`, none of them completes a purchase (the usual
+  reason an adapter earns its own gem — its own `Client`/credentials/
+  fulfillment logic), and a separate gem per retailer would mean five new
+  `require`/`rescue LoadError` seams for zero behavioral gain over the
+  `#available?` opt-in gate already in place. Revisit only if a future
+  phase adds real purchase automation for one of these.
+  `plugins/buy/skills/buy/SKILL.md`, `references/outcomes.md` and
+  `references/handoff-only.md` updated; `plugins/buy/.claude-plugin/
+  plugin.json` bumped to `0.6.0`. `claude plugin validate .` and `claude
+  plugin validate plugins/buy` still pass.
+  `portage-cli`: 925 → 961 examples (+36), 0 failures; `rubocop` clean, no
+  new cop disables. **Not live-checked at all** (docs/plans/
+  buy-skill-and-local-browser.md Phase 7 rule: "you almost certainly have
+  no API keys"): every source's spec stubs the HTTP boundary with WebMock,
+  none of Walmart/eBay/Best Buy/Etsy/Amazon Creators was called for real,
+  and no real cart was touched anywhere.
 - **Portage browser profile** (`docs/plans/buy-skill-and-local-browser.md`
   Phase 6, Tier B). `portage browser profile init|open|status [--browser
   chrome|edge|brave|arc] [--port N] [--url URL (open only)] [--json]`

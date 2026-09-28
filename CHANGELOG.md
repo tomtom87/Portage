@@ -9,6 +9,23 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Retailer offer sources, hand-off only** (`docs/plans/
+  buy-skill-and-local-browser.md` Phase 7 — full change is in
+  `portage-cli/CHANGELOG.md`). Five official, opt-in buyer-side retailer
+  APIs (Walmart Affiliate, eBay Browse — Buy It Now only, Best Buy
+  Products, Etsy Open API v3, Amazon Creators) join `OfferSources`
+  alongside `ShopifyCatalog`, each gated on its own key. Every offer they
+  return still ends in hand-off — none completes a purchase, and none of
+  them is ever written into the local index. Amazon already routed
+  through the existing Tier C hand-off-only path; walmart.com/ebay.com/
+  bestbuy.com now do too (unconditionally — no adapter, no UCP), and so
+  does etsy.com unless the process already has its own Etsy *seller*
+  credentials configured, in which case `portage-ucp-etsy`'s existing
+  adapter flow still applies. `portage setup` gains an eighth wizard step
+  for the five keys; `portage doctor` reports which are active. Open
+  question 3 (one gem per retailer vs. one `portage-ucp-retail` gem) is
+  resolved: kept in `portage-cli`'s `OfferSources`. `plugins/buy/
+  .claude-plugin/plugin.json` bumped to `0.6.0`.
 - **Hand-off targets + hand-off-only hosts, and the `buy` skill knows both**
   (`docs/plans/buy-skill-and-local-browser.md` Phase 5 — full change is in
   `portage-cli/CHANGELOG.md`). `portage buy --handoff-target
