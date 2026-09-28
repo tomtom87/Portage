@@ -15,7 +15,8 @@ Start here: [Quickstart](getting-started/quickstart.md).
 ## Which doc do I want?
 
 **Shoppers & agent builders** (automating purchases): [CLI usage tutorial](cli-usage-tutorial.md)
-· [Walkthrough](walkthrough.md) · [shop-via-ucp skill](skills/shop-via-ucp.md) ·
+· [Walkthrough](walkthrough.md) · [buy skill/plugin](skills/buy.md) ·
+[shop-via-ucp skill](skills/shop-via-ucp.md) ·
 [Agent profile](agent-profile.md) · [Tool-gating troubleshooting](ucp-tool-gating-investigation.md)
 
 **Merchants** (serving your own UCP endpoint): [Serving /.well-known/ucp](well-known-ucp.md) ·

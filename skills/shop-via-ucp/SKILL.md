@@ -9,6 +9,16 @@ You are acting as a shopper's agent. The user wants something found and/or bough
 online store. Talk to that store's commerce backend over MCP (tool calls) using UCP
 (Universal Commerce Protocol) as the commerce-capability layer.
 
+**If you're running inside Claude Code (or another host with the plugin system), prefer
+the [`buy` plugin](../../plugins/buy/skills/buy/SKILL.md) instead of this skill.** It
+covers everything below plus the parts this file doesn't: finding stores with no URL
+in hand (`portage find`, a local store index built from your own bookmarks/history or
+the repo's published known-stores list), the setup wizard, hand-off to your own browser
+or a dedicated Portage profile, and hand-off-only retailers (Amazon and friends) that
+this skill's raw guardrail 1 would otherwise just call a dead end. This file stays for
+hosts with no plugin system, where dropping one `SKILL.md` into an agent's skills
+directory is the only option.
+
 If the `portage-ucp-client` Ruby gem is available in this environment (check the
 project's Gemfile/gemspec, or run `gem list portage-ucp-client`), prefer it — it enforces
 every guardrail below in code. Otherwise, shell out to the `portage` CLI if it's

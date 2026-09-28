@@ -206,6 +206,95 @@ portage find --query "usb-c cable" --max-price 20 --json
 #    each store's catalog decides fit
 ```
 
+## Building a local store index
+
+A fresh install only knows the stores in `stores.yml` or whatever a search
+backend returns for one query. `portage index` gives `find` a standing,
+local list to route queries to instead, built from sources you can read:
+
+```bash
+portage index sources                     # what each source fetches, and its file path
+portage index build                       # every default source (Shopify's open catalog, your stores.yml)
+portage index show --stores --json
+```
+
+Stored at `~/.portage/index/{stores,products}.json`, never in git, and
+never carrying a price or stock field — those stay live. `find` also
+merges in the repo's own published known-stores list automatically (over
+jsdelivr, cached and refreshed periodically) even before you run `index
+build` yourself. The index is untrusted data on the same footing as any
+other `find` candidate: it never feeds `policy set --allow` and never lets
+`--yes` complete a purchase without you naming the store. Full reference:
+[CLI reference § Local store index](cli-reference.md#local-store-index-portage-index).
+
+## Seeding the index from your own browsing history
+
+```bash
+portage browser import --dry-run --json
+```
+
+Reads your browser's bookmarks and history, reduces them to domains, and
+keeps only the ones that answer `/.well-known/ucp` (or are already known).
+Nothing is written until you review the `kept[]` list and re-run with
+`--yes`:
+
+```bash
+portage browser import --yes --exclude some-domain-you-declined.example
+```
+
+Never reads cookies, saved passwords, or browser autofill data — only
+bookmarks/history files, and only bookmarks/history. Details: [CLI
+reference § Browser import](cli-reference.md#browser-import-tier-a).
+
+## The setup wizard
+
+On a real terminal, `portage setup` walks through the steps above
+interactively — shipping address, search API keys, retailer offer source
+keys, the agent profile, browser import, index build, spending caps and
+hand-off target — one skippable step at a time, never echoing a secret
+back:
+
+```bash
+portage setup
+```
+
+Piped, from CI, or with `--json`, it's exactly `portage doctor --json`'s
+read-only report — always safe to run non-interactively.
+
+## Hand-off: how a purchase actually finishes (Tiers A/B/C)
+
+Most stores don't let `portage buy` complete payment itself. It builds the
+cart/checkout it can, then hands off:
+
+```bash
+portage buy https://some-shop.example --query "mug" --yes --handoff-target default
+```
+
+- **Tier A, `default`** (the default): opens the checkout in your own
+  browser — your login, saved address and saved card all apply.
+- **Tier B, `profile`** (opt-in): drives a dedicated Portage browser
+  profile instead, up to the point of payment:
+
+  ```bash
+  portage browser profile open   # once, to sign into your shopping sites
+  portage buy https://some-shop.example --query "mug" --yes --handoff-target profile
+  ```
+
+  Never your default browser profile, and limited to the store's own
+  domain plus its checkout host — Portage never touches a payment field or
+  clicks pay.
+- **Tier C, hand-off only**: Amazon (every marketplace) and any host you
+  add to `~/.portage/config.json`'s `handoff_only_hosts` are never sent a
+  request at all — `portage buy` opens the page (or a cart-add/search URL)
+  and reports `outcome: "handoff_only"` with a `legal_notice`, since these
+  sites restrict automated purchasing agents in their own terms.
+
+Portage is open-source software provided as-is, without warranty of any
+kind (MIT) — how you use it on any given site, and compliance with that
+site's terms, is your own responsibility. Full detail, including the
+`agent:<name>` hand-off target for an approved external agent: [CLI
+reference § Tiers](cli-reference.md#tiers-how-a-purchase-actually-finishes).
+
 ## Running behind a proxy
 
 ```bash

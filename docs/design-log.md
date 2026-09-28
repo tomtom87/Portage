@@ -3450,3 +3450,62 @@ marker appeared at any stage.
   browsers were quit (no Chrome process left with the run's profile).
   Results are in `rerun-result.json` and `rerun-result-heavy.json`, with
   tokens redacted.
+
+## 52. Buy skill's three tiers, and why Tier C is hand-off only (2026-09-28)
+
+`docs/plans/buy-skill-and-local-browser.md` Phases 1-7 landed with no single
+place explaining *why* a purchase ends up where it does — the plan's own
+Tiers table was the closest thing, and it lives in a doc excluded from the
+published site. Phase 8 (docs) is the place to say it once, since every
+other doc now points back here.
+
+**Three tiers, in the order a shopper actually meets them.** Tier A is the
+default and needs nothing from the shopper: `portage buy` opens the
+checkout in their own browser, where their login, saved address and saved
+card already apply — the same hand-off this gem has done since before this
+plan existed. Its only opt-in half is `portage browser import`, reading
+bookmarks/history to seed the local store index; it's Tier A because it's
+still just naming *candidates* for the same default hand-off, never driving
+anything itself. Tier B is opt-in and does more: a dedicated Portage
+browser profile (never the shopper's default one) drives the cart via
+WebMCP and stops exactly at payment, where the shopper's own gesture
+triggers their browser's own card autofill. Tier C is hosts Portage never
+drives at all — it opens a page or builds a URL and stops.
+
+**Why Tier C exists, and why it's on by default.** Amazon's Conditions of
+Use restrict robots and automated data extraction, and in November 2025 it
+sued Perplexity over an agent (Comet) that shopped through users' own
+logged-in sessions — being the user's own browser and account was not a
+defence. That's the fact pattern this plan is built not to repeat: nothing
+in Tier A or B is meaningfully different from what Comet did (a browser
+acting under the user's own session), so the one thing that actually avoids
+the risk is not automating that class of site at all, regardless of tier.
+Hand-off-only is therefore its own tier, not a flag on Tier A/B, and it
+defaults *on* for the hosts named — walmart.com/ebay.com/bestbuy.com join
+unconditionally in Phase 7 for an unrelated, simpler reason: there's no UCP
+and no adapter for any of them, so there's nothing to automate regardless
+of terms.
+
+**The user-editable list only ever changes the message, never the code
+path.** `~/.portage/config.json`'s `handoff_only_hosts` lets a shopper drop
+Amazon from their own list or add another host — decision 5's own point is
+that this is safe *because* Portage has no automation code for a site
+without UCP or WebMCP to fall back to once a host is removed. Dropping
+Amazon doesn't unlock any cart/checkout capability that was hiding behind
+the check; `Buy#call`'s hand-off-only branch is a short-circuit before
+`discover`, not a permission gate in front of real automation. Read the
+other way: adding a host to the list can't be used to get a UCP-speaking
+store treated as hand-off-only in bad faith either, since a store that
+*does* speak UCP or WebMCP just gets Tier A/B's ordinary flow like any
+other — the flag only matters for hosts with nothing else to fall back to.
+That asymmetry is why the config key changes so little in practice: it's a
+message and a routing decision, not a capability toggle.
+
+**The as-is disclaimer says whose call it is.** Portage is MIT-licensed,
+open-source, provided as-is without warranty — `HandoffOnly::LEGAL_NOTICE`
+says so verbatim in every `handoff_only` report, `doctor`, `portage setup`'s
+Hand-off step, and the `buy` skill's own reference doc, because how a
+shopper uses this on any given site, and whether that complies with that
+site's own terms, is their call and their responsibility, not a legal
+opinion this gem is positioned to give. `legal_notice` sticks to what a
+site's terms say and stops there.
