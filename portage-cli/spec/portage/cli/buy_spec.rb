@@ -167,6 +167,20 @@ RSpec.describe Portage::Cli::Buy do
 
       expect(checked_out_id([in_stock, sold_out], product_id: "p1")).to eq("v1")
     end
+
+    # OfferSources::ShopifyCatalog hands Find an offer whose product_id is
+    # the merchant's own variant gid, not the catalog's global product id
+    # (see that class) — --product-id then names a variant, and the product
+    # carrying it is matched by that variant, not by its own top-level id.
+    it "matches and buys the variant OfferSources::ShopifyCatalog named, not just a top-level product id" do
+      other = { "id" => "p1", "variants" => [variant("v1", true)] }
+      catalog_match = { "id" => "gid://shopify/p/9",
+                        "variants" => [variant("gid://shopify/ProductVariant/9", true),
+                                       variant("gid://shopify/ProductVariant/10", true)] }
+
+      expect(checked_out_id([other, catalog_match], product_id: "gid://shopify/ProductVariant/9"))
+        .to eq("gid://shopify/ProductVariant/9")
+    end
   end
 
   describe "native UCP, cart+checkout advertised" do

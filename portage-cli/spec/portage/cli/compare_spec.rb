@@ -35,9 +35,13 @@ RSpec.describe Portage::Cli::Compare do
     allow(Portage::Ucp::Client).to receive(:discover) { |origin| sessions_by_origin[origin] }
   end
 
+  # offer_sources: [] — a live ShopifyCatalog would otherwise dial a real
+  # endpoint on every spec here, same reasoning as find_spec.rb's own
+  # `find` helper.
   def compare(origin_url: "https://origin.example", origin_product_id: "orig1", backends: [], **overrides)
     described_class.new(origin_url: origin_url, origin_product_id: origin_product_id,
-                        find_options: { backends: backends, cache: cache, throttle: 0 }, **overrides)
+                        find_options: { backends: backends, cache: cache, throttle: 0, offer_sources: [] },
+                        **overrides)
   end
 
   it "reports the origin URL as unparseable instead of raising" do

@@ -3,6 +3,8 @@ require "portage/ucp"
 require "portage/ucp/client"
 
 require_relative "search_backends"
+require_relative "offer_sources"
+require_relative "agent_profile_url"
 require_relative "probe_cache"
 require_relative "decisions"
 require_relative "user_agent"
@@ -29,23 +31,30 @@ module Portage
 
       # @param max_price [Integer, nil] minor units, matching the protocol's
       #   own money representation — the CLI converts from major units.
-      def initialize(query:, limit: MAX_PROBES, max_price: nil, backends: nil, cache: nil, throttle: THROTTLE)
+      # @param offer_sources [Array<#offers>, nil] a second kind of backend
+      #   (OfferSources) that answers offers directly, with no manifest
+      #   probe of its own — see #call. nil (the default) is
+      #   OfferSources.default.
+      def initialize(query:, limit: MAX_PROBES, max_price: nil, backends: nil, cache: nil, throttle: THROTTLE,
+                     offer_sources: nil)
         @query = query.to_s
         @limit = [limit, MAX_PROBES].min
         @max_price = max_price
         @backends = backends || SearchBackends.default
         @cache = cache || ProbeCache.new
         @throttle = throttle
+        @offer_sources = offer_sources || OfferSources.default
       end
 
       def call
         return report(message: "Nothing to search for — pass --query.") if @query.strip.empty?
 
         candidates = candidate_origins
-        return report(candidates: candidates, message: no_candidates_message) if candidates.empty?
-
         stores = probe(candidates)
-        offers = rank(stores.flat_map { |store| offers_for(store) })
+        sourced = source_offers
+        return report(candidates: candidates, message: no_candidates_message) if nothing_to_go_on?(candidates, sourced)
+
+        offers = rank(sourced + stores.flat_map { |store| offers_for(store) })
         report(candidates: candidates, stores: stores.map { |s| s.slice(:origin, :source, :checkout) },
                offers: offers, message: summary(candidates, stores, offers))
       rescue Portage::Ucp::Client::MissingAgentProfileError
@@ -55,6 +64,11 @@ module Portage
       end
 
       private
+
+      # Neither the URL backends nor any OfferSource found anything to
+      # probe or rank — split out of #call to keep its own branching under
+      # the complexity budget.
+      def nothing_to_go_on?(candidates, sourced) = candidates.empty? && sourced.empty?
 
       # --- Step 1: ask the backends who might sell this ---
 
@@ -79,6 +93,18 @@ module Portage
         return if existing && !upgradable?(existing, uri)
 
         seen[uri.host] = { origin: origin_of(uri), source: existing ? existing[:source] : backend.name }
+      end
+
+      # --- Step 1b: ask any OfferSources directly, no probe needed ---
+
+      # Each source already returns Find#offer-shaped hashes (store:/
+      # source:/checkout:/product_id:/title:/amount:/currency:/url:) and
+      # swallows its own failures, so nothing here needs the try/rescue
+      # #urls_from gives the URL backends.
+      def source_offers
+        @offer_sources.flat_map do |source|
+          source.offers(@query, limit: PER_STORE_RESULTS, context: BuyerContext.from_env)
+        end
       end
 
       def upgradable?(existing, uri)
@@ -156,7 +182,7 @@ module Portage
       # before answering any call (see Transports::Http) — the own-store
       # loopback path ignores it harmlessly.
       def agent_meta
-        { agent_profile: ENV.fetch("PORTAGE_AGENT_PROFILE", nil) }
+        { agent_profile: AgentProfileUrl.resolve }
       end
 
       def offer(store, product)
