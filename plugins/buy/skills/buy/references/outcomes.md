@@ -2,7 +2,7 @@
 
 Branch on `outcome`, never on `message`. **Only `purchased` means money moved.** Whenever a report carries a `checkout_url`, give it to the user.
 
-A hand-off outcome's `handoff` object (when present) says what actually happened with that URL: `url`, `opened` (browser opened for `default`), `notified`/`notify_error` (`--notify-webhook`), `handoff_target` (which of `default`/`print`/`profile`/`agent:<name>` ran — see `--handoff-target` below), and, for `agent:<name>`, `agent_delivered`/`agent_error`.
+A hand-off outcome's `handoff` object (when present) says what actually happened with that URL: `url`, `opened` (browser opened for `default`, or navigated in the Portage profile for `profile`), `notified`/`notify_error` (`--notify-webhook`), `handoff_target` (which of `default`/`print`/`profile`/`agent:<name>` ran — see `--handoff-target` below), and, for `agent:<name>`, `agent_delivered`/`agent_error`. For `profile` with no browser attached, `target_message` says to run `portage browser profile open` first.
 
 ## Done
 
@@ -62,4 +62,19 @@ Not a purchase, so no `outcome`. Branch on `error`, then `saved` / `needs_confir
 | `error: "reader_unavailable"` | The `sqlite3` (or, for Safari, `plutil`) command is missing | Tell the user; nothing else reads those files. |
 
 Each `kept[]` entry's `verdict` is `ucp` (answered `/.well-known/ucp`), `indexed` / `known` (already in the local index / the published known-stores list, not probed), `webmcp`, or `handoff_only`. An empty `category_names` means the store is only used when the user names it.
+
+## `portage browser profile init|open|status --json`
+
+Not a purchase, so no `outcome`. `init`/`status` don't raise; `open` reports an `error` instead of raising.
+
+| Field | Meaning | Do |
+|---|---|---|
+| `init`: `created: true` | The dedicated profile directory exists (created if it wasn't there) | Tell the user to run `open` next, then sign into their shopping sites there once. |
+| `status`: `running: false` | Nothing is listening on this profile's remote-debugging port | Suggest `portage browser profile open` before `buy --handoff-target profile`. |
+| `status`: `running: true` | The profile is up — merges in `/json/version`'s own fields | Safe to buy with `--handoff-target profile`. |
+| `open`: `running: true`, `target` | Launched (or already running) and attached to a tab | Ready — `portage buy ... --handoff-target profile` now builds the cart in this browser. |
+| `open` `error: "BrowserNotFoundError"` | The requested browser (or the auto-detected default, chrome) isn't installed | Relay `message`; try `--browser edge\|brave\|arc`. |
+| `open` `error: "LaunchError"` | The browser started but never answered its own debugging port in time | Relay `message`; try again, or check nothing else is using `--port`. |
+
+This is a dedicated profile, never the user's default one — Portage never reads its password, cookie or autofill store. Firefox and Safari aren't supported for driving (Chromium-family only: `chrome`/`edge`/`brave`/`arc`).
 

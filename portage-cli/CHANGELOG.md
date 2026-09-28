@@ -6,6 +6,61 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Portage browser profile** (`docs/plans/buy-skill-and-local-browser.md`
+  Phase 6, Tier B). `portage browser profile init|open|status [--browser
+  chrome|edge|brave|arc] [--port N] [--url URL (open only)] [--json]`
+  manages a dedicated Chromium-family profile directory under
+  `~/.portage/browser/<browser>/profile`, launched with remote debugging
+  bound to that profile only — never the browser's own default profile
+  (`init!` only ever creates its own directory; `Launcher` only ever
+  passes that directory as `--user-data-dir`; Chrome 136+ refuses remote
+  debugging on the default profile anyway). `open` launches the browser
+  if it isn't already running on its own port, waits for its CDP endpoint
+  to answer, then attaches to an existing tab or opens a new one at
+  `--url`; `status` reports `/json/version`; the user signs into their
+  shopping sites in this profile once — nothing here ever reads a
+  credential, cookie or autofill store from it.
+  `--handoff-target profile` now actually does something: `Cli.
+  run_buy`/`execute_buy` attaches a `Portage::Cli::BrowserProfile::Bridge`
+  as `Buy#webmcp_bridge` whenever `portage-ucp-webmcp` is installed and
+  the profile is running (`Cli.profile_webmcp_bridge`) — reusing an
+  existing tab already on the store's host, or opening a new one — so
+  `#webmcp_flow` (`docs/plans/webmcp-universal-outbound.md`) drives that
+  same browser, and Phase 3's `WebMcp::Autofill` runs in it unchanged
+  (`Bridge#headless?` is always `false`, so `autofill_needs_headed_browser`
+  never fires for this profile — asserted directly). `Buy#dispatch_to_target`'s
+  `"profile"` case now navigates the attached bridge to the checkout URL
+  and reports `opened: true`, or — no bridge attached (gem missing,
+  profile not running) — tells the shopper to run `portage browser
+  profile open` first, same "report, never raise" posture as every other
+  hand-off dispatch.
+  Driving is limited to a domain allowlist (`Portage::Cli::BrowserProfile::
+  Allowlist`, reusing `HandoffOnly`'s own host normalization/matching):
+  seeded with the store's own host, and permitted to include a checkout
+  host only when `Bridge#navigate` deliberately opens it — a page-driven
+  navigation to anything else raises `DomainNotAllowedError` on the very
+  next driven call (there's no navigation-event hook in this minimal a
+  CDP client, so it's caught on next use, not mid-navigation), which
+  `Bridges::ScriptEvaluator#evaluate` re-wraps as its own `BridgeError` —
+  still caught by `Buy#webmcp_flow`'s existing rescue, so the run stops
+  the same way any other WebMCP failure does. `Portage::Cli::BrowserProfile::
+  CdpSocket` is a small, dependency-free WebSocket JSON-RPC client (RFC
+  6455 handshake, masked outbound / unmasked inbound frames) for Chrome
+  DevTools Protocol's `Runtime.evaluate`/`Page.navigate`/`Page.enable`;
+  `Portage::Cli::BrowserProfile::Cdp` covers the plain-HTTP half
+  (`/json/version`, `/json/list`, `/json/new`). No raw card data is ever
+  read or typed by any of this; Portage never touches a payment field and
+  never clicks pay. `portage-cli`: 865 → 925 examples (+60), 0 failures;
+  `rubocop` clean (one documented `Metrics/ClassLength` exclude for
+  `CdpSocket`, same "one small self-contained protocol end to end"
+  rationale already given to `Index::Builder`/`BrowserImport::Importer`).
+  Specs never launch a real browser or open a real socket — `Process.spawn`
+  is injected (`Launcher`), CDP HTTP calls go through WebMock
+  (`Portage::Ucp::Support::Connection`, same as every other network call
+  in this gem), and the WebSocket layer is proven against an in-memory
+  fake transport (`cdp_socket_spec.rb`), including RFC 6455's own §1.3
+  worked handshake example.
+
 - **Hand-off targets + hand-off-only hosts** (`docs/plans/
   buy-skill-and-local-browser.md` Phase 5). `portage buy --handoff-target
   default|print|profile|agent:<name>` (also `PORTAGE_HANDOFF_TARGET` /
