@@ -21,7 +21,10 @@ module Portage
         # path (docs/plans/webmcp-universal-outbound.md Phase 1) reads it
         # after calling a tool that only navigates the tab rather than
         # returning data, and checks `respond_to?(:location)` first since a
-        # hand-rolled Bridge may not implement it.
+        # hand-rolled Bridge may not implement it. `#headless?` and
+        # `#autofill` (Phase 3) are optional the same way, for the same
+        # reason: `Cli::Buy`'s autofill path checks `respond_to?` before
+        # using either.
         class ScriptEvaluator
           # How much of a driver's own error text a BridgeError quotes — the
           # same cap portage-ucp-decision puts on a Jev reply. Enough to name
@@ -31,22 +34,32 @@ module Portage
 
           # Ferrum: `Ferrum::Page#evaluate_async` passes its resolve callback
           # as `arguments[0]`.
-          def self.ferrum(page, timeout: 30)
-            new(evaluate: ->(expression) { page.evaluate_async("(#{expression}).then(arguments[0])", timeout) })
+          #
+          # @param headless [Boolean, nil] whether the browser this page runs
+          #   in has no visible window — Ferrum knows this about itself
+          #   (`browser.options[:headless]`), so a caller building this from
+          #   a Ferrum::Browser can pass it straight through. nil (unset)
+          #   means "unknown", which Phase 3's autofill treats the same as
+          #   headless (see Autofill) — a shopper who can't see the browser
+          #   can't pay in it either way, so the safe default when this
+          #   isn't declared is to refuse, not to assume headed.
+          def self.ferrum(page, timeout: 30, headless: nil)
+            new(evaluate: ->(expression) { page.evaluate_async("(#{expression}).then(arguments[0])", timeout) },
+                headless: headless)
           end
 
           # Playwright (playwright-ruby-client): `Page#evaluate` awaits a
           # returned promise itself.
-          def self.playwright(page)
-            new(evaluate: ->(expression) { page.evaluate("() => #{expression}") })
+          def self.playwright(page, headless: nil)
+            new(evaluate: ->(expression) { page.evaluate("() => #{expression}") }, headless: headless)
           end
 
           # Selenium WebDriver: `execute_async_script` passes its done
           # callback as the last argument.
-          def self.selenium(driver)
+          def self.selenium(driver, headless: nil)
             new(evaluate: lambda { |expression|
               driver.execute_async_script("var done = arguments[arguments.length - 1]; (#{expression}).then(done);")
-            })
+            }, headless: headless)
           end
 
           # The expression #list_tools/#execute_tool hand to `evaluate:`.
@@ -55,10 +68,18 @@ module Portage
               "#{JSON.generate(input)})"
           end
 
-          def initialize(evaluate:)
+          # The expression #autofill hands to `evaluate:` — assets/autofill.js
+          # (Phase 3), not consumer.js's tool-call protocol: this drives the
+          # checkout page's own DOM directly rather than a WebMCP tool.
+          def self.autofill_expression(fields, selectors)
+            "(#{Assets.read('autofill.js')})(#{JSON.generate(fields)}, #{JSON.generate(selectors)})"
+          end
+
+          def initialize(evaluate:, headless: nil)
             raise ArgumentError, "evaluate: must respond to #call" unless evaluate.respond_to?(:call)
 
             @evaluate = evaluate
+            @headless = headless
           end
 
           def list_tools
@@ -76,6 +97,29 @@ module Portage
           # BridgeError.
           def location
             evaluate("Promise.resolve(window.location.href)")
+          end
+
+          # @return [Boolean, nil] nil when the caller never said — see
+          #   .ferrum's note on why that's treated as headless by Autofill.
+          def headless?
+            @headless
+          end
+
+          # Fills the checkout page's own contact/shipping fields directly —
+          # Phase 3's autofill, never a WebMCP tool call. See assets/autofill.js
+          # for exactly what it will and won't touch (never a payment field,
+          # never a submit control) and Autofill for the Ruby-side gate this
+          # sits behind (headless?, a CAPTCHA/challenge check baked into the
+          # script itself).
+          #
+          # @param fields [Hash{String=>String}] autocomplete token => value.
+          # @param selectors [Hash{String=>String}] a preset's fallback CSS
+          #   selectors, tried only when no element on the page carries a
+          #   matching `autocomplete` attribute for that token.
+          # @return [Hash] `{"blocked" => String|nil, "filled" => [...],
+          #   "unmatched" => [...], "rate" => [...]}`.
+          def autofill(fields, selectors: {})
+            unwrap(evaluate(self.class.autofill_expression(fields, selectors)))
           end
 
           private

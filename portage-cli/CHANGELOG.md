@@ -6,6 +6,34 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Approved autofill of the store's checkout**
+  (docs/plans/webmcp-universal-outbound.md Phase 3). Opt-in, per run:
+  `--autofill`, or `PORTAGE_WEBMCP_AUTOFILL=approve` / config.json's
+  `"webmcp_autofill": "approve"` (`Portage::Cli::WebmcpAutofillMode`) — off
+  by default, and a generic truthy value like `"true"` doesn't turn it on,
+  only the literal `"approve"`. Even opted in, nothing is typed until the
+  shopper approves the exact field/value pairs in a new prompt
+  (`Portage::Cli::WebmcpAutofillConfirm`) — refused outright with no prompt
+  at all under `--json` or with no TTY, same posture as Phase 2's
+  `WebmcpMappingConfirm`. Fields are contact email
+  (`PORTAGE_SHIP_EMAIL`, new) and the shipping address `Portage::Cli::
+  ShippingProfile` already reads from `PORTAGE_SHIP_*`, mapped onto WHATWG
+  autocomplete tokens by the new `Portage::Cli::WebmcpAutofillFields`.
+  `Buy#webmcp_handoff_checkout_flow` runs this once the bridge's browser has
+  navigated to the store's own checkout (right after the hand-off tool
+  call), via `portage-ucp-webmcp`'s new `WebMcp::Autofill` — never a payment
+  field, never the pay button, and the run still always ends in
+  `express_stop`, unchanged. A headless bridge (or one that never says)
+  reports `autofill_needs_headed_browser`; a CAPTCHA/challenge on the page
+  reports `autofill_blocked`; either way nothing is touched. The report
+  gets a new `autofill:` key only when an attempt was actually made — a run
+  with the mode off, or nothing configured to fill, looks exactly like it
+  did before Phase 3 existed. `Buy.new` gained `autofill:` (the
+  `--autofill` flag's value) and `webmcp_autofill_confirm:` (injectable, for
+  specs). Live checks (does autofill actually reach a real Shopify checkout
+  page's fields; is the cheapest-rate heuristic right against a real rate
+  picker) are pending — no browser or live storefront available this
+  session; noted in the plan's Progress log.
 - Fix: `Buy#webmcp_flow` never ran against a real page. The Session
   `WebMcp.connect` returned had `nil` capabilities, so the cart/checkout
   check always fell through to adapter detection. Fixed in

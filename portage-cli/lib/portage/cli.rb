@@ -447,6 +447,7 @@ module Portage
         parser.on("--product-id ID") { |v| buy[:product_id] = v }
         parser.on("--yes") { buy[:yes] = true }
         parser.on("--dry-run") { buy[:dry_run] = true }
+        parser.on("--autofill") { buy[:autofill] = true }
         parser.on("--json") { parsed[:json] = true }
         add_handoff_options(parser, buy)
         add_wait_options(parser, parsed)
