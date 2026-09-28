@@ -437,6 +437,7 @@ module Portage
           return build_report(source: "webmcp", outcome: "no_match", browse: true, checkout: true,
                               products: products, message: no_match_message)
         end
+        return webmcp_handoff_dry_run_report(products, product, preset) if @dry_run
 
         created = session.create_cart(line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
                                       context: buyer_context, meta: agent_meta)
@@ -447,6 +448,25 @@ module Portage
         autofill = attempt_webmcp_autofill(preset)
         webmcp_handoff_report("webmcp", products, cart.merge("continue_url" => url_from_handoff(result)), warnings,
                               autofill: autofill)
+      end
+
+      # Unlike #full_buy's dry run (which still creates a UCP checkout, since
+      # that's a document the store drops on its own), a dry run here stops
+      # before `create_cart`: every step after it changes something outside
+      # this process — a real cart on the store, the bridge's own tab
+      # navigated to checkout, and (with autofill on) typing into that page.
+      # None of that is safe to do on a preview run, so this only reports
+      # what the run would have done. No checkout_id either, so History
+      # records it as a search, not a purchase.
+      def webmcp_handoff_dry_run_report(products, product, preset)
+        build_report(
+          source: "webmcp", outcome: "dry_run", browse: true, checkout: true, products: products, handoff: nil,
+          decisions: @decisions.dup,
+          would: { line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
+                   handoff_checkout: preset.handoff_checkout, autofill: webmcp_autofill_approved? },
+          message: "Dry run — would add #{product['title'] || line_item_id_of(product)} to the store's cart and " \
+                   "hand off through #{preset.handoff_checkout}. Nothing was added, and no checkout was opened."
+        )
       end
 
       # Best-effort: the hand-off tool's own result shape isn't documented

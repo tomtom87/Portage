@@ -6,6 +6,12 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fixed: `dry_run: true` was ignored on the WebMCP hand-off path**
+  (docs/design-log.md §51). `Buy#webmcp_handoff_checkout_flow` still added
+  to the store's real cart, sent the bridge's tab to checkout and ran
+  autofill. It now stops after the read-only search and returns a
+  `dry_run` report with a `would:` key (line item, hand-off tool, whether
+  autofill would run). No cart, no hand-off, no prompt, nothing typed.
 - **Docs for Phases 1-3** (docs/plans/webmcp-universal-outbound.md Phase 4,
   no code change): the README's "WebMCP (library use, opt-in)" section now
   covers the schema-matched/confirmed fallback for a page no preset

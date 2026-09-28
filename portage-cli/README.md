@@ -518,6 +518,12 @@ match prompts on a real TTY with `--json` off; under `--json` or with no
 TTY it stops instead (outcome `webmcp_mapping_unconfirmed`) and returns the
 proposed mapping for the caller to pass back.
 
+`dry_run: true` against a page whose preset hands off through its own
+checkout tool (Shopify's `proceed_to_checkout`) stops after the read-only
+product search: nothing is added to the store's cart, the tab isn't sent to
+checkout and nothing is autofilled. The `dry_run` report carries a `would:`
+key with the line item, the hand-off tool and whether autofill would run.
+
 Once the flow hands off to the store's own checkout page, the shopper can
 opt into having it pre-filled: `--autofill`, or
 `PORTAGE_WEBMCP_AUTOFILL=approve` / config.json's `"webmcp_autofill":

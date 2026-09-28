@@ -3330,3 +3330,114 @@ single rate puts it in a sibling `-secondary` div), and `RATE_PRICE`'s
 currency list, which has no `฿`/`THB` and would miss rates on a checkout
 still in Thai baht. Trimmed markup is in
 `tmp/live-checks-2026-09-28/rate-picker.html`.
+
+## 51. autofill.js parses, dry runs stop before the cart, and the live rerun (2026-09-28)
+
+Entry 50 left `assets/autofill.js` unparseable and a few smaller gaps open.
+This entry fixes them and reruns the live checks against the unmodified
+library.
+
+**The `*/` bug, and why no spec caught it.** The header comment said
+`PORTAGE_SHIP_*/buyer context`. That `*/` ends a block comment, so the rest
+of the line was parsed as code and the file raised `SyntaxError: Unexpected
+identifier 'context'` before anything ran. It shipped because no spec ever
+handed the real file to a JavaScript parser. `autofill_spec.rb` tested
+`Autofill.call` against a fake bridge whose `#autofill` returned a canned
+Hash, and `script_evaluator_spec.rb` only checked that the expression
+*started with* `Assets.read('autofill.js')`, passed to a stubbed `evaluate:`.
+Both are right for what they test, and neither ever evaluates the script.
+This is entry 47's gap again: a double standing in for its collaborator
+hides a broken collaborator. The other three assets had never hit this
+because `assets_spec.rb` already runs them under node. The comment now says
+"the PORTAGE_SHIP_* variables and buyer context". Two new specs close the
+gap:
+
+- `asset_syntax_spec.rb` runs `node --check` on each asset **in the form the
+  gem hands a browser**: `ScriptEvaluator.autofill_expression`/`.expression`
+  for the two function-expression assets (`(<src>)(...)`), and
+  `WebMcp.polyfill_js`/`Registrar#to_js` for the two plain scripts. Wrapping
+  every file as `(<src>);` doesn't work: polyfill.js and registrar.js end in
+  `;`, and `(...;)` is itself a syntax error. The spec also fails if a file in
+  `assets/` isn't in its list, so a new asset can't skip the check. It skips
+  with a message when `node` isn't on PATH. A run against the pre-fix file
+  fails with the exact error from entry 50. polyfill.js, consumer.js and
+  registrar.js all parse. Every `*/` in them closes a comment it was meant
+  to close: their header comments and a few one-line `/* … */` notes.
+- `autofill_js_spec.rb` runs the real script through the real
+  `ScriptEvaluator#autofill`, in a `NodeBrowser` tab holding a small fake
+  checkout DOM (`spec/support/fake_checkout_dom.js`, no npm dependency). The
+  fake's value setters throw `TypeError: Illegal invocation` when called on
+  the wrong element type, as Chrome's do, so the `<select>` bug below
+  actually fails there. `NodeBrowser` now reads node's stdout as UTF-8. With
+  no `LANG` set Ruby read it as US-ASCII and choked on the first `฿`.
+
+**`<select>` through `checkout_selectors`.** `fillField` called
+`HTMLInputElement`'s value setter on anything that wasn't a textarea, which
+throws on a `<select>`. It now picks the select's own option: exact value
+first, then visible text (case-insensitive, trimmed), set through
+`HTMLSelectElement`'s setter, with the same input/change events. If no
+option matches, the token goes in `unmatched`. Nothing throws, and the
+select is left as it was.
+
+**Rate prices in any currency.** `RATE_PRICE` only knew
+USD/EUR/GBP/CAD/AUD and `$£€`. Entry 50 saw this checkout in THB until the
+UK address switched it to GBP. It now takes any `\p{Sc}` symbol or any
+three-letter uppercase code, before or after the amount. The amount can
+carry thousands separators: the old pattern would have read `฿1,950.00` as
+1.95. The last separator counts as the decimal point only when one or two
+digits follow it. "Free" still counts as 0. Any three uppercase letters
+next to a number count as a currency, so a rate labelled "UPS 5.99" reads
+as 5.99. That is almost always the price anyway.
+
+**Dry runs on the hand-off path.** `Buy#webmcp_handoff_checkout_flow` never
+checked `@dry_run`. A library caller passing `dry_run: true` still added to
+the store's real cart, navigated the bridge's tab to checkout and ran
+autofill (including its prompt). `#full_buy`'s dry run goes as far as
+`create_checkout`, because a UCP checkout is a server-side document the
+store expires on its own. This path is different: every step after the
+search changes something outside the process. It now returns right after
+product selection with outcome `dry_run`, `handoff: nil`, and a `would:`
+key (`line_items`, `handoff_checkout`, `autofill`: whether the mode is
+approved, with no prompt). There's no `checkout_id`, so `History` records
+it as a search. Three `buy_spec` cases cover it, and all three fail without
+the guard.
+
+**Live rerun.** Same setup as entry 50 (headed Ferrum, polyfill, The Light
+Yard, fake identity, qty 1), driven by
+`tmp/live-checks-2026-09-28/live_check.rb`. The script now puts the repo's
+own `lib/` dirs first on the load path, checks that `Assets::DIR` is under
+the repo, and has no in-memory patch. Nothing was clicked, and nothing went
+into the page except through `Autofill.call`. No CAPTCHA or challenge
+marker appeared at any stage.
+
+- **Check 2 passed as committed.** The first `Autofill.call` returned
+  `:filled` with all 8 tokens (`email`, `shipping given-name`/`family-name`/
+  `address-line1`/`address-level2`/`postal-code`/`country`/`tel`) and
+  `unmatched: []`. Field snapshots before and after each call show no
+  changed `cc-*`/`transaction-*`/hidden/password field. The page has none
+  of those in its top document; card entry is six
+  `checkout.pci.shopifyinc.com` iframes. The only fields that changed were
+  the requested ones, Shopify's `autofill_*` capture copies of them, and
+  selects Shopify updates itself from those values (`countryCode`,
+  `phone_country_select`). Every later address variation also returned
+  `:filled` 8/8.
+- **The `<select>` fix, live.** An extra call with only `shipping country`
+  and the fallback `select[name='countryCode']` returned `:filled` in real
+  Chrome. The select already held `GB`, so its value didn't change. Before
+  the fix this call would have thrown.
+- **Check 3 still open: one rate every time.** Across six address/item
+  combinations, all entered by autofill alone with no click, the shipping
+  section only ever showed a single rate, with no radio. For the £39
+  after-care pack: Chesterfield S40 1ZZ, Kirkwall KW15 1AA (Orkney), Belfast
+  BT1 1AA and Portree IV51 9AA (Skye) all gave "Standard, 1 to 2 business
+  days, signature required, £50.00". For a 15 kg bollard light: Chesterfield
+  and Kirkwall both gave the same Standard rate, "Free". The store seems to
+  run one flat UK profile. `selectCheapestRate` returned `[]` every time,
+  which is correct with nothing to choose. Multi-rate markup still hasn't
+  been seen on a real checkout, so `rate-picker-multi.html` wasn't written
+  and it's still unknown whether the price sits in the radio's `<label>`.
+  Checking that needs a store with more than one UK rate.
+- Carts cleared after both runs (`/cart.js` `item_count` 0), and the
+  browsers were quit (no Chrome process left with the run's profile).
+  Results are in `rerun-result.json` and `rerun-result-heavy.json`, with
+  tokens redacted.
