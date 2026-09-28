@@ -56,4 +56,15 @@ RSpec.describe Portage::Ucp::WebMcp::Presets do
   it "names Shopify's hand-off-only checkout tool" do
     expect(described_class::SHOPIFY.handoff_checkout).to eq("proceed_to_checkout")
   end
+
+  it "falls back to Shopify's live-checked selectors for the two tokens its checkout names differently" do
+    expect(described_class::SHOPIFY.checkout_selectors).to eq(
+      "email" => "input[autocomplete='shipping email']",
+      "shipping tel" => "input[autocomplete='shipping tel-national']"
+    )
+  end
+
+  it "has no fallback selector for a payment field" do
+    expect(described_class::SHOPIFY.checkout_selectors.keys.grep(/cc-|transaction-/)).to be_empty
+  end
 end

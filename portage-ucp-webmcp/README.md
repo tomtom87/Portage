@@ -444,10 +444,10 @@ sets a field's `.value`, or checks a radio button already on the page.
 A field the standard `autocomplete` match misses falls back to
 `Presets::Preset#checkout_selectors` — a platform's own CSS selectors,
 keyed by the same autocomplete token, for a checkout whose markup doesn't
-carry one. Shopify's is empty (`{}`) today: no live check has confirmed a
-fallback selector is even needed there, since Shopify Checkout's fields are
-documented to carry standard `autocomplete` values already — but that's
-unverified, not assumed safe, so nothing is guessed in its place.
+carry one. Shopify's has two, both taken from a live checkout on 2026-09-28:
+its email field is `autocomplete="shipping email"` (not `email`) and its phone
+field is `shipping tel-national` (not `shipping tel`). Every other contact and
+shipping field matched by its own `autocomplete` value.
 
 ### Errors
 
