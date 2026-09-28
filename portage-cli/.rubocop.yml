@@ -78,6 +78,13 @@ Metrics/ClassLength:
     # (docs/plans/buy-skill-and-local-browser.md Phase 2b) — breadth of one
     # small method per step, not a class doing several unrelated things.
     - "lib/portage/cli/index/builder.rb"
+    # Same rationale as Index::Builder — BrowserImport::Importer is one
+    # documented algorithm end to end (read allowed files -> reduce to
+    # domains -> local skip/known checks -> capped probe -> classify ->
+    # report; docs/plans/buy-skill-and-local-browser.md Phase 3), with
+    # domain grouping, classification and saving already split into
+    # their own files (domains.rb, categorize.rb, saver.rb).
+    - "lib/portage/cli/browser_import/importer.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and

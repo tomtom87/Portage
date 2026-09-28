@@ -22,8 +22,10 @@ module Portage
         # Runs with no extra opt-in: no bridge required, and no low-yield
         # trade-off to accept up front. `wikidata` and `webmcp_sweep` still
         # show up in `portage index sources`, just not run unless named in
-        # `--sources`.
-        DEFAULT_NAMES = %w[shopify_catalog stores_file browser].freeze
+        # `--sources`. `browser` is listed but never a default — it yields
+        # nothing; `portage browser import` writes those entries itself
+        # (see Sources::Browser).
+        DEFAULT_NAMES = %w[shopify_catalog stores_file].freeze
 
         def self.all = ALL.values.map(&:call)
 

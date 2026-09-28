@@ -9,6 +9,7 @@ require_relative "cli/catalog_products"
 require_relative "cli/agent_profile_url"
 require_relative "cli/offer_sources"
 require_relative "cli/index"
+require_relative "cli/browser_import"
 require_relative "cli/buy"
 require_relative "cli/find"
 require_relative "cli/compare"
@@ -60,6 +61,9 @@ module Portage
              portage index add <url> [--json]
              portage index remove <host> [--json]
              portage index sources [--json]
+             portage browser import [--browser chrome|edge|brave|arc|firefox|safari] [--profile-root DIR]
+                                    [--history-days 90] [--include-product-pages] [--max-probes 200]
+                                    [--exclude HOST,HOST] [--dry-run] [--yes] [--json]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
              portage configure [--require FILE] [--adapter CLASS_NAME] [--json]  (alias for doctor)
              portage setup [--require FILE] [--adapter CLASS_NAME] [--json]      (alias for doctor)
@@ -75,7 +79,8 @@ module Portage
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
-                 "orders" => :run_orders, "index" => :run_index, "doctor" => :run_doctor,
+                 "orders" => :run_orders, "index" => :run_index, "browser" => :run_browser,
+                 "doctor" => :run_doctor,
                  "configure" => :run_doctor, "setup" => :run_doctor, "generate" => :run_generate }.freeze
 
     VERSION_FLAGS = %w[--version -v version].freeze
@@ -992,6 +997,130 @@ module Portage
       sources.map { |s| "#{s[:name]}: #{s[:description]}#{" (#{s[:path]})" if s[:path]}" }.join("\n")
     end
     private_class_method :format_index_sources
+
+    # --- browser (docs/plans/buy-skill-and-local-browser.md Phase 3) ---
+
+    BROWSER_SUBCOMMANDS = { "import" => ->(argv) { run_browser_import(argv) } }.freeze
+
+    def self.run_browser(argv)
+      sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      return BROWSER_SUBCOMMANDS[sub].call(argv) if BROWSER_SUBCOMMANDS.key?(sub)
+
+      warn USAGE
+      1
+    end
+    private_class_method :run_browser
+
+    def self.parse_browser_import_options(argv)
+      opts = { browser: nil, root: nil, history_days: BrowserImport::Importer::DEFAULT_HISTORY_DAYS,
+               include_product_pages: false, max_probes: BrowserImport::Importer::MAX_PROBES, exclude: [],
+               dry_run: false, yes: false, json: false }
+      browser_import_option_parser(opts).parse!(argv)
+      opts
+    end
+    private_class_method :parse_browser_import_options
+
+    def self.browser_import_option_parser(opts)
+      OptionParser.new do |parser|
+        parser.on("--browser NAME", BrowserImport::Profiles::BROWSERS) { |v| opts[:browser] = v }
+        parser.on("--profile-root DIR") { |v| opts[:root] = File.expand_path(v) }
+        parser.on("--history-days N", Integer) { |v| opts[:history_days] = v }
+        parser.on("--max-probes N", Integer) { |v| opts[:max_probes] = v }
+        parser.on("--exclude HOSTS", Array) { |v| opts[:exclude] = v.map(&:strip) }
+        %i[include_product_pages dry_run yes json].each do |flag|
+          parser.on("--#{flag.to_s.tr('_', '-')}") { opts[flag] = true }
+        end
+      end
+    end
+    private_class_method :browser_import_option_parser
+
+    # Reads, reduces and probes (BrowserImport::Importer#plan), shows the
+    # list, and saves only through BrowserImport::Confirm's gate: `--yes`,
+    # or a "y" at a real TTY prompt. Under `--json`/no TTY without `--yes`
+    # nothing is written — the report says `saved: false,
+    # needs_confirmation: true` and exits 0, so an agent shows the user the
+    # list and re-runs with `--yes` only once they've approved it.
+    def self.run_browser_import(argv)
+      opts = parse_browser_import_options(argv)
+      plan = BrowserImport::Importer.new.plan(browser_import_options(opts))
+      return report_browser_import(plan, opts, nil) if plan[:error]
+
+      puts format_browser_import(plan) unless opts[:json]
+      interactive = !opts[:json] && $stdin.tty?
+      decision = BrowserImport::Confirm.new(interactive: interactive).call(plan, yes: opts[:yes],
+                                                                                 dry_run: opts[:dry_run])
+      saved = decision == :save ? BrowserImport::Importer.new.save(plan) : nil
+      report_browser_import(plan, opts, decision, saved)
+    rescue OptionParser::ParseError => e
+      warn "#{e.message}\n#{USAGE}"
+      1
+    end
+    private_class_method :run_browser_import
+
+    def self.browser_import_options(opts)
+      browser = opts[:browser] || BrowserImport::Profiles.detect || "chrome"
+      BrowserImport::Importer::Options.new(
+        browser: browser, root: opts[:root] || BrowserImport::Profiles.default_root(browser),
+        history_days: opts[:history_days], include_product_pages: opts[:include_product_pages],
+        max_probes: opts[:max_probes], exclude: opts[:exclude]
+      )
+    end
+    private_class_method :browser_import_options
+
+    BROWSER_IMPORT_MESSAGES = {
+      dry_run: "Dry run — nothing saved.",
+      nothing: "No shop domains to save.",
+      declined: "Nothing saved.",
+      needs_confirmation: "Nothing saved: there's no terminal to confirm on. Show this list to the user, then " \
+                          "re-run with --yes once they've approved it (--exclude HOST,... drops any they don't want)."
+    }.freeze
+
+    def self.report_browser_import(plan, opts, decision, saved = nil)
+      message = plan[:message] || browser_import_message(decision, saved)
+      if opts[:json]
+        puts JSON.pretty_generate(plan.merge(saved: !saved.nil?, needs_confirmation: decision == :needs_confirmation,
+                                             message: message))
+      else
+        puts message
+      end
+      plan[:error] ? 1 : 0
+    end
+    private_class_method :report_browser_import
+
+    def self.browser_import_message(decision, saved)
+      return "Saved #{saved[:stores]} store(s) and #{saved[:products]} product(s) to your local index." if saved
+
+      BROWSER_IMPORT_MESSAGES.fetch(decision, "Nothing saved.")
+    end
+    private_class_method :browser_import_message
+
+    def self.format_browser_import(plan)
+      lines = browser_import_counts(plan)
+      lines << "Shops found (#{plan[:kept].length}):"
+      plan[:kept].each { |entry| lines << "  #{browser_import_line(entry)}" }
+      lines << "  (none)" if plan[:kept].empty?
+      lines << "#{plan[:products].length} product page(s) to keep." if plan[:products].any?
+      lines.join("\n")
+    end
+    private_class_method :format_browser_import
+
+    def self.browser_import_counts(plan)
+      skipped = plan[:skipped].map { |reason, n| "#{n} #{reason}" }.join(", ")
+      lines = ["Read #{plan[:rows][:history]} history and #{plan[:rows][:bookmark]} bookmark row(s) across " \
+               "#{plan[:domains]} domain(s) from #{plan[:browser]}.",
+               "Skipped #{skipped.empty? ? 'none' : skipped}; probed #{plan[:probed]} " \
+               "(#{plan[:not_ucp]} without UCP, #{plan[:cached_miss]} already known not to)."]
+      lines << "Hit the #{plan[:probed]}-probe cap; #{plan[:unprobed]} domain(s) left unprobed." if plan[:capped]
+      lines
+    end
+    private_class_method :browser_import_counts
+
+    def self.browser_import_line(entry)
+      categories = entry[:category_names].empty? ? "uncategorised" : entry[:category_names].join(", ")
+      "#{entry[:domain]} — #{entry[:verdict]} — #{categories} " \
+        "(#{entry[:sources].join(', ')}, #{entry[:visits]} visit(s))"
+    end
+    private_class_method :browser_import_line
 
     # --- doctor ---
 

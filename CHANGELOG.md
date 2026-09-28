@@ -9,6 +9,19 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Browser import (Tier A) and the `buy` skill's `browser import` steps**
+  (`docs/plans/buy-skill-and-local-browser.md` Phase 3 — full change is in
+  `portage-cli/CHANGELOG.md`). `portage browser import` turns the user's
+  own bookmarks and history into shop-domain index entries: allowed
+  history/bookmark files only (never password, cookie or autofill stores),
+  one `/.well-known/ucp` probe per unknown domain (at most 200), shown to
+  the user and saved only on a TTY "y" or an explicit `--yes`, and never
+  exported. `plugins/buy/skills/buy/SKILL.md`'s browser-import bullet now
+  walks the agent through dry-run → show the list → `--yes` only after the
+  user approves, and what to do with a Full Disk Access / permission
+  error; `references/outcomes.md` gains a `portage browser import --json`
+  table. `plugins/buy/.claude-plugin/plugin.json` bumped to `0.3.0`.
+  `claude plugin validate .` still passes.
 - **Known-stores list moves into the repo, fetched over jsdelivr**
   (`docs/plans/buy-skill-and-local-browser.md` Phase 2c — full change is in
   `portage-cli/CHANGELOG.md`). `portage-cli/known-stores/{stores,

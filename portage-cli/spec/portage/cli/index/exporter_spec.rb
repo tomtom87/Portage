@@ -80,4 +80,57 @@ RSpec.describe Portage::Cli::Index::Exporter do
     expect(exported_products["title:x"]["stores"]).to eq([{ "origin" => "https://real.example",
                                                             "last_seen" => 1000 }])
   end
+
+  describe "browser-import labels (docs/plans/buy-skill-and-local-browser.md Phase 3)" do
+    it "never exports a store found only in history and/or bookmarks" do
+      stores.upsert("https://history.example", sources: ["history"], last_verified: 1000)
+      stores.upsert("https://bookmark.example", sources: ["bookmark"], last_verified: 1000)
+      stores.upsert("https://both.example", sources: %w[bookmark history], last_verified: 1000)
+
+      result = exporter.export(@export_dir)
+
+      expect(result[:stores]).to eq(0)
+      expect(exported_stores).to eq({})
+    end
+
+    it "strips history/bookmark from a store a real source also found" do
+      stores.upsert("https://mixed.example", sources: %w[shopify_catalog history bookmark], last_verified: 1000)
+
+      exporter.export(@export_dir)
+
+      expect(exported_stores["https://mixed.example"]["sources"]).to eq(["shopify_catalog"])
+    end
+
+    it "never exports a product page kept by --include-product-pages, even at a store a real source found" do
+      stores.upsert("https://mixed.example", sources: %w[shopify_catalog history], last_verified: 1000)
+      products.upsert("title:looked-at", origin: "https://mixed.example", seen_at: 1000, title: "Looked at",
+                                         sources: ["history"])
+      products.upsert("title:catalog", origin: "https://mixed.example", seen_at: 1000, title: "Catalog",
+                                       sources: ["shopify_catalog"])
+
+      exporter.export(@export_dir)
+
+      expect(exported_products.keys).to eq(["title:catalog"])
+      expect(exported_products["title:catalog"]["sources"]).to eq(["shopify_catalog"])
+    end
+
+    it "strips the personal label from a product both a real source and the browser saw" do
+      stores.upsert("https://shop.example", sources: ["shopify_catalog"], last_verified: 1000)
+      products.upsert("title:x", origin: "https://shop.example", seen_at: 1000, title: "X", sources: ["bookmark"])
+      products.upsert("title:x", origin: "https://shop.example", seen_at: 2000, title: "X",
+                                 sources: ["shopify_catalog"])
+
+      exporter.export(@export_dir)
+
+      expect(exported_products["title:x"]["sources"]).to eq(["shopify_catalog"])
+    end
+
+    it "still exports a store with an empty sources list, as before" do
+      stores.upsert("https://legacy.example", sources: [], last_verified: 1000)
+
+      exporter.export(@export_dir)
+
+      expect(exported_stores.keys).to eq(["https://legacy.example"])
+    end
+  end
 end

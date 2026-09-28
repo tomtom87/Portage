@@ -1,6 +1,6 @@
 {
   "name": "buy",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Find and buy products from online stores through the portage CLI: search, compare, dry-run, checkout, hand-off to your own browser, order tracking, with spending caps and hard guardrails.",
   "author": {
     "name": "Tom Whitbread",

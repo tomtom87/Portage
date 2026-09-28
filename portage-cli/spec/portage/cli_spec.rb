@@ -1,5 +1,6 @@
 require "spec_helper"
 require "tmpdir"
+require_relative "cli/browser_import/fixtures"
 
 RSpec.describe Portage::Cli do
   let(:report) do
@@ -748,6 +749,139 @@ RSpec.describe Portage::Cli do
 
     it "prints usage for an unknown index subcommand" do
       expect { expect(described_class.run(%w[index nope])).to eq(1) }.to output.to_stderr
+    end
+  end
+
+  describe "browser import (docs/plans/buy-skill-and-local-browser.md Phase 3)" do
+    let(:plan) do
+      { browser: "chrome", profiles: 1, files_opened: ["/x/Default/History"], rows: { history: 3, bookmark: 1 },
+        domains: 3, skipped: { "webmail" => 1 }, already_indexed: 0, known: 0, probed: 2, cached_miss: 0,
+        not_ucp: 1, unprobed: 0, capped: false, products: [],
+        kept: [{ domain: "shop.example", origin: "https://shop.example", verdict: "ucp", sources: ["history"],
+                 visits: 3, categories: { "187" => 3 }, category_names: ["Apparel & Accessories > Shoes"],
+                 capabilities: ["catalog"] }] }
+    end
+    let(:importer) { instance_double(Portage::Cli::BrowserImport::Importer, plan: plan, save: { stores: 1, products: 0 }) }
+
+    before do
+      allow(Portage::Cli::BrowserImport::Importer).to receive(:new).and_return(importer)
+      allow($stdin).to receive(:tty?).and_return(false)
+      # Never look for a real browser profile under the developer's home.
+      allow(Portage::Cli::BrowserImport::Profiles).to receive_messages(detect: "chrome", default_root: "/nonexistent")
+    end
+
+    def run_json(*args)
+      output = capture_stdout { @status = described_class.run(["browser", "import", *args, "--json"]) }
+      JSON.parse(output)
+    end
+
+    it "never saves on --dry-run" do
+      result = run_json("--dry-run", "--yes")
+
+      expect(@status).to eq(0)
+      expect(result).to include("saved" => false, "needs_confirmation" => false,
+                                "message" => "Dry run — nothing saved.")
+      expect(importer).not_to have_received(:save)
+    end
+
+    it "never saves under --json without --yes — it asks the caller to confirm instead" do
+      result = run_json
+
+      expect(@status).to eq(0)
+      expect(result).to include("saved" => false, "needs_confirmation" => true)
+      expect(result["message"]).to include("--yes")
+      expect(result["kept"].first).to include("domain" => "shop.example",
+                                              "category_names" => ["Apparel & Accessories > Shoes"])
+      expect(importer).not_to have_received(:save)
+    end
+
+    it "saves on an explicit --yes" do
+      result = run_json("--yes")
+
+      expect(result).to include("saved" => true, "message" => "Saved 1 store(s) and 0 product(s) to your local index.")
+      expect(importer).to have_received(:save).with(plan)
+    end
+
+    it "shows the list, then asks at a TTY and saves only on 'y'" do
+      allow($stdin).to receive(:tty?).and_return(true)
+      allow($stdin).to receive(:gets).and_return("y\n")
+
+      output = capture_stdout { expect(described_class.run(%w[browser import])).to eq(0) }
+
+      expect(output).to include("shop.example — ucp — Apparel & Accessories > Shoes (history, 3 visit(s))",
+                                "Skipped 1 webmail", "Save these 1 store(s)", "Saved 1 store(s)")
+      expect(importer).to have_received(:save)
+    end
+
+    it "shows the list but saves nothing with no TTY and no --yes" do
+      output = capture_stdout { described_class.run(%w[browser import]) }
+
+      expect(output).to include("shop.example", "Nothing saved")
+      expect(importer).not_to have_received(:save)
+    end
+
+    it "passes the browser, profile root and caps through" do
+      capture_stdout do
+        described_class.run(%w[browser import --browser firefox --profile-root /tmp/ff --history-days 30
+                               --max-probes 10 --include-product-pages --exclude a.example,b.example --dry-run])
+      end
+
+      expect(importer).to have_received(:plan).with(
+        having_attributes(browser: "firefox", root: "/tmp/ff", history_days: 30, max_probes: 10,
+                          include_product_pages: true, exclude: %w[a.example b.example])
+      )
+    end
+
+    it "reports a read error (e.g. Safari without Full Disk Access) and exits 1 without saving" do
+      allow(importer).to receive(:plan).and_return({ browser: "safari", error: "full_disk_access_required",
+                                                     message: "Full Disk Access needed." })
+
+      result = run_json("--browser", "safari", "--yes")
+
+      expect(@status).to eq(1)
+      expect(result).to include("error" => "full_disk_access_required", "saved" => false)
+      expect(importer).not_to have_received(:save)
+    end
+
+    it "rejects an unknown --browser" do
+      expect { expect(described_class.run(%w[browser import --browser netscape])).to eq(1) }.to output.to_stderr
+    end
+
+    it "prints usage for an unknown browser subcommand" do
+      expect { expect(described_class.run(%w[browser nope])).to eq(1) }.to output.to_stderr
+    end
+  end
+
+  describe "browser import, end to end against a fixture profile" do
+    include BrowserImportFixtures
+
+    before do
+      skip "sqlite3 CLI not installed" unless sqlite_available?
+      allow($stdin).to receive(:tty?).and_return(false)
+      session = instance_double(Portage::Ucp::Client::Session, capabilities: %w[dev.ucp.shopping.catalog])
+      allow(Portage::Ucp::Client).to receive(:discover) do |origin, **|
+        raise Portage::Ucp::Client::DiscoveryError, "404" unless origin == "https://www.shop.example"
+
+        session
+      end
+    end
+
+    it "writes approved domains as untrusted index entries that find reaches only as source: index" do
+      Dir.mktmpdir do |root|
+        chrome_profile(root, visits: [{ url: "https://www.shop.example/products/knife", title: "Kitchen Knives",
+                                        visits: 4 },
+                                      { url: "https://news.example/story", title: "News", visits: 9 },
+                                      { url: "https://mail.google.com/mail/u/0", title: "Inbox" }])
+
+        capture_stdout do
+          described_class.run(["browser", "import", "--browser", "chrome", "--profile-root", root, "--yes", "--json"])
+        end
+      end
+
+      entry = Portage::Cli::Index::Store.new.find("https://www.shop.example")
+      expect(entry).to include("sources" => ["history"], "capabilities" => ["catalog"], "handoff_only" => false)
+      expect(Portage::Cli::Index::Store.new.all.map { |e| e["origin"] }).to eq(["https://www.shop.example"])
+      expect(Portage::Cli::SearchBackends::Index.new.search("kitchen knives from shop")).to eq(["https://www.shop.example"])
     end
   end
 

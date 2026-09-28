@@ -6,6 +6,67 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`portage browser import` — bookmarks and history as index seeds**
+  (`docs/plans/buy-skill-and-local-browser.md` Phase 3, Tier A).
+  `portage browser import [--browser chrome|edge|brave|arc|firefox|safari]
+  [--profile-root DIR] [--history-days 90] [--include-product-pages]
+  [--max-probes 200] [--exclude HOST,...] [--dry-run] [--yes] [--json]`
+  (new `Portage::Cli::BrowserImport`). Reads only a profile's history and
+  bookmark files — Chromium `History`/`Bookmarks`, Firefox
+  `places.sqlite`, Safari `History.db`/`Bookmarks.plist`
+  (`BrowserImport::Profiles::ALLOWED_FILES`) — and never a password,
+  cookie or autofill store; a spec wraps every Ruby file/dir/subprocess
+  entry point and fails if anything else in a fixture profile full of
+  `Login Data`/`Cookies`/`Web Data`/`logins.json`/`key4.db`/
+  `cookies.sqlite`/`formhistory.sqlite` decoys is touched. SQLite
+  databases are copied (with their `-wal`) into a private tmpdir and
+  queried with the system `sqlite3` CLI in `-readonly -json` mode, then
+  deleted; Safari's binary plist goes through macOS's own `plutil` and a
+  small XML-plist reader — no new gem dependency. Rows are reduced to
+  domains, and obvious non-shops (`SearchBackends::NON_STORE_HOSTS`,
+  webmail, banks/payment hosts, localhost/intranet/IP hosts, common
+  tools and social sites) are skipped locally, as are domains already in
+  the local index or the known-stores list. At most `--max-probes`
+  (default 200) unknown domains, most-visited first, each get one
+  `GET /.well-known/ucp` through `Portage::Ucp::Client.discover` and
+  `ProbeCache` (5s timeout) — nothing else about the history is sent
+  anywhere. A domain is kept when it answers, matches a WebMCP preset
+  (skipped with no bridge), or is on the hand-off-only list (an
+  injectable `handoff_only_hosts:` seam, empty until Phase 5). Each kept
+  domain is classified from the user's own page titles, bookmark folder
+  names and URL slugs, weighted by visit count; a domain that matches no
+  category stays uncategorised. The list (with category names) is shown
+  first and saved only after a "y" at a TTY prompt or an explicit
+  `--yes` — under `--json` or with no TTY and no `--yes`, nothing is
+  written and the report says `needs_confirmation: true`. Safari without
+  Full Disk Access (and any other permission error) is explained and the
+  command stops; it never works around it. Kept domains are written to
+  `~/.portage/index/stores.json` with `sources: ["history"]`/
+  `["bookmark"]`; `--include-product-pages` also writes product-page
+  titles to `products.json` with the same labels.
+- **`SearchBackends::Index` routes a store the query names** (its host, or
+  its bare name as a whole word), after product matches and ahead of
+  category matches — the only route an uncategorised browser-imported
+  domain gets. Imported entries are otherwise ordinary untrusted index
+  entries: `source: "index"`, never `merchant_allowlist`, never past the
+  `--store`/interactive-pick gate for `--yes`.
+- **`Index::Exporter` treats `history`/`bookmark` as personal** (alongside
+  `browser`): a store found only that way is never exported, the labels
+  are stripped from mixed-source entries, and a product whose only
+  `sources` are personal (a `--include-product-pages` entry) is dropped
+  even at a store a real source also found. `Index::ProductStore` entries
+  now carry a `sources` list (the union of every sighting's), and
+  `index build` records its own source on each product.
+- **`Index::Sources::Browser` is now a pointer, not a reader.** It yields
+  nothing, isn't a default `index build` source any more, and its
+  `portage index sources` description points at `portage browser import`
+  — `index build` never reads a browser on its own, since that would skip
+  the import's approval step. The Phase 2b `browser-import.json` hand-off
+  file is gone.
+- `Classifier.names_for(ids)` (category names for display) and
+  `Index::Builder.capabilities_of(session)` are now public, for the
+  import to reuse.
+
 - **`portage-cli/known-stores/{stores,products}.json` — a repo-committed,
   jsdelivr-hosted list every install fetches on top of its own local index**
   (`docs/plans/buy-skill-and-local-browser.md` Phase 2c). Same schema as

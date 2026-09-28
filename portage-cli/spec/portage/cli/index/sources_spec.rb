@@ -8,7 +8,7 @@ RSpec.describe Portage::Cli::Index::Sources do
   end
 
   it "runs only the sources that need no opt-in by default" do
-    expect(described_class.default.map(&:name)).to contain_exactly("shopify_catalog", "stores_file", "browser")
+    expect(described_class.default.map(&:name)).to contain_exactly("shopify_catalog", "stores_file")
   end
 
   it "builds by name, dropping anything unknown" do
