@@ -85,6 +85,14 @@ Metrics/ClassLength:
     # domain grouping, classification and saving already split into
     # their own files (domains.rb, categorize.rb, saver.rb).
     - "lib/portage/cli/browser_import/importer.rb"
+    # CdpSocket implements one small, self-contained protocol end to end —
+    # the RFC 6455 handshake plus masked outbound / unmasked inbound frame
+    # I/O for Chrome DevTools Protocol's WebSocket transport (docs/plans/
+    # buy-skill-and-local-browser.md Phase 6) — no dependency exists for
+    # this, so splitting handshake/send/receive into separate files would
+    # scatter one documented wire format across files for no reader's
+    # benefit.
+    - "lib/portage/cli/browser_profile/cdp_socket.rb"
 
 # Cli is argument parsing, dispatch, and formatting for two subcommands; the
 # length is the flag surface, and splitting it would put `buy`'s parser and

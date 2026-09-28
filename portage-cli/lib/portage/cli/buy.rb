@@ -79,12 +79,17 @@ module Portage
       # @param webmcp_bridge [#list_tools, #execute_tool, nil] docs/plans/
       #   handoff-reconcile.md Phase 4 — a `portage-ucp-webmcp` outbound
       #   Bridge (already pointed at a navigated page) an embedding caller
-      #   already holds. nil (the default, and the only option from the
-      #   `portage buy` CLI, which has no browser of its own) skips WebMCP
-      #   entirely — zero behavior change from before this parameter
-      #   existed. Given one, attempted after native-UCP discovery finds
-      #   nothing at this URL and before a platform-adapter fallback (see
-      #   #webmcp_flow).
+      #   already holds. nil (the default) skips WebMCP entirely — zero
+      #   behavior change from before this parameter existed. Given one,
+      #   attempted after native-UCP discovery finds nothing at this URL
+      #   and before a platform-adapter fallback (see #webmcp_flow).
+      #   docs/plans/buy-skill-and-local-browser.md Phase 6: `portage buy`
+      #   from the shell now builds one itself — a
+      #   Portage::Cli::BrowserProfile::Bridge onto the Portage browser
+      #   profile — whenever `--handoff-target profile` resolves and that
+      #   profile is running (`Cli.profile_webmcp_bridge`); any other
+      #   target still leaves this nil, the CLI's original "no browser of
+      #   its own" posture.
       # @param webmcp_mappings [Portage::Cli::WebmcpMappings, nil] Phase 2's
       #   confirmed-mapping store (docs/plans/webmcp-universal-outbound.md).
       #   nil (the default) builds the real `~/.portage/webmcp_mappings.json`
@@ -381,6 +386,11 @@ module Portage
         run_webmcp_checkout(session, preset_name)
       rescue Portage::Ucp::WebMcp::BridgeError, Portage::Ucp::WebMcp::ToolNotFoundError,
              Portage::Ucp::Client::ServerError => e
+        # A Portage::Cli::BrowserProfile::DomainNotAllowedError (Phase 6's
+        # domain allowlist, tripped inside Bridge#evaluate) always surfaces
+        # here as a BridgeError — Bridges::ScriptEvaluator#evaluate wraps
+        # whatever its injected evaluate: callable raises, StandardError
+        # included, so there's no separate rescue clause for it.
         build_report(source: "webmcp", outcome: "webmcp_error", browse: false, checkout: false,
                      message: "WebMCP checkout failed: #{e.message}")
       end
@@ -1224,12 +1234,37 @@ module Portage
       def dispatch_to_target(url, payload)
         case handoff_target.kind
         when "print" then { target: "print", opened: false }
-        when "profile"
-          { target: "profile", opened: false,
-            message: "The Portage browser profile isn't built yet (Phase 6) — showing the link instead." }
+        when "profile" then dispatch_to_profile(url)
         when "agent" then dispatch_to_agent(payload)
         else { target: "default", opened: CheckoutHandoff.new(auto_open: @auto_open).call(url) }
         end
+      end
+
+      # docs/plans/buy-skill-and-local-browser.md Phase 6: when this run
+      # already has a Portage browser profile bridge attached (`Cli.
+      # profile_webmcp_bridge`, only when `--handoff-target profile`
+      # resolved and the profile was running), navigate that same browser
+      # to the checkout URL — the cart was built there too, when the
+      # WebMCP flow ran, or is about to be paid there for the first time,
+      # for a native-UCP store. `#navigate` permits the URL's own host
+      # first (the "plus its checkout host" half of the allowlist), so
+      # this is never blocked by the allowlist itself; it's the one
+      # deliberate Portage-initiated navigation the allowlist always lets
+      # through. Any other bridge failure (the profile process died mid
+      # run, a stale WebSocket) is reported rather than raised, same
+      # posture as every other hand-off dispatch.
+      def dispatch_to_profile(url)
+        unless @webmcp_bridge.respond_to?(:navigate)
+          return { target: "profile", opened: false,
+                   message: "No Portage browser profile is attached — run `portage browser profile open` " \
+                            "first, then retry with --handoff-target profile." }
+        end
+
+        @webmcp_bridge.navigate(url)
+        { target: "profile", opened: true }
+      rescue StandardError => e
+        { target: "profile", opened: false, message: "Couldn't open the checkout in the Portage browser " \
+                                                     "profile (#{e.message}) — showing the link instead." }
       end
 
       def dispatch_to_agent(payload)

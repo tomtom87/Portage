@@ -1551,14 +1551,41 @@ RSpec.describe Portage::Cli::Buy do
         expect(Portage::Cli::CheckoutHandoff).not_to have_received(:new)
       end
 
-      it "profile: reports it isn't available yet and behaves like print" do
+      it "profile: with no browser profile bridge attached, reports that and behaves like print " \
+         "(docs/plans/buy-skill-and-local-browser.md Phase 6 — Cli.profile_webmcp_bridge attaches one; " \
+         "Buy itself never builds its own)" do
         stub_dead_end
 
         report = described_class.new(url: "shop.example", query: "cold", yes: true,
                                      handoff_target: Portage::Cli::HandoffTarget.new(override: "profile")).call
 
         expect(report[:handoff]).to include(opened: false, handoff_target: "profile")
-        expect(report[:handoff][:target_message]).to include("isn't built yet")
+        expect(report[:handoff][:target_message]).to include("portage browser profile open")
+      end
+
+      it "profile: with a browser profile bridge attached, navigates it to the checkout URL and reports opened" do
+        stub_dead_end
+        bridge = instance_double(Portage::Cli::BrowserProfile::Bridge)
+        allow(bridge).to receive(:respond_to?).with(:navigate).and_return(true)
+        expect(bridge).to receive(:navigate).with(kind_of(String))
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true, webmcp_bridge: bridge,
+                                     handoff_target: Portage::Cli::HandoffTarget.new(override: "profile")).call
+
+        expect(report[:handoff]).to include(opened: true, handoff_target: "profile")
+      end
+
+      it "profile: reports the link instead of raising when the bridge fails to navigate" do
+        stub_dead_end
+        bridge = instance_double(Portage::Cli::BrowserProfile::Bridge)
+        allow(bridge).to receive(:respond_to?).with(:navigate).and_return(true)
+        allow(bridge).to receive(:navigate).and_raise("profile process died")
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true, webmcp_bridge: bridge,
+                                     handoff_target: Portage::Cli::HandoffTarget.new(override: "profile")).call
+
+        expect(report[:handoff]).to include(opened: false, handoff_target: "profile")
+        expect(report[:handoff][:target_message]).to include("profile process died")
       end
 
       it "agent:<name> is never invoked when the name isn't approved in config" do

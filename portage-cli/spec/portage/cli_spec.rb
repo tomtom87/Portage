@@ -903,6 +903,149 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "browser profile (docs/plans/buy-skill-and-local-browser.md Phase 6)" do
+    let(:profile) { instance_double(Portage::Cli::BrowserProfile::Profile, port: 9223, dir: "/x/chrome/profile") }
+
+    before { allow(Portage::Cli::BrowserProfile::Profile).to receive(:new).and_return(profile) }
+
+    def run_json(*args)
+      output = capture_stdout { @status = described_class.run(["browser", "profile", *args, "--json"]) }
+      JSON.parse(output)
+    end
+
+    it "init creates the dedicated profile directory" do
+      allow(profile).to receive(:init!).and_return(browser: "chrome", dir: "/x/chrome/profile", port: 9223,
+                                                   created: true)
+
+      result = run_json("init")
+
+      expect(@status).to eq(0)
+      expect(result).to include("created" => true, "dir" => "/x/chrome/profile")
+    end
+
+    it "open launches (or attaches to) the profile and reports the target" do
+      allow(profile).to receive(:open!).with(url: "https://shop.example").and_return(
+        running: true, browser: "chrome", dir: "/x/chrome/profile", port: 9223, target: { "id" => "1" }
+      )
+
+      result = run_json("open", "--url", "https://shop.example")
+
+      expect(@status).to eq(0)
+      expect(result).to include("running" => true, "target" => { "id" => "1" })
+    end
+
+    it "open reports a browser-not-found error rather than raising" do
+      allow(profile).to receive(:open!).and_raise(Portage::Cli::BrowserProfile::BrowserNotFoundError,
+                                                  "chrome isn't installed on this machine")
+
+      result = run_json("open")
+
+      expect(@status).to eq(1)
+      expect(result).to include("error" => "BrowserNotFoundError",
+                                "message" => "chrome isn't installed on this machine")
+    end
+
+    it "status reports not running when the profile has no CDP endpoint up" do
+      allow(profile).to receive(:status).and_return(running: false, browser: "chrome", dir: "/x/chrome/profile",
+                                                    port: 9223)
+
+      result = run_json("status")
+
+      expect(@status).to eq(0)
+      expect(result).to include("running" => false)
+    end
+
+    it "passes --browser and --port through to the Profile it builds" do
+      allow(profile).to receive(:status).and_return(running: false)
+
+      capture_stdout { described_class.run(%w[browser profile status --browser brave --port 9333]) }
+
+      expect(Portage::Cli::BrowserProfile::Profile).to have_received(:new).with(browser: "brave", port: 9333)
+    end
+
+    it "prints usage for an unknown browser profile subcommand" do
+      expect { expect(described_class.run(%w[browser profile nope])).to eq(1) }.to output.to_stderr
+    end
+  end
+
+  describe "portage buy --handoff-target profile attaches a browser profile bridge " \
+           "(docs/plans/buy-skill-and-local-browser.md Phase 6)" do
+    let(:captured) { {} }
+
+    before do
+      allow(Portage::Cli::Buy).to receive(:new) do |**opts|
+        captured.replace(opts)
+        instance_double(Portage::Cli::Buy, call: report)
+      end
+    end
+
+    it "never attaches a bridge for any target but profile" do
+      expect(Portage::Cli).not_to receive(:profile_webmcp_bridge)
+
+      capture_stdout { described_class.run(%w[buy shop.example --query cold --dry-run]) }
+
+      expect(captured[:webmcp_bridge]).to be_nil
+    end
+
+    it "attaches nothing when portage-ucp-webmcp isn't available" do
+      allow(Portage::Cli::Webmcp).to receive(:available?).and_return(false)
+
+      capture_stdout do
+        described_class.run(%w[buy shop.example --query cold --dry-run --handoff-target profile])
+      end
+
+      expect(captured[:webmcp_bridge]).to be_nil
+    end
+
+    it "attaches nothing when the profile isn't running" do
+      allow(Portage::Cli::Webmcp).to receive(:available?).and_return(true)
+      not_running = instance_double(Portage::Cli::BrowserProfile::Profile, status: { running: false })
+      allow(Portage::Cli::BrowserProfile::Profile).to receive(:new).and_return(not_running)
+
+      capture_stdout do
+        described_class.run(%w[buy shop.example --query cold --dry-run --handoff-target profile])
+      end
+
+      expect(captured[:webmcp_bridge]).to be_nil
+    end
+
+    it "opens a new tab and attaches a CdpSocket-backed bridge when the profile is running" do
+      allow(Portage::Cli::Webmcp).to receive(:available?).and_return(true)
+      running = instance_double(Portage::Cli::BrowserProfile::Profile, status: { running: true }, port: 9223)
+      allow(Portage::Cli::BrowserProfile::Profile).to receive(:new).and_return(running)
+      allow(Portage::Cli::BrowserProfile::Cdp).to receive(:list).with(port: 9223).and_return([])
+      allow(Portage::Cli::BrowserProfile::Cdp).to receive(:new_tab).with(port: 9223, url: "https://shop.example")
+                                                                   .and_return("webSocketDebuggerUrl" => "ws://x")
+      socket = instance_double(Portage::Cli::BrowserProfile::CdpSocket)
+      allow(Portage::Cli::BrowserProfile::CdpSocket).to receive(:connect).with("ws://x").and_return(socket)
+
+      capture_stdout do
+        described_class.run(%w[buy shop.example --query cold --dry-run --handoff-target profile])
+      end
+
+      expect(captured[:webmcp_bridge]).to be_a(Portage::Cli::BrowserProfile::Bridge)
+    end
+
+    it "reuses an existing tab already on the store's host instead of opening a new one" do
+      allow(Portage::Cli::Webmcp).to receive(:available?).and_return(true)
+      running = instance_double(Portage::Cli::BrowserProfile::Profile, status: { running: true }, port: 9223)
+      allow(Portage::Cli::BrowserProfile::Profile).to receive(:new).and_return(running)
+      allow(Portage::Cli::BrowserProfile::Cdp).to receive(:list).with(port: 9223).and_return(
+        [{ "type" => "page", "url" => "https://shop.example/cart", "webSocketDebuggerUrl" => "ws://existing" }]
+      )
+      allow(Portage::Cli::BrowserProfile::Cdp).to receive(:new_tab)
+      socket = instance_double(Portage::Cli::BrowserProfile::CdpSocket)
+      allow(Portage::Cli::BrowserProfile::CdpSocket).to receive(:connect).with("ws://existing").and_return(socket)
+
+      capture_stdout do
+        described_class.run(%w[buy shop.example --query cold --dry-run --handoff-target profile])
+      end
+
+      expect(captured[:webmcp_bridge]).to be_a(Portage::Cli::BrowserProfile::Bridge)
+      expect(Portage::Cli::BrowserProfile::Cdp).not_to have_received(:new_tab)
+    end
+  end
+
   describe "browser import, end to end against a fixture profile" do
     include BrowserImportFixtures
 

@@ -1,5 +1,6 @@
 require "optparse"
 require "json"
+require "uri"
 
 require_relative "cli/version"
 require_relative "cli/user_agent"
@@ -10,6 +11,7 @@ require_relative "cli/agent_profile_url"
 require_relative "cli/offer_sources"
 require_relative "cli/index"
 require_relative "cli/browser_import"
+require_relative "cli/browser_profile"
 require_relative "cli/buy"
 require_relative "cli/find"
 require_relative "cli/compare"
@@ -68,6 +70,8 @@ module Portage
              portage browser import [--browser chrome|edge|brave|arc|firefox|safari] [--profile-root DIR]
                                     [--history-days 90] [--include-product-pages] [--max-probes 200]
                                     [--exclude HOST,HOST] [--dry-run] [--yes] [--json]
+             portage browser profile init|open|status [--browser chrome|edge|brave|arc] [--port N]
+                                    [--url URL (open only)] [--json]
              portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]
              portage configure [--require FILE] [--adapter CLASS_NAME] [--json]  (alias for doctor)
              portage setup [--json]  (interactive wizard on a TTY; --json/no TTY: today's doctor report)
@@ -296,6 +300,7 @@ module Portage
       options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check],
                                    handoff_target: parsed[:handoff_target], json: !parsed[:json].nil?)
       options[:product_id] ||= product_id
+      options[:webmcp_bridge] = profile_webmcp_bridge(url) if parsed[:handoff_target].profile?
       report = Buy.new(**options).call
       record_buy(report, options[:query])
       result = parsed[:wait] ? wait_for_handoff(report, parsed) : nil
@@ -303,6 +308,64 @@ module Portage
       report[:checkout] || report[:browse] ? 0 : 1
     end
     private_class_method :execute_buy
+
+    # docs/plans/buy-skill-and-local-browser.md Phase 6: `--handoff-target
+    # profile` gives `portage buy` a browser of its own — the Portage
+    # profile — so it's attached here as Buy's `webmcp_bridge:`, exactly
+    # the seam Buy#initialize's own doc comment already names as "the only
+    # option from the portage buy CLI" before this phase existed. Never
+    # raises: any failure to attach (portage-ucp-webmcp not installed, the
+    # profile not running, a bad target) just means Buy runs with no
+    # bridge at all — its dead-end hand-off to "profile" then reports that
+    # the browser isn't attached (see #dispatch_to_target's "profile"
+    # case) rather than this crashing the whole buy.
+    def self.profile_webmcp_bridge(url)
+      return nil unless Webmcp.available?
+
+      profile = BrowserProfile::Profile.new
+      return nil unless profile.status[:running]
+
+      full_url = absolute_url(url)
+      target = browser_profile_target(profile, full_url)
+      ws_url = target && target["webSocketDebuggerUrl"]
+      return nil unless ws_url
+
+      socket = BrowserProfile::CdpSocket.connect(ws_url)
+      allowlist = BrowserProfile::Allowlist.new(hosts: [URI(full_url).host])
+      BrowserProfile::Bridge.new(socket: socket, allowlist: allowlist)
+    rescue StandardError
+      nil
+    end
+    private_class_method :profile_webmcp_bridge
+
+    # Same "bare host gets an https:// prefix" normalization Buy#initialize
+    # applies to the same `url` — done again here since this runs before
+    # Buy exists to do it, and a bare host like "shop.example" isn't a
+    # URI CDP's own `/json/new` or Runtime.evaluate's `window.location`
+    # comparisons can parse a host out of otherwise.
+    def self.absolute_url(url)
+      raw = url.to_s.strip
+      raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}"
+    end
+    private_class_method :absolute_url
+
+    # An existing tab already on this store's host, so a shopper who's
+    # mid-session there isn't yanked to a fresh one; otherwise a brand new
+    # tab navigated straight to `url`.
+    def self.browser_profile_target(profile, url)
+      host = URI(url).host
+      existing = BrowserProfile::Cdp.list(port: profile.port)
+                                    .find { |t| t["type"] == "page" && same_host?(t["url"], host) }
+      existing || BrowserProfile::Cdp.new_tab(port: profile.port, url: url)
+    end
+    private_class_method :browser_profile_target
+
+    def self.same_host?(url, host)
+      URI(url.to_s).host == host
+    rescue URI::InvalidURIError
+      false
+    end
+    private_class_method :same_host?
 
     # docs/plans/handoff-reconcile.md Phase 3 — `portage buy --wait`. A
     # no-op (returns nil) whenever there's nothing to wait on: --dry-run
@@ -1024,7 +1087,8 @@ module Portage
 
     # --- browser (docs/plans/buy-skill-and-local-browser.md Phase 3) ---
 
-    BROWSER_SUBCOMMANDS = { "import" => ->(argv) { run_browser_import(argv) } }.freeze
+    BROWSER_SUBCOMMANDS = { "import" => ->(argv) { run_browser_import(argv) },
+                            "profile" => ->(argv) { run_browser_profile(argv) } }.freeze
 
     def self.run_browser(argv)
       sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
@@ -1155,6 +1219,113 @@ module Portage
         "(#{entry[:sources].join(', ')}, #{entry[:visits]} visit(s))"
     end
     private_class_method :browser_import_line
+
+    # --- browser profile (docs/plans/buy-skill-and-local-browser.md Phase 6) ---
+
+    BROWSER_PROFILE_SUBCOMMANDS = {
+      "init" => ->(argv) { run_browser_profile_init(argv) },
+      "open" => ->(argv) { run_browser_profile_open(argv) },
+      "status" => ->(argv) { run_browser_profile_status(argv) }
+    }.freeze
+
+    def self.run_browser_profile(argv)
+      sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      return browser_profile_usage unless BROWSER_PROFILE_SUBCOMMANDS.key?(sub)
+
+      BROWSER_PROFILE_SUBCOMMANDS[sub].call(argv)
+    end
+    private_class_method :run_browser_profile
+
+    def self.browser_profile_usage
+      warn USAGE
+      1
+    end
+    private_class_method :browser_profile_usage
+
+    def self.parse_browser_profile_options(argv)
+      opts = { browser: nil, port: BrowserProfile::Profile::DEFAULT_PORT, url: nil, json: false }
+      OptionParser.new do |parser|
+        parser.on("--browser NAME", BrowserProfile::Browsers::CHROMIUM) { |v| opts[:browser] = v }
+        parser.on("--port N", Integer) { |v| opts[:port] = v }
+        parser.on("--url URL") { |v| opts[:url] = v }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+      opts
+    end
+    private_class_method :parse_browser_profile_options
+
+    # `--browser` names the exact browser; without it, the first Chromium
+    # family browser BrowserImport::Profiles finds installed, falling back
+    # to "chrome" — same "pick something reasonable, let --browser
+    # override" posture as run_browser_import's own default.
+    def self.browser_profile_for(opts)
+      browser = opts[:browser] || BrowserProfile::Browsers.detect || "chrome"
+      BrowserProfile::Profile.new(browser: browser, port: opts[:port])
+    end
+    private_class_method :browser_profile_for
+
+    def self.run_browser_profile_init(argv)
+      opts = parse_browser_profile_options(argv)
+      result = browser_profile_for(opts).init!
+      puts opts[:json] ? JSON.pretty_generate(result) : "Profile ready at #{result[:dir]} (#{result[:browser]})."
+      0
+    rescue OptionParser::ParseError => e
+      warn "#{e.message}\n#{USAGE}"
+      1
+    end
+    private_class_method :run_browser_profile_init
+
+    # Launches the profile (if it isn't already running on its own port)
+    # and either opens a new tab at --url or attaches to the first
+    # existing one. Never touches the browser's default profile — Profile
+    # itself only ever points --user-data-dir at its own dedicated
+    # directory.
+    def self.run_browser_profile_open(argv)
+      opts = parse_browser_profile_options(argv)
+      result = browser_profile_for(opts).open!(url: opts[:url])
+      puts opts[:json] ? JSON.pretty_generate(result) : format_browser_profile_open(result)
+      0
+    rescue BrowserProfile::Error => e
+      report_browser_profile_error(e, opts[:json])
+    rescue OptionParser::ParseError => e
+      warn "#{e.message}\n#{USAGE}"
+      1
+    end
+    private_class_method :run_browser_profile_open
+
+    def self.run_browser_profile_status(argv)
+      opts = parse_browser_profile_options(argv)
+      result = browser_profile_for(opts).status
+      puts opts[:json] ? JSON.pretty_generate(result) : format_browser_profile_status(result)
+      0
+    rescue OptionParser::ParseError => e
+      warn "#{e.message}\n#{USAGE}"
+      1
+    end
+    private_class_method :run_browser_profile_status
+
+    def self.format_browser_profile_open(result)
+      tab = result.dig(:target, "url")
+      "#{result[:browser]} profile is open (port #{result[:port]}, #{result[:dir]})#{" — tab: #{tab}" if tab}."
+    end
+    private_class_method :format_browser_profile_open
+
+    def self.format_browser_profile_status(result)
+      return "#{result[:browser]} profile (#{result[:dir]}) isn't running." unless result[:running]
+
+      "#{result[:browser]} profile is running on port #{result[:port]} (#{result[:dir]})."
+    end
+    private_class_method :format_browser_profile_status
+
+    def self.report_browser_profile_error(error, json)
+      if json
+        puts JSON.pretty_generate(error: error.class.name.split("::").last, message: error.message)
+      else
+        warn error.message
+      end
+      1
+    end
+    private_class_method :report_browser_profile_error
 
     # --- doctor ---
 
