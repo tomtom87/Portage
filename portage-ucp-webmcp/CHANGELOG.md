@@ -6,6 +6,23 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fixed: `assets/autofill.js` didn't parse** (docs/design-log.md §51). A
+  `*/` inside its header comment closed the comment early, so every real
+  `Autofill.call` raised `BridgeError` (`SyntaxError: Unexpected identifier
+  'context'`). New `asset_syntax_spec.rb` runs `node --check` on every file
+  in `assets/`, in the form the gem actually hands a browser, and skips with
+  a message when node isn't on PATH. New `autofill_js_spec.rb` runs the real
+  script through `ScriptEvaluator#autofill` against a small fake checkout
+  DOM (`spec/support/fake_checkout_dom.js`, no npm dependency).
+- **Autofill fills a `<select>`** reached through `checkout_selectors`: it
+  picks the option whose value matches, then the one whose visible text
+  matches (case-insensitive, trimmed), using `HTMLSelectElement`'s own value
+  setter. No matching option reports the token as `unmatched` instead of
+  throwing on the input setter.
+- **Shipping-rate prices in any currency.** `selectCheapestRate` now reads
+  any Unicode currency symbol (`\p{Sc}`, so `฿`, `¥`, `₹` …) or three-letter
+  ISO code, before or after the amount, and handles thousands separators
+  (`฿1,950.00` is 1950, not 1.95). "Free" still counts as 0.
 - **`Presets::SHOPIFY.checkout_selectors`** now has two fallbacks, taken
   from a live Shopify checkout (docs/design-log.md §50): `email` →
   `input[autocomplete='shipping email']` and `shipping tel` →

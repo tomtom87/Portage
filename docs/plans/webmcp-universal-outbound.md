@@ -1,6 +1,6 @@
 # WebMCP Outbound: Platform Presets and Schema Matching
 
-**Status:** Complete (2026-09-28). Phases 0-4 shipped, and all three live checks ran on 2026-09-28 against The Light Yard ([design-log §50](../design-log.md)). They found one blocking bug that is still open: `assets/autofill.js` doesn't parse, so autofill can't run in any browser until its header comment is fixed. See [Progress log](#progress-log) and "This plan is complete apart from three live checks" below.
+**Status:** Complete apart from one live check (2026-09-28). Phases 0-4 shipped. The live checks ran against The Light Yard ([design-log §50](../design-log.md)), and the rerun after the fixes ([§51](../design-log.md)) passed checks 1 and 2. The `assets/autofill.js` parse bug is fixed. Check 3 (the cheapest rate out of several) is still open: that store only ever offered one UK rate. See [Progress log](#progress-log) and "This plan is complete apart from one live check" below.
 **Driver:** the outbound half of `portage-ucp-webmcp` already calls any page's WebMCP tools, Portage-powered or not. In practice it only works against a store when the caller knows that store's tool names in advance and passes `tool_names:` by hand. The one population with WebMCP tools today, Shopify storefronts, needs `tool_names: { create_cart: "add_to_cart" }`, and nothing in Portage supplies it. This plan makes the outbound path work against a WebMCP page with no per-store setup: a known platform gets a built-in preset, and an unknown one gets a proposed mapping that the user confirms.
 
 ## Context
@@ -96,11 +96,13 @@ Unchanged by Phase 4 — still explicitly out of scope for this plan, not silent
 | 2026-09-28 | 3 | Shipped. `portage-ucp-webmcp` adds `assets/autofill.js` (evaluated via the new `Bridges::ScriptEvaluator#autofill(fields, selectors:)`, not a WebMCP tool call) — fills a checkout page's fields by `autocomplete` attribute, picks the cheapest priced option in a same-named radio group, refuses on principle to touch a `cc-*`/`transaction-*`/hidden/password field regardless of what's asked for, never clicks a submit control, and stops with `blocked` on the first CAPTCHA/challenge marker it finds. `ScriptEvaluator.ferrum`/`.playwright`/`.selenium` take a new `headless:` (default nil = unknown), exposed as `#headless?`. `WebMcp::Autofill.call(bridge:, fields:, selectors:)` is the Ruby-side gate (`:needs_headed_browser` for headless-or-unknown, `:unsupported` for a bridge with no `#autofill`, `:blocked`, `:filled`). `Presets::Preset` gained `checkout_selectors` (Shopify's is `{}` — no live check ran). `portage-cli` adds the opt-in gate (`WebmcpAutofillMode`: `--autofill` / `PORTAGE_WEBMCP_AUTOFILL=approve` / config.json, off by default, only the literal `"approve"` turns the env/config level on), the shopper-approval prompt (`WebmcpAutofillConfirm`, refused outright under `--json`/no TTY, same posture as Phase 2's `WebmcpMappingConfirm`), and the fields builder (`WebmcpAutofillFields`, mapping `PORTAGE_SHIP_*` plus a new `PORTAGE_SHIP_EMAIL` onto WHATWG autocomplete tokens). `Buy#webmcp_handoff_checkout_flow` runs the attempt right after the hand-off tool navigates the bridge's browser to the real checkout page — the only WebMCP flow that ever puts that browser on one. The report gets an `autofill:` key only when an attempt was actually made (mode off, or nothing configured to fill, leaves the report exactly as it was before Phase 3); the run still always ends in `express_stop` either way — nothing here ever reaches a payment field or a pay button. webmcp 179 green (+13: `autofill_spec`, `ScriptEvaluator#autofill`/`#headless?`/driver-adapter cases), cli 499 green (+26: `webmcp_autofill_mode_spec`, `webmcp_autofill_fields_spec`, `webmcp_autofill_confirm_spec`, `buy_spec`'s new Phase 3 block), rubocop clean on both. All specs run against a fake/stubbed bridge, per the plan's own scope note — no real browser or live storefront available this session. Not done, and left pending: whether autofill actually reaches a real Shopify checkout page's fields, and whether the cheapest-rate heuristic matches a real rate picker's markup — no live check possible without adding to a real store's cart, which was out of scope for this session. Phase 1's own still-pending live check (checkout URL across browsers) is unaffected; Phase 3 was scoped to assume the hand-off stays in the bridge's own browser, per the plan's fallback guidance. |
 | 2026-09-28 | 4 | Shipped (docs only, no code/spec change). `portage-ucp-webmcp/README.md`'s "Stores that don't run Portage" section documents the preset → matched-and-confirmed mapping → explicit `tool_names:` order, `Presets`/`preset:`, `Matcher`/the read-vs-mutating confirm rule and the fingerprint-keyed mappings store, plus a new "Approved autofill of the store's checkout" section (outcome table, `checkout_selectors` fallback). `portage-cli/README.md`'s "WebMCP (library use, opt-in)" section gained the same from the CLI side (the confirm-gate fallback, `--autofill`/`PORTAGE_WEBMCP_AUTOFILL=approve`/`webmcp_autofill`). `skills/shop-via-ucp/SKILL.md` now names the WebMCP path (ranks after native UCP, before a platform adapter, browser-gated, always a hand-off) and the autofill flag/env var, without describing the internal mechanism. `docs/design-log.md` gained entries 47-49 (Phase 0's `nil`-capabilities bug and the spec double that hid it; Phase 1's exact-fingerprint-only rule and why subset/similarity matching was rejected; Phase 3's `headless?`/`checkout_selectors` "unknown defaults to the unsafe-if-wrong choice" design calls). Root, `portage-ucp-webmcp` and `portage-cli` `CHANGELOG.md`s each gained an `[Unreleased]` bullet. webmcp 179 green (unchanged), cli 499 green (unchanged), rubocop clean on both — confirms the docs-only diff touched nothing executable. Not this phase's job, still pending: Phase 1's checkout-URL-across-browsers live check, and Phase 3's two live checks (autofill against a real Shopify checkout page; the cheapest-rate heuristic against a real rate picker) — all three need a supervised session against a real store/browser, not more code. |
 | 2026-09-28 | Live checks | All three ran against The Light Yard: headed Ferrum, polyfill injected, the £39 "Exterior After Care Pack" variant at qty 1, fake UK identity, driven through the library (`portage buy` can't reach this path: `cli.rb:263-265` never passes `webmcp_bridge:`, so `Buy#webmcp_flow` returns at `buy.rb:298`). No click, no submit, nothing typed into a payment field, cart cleared afterwards. **Check 1 passed:** the checkout URL opened in a clean second browser with the same line at qty 1 (Shopify redirected it to a new checkout path). Autofilled values didn't carry over. **Check 2 failed as committed:** `assets/autofill.js` doesn't parse (its header comment closes early at `PORTAGE_SHIP_*/buyer`, giving `SyntaxError: Unexpected identifier 'context'`), so `Autofill.call` raises `BridgeError` in any real browser. The specs never evaluate it. With that comment changed in the check script only, 6 of 8 fields filled by autocomplete. `email` and `shipping tel` missed because Shopify labels them `shipping email` and `shipping tel-national`. **Fixed:** `Presets::SHOPIFY.checkout_selectors` now has those two, and with them all 8 filled. No `cc-*`, password or hidden field was touched. Card fields sit in `checkout.pci.shopifyinc.com` iframes out of reach. **Check 3: nothing to judge:** this address got one rate (Standard, £50), and Shopify renders a single rate with no radio, so `selectCheapestRate` rightly picked nothing. The multi-rate radio markup wasn't seen. Rates appeared within a few seconds of autofill, with no click. The `autofill.js` comment fix is out of this session's scope and still open. webmcp 181 green (+2), cli 499 green, rubocop clean on both. |
+| 2026-09-28 | Live checks (rerun) | Fixes from design-log §51, then a rerun against the unmodified library. **Fixed:** `assets/autofill.js`'s header comment no longer contains `*/`, so the file parses. New `asset_syntax_spec` runs `node --check` on every asset in the form the gem hands a browser. New `autofill_js_spec` runs the real script through `ScriptEvaluator#autofill` against a fake checkout DOM (`spec/support/fake_checkout_dom.js`). `fillField` handles `<select>` (option value, then visible text; no match goes to `unmatched`). `RATE_PRICE` takes any `\p{Sc}` symbol or ISO code, on either side of the amount, with thousands separators. `Buy#webmcp_handoff_checkout_flow` now stops on `dry_run` before `create_cart` and reports `would:`. **Rerun** (`tmp/live-checks-2026-09-28/live_check.rb`, repo `lib/` dirs, no patch): `Autofill.call` returned `:filled` 8/8 with `unmatched: []` on every attempt, and no `cc-*`/`transaction-*`/hidden/password field changed. The country `<select>` filled through the fallback in real Chrome. No CAPTCHA. **Check 3 still open:** six address/item variations (after-care pack at S40 1ZZ, KW15 1AA, BT1 1AA and IV51 9AA; a 15 kg bollard at S40 1ZZ and KW15 1AA) each gave exactly one rate, with no radio, and `selectCheapestRate` correctly picked nothing. Cart emptied (`item_count` 0) and browsers quit after both runs. webmcp 196 green (+15), cli 502 green (+3), rubocop clean on both. |
 
-### This plan is complete apart from three live checks
+### This plan is complete apart from one live check
 
-There is no phase after 4. The three live checks ran on 2026-09-28 against
-The Light Yard ([design-log §50](../design-log.md)), in a headed browser,
+There is no phase after 4. The live checks first ran on 2026-09-28 against
+The Light Yard ([design-log §50](../design-log.md)), and were rerun the
+same day after the fixes in [§51](../design-log.md), in a headed browser,
 driving the library directly:
 
 1. **Phase 1: passed.** The checkout URL from the bridge's browser still
@@ -109,21 +111,20 @@ driving the library directly:
    and shipping values don't carry over, so hand-off has to stay in the
    bridge's own browser whenever autofill ran. With no autofill, it can
    move to the shopper's browser.
-2. **Phase 3 autofill: failed as committed, one open bug.**
-   `assets/autofill.js` doesn't parse. The `*/` in `PORTAGE_SHIP_*/buyer`
-   in its header comment closes the comment early, so every real
-   `Autofill.call` raises `BridgeError` (`SyntaxError: Unexpected
-   identifier 'context'`). The specs never evaluate the script, which is
-   how this got through. With the comment changed in the check script
-   only, the script reached the real fields. Six tokens matched by
-   autocomplete; `email` and `shipping tel` needed the new
-   `Presets::SHOPIFY.checkout_selectors`, and with them all eight filled.
-   **Still to do:** fix that comment, and add a spec that parses the asset
-   under node.
-3. **Phase 3 cheapest rate: not exercised.** Only one rate was offered,
-   and Shopify renders a single rate with no radio, so there was nothing
-   to pick and `selectCheapestRate` correctly did nothing. How Shopify
-   marks up two or more rates (radio plus `<label>`, or price in a sibling
-   element as with the single rate) is still unseen. Rates appeared with no
-   click, within a few seconds of the address being filled, so a retry after a short
-   wait would reach them.
+2. **Phase 3 autofill: passed on the rerun.** The `*/` in `autofill.js`'s
+   header comment is gone, and `asset_syntax_spec` now parses every asset
+   under node, so this can't ship again unnoticed. Against the unmodified
+   library, `Autofill.call` returned `:filled` with all eight tokens and
+   `unmatched: []`, and no payment, hidden or password field was touched.
+   A `<select>` reached through `checkout_selectors` now fills by option
+   value or text instead of throwing, and it did so live on Shopify's
+   country select.
+3. **Phase 3 cheapest rate: still open.** Six address and item variations
+   (Highlands, Islands and Northern Ireland postcodes, plus a 15 kg item)
+   each got exactly one rate. Shopify renders a single rate with no radio,
+   so `selectCheapestRate` rightly picked nothing. The price matcher now
+   reads any currency symbol or ISO code (`฿1,950.00`, `12,50 €`), and
+   that's covered in `autofill_js_spec`, but how Shopify marks up two or
+   more rates is still unseen. Closing this needs a store with more than
+   one UK rate. Rates appear with no click, a few seconds after autofill
+   enters the address.

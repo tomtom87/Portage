@@ -26,6 +26,9 @@ class NodeBrowser
     @requests = []
     @next_id = 0
     @stdin, @stdout, @stderr, @wait = Open3.popen3({ "PAGE_ORIGIN" => origin }, "node", HARNESS)
+    # node writes UTF-8; with no LANG set Ruby would read the pipe as
+    # US-ASCII and choke on the first non-ASCII result (a "฿" rate label).
+    @stdout.set_encoding(Encoding::UTF_8)
   end
 
   # Evaluates `source` in the tab's global scope, awaiting it if it is a

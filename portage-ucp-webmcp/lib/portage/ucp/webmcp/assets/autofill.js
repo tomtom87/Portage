@@ -8,9 +8,11 @@
  *
  *   - fields: { "<autocomplete token>": "<value>", ... } — contact email and
  *     shipping address only, built by portage-cli's WebmcpAutofillFields
- *     from PORTAGE_SHIP_*/buyer context, and only after the shopper has
- *     approved exactly these field/value pairs in a prompt. Never a payment
- *     field — portage-cli never builds one.
+ *     from the PORTAGE_SHIP_* variables and buyer context, and only after
+ *     the shopper has approved exactly these field/value pairs in a prompt.
+ *     Never a payment field — portage-cli never builds one.
+ *     (No glob-then-slash in this comment: that pair closes it early, which
+ *     is how this file once shipped unparseable — see design-log §51.)
  *   - selectors: { "<token>": "<css selector>" } — a platform preset's
  *     fallback (Presets::Preset#checkout_selectors), tried only when no
  *     element on the page carries a matching `autocomplete` attribute for
@@ -59,7 +61,16 @@
     "[data-testid='challenge']"
   ];
   var CHALLENGE_TITLE = /checking your browser|verify you are human|attention required|just a moment/i;
-  var RATE_PRICE = /(?:USD|EUR|GBP|CAD|AUD|[$£€])\s?(\d+(?:[.,]\d{1,2})?)/;
+  // A rate's price: any currency symbol (Unicode \p{Sc}: $ £ € ฿ ¥ ₹ …) or a
+  // three-letter ISO code, before or after the amount ("£50.00", "฿1,950.00",
+  // "THB 1,950.00", "12,50 €"). The amount allows thousands separators (a
+  // comma, a dot, or the no-break spaces some locales use), so
+  // "฿1,950.00" reads as 1950, not 1.95. Checkout currency follows the
+  // shopper's geo-IP until an address is filled (design-log §50 saw THB on a
+  // UK store), so no fixed list of currencies is enough.
+  var AMOUNT = "(\\d{1,3}(?:[.,\\u00a0\\u202f]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)";
+  var CURRENCY = "(?:\\p{Sc}|(?<![A-Za-z])[A-Z]{3}(?![A-Za-z]))";
+  var RATE_PRICE = new RegExp(CURRENCY + "\\s?" + AMOUNT + "|" + AMOUNT + "\\s?" + CURRENCY, "u");
 
   function isChallengePage() {
     var found = CHALLENGE_SELECTORS.some(function (selector) {
@@ -107,9 +118,28 @@
   }
 
   function nativeValueSetter(el) {
-    var proto = el.tagName === "TEXTAREA" ? root.HTMLTextAreaElement.prototype : root.HTMLInputElement.prototype;
+    var ctor = { TEXTAREA: root.HTMLTextAreaElement, SELECT: root.HTMLSelectElement }[el.tagName] ||
+      root.HTMLInputElement;
+    var proto = ctor && ctor.prototype;
     var descriptor = proto && Object.getOwnPropertyDescriptor(proto, "value");
     return descriptor && descriptor.set;
+  }
+
+  // A <select> only takes one of its own options' values: an exact option
+  // value first ("GB"), then the option's visible text, case-insensitive and
+  // trimmed ("United Kingdom"). null when neither matches, so the token is
+  // reported unmatched instead of leaving the select blank.
+  function selectOptionValue(el, value) {
+    var options = el.options || [];
+    var wanted = String(value).trim().toLowerCase();
+    var i;
+    for (i = 0; i < options.length; i += 1) {
+      if (options[i].value === String(value)) return options[i].value;
+    }
+    for (i = 0; i < options.length; i += 1) {
+      if ((options[i].text || options[i].textContent || "").trim().toLowerCase() === wanted) return options[i].value;
+    }
+    return null;
   }
 
   // Plain `el.value = x` doesn't notify a framework-controlled input (React,
@@ -117,6 +147,11 @@
   // setter — using the native setter first, then dispatching input/change,
   // is the same trick those frameworks' own test-utils use.
   function fillField(el, value) {
+    if (el.tagName === "SELECT") {
+      value = selectOptionValue(el, value);
+      if (value === null) return false;
+    }
+
     var setter = nativeValueSetter(el);
     if (setter) {
       setter.call(el, value);
@@ -125,23 +160,32 @@
     }
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
   }
 
   function fill(token, value) {
     var el = findByAutocomplete(token) || findBySelector(selectors && selectors[token]);
-    if (!el) return false;
+    return !!el && fillField(el, value);
+  }
 
-    fillField(el, value);
-    return true;
+  // "1,950.00" / "1.950,00" / "1 950" -> 1950; "12,50" -> 12.5. A trailing
+  // separator with one or two digits after it is the decimal point; every
+  // other separator groups thousands.
+  function parseAmount(raw) {
+    var digits = raw.replace(/[\u00a0\u202f]/g, "");
+    var decimal = digits.match(/[.,](\d{1,2})$/);
+    var whole = decimal ? digits.slice(0, -decimal[0].length) : digits;
+    return parseFloat(whole.replace(/[.,]/g, "") + (decimal ? "." + decimal[1] : ""));
   }
 
   // Best-effort: groups same-named radio buttons whose visible label text
   // looks like a shipping-rate price, and checks the cheapest option in
   // each group not already selected — the DOM equivalent of
   // Buy#cheapest_option_selection for a checkout with no UCP fulfillment
-  // groups to read. Unverified against a real store (no live checkout
-  // reached this session — see the plan's Progress log); a group whose
-  // markup doesn't match this heuristic is simply left alone.
+  // groups to read. Only a single-rate Shopify checkout has been seen live
+  // (design-log §50/§51): it renders no radio at all, so there's nothing to
+  // pick. Multi-rate markup is still unverified; a group whose markup
+  // doesn't match this heuristic is simply left alone.
   function selectCheapestRate() {
     var groups = {};
     var radios = doc.querySelectorAll("input[type='radio']");
@@ -154,7 +198,7 @@
       var match = text.match(RATE_PRICE);
       if (!match && !/\bfree\b/i.test(text)) continue;
 
-      var price = match ? parseFloat(match[1].replace(",", ".")) : 0;
+      var price = match ? parseAmount(match[1] || match[2]) : 0;
       (groups[radio.name] = groups[radio.name] || []).push({ radio: radio, price: price, text: text });
     }
 

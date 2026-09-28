@@ -1083,6 +1083,41 @@ RSpec.describe Portage::Cli::Buy do
 
         expect(report[:checkout_url]).to eq("https://shop.example/checkouts/c1")
       end
+
+      # A library caller's dry_run: true used to be ignored here: the run
+      # still added to the store's real cart and navigated the bridge's tab
+      # to checkout. Nothing past the read-only search may run.
+      it "stops before any cart mutation or hand-off on a dry run, reporting what it would have done" do
+        stub_no_native_manifest
+        page = shopify_shaped_page(cart: webmcp_cart,
+                                   handoff_result: { "url" => "https://shop.example/checkouts/c1" })
+        allow(page).to receive(:execute_tool).and_call_original
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true, dry_run: true,
+                                     webmcp_bridge: page).call
+
+        expect(report[:source]).to eq("webmcp")
+        expect(report[:outcome]).to eq("dry_run")
+        expect(report[:message]).to include("Dry run")
+        expect(report[:handoff]).to be_nil
+        expect(report[:checkout_url]).to be_nil
+        expect(report[:would]).to eq(line_items: [{ product_id: "p1", quantity: 1 }],
+                                     handoff_checkout: "proceed_to_checkout", autofill: false)
+        %w[add_to_cart get_cart proceed_to_checkout].each do |tool|
+          expect(page).not_to have_received(:execute_tool).with(tool, anything)
+        end
+      end
+
+      it "never auto-opens or notifies on a dry run" do
+        stub_no_native_manifest
+        page = shopify_shaped_page(cart: webmcp_cart, handoff_result: {},
+                                   location: "https://shop.example/checkouts/c1")
+        expect(Portage::Cli::CheckoutHandoff).not_to receive(:new)
+
+        report = described_class.new(url: "shop.example", query: "cold", dry_run: true, webmcp_bridge: page).call
+
+        expect(report[:outcome]).to eq("dry_run")
+      end
     end
 
     describe "Phase 2: schema matching for an unrecognized page's tools" do
@@ -1334,6 +1369,23 @@ RSpec.describe Portage::Cli::Buy do
 
         expect(report[:outcome]).to eq("express_stop")
         expect(report[:checkout_url]).to eq("https://shop.example/checkouts/c1")
+      end
+
+      it "never prompts or types into the page on a dry run, only reporting that autofill would run" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(headless: false, autofill_result: nil)
+        expect(page).not_to receive(:autofill)
+        confirm = instance_double(Portage::Cli::WebmcpAutofillConfirm)
+        expect(confirm).not_to receive(:call)
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              dry_run: true, webmcp_autofill_confirm: confirm).call
+        end
+
+        expect(report[:outcome]).to eq("dry_run")
+        expect(report[:would][:autofill]).to be(true)
+        expect(report).not_to have_key(:autofill)
       end
     end
 
