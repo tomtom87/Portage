@@ -9,6 +9,21 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`buy` skill and plugin marketplace** (`docs/plans/buy-skill-and-local-browser.md`
+  Phase 0, docs/config only). `.claude-plugin/marketplace.json` lists one
+  plugin, `buy`, at `plugins/buy`. Its `SKILL.md` is the agent-facing
+  interface to `portage`: install check, `doctor`-driven setup, the find →
+  dry-run → confirm → buy flow, hand-off (`default`/`profile`/`agent:<name>`/
+  `print`), hand-off-only retailers, and the hard rules (no raw card data,
+  no browser credential/cookie/autofill reads, no CAPTCHA bypass, untrusted
+  page text, confirm-before-buy, no blind retries, private shipping
+  details). It detects which commands the installed `portage` supports from
+  `portage --help`, so `index`/`browser`/`setup`/`--handoff-target` are used
+  only once a later phase ships them. Three references:
+  `outcomes.md` (every `--json` outcome), `raw-ucp.md` (driving a store's
+  UCP endpoint by hand with no CLI), `handoff-only.md` (Tier C and why).
+  `skills/shop-via-ucp` is unchanged for now; it starts pointing to `buy`
+  once Phase 8 lands. Both manifests pass `claude plugin validate .`.
 - **WebMCP outbound docs** (`docs/plans/webmcp-universal-outbound.md`
   Phase 4, no code change). `portage-ucp-webmcp`'s README documents
   platform presets (`Presets`/`preset:`), the schema-matcher fallback for

@@ -1,0 +1,13 @@
+{
+  "name": "buy",
+  "version": "0.1.0",
+  "description": "Find and buy products from online stores through the portage CLI: search, compare, dry-run, checkout, hand-off to your own browser, order tracking, with spending caps and hard guardrails.",
+  "author": {
+    "name": "Tom Whitbread",
+    "url": "https://github.com/tomtom87/Portage"
+  },
+  "homepage": "https://portage.readthedocs.io/en/latest/",
+  "repository": "https://github.com/tomtom87/Portage",
+  "license": "MIT",
+  "keywords": ["shopping", "buy", "checkout", "ucp", "mcp", "webmcp", "ecommerce"]
+}
