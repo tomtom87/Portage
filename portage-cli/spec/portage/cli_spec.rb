@@ -122,6 +122,41 @@ RSpec.describe Portage::Cli do
       expect(Portage::Cli::Buy).not_to have_received(:new)
     end
 
+    describe "--handoff-target (docs/plans/buy-skill-and-local-browser.md Phase 5)" do
+      it "builds and passes a validated HandoffTarget to Buy" do
+        captured = nil
+        allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+          captured = opts
+          instance_double(Portage::Cli::Buy, call: report)
+        }
+
+        described_class.run(%w[buy shop.example --query cold --handoff-target print])
+
+        expect(captured[:handoff_target]).to be_a(Portage::Cli::HandoffTarget)
+        expect(captured[:handoff_target]).to be_print
+      end
+
+      it "defaults to the \"default\" target when the flag is omitted" do
+        captured = nil
+        allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+          captured = opts
+          instance_double(Portage::Cli::Buy, call: report)
+        }
+
+        described_class.run(%w[buy shop.example --query cold])
+
+        expect(captured[:handoff_target]).to be_default
+      end
+
+      it "refuses an unknown --handoff-target value, before ever building Buy" do
+        allow(Portage::Cli::Buy).to receive(:new)
+
+        expect { expect(described_class.run(%w[buy shop.example --handoff-target nowhere])).to eq(1) }
+          .to output(/Unknown --handoff-target/).to_stderr
+        expect(Portage::Cli::Buy).not_to have_received(:new)
+      end
+    end
+
     describe "a refused option under --json" do
       before { allow(Portage::Cli::Buy).to receive(:new) }
 
@@ -147,6 +182,14 @@ RSpec.describe Portage::Cli do
         expect(status).to eq(1)
         expect(report).to include("outcome" => "invalid_option")
         expect(report["message"]).to include("--min-confidence high")
+      end
+
+      it "reports an unknown --handoff-target the same way" do
+        status, report = refused(%w[buy shop.example --handoff-target nowhere --json])
+
+        expect(status).to eq(1)
+        expect(report).to include("outcome" => "invalid_option")
+        expect(report["message"]).to include("Unknown --handoff-target")
       end
     end
 
@@ -773,6 +816,14 @@ RSpec.describe Portage::Cli do
     def run_json(*args)
       output = capture_stdout { @status = described_class.run(["browser", "import", *args, "--json"]) }
       JSON.parse(output)
+    end
+
+    it "wires the real HandoffOnly list into Importer's handoff_only_hosts: seam" do
+      Portage::Cli::Config.load.set("handoff_only_hosts", ["shop.example"])
+
+      capture_stdout { described_class.run(%w[browser import --dry-run]) }
+
+      expect(Portage::Cli::BrowserImport::Importer).to have_received(:new).with(handoff_only_hosts: ["shop.example"])
     end
 
     it "never saves on --dry-run" do

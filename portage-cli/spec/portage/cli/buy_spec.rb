@@ -278,7 +278,7 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:outcome]).to eq("requires_escalation")
       expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
       expect(report[:handoff]).to eq(url: "https://shop.example/checkout/chk_1", opened: false,
-                                     notified: false, notify_error: nil)
+                                     notified: false, notify_error: nil, handoff_target: "default")
       expect(session).not_to have_received(:complete_checkout)
     end
 
@@ -317,7 +317,7 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:checkout_url]).to eq("https://shop.example/checkout/chk_1")
       expect(report[:checkout_status]).to eq("ready_for_complete")
       expect(report[:handoff]).to eq(url: "https://shop.example/checkout/chk_1", opened: false,
-                                     notified: false, notify_error: nil)
+                                     notified: false, notify_error: nil, handoff_target: "default")
     end
 
     it "auto-opens the checkout_url on a dead end when --auto-open is given" do
@@ -1458,6 +1458,158 @@ RSpec.describe Portage::Cli::Buy do
 
         expect(report[:outcome]).to eq("webmcp_token_unsupported")
         expect(report[:checkout]).to be false
+      end
+    end
+  end
+
+  describe "hand-off targets + hand-off-only hosts (docs/plans/buy-skill-and-local-browser.md Phase 5)" do
+    describe "Tier C: hand-off-only hosts" do
+      it "never sends a request to Amazon — no UCP probe, no homepage fetch, no cart" do
+        expect(Portage::Ucp::Client).not_to receive(:discover)
+        expect(Portage::Cli::HomepageFetch).not_to receive(:call)
+
+        report = described_class.new(url: "https://www.amazon.co.uk", query: "kettle", dry_run: true).call
+
+        expect(a_request(:any, /.*/)).not_to have_been_made
+        expect(report[:outcome]).to eq("handoff_only")
+      end
+
+      it "reports handoff_only with the retailer's own search URL and the legal notice" do
+        report = described_class.new(url: "https://www.amazon.co.uk", query: "kettle", dry_run: true).call
+
+        expect(report[:outcome]).to eq("handoff_only")
+        expect(report[:source]).to eq("handoff_only")
+        expect(report[:checkout]).to be false
+        expect(report[:browse]).to be false
+        expect(report[:checkout_url]).to eq("https://www.amazon.co.uk/s?k=kettle")
+        expect(report[:legal_notice]).to eq(Portage::Cli::HandoffOnly::LEGAL_NOTICE)
+      end
+
+      it "builds a cart-add URL when a product id is known" do
+        report = described_class.new(url: "https://www.amazon.com", query: "kettle", product_id: "B000123",
+                                     qty: 2, dry_run: true).call
+
+        expect(report[:checkout_url])
+          .to eq("https://www.amazon.com/gp/aws/cart/add.html?ASIN.1=B000123&Quantity.1=2")
+      end
+
+      it "falls back to the origin's homepage for a user-added host with no known search pattern" do
+        Portage::Cli::Config.load.set("handoff_only_hosts", ["shop.example"])
+
+        report = described_class.new(url: "https://shop.example", query: "kettle", dry_run: true).call
+
+        expect(report[:outcome]).to eq("handoff_only")
+        expect(report[:checkout_url]).to eq("https://shop.example/")
+      end
+
+      it "an Amazon offer's own default-hand-off-target list is honored — Amazon opens like any other hand-off" do
+        allow_any_instance_of(Portage::Cli::CheckoutHandoff).to receive(:system).and_return(true)
+
+        report = described_class.new(url: "https://www.amazon.co.uk", query: "kettle", auto_open: true).call
+
+        expect(report[:handoff]).to include(opened: true, handoff_target: "default")
+      end
+
+      it "never opens anything on --dry-run" do
+        allow(Portage::Cli::CheckoutHandoff).to receive(:new)
+
+        report = described_class.new(url: "https://www.amazon.co.uk", query: "kettle", dry_run: true).call
+
+        expect(report[:handoff]).to be_nil
+        expect(Portage::Cli::CheckoutHandoff).not_to have_received(:new)
+      end
+
+      it "a user can drop Amazon from the list entirely, restoring normal buy behavior" do
+        Portage::Cli::Config.load.set("handoff_only_hosts", [])
+        session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+        report = described_class.new(url: "https://www.amazon.co.uk", query: "kettle", yes: true).call
+
+        expect(report[:outcome]).not_to eq("handoff_only")
+      end
+    end
+
+    describe "--handoff-target" do
+      def dead_end_checkout
+        incomplete_checkout.merge("links" => [{ "type" => "checkout", "url" => "https://shop.example/checkout/chk_1" }])
+      end
+
+      def stub_dead_end
+        session = fake_session(advertises_checkout: true, checkout: dead_end_checkout)
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      end
+
+      it "print: never opens anything, just reports the URL and the target" do
+        stub_dead_end
+        allow(Portage::Cli::CheckoutHandoff).to receive(:new)
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true,
+                                     handoff_target: Portage::Cli::HandoffTarget.new(override: "print")).call
+
+        expect(report[:handoff]).to include(opened: false, handoff_target: "print")
+        expect(Portage::Cli::CheckoutHandoff).not_to have_received(:new)
+      end
+
+      it "profile: reports it isn't available yet and behaves like print" do
+        stub_dead_end
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true,
+                                     handoff_target: Portage::Cli::HandoffTarget.new(override: "profile")).call
+
+        expect(report[:handoff]).to include(opened: false, handoff_target: "profile")
+        expect(report[:handoff][:target_message]).to include("isn't built yet")
+      end
+
+      it "agent:<name> is never invoked when the name isn't approved in config" do
+        stub_dead_end
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true,
+                                     handoff_target: Portage::Cli::HandoffTarget.new(override: "agent:openclaw")).call
+
+        expect(report[:handoff]).to include(opened: false, handoff_target: "agent:openclaw", agent_delivered: false)
+        expect(report[:handoff][:agent_error]).to include("openclaw").and include("approved")
+      end
+
+      it "agent:<name> is invoked with the same payload --notify-webhook sends, once approved" do
+        stub_dead_end
+        Portage::Cli::Config.load.set("handoff_agents",
+                                      { "openclaw" => { "webhook" => "https://agent.example/hook",
+                                                        "approved" => true } })
+        stub = stub_request(:post, "https://agent.example/hook")
+               .with(body: hash_including("event" => "checkout_handoff",
+                                          "checkout_url" => "https://shop.example/checkout/chk_1",
+                                          "store" => "https://shop.example", "query" => "cold"))
+               .to_return(status: 200, body: "ok")
+
+        report = described_class.new(url: "shop.example", query: "cold", yes: true,
+                                     handoff_target: Portage::Cli::HandoffTarget.new(override: "agent:openclaw")).call
+
+        expect(report[:handoff]).to include(agent_delivered: true, agent_error: nil, opened: false)
+        expect(stub).to have_been_requested
+      end
+
+      it "the agent payload carries no shipping/credential fields beyond the checkout URL" do
+        stub_dead_end
+        Portage::Cli::Config.load.set("handoff_agents",
+                                      { "openclaw" => { "webhook" => "https://agent.example/hook",
+                                                        "approved" => true } })
+        sent_body = nil
+        stub_request(:post, "https://agent.example/hook")
+          .to_return do |request|
+          sent_body = request.body
+          { status: 200, body: "ok" }
+        end
+
+        described_class.new(url: "shop.example", query: "cold", yes: true,
+                            handoff_target: Portage::Cli::HandoffTarget.new(override: "agent:openclaw")).call
+
+        body = JSON.parse(sent_body)
+        expect(body.keys).not_to include("payment_token", "shipping_address", "card")
+      end
+
+      it "an unknown --handoff-target value raises ArgumentError, caught before any checkout is attempted" do
+        expect { Portage::Cli::HandoffTarget.new(override: "nowhere") }.to raise_error(ArgumentError)
       end
     end
   end

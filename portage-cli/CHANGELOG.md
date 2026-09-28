@@ -6,6 +6,83 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Hand-off targets + hand-off-only hosts** (`docs/plans/
+  buy-skill-and-local-browser.md` Phase 5). `portage buy --handoff-target
+  default|print|profile|agent:<name>` (also `PORTAGE_HANDOFF_TARGET` /
+  `~/.portage/config.json`'s `"handoff_target"`, same precedence as every
+  other `Setting`) decides where a dead-end `checkout_url` goes:
+  `default` is today's `CheckoutHandoff` auto-open, unchanged; `print`
+  just reports the URL; `profile` is accepted but says the Portage browser
+  profile isn't built yet (Phase 6) and behaves like `print`; `agent:<name>`
+  passes the checkout URL and the same cart-summary payload
+  `--notify-webhook` sends to a named agent the user has approved once in
+  `~/.portage/config.json`'s new `handoff_agents` (a `command` argv run
+  with a scrubbed environment, stdin JSON and a 30s timeout — never a
+  shell string — or an `https` `webhook`), never invoked unless
+  `"approved": true`. Every hand-off report's `handoff` object now also
+  carries `handoff_target`, plus `agent_delivered`/`agent_error` for an
+  `agent:<name>` target. New `Portage::Cli::HandoffTarget`, `HandoffAgents`
+  (`lib/portage/cli/handoff_{target,agents}.rb`), and `Buy#handoff_notify_payload`
+  now also carries `items:`.
+  New `Portage::Cli::HandoffOnly` (`lib/portage/cli/handoff_only.rb`) is
+  the one place Tier C's host list lives — every Amazon marketplace by
+  default, fully replaced by `~/.portage/config.json`'s
+  `"handoff_only_hosts"` once that key is present. `portage buy` against
+  one of these hosts returns outcome `handoff_only` **before any request
+  to that host** — no UCP probe, no homepage fetch, no cart — with a
+  `checkout_url` (a product page/cart-add URL when a product id is known,
+  the retailer's own search URL for the query when it's Amazon, or the
+  origin's homepage otherwise, always built and never fetched) and a
+  `legal_notice` (facts plus the as-is/no-warranty line). `portage find`
+  and `portage index build`/`add`/`refresh` never probe a hand-off-only
+  origin either — `find` still lists it as a candidate, marked
+  `handoff_only: true`. `portage browser import`'s existing
+  `handoff_only_hosts:` seam is now wired to the real list. `portage
+  compare` and `PaymentMethods#enroll` (`portage payment enroll`) also
+  refuse a hand-off-only origin before ever probing it (`compare` reports
+  it hand-off only with the legal notice; enrollment reports
+  `status: "handoff_only"` — "there's nothing to set up here"), and
+  `HandoffReconciler#reconnect` refuses one too, as defense in depth (Buy's
+  `handoff_only` outcome never reserves a pending record in the first
+  place, so this path shouldn't be reachable, but it's the one place every
+  reconcile fetches a store again from a saved record). `HandoffOnly#hosts`
+  normalizes each configured entry — `"www.example.com"`,
+  `"example.com/path"`, and `"https://www.example.com/s?k=x"` all reduce
+  to `"example.com"` — the same normalization `BrowserImport::Importer`
+  already applies to a history/bookmark domain. `portage
+  doctor` gains a `handoff` finding (current target, the hand-off-only
+  list, the disclaimer), and `portage setup`'s Hand-off step now also sets
+  the target, approves a named agent, and edits the hand-off-only list.
+  **Review caught three more real bugs before this shipped, all fixed:**
+  (1) `HandoffAgents::Command`'s timeout never actually killed the child —
+  `Open3.popen3`'s block form joins `wait_thr` in its own `ensure` once the
+  block returns, so a `Timeout.timeout` firing inside it just meant popen3
+  itself then hung waiting for the still-running child; fixed to
+  `SIGTERM`, then `SIGKILL` after a short grace, and to actually wait for
+  the child to die before leaving the block, plus draining stdout/stderr
+  on their own threads (same as `Open3.capture3`) so a child that fills
+  the stderr pipe can't deadlock a sequential read of stdout first. (2)
+  `Index::Builder#reverify_stale` skipped by an entry's *stored*
+  `handoff_only` flag rather than the live config, which was wrong in
+  both directions — an origin whose UCP probe simply failed (stored
+  `handoff_only: true`, but not a Tier C host) would never be re-verified
+  again, and a stale entry recorded before the user added its host to
+  `handoff_only_hosts` (stored `handoff_only: false`) would keep being
+  probed; fixed to check `handoff_only_origin?` against live config
+  instead, flipping a now-hand-off-only entry's stored flag with no
+  request when it disagrees. (3) `Compare#resolve_origin` and
+  `PaymentMethods#discover_session` still probed whatever origin/store URL
+  they were given, including a hand-off-only one (`portage compare
+  <amazon-url>` and `portage payment enroll <amazon-url>` both reached
+  Amazon) — fixed as described above.
+  `portage-cli`: 783 → 865 examples (+82: +70 from the phase's first pass,
+  +12 from the review round above — a real-subprocess kill-on-timeout
+  spec for `HandoffAgents::Command`, `Index::Builder#refresh` specs for
+  both reverify-skip directions plus a `--dry-run` one, and one
+  zero-requests spec each for `Compare`, `PaymentMethods#enroll`,
+  `HandoffReconciler#reconnect`, and `HandoffOnly#hosts` normalization),
+  0 failures; `rubocop` clean, no new cop disables.
+
 - **`portage setup` — interactive setup wizard** (`docs/plans/
   buy-skill-and-local-browser.md` Phase 4). On a TTY, `portage setup` (and
   `portage doctor`/`configure` when `Doctor#nothing_configured?` — no

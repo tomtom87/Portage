@@ -16,6 +16,7 @@ require_relative "payment_methods/keychain_backend"
 require_relative "payment_methods/secret_service_backend"
 require_relative "payment_methods/env_backend"
 require_relative "user_agent"
+require_relative "handoff_only"
 
 module Portage
   module Cli
@@ -60,9 +61,10 @@ module Portage
 
       def self.default(path: PATH, backend: detect_backend) = new(path: path, backend: backend).default
 
-      def initialize(path: PATH, backend: self.class.detect_backend)
+      def initialize(path: PATH, backend: self.class.detect_backend, handoff_only: nil)
         @path = path
         @backend = backend
+        @handoff_only = handoff_only || HandoffOnly.new
       end
 
       # @return [String, nil] the token `portage buy` should use when
@@ -132,8 +134,10 @@ module Portage
       #
       # @return [Hash] {status:, setup_url:, id:, label:} — status is
       #   "complete", "pending" (timed out — the CLI can re-poll later
-      #   against the same enrollment id), or "unsupported" (nothing at
-      #   `url` advertises payment enrollment).
+      #   against the same enrollment id), "unsupported" (nothing at
+      #   `url` advertises payment enrollment), or "handoff_only" (a Tier C
+      #   host, e.g. Amazon — never even probed; docs/plans/
+      #   buy-skill-and-local-browser.md Phase 5).
       # @param scope [Hash, nil] Phase 2 per-token policy scope, bound at
       #   enrollment time (docs/plans/agentic-payments.md) — e.g.
       #   `{merchants: ["shop.example.com"], max_amount: 5000, currency: "USD"}`.
@@ -143,6 +147,9 @@ module Portage
       #   this gem's.
       def enroll(url, label: nil, scope: nil, poll_interval: 3, timeout: 300, sleeper: ->(s) { sleep(s) })
         raise NotSupportedError, "headless mode has no local storage — set PORTAGE_PAYMENT_TOKEN instead" if headless?
+
+        host = handoff_only_host(url)
+        return { status: "handoff_only", host: host } if host
 
         session = discover_session(url)
         return { status: "unsupported" } unless session && payment_enrollment_advertised?(session)
@@ -195,6 +202,20 @@ module Portage
       end
 
       def stringify_keys(hash) = hash.transform_keys(&:to_s)
+
+      # Never even parses far enough to probe a hand-off-only host (Amazon
+      # by default) to see whether it supports payment enrollment — there's
+      # nothing to set up there regardless of what it answers.
+      def handoff_only_host(url)
+        uri = normalized_uri(url)
+        uri && @handoff_only.host?(uri.host) ? uri.host : nil
+      end
+
+      def normalized_uri(url)
+        URI.parse(url.to_s =~ %r{\Ahttps?://}i ? url.to_s : "https://#{url}")
+      rescue URI::InvalidURIError
+        nil
+      end
 
       # Same native-manifest-first, own-store-adapter-fallback discovery as
       # Buy#call — duplicated rather than extracted since Buy's version is

@@ -8,6 +8,8 @@ require_relative "dot_env"
 require_relative "search_backends"
 require_relative "agent_profile_url"
 require_relative "index"
+require_relative "handoff_target"
+require_relative "handoff_only"
 
 module Portage
   module Cli
@@ -73,6 +75,7 @@ module Portage
           search_backend_finding,
           agent_profile_finding,
           index_finding,
+          handoff_finding,
           user_agent_finding,
           shipping_finding,
           proxy_finding,
@@ -237,6 +240,19 @@ module Portage
         days = age ? age / 86_400 : "?"
         "Known-stores list: #{@known_cache.stores.length} store(s), #{@known_cache.products.length} " \
           "product(s), fetched #{days} day(s) ago."
+      end
+
+      # docs/plans/buy-skill-and-local-browser.md Phase 5 — always info:
+      # both the current hand-off target and the hand-off-only host list are
+      # legitimate to leave at their defaults. The disclaimer runs here as
+      # well as on every `handoff_only` buy report and the `buy` skill's own
+      # reference doc (decision 5).
+      def handoff_finding
+        target = HandoffTarget.new
+        hosts = HandoffOnly.new.hosts
+        Finding.new(check: "handoff", level: "info", details: { target: target.label, handoff_only_hosts: hosts },
+                    message: "Hand-off target: #{target.label}. Hand-off-only hosts (#{hosts.length}): " \
+                             "#{hosts.join(', ')}. #{HandoffOnly::LEGAL_NOTICE}")
       end
 
       # PORTAGE_USER_AGENT / config.json's "user_agent" (UserAgent) is sent

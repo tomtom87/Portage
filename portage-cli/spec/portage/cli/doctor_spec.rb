@@ -244,6 +244,41 @@ RSpec.describe Portage::Cli::Doctor do
     end
   end
 
+  describe "hand-off target + hand-off-only hosts (docs/plans/buy-skill-and-local-browser.md Phase 5)" do
+    def handoff_finding
+      described_class.new(install_doctor: install_doctor).call.find { |f| f.check == "handoff" }
+    end
+
+    it "reports the current hand-off target" do
+      finding = handoff_finding
+
+      expect(finding.level).to eq("info")
+      expect(finding.message).to include("Hand-off target: default")
+      expect(finding.details[:target]).to eq("default")
+    end
+
+    it "reports the hand-off-only host list, seeded with Amazon" do
+      finding = handoff_finding
+
+      expect(finding.message).to include("amazon.com")
+      expect(finding.details[:handoff_only_hosts]).to eq(Portage::Cli::HandoffOnly::DEFAULT_HOSTS)
+    end
+
+    it "reflects the user's own configured target and host list" do
+      Portage::Cli::Config.load.set("handoff_target", "print")
+      Portage::Cli::Config.load.set("handoff_only_hosts", ["shop.example"])
+
+      finding = handoff_finding
+
+      expect(finding.message).to include("Hand-off target: print").and include("shop.example")
+      expect(finding.message).not_to include("amazon.com")
+    end
+
+    it "always states the as-is/no-warranty disclaimer" do
+      expect(handoff_finding.message).to include("provided as-is, without warranty")
+    end
+  end
+
   describe "the local index (docs/plans/buy-skill-and-local-browser.md Phase 2b)" do
     def index_finding(stores:, products:, known_cache: instance_double(Portage::Cli::Index::KnownCache,
                                                                        stale?: false, exists?: false))

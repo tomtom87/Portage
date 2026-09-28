@@ -1,4 +1,5 @@
 require_relative "find"
+require_relative "handoff_only"
 
 module Portage
   module Cli
@@ -53,6 +54,8 @@ module Portage
       def resolve_origin
         uri = parse_http(@origin_url)
         return report(message: "Not a store URL: #{@origin_url.inspect}") unless uri
+        return report(message: "#{uri.host} is hand-off only — #{HandoffOnly::LEGAL_NOTICE}") \
+          if @handoff_only.host?(uri.host)
 
         session = discover(origin_of(uri))
         return report(message: "#{origin_of(uri)} doesn't speak UCP.") unless session

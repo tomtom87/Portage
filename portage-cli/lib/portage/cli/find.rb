@@ -8,6 +8,7 @@ require_relative "agent_profile_url"
 require_relative "probe_cache"
 require_relative "decisions"
 require_relative "user_agent"
+require_relative "handoff_only"
 
 module Portage
   module Cli
@@ -35,8 +36,14 @@ module Portage
       #   (OfferSources) that answers offers directly, with no manifest
       #   probe of its own — see #call. nil (the default) is
       #   OfferSources.default.
+      # @param handoff_only [HandoffOnly, nil] Tier C's host list
+      #   (docs/plans/buy-skill-and-local-browser.md Phase 5) — nil (the
+      #   default) is the real ~/.portage/config.json-backed one. A
+      #   candidate on it is never probed (see #call): it still surfaces as
+      #   a candidate, marked `handoff_only: true`, so an agent can list it
+      #   ("Amazon also sells this") without this process ever fetching it.
       def initialize(query:, limit: MAX_PROBES, max_price: nil, backends: nil, cache: nil, throttle: THROTTLE,
-                     offer_sources: nil)
+                     offer_sources: nil, handoff_only: nil)
         @query = query.to_s
         @limit = [limit, MAX_PROBES].min
         @max_price = max_price
@@ -44,21 +51,22 @@ module Portage
         @cache = cache || ProbeCache.new
         @throttle = throttle
         @offer_sources = offer_sources || OfferSources.default
+        @handoff_only = handoff_only || HandoffOnly.new
       end
 
       def call
         return report(message: "Nothing to search for — pass --query.") if @query.strip.empty?
 
         candidates = candidate_origins
-        stores = probe(candidates)
+        probed, stores = probe_candidates(candidates)
         sourced = source_offers
         return report(candidates: candidates, message: no_candidates_message) if nothing_to_go_on?(candidates, sourced)
 
-        offers = rank(sourced + stores.flat_map { |store| offers_for(store) })
-        report(candidates: candidates, stores: stores.map { |s| s.slice(:origin, :source, :checkout) },
-               offers: offers, message: summary(candidates, stores, offers))
+        offers = rank(sourced + probed.flat_map { |store| offers_for(store) })
+        report(candidates: candidates, stores: store_summaries(stores), offers: offers,
+               message: summary(candidates, stores, offers))
       rescue Portage::Ucp::Client::MissingAgentProfileError
-        report(candidates: candidates, stores: stores.map { |s| s.slice(:origin, :source, :checkout) },
+        report(candidates: candidates, stores: store_summaries(stores),
                message: "Set PORTAGE_AGENT_PROFILE to a URL that describes this agent — each store " \
                         "verifies it before answering a catalog search.")
       end
@@ -92,7 +100,30 @@ module Portage
         existing = seen[uri.host]
         return if existing && !upgradable?(existing, uri)
 
-        seen[uri.host] = { origin: origin_of(uri), source: existing ? existing[:source] : backend.name }
+        seen[uri.host] = { origin: origin_of(uri), source: existing ? existing[:source] : backend.name,
+                           handoff_only: @handoff_only.host?(uri.host) }
+      end
+
+      # Tier C candidates never reach #probe — no UCP request, ever — but
+      # still surface in the report's `stores`, `checkout: false`.
+      def handoff_only_stores(candidates)
+        candidates.map { |c| c.merge(checkout: false) }
+      end
+
+      # Splits candidates into the ones #probe actually fetches and the
+      # Tier C ones that never touch the network — kept out of #call to
+      # stay under its own complexity budget.
+      # @return [Array(Array<Hash>, Array<Hash>)] probed stores (the ones
+      #   with a live `session`, so #offers_for can ask them what they
+      #   stock), and every store for the report (probed + hand-off-only).
+      def probe_candidates(candidates)
+        probeable, deferred = candidates.partition { |c| !c[:handoff_only] }
+        probed = probe(probeable)
+        [probed, probed + handoff_only_stores(deferred)]
+      end
+
+      def store_summaries(stores)
+        stores.map { |s| s.slice(:origin, :source, :checkout, :handoff_only) }
       end
 
       # --- Step 1b: ask any OfferSources directly, no probe needed ---

@@ -8,6 +8,7 @@ require_relative "homepage_fetch"
 require_relative "handoff_spend_mode"
 require_relative "reconcile_notifier"
 require_relative "permissive_authenticator"
+require_relative "handoff_only"
 require_relative "handoff_reconciler/wire_adapters"
 
 module Portage
@@ -48,13 +49,15 @@ module Portage
       def initialize(transaction_log: Portage::Ucp::Support::TransactionLog.new,
                      order_ledger: Portage::Ucp::Support::OrderLedger.new,
                      journal: Portage::Ucp::Journal::PurchaseJournal.new,
-                     notifier: ReconcileNotifier.new, spend_mode: HandoffSpendMode.resolve, clock: -> { Time.now })
+                     notifier: ReconcileNotifier.new, spend_mode: HandoffSpendMode.resolve, clock: -> { Time.now },
+                     handoff_only: nil)
         @transaction_log = transaction_log
         @order_ledger = order_ledger
         @journal = journal
         @notifier = notifier
         @spend_mode = spend_mode
         @clock = clock
+        @handoff_only = handoff_only || HandoffOnly.new
       end
 
       # @param record [Hash] a TransactionLog record, as returned by
@@ -216,6 +219,17 @@ module Portage
         raise ReconnectError, "no store_url on this record" if store_url.to_s.empty?
 
         uri = URI.parse(store_url)
+        # Defense in depth (docs/plans/buy-skill-and-local-browser.md
+        # Phase 5): nothing in this gem should ever write a hand-off-only
+        # host's checkout into TransactionLog as a pending `settled_by:
+        # "shopper"` record in the first place (Buy's `handoff_only`
+        # outcome never calls #hand_off/#record_pending_handoff at all),
+        # but this is the one place every reconcile path fetches a store
+        # again from a saved record, so it's guarded here too rather than
+        # trusted to stay that way.
+        raise ReconnectError, "#{uri.host} is hand-off only — never reconciled automatically" \
+          if @handoff_only.host?(uri.host)
+
         native_session(uri) || adapter_session(uri) ||
           raise(ReconnectError, "no automated path back into #{store_url}")
       end

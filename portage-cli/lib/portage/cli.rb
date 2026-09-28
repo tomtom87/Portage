@@ -16,6 +16,8 @@ require_relative "cli/compare"
 require_relative "cli/history"
 require_relative "cli/payment_methods"
 require_relative "cli/proxy_settings"
+require_relative "cli/handoff_only"
+require_relative "cli/handoff_target"
 require_relative "cli/doctor"
 require_relative "cli/setup_wizard"
 require_relative "cli/handoff_reconciler"
@@ -35,6 +37,7 @@ module Portage
       usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
                                 [--product-id ID] [--yes] [--dry-run]
                                 [--auto-open|--no-auto-open] [--notify-webhook URL]
+                                [--handoff-target default|print|profile|agent:NAME]
                                 [--decision-backend jev|laya] [--min-confidence N] [--json]
                                 [--wait [--wait-timeout DURATION|off]]
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
@@ -235,11 +238,26 @@ module Portage
       url = parsed[:buy][:url] || parsed[:store]
       parsed[:confidence_check] = confidence_check(parsed, url)
       return 1 unless parsed[:confidence_check]
+
+      parsed[:handoff_target] = handoff_target(parsed, url)
+      return 1 unless parsed[:handoff_target]
       return execute_buy(parsed, url) if url
 
       buy_from_search(parsed)
     end
     private_class_method :run_buy
+
+    # Built and validated up front, same posture as #confidence_check — an
+    # unknown --handoff-target/PORTAGE_HANDOFF_TARGET/config.json value is a
+    # usage error, reported before a checkout is ever attempted rather than
+    # discovered mid hand-off (docs/plans/buy-skill-and-local-browser.md
+    # Phase 5).
+    def self.handoff_target(parsed, url)
+      HandoffTarget.new(override: parsed[:buy][:handoff_target])
+    rescue ArgumentError => e
+      invalid_buy_option(e.message, url: url, json: parsed[:json])
+    end
+    private_class_method :handoff_target
 
     # `portage buy` with no URL: search first, then buy from the store the
     # caller picks. `--yes` alone deliberately isn't enough to get here —
@@ -275,7 +293,8 @@ module Portage
     private_class_method :prompt_for_offer
 
     def self.execute_buy(parsed, url, product_id: nil)
-      options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check], json: !parsed[:json].nil?)
+      options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check],
+                                   handoff_target: parsed[:handoff_target], json: !parsed[:json].nil?)
       options[:product_id] ||= product_id
       report = Buy.new(**options).call
       record_buy(report, options[:query])
@@ -483,6 +502,7 @@ module Portage
     def self.add_handoff_options(parser, buy)
       parser.on("--[no-]auto-open") { |v| buy[:auto_open] = v }
       parser.on("--notify-webhook URL") { |v| buy[:notify_webhook] = v }
+      parser.on("--handoff-target TARGET") { |v| buy[:handoff_target] = v }
     end
     private_class_method :add_handoff_options
 
@@ -792,6 +812,9 @@ module Portage
       when "pending"
         "Timed out waiting for enrollment — finish it at #{result[:setup_url]}, then run " \
         "`portage payment enroll` again."
+      when "handoff_only"
+        "#{result[:host]} is hand-off only — there's nothing to set up here. Sign in and add a card " \
+        "on #{result[:host]} yourself."
       else "This store doesn't support payment enrollment."
       end
     end
@@ -1043,20 +1066,30 @@ module Portage
     # list and re-runs with `--yes` only once they've approved it.
     def self.run_browser_import(argv)
       opts = parse_browser_import_options(argv)
-      plan = BrowserImport::Importer.new.plan(browser_import_options(opts))
+      plan = browser_importer.plan(browser_import_options(opts))
       return report_browser_import(plan, opts, nil) if plan[:error]
 
       puts format_browser_import(plan) unless opts[:json]
       interactive = !opts[:json] && $stdin.tty?
       decision = BrowserImport::Confirm.new(interactive: interactive).call(plan, yes: opts[:yes],
                                                                                  dry_run: opts[:dry_run])
-      saved = decision == :save ? BrowserImport::Importer.new.save(plan) : nil
+      saved = decision == :save ? browser_importer.save(plan) : nil
       report_browser_import(plan, opts, decision, saved)
     rescue OptionParser::ParseError => e
       warn "#{e.message}\n#{USAGE}"
       1
     end
     private_class_method :run_browser_import
+
+    # The real HandoffOnly list (docs/plans/buy-skill-and-local-browser.md
+    # Phase 5) into Importer's own injectable `handoff_only_hosts:` seam
+    # (Phase 3 left it defaulting to `[]` for exactly this) — a history/
+    # bookmark domain on the list is kept as `handoff_only: true` and never
+    # probed.
+    def self.browser_importer
+      BrowserImport::Importer.new(handoff_only_hosts: HandoffOnly.new.hosts)
+    end
+    private_class_method :browser_importer
 
     def self.browser_import_options(opts)
       browser = opts[:browser] || BrowserImport::Profiles.detect || "chrome"
