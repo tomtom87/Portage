@@ -6,6 +6,12 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Docs for Phases 1-3** (docs/plans/webmcp-universal-outbound.md Phase 4,
+  no code change): the README's "WebMCP (library use, opt-in)" section now
+  covers the schema-matched/confirmed fallback for a page no preset
+  recognizes, and `--autofill`/`PORTAGE_WEBMCP_AUTOFILL=approve`/
+  config.json's `webmcp_autofill` — what it will and won't touch, and where
+  it stops (`autofill_needs_headed_browser`, `autofill_blocked`).
 - **Approved autofill of the store's checkout**
   (docs/plans/webmcp-universal-outbound.md Phase 3). Opt-in, per run:
   `--autofill`, or `PORTAGE_WEBMCP_AUTOFILL=approve` / config.json's

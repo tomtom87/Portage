@@ -27,6 +27,20 @@ checkouts by the same `outcome`, so check it before buying something twice. With
 If neither is available, make the raw MCP tool calls yourself, following the sequence
 below exactly.
 
+**A store with no UCP manifest isn't necessarily a dead end if you're driving a
+browser.** When you (or the process calling `portage-ucp-client`/`portage buy`) hold a
+browser already navigated to the store's page, `portage-ucp-webmcp`'s outbound
+transport can call whatever WebMCP tools that page itself registers — some Shopify
+storefronts do this today, most other platforms don't yet. It's tried after native UCP
+discovery finds nothing and before falling back to a platform adapter, and it never
+completes payment: the flow always ends by handing the shopper off to the store's own
+checkout page in that same browser, exactly like a `requires_escalation` link. A shopper
+who wants that hand-off page's contact and shipping fields pre-filled before they get
+there can opt into it — with `portage buy`, that's the `--autofill` flag or the
+`PORTAGE_WEBMCP_AUTOFILL=approve` setting — but even opted in, it only ever fills
+contact/shipping and the cheapest shipping rate, prompts the shopper to approve the
+exact fields first, and never touches anything payment-related.
+
 ## Guardrails — apply these every time, no exceptions
 
 1. **Discover the manifest before assuming any credential path.** Fetch

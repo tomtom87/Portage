@@ -255,7 +255,63 @@ something the consumer can list.
 
 ### Stores that don't run Portage
 
-`Transport` does not assume that the page was built with this gem:
+`Transport` does not assume that the page was built with this gem. Three
+ways to get a working `tool_names:`/`wire:` for a page you don't control,
+tried in this order (`docs/plans/webmcp-universal-outbound.md`):
+
+1. **A built-in preset.** `WebMcp::Presets.detect(tools)` matches a page's
+   tools against a known platform's exact fingerprint — the whole sorted set
+   of tool names it registers *right now*, never anything the page's own
+   text says about itself (a `generator` meta tag, `window.Shopify`, a
+   tool's own description — all untrusted page content, same boundary as
+   the confirm rule below). `WebMcp.connect(bridge:, preset: :auto)` — the
+   default — runs detection (one extra page read, on top of the one
+   `capabilities: nil` already does) and applies the matching preset's
+   `tool_names:`/`wire:` before anything else. `preset: nil` turns presets
+   off entirely; a symbol (`preset: :shopify`) forces one with no detection
+   read at all. An explicit `tool_names:`/`wire:` you also pass to `connect`
+   still wins over the preset's own — `tool_names:` key by key, `wire:`
+   outright. Shopify (`Presets::SHOPIFY`) is the only entry so far; see
+   "Shopify storefronts" below. A platform can change its tool set without
+   notice — when it does, `detect` simply misses and the page falls through
+   to the next mechanism rather than being mapped wrongly.
+2. **A matched-and-confirmed mapping**, for a page no preset recognizes.
+   `WebMcp::Matcher.propose(tools)` scores each of the page's own tools
+   against every UCP action Session can drive over WebMCP, by name-token
+   overlap (`findProducts` ↔ `search_catalog`), input-schema shape (a
+   `query` string → search; `product_id`/`variant_id` + `quantity` → add to
+   cart), and the tool's own `readOnlyHint` — **never** its `description`,
+   which is page text and therefore untrusted (a page could name a mutating
+   tool `search_catalog` with a friendly description; nothing here reads
+   that string for scoring or for the mapping it returns). It returns a
+   `Proposal` (`tool:`, `confidence:`, `reason:`) per action that scored
+   above a floor; an action nothing plausible matched is simply absent
+   rather than given a weak guess. `Matcher` itself never calls a tool,
+   prompts anyone, or persists anything — that's the caller's job, and the
+   confirm rule it leans on is: a **read action** (`search_catalog`,
+   `get_product`, `get_cart`) can be used straight off the proposal, since a
+   wrong match there wastes a call and changes nothing; a **mutating
+   action** (`create_cart`, `update_cart`, `create_checkout`) needs
+   confirmation before its first call, since a wrong guess there could add
+   to, discard, or attempt to charge a stranger's cart. `portage-cli`
+   enforces that rule for `portage buy`: `Portage::Cli::WebmcpMappingConfirm`
+   prints the proposed mapping — quoting a mutating tool's own `description`
+   as what it is, page content, never as an instruction — and prompts on a
+   real TTY with `--json` off; under `--json`, or with no TTY, the run
+   stops instead (outcome `webmcp_mapping_unconfirmed`) and returns the
+   proposal for the caller to pass back as `tool_names:` itself.
+   `Portage::Cli::WebmcpMappings` persists a confirmed mapping in
+   `~/.portage/webmcp_mappings.json`, keyed by the page's tool
+   **fingerprint** (`WebMcp::Fingerprint.for` — sorted tool names plus a
+   hash of each one's own input schema) rather than by origin: any later
+   store whose WebMCP tools have that exact shape reuses the mapping with
+   no prompt at all, in effect a locally-grown preset shared across every
+   store running that tool set. A lookalike page whose schemas differ even
+   slightly gets a different fingerprint and has to be confirmed again, so
+   it can't borrow a mapping that turns out to have a different shape
+   underneath the same tool names.
+3. **An explicit `tool_names:` you pass yourself.** Always available,
+   preset or confirmed mapping or not — see the next bullet.
 
 - **Tool names.** An action resolves to `tool_names[action]` first, then to
   `"#{prefix}#{action}"`, then to the action itself. Map a store's own names:
@@ -327,6 +383,71 @@ Things to know about these tools:
 - `update_cart_lines` addresses existing cart lines by line id, not by variant.
   `proceed_to_checkout` navigates the browser to Shopify checkout, where the
   shopper pays. Neither maps onto a Session method.
+
+### Approved autofill of the store's checkout
+
+Once a WebMCP session hands off to the store's own checkout — a preset's
+`handoff_checkout` tool (Shopify's `proceed_to_checkout`) navigates the same
+bridge's browser there — the shopper can opt into having contact and
+shipping fields filled in for them before they take over to pay. This is
+off by default and gated behind two separate approvals, neither of which
+lives in this gem:
+
+- **The opt-in itself** is `portage-cli`'s: `portage buy --autofill`, or
+  `PORTAGE_WEBMCP_AUTOFILL=approve` (config.json's `"webmcp_autofill":
+  "approve"` also works) for every run, until the caller opts out again.
+  Only the literal string `"approve"` turns the env/config level on — an
+  unrelated truthy convention like `PORTAGE_WEBMCP_AUTOFILL=true` does
+  nothing, deliberately, since a mistaken export of some other tool's
+  boolean shouldn't silently start typing into a checkout page.
+- **The shopper's approval of the exact fields.** Even opted in, nothing is
+  typed until a prompt lists every field and value about to be entered and
+  the shopper says yes — refused outright under `--json` or with no TTY on
+  stdin, the same posture as the mapping-confirm prompt above.
+
+What it will fill, once both approvals are in: the contact email and
+shipping address `portage-cli` already builds from `PORTAGE_SHIP_*` (plus
+the new `PORTAGE_SHIP_EMAIL`), matched to the checkout page's own fields by
+their WHATWG `autocomplete` attribute (`email`, `shipping given-name`,
+`shipping address-line1`, `shipping postal-code`, …), and the cheapest
+priced option in a same-named radio-button group it can read a price out
+of (a best-effort DOM heuristic, unverified against a real rate picker — see
+the Progress log in the plan). What it will never do, regardless of what
+it's asked for: touch a field whose own `autocomplete` is payment-shaped
+(`cc-*`, `transaction-*`) or whose `type` is `hidden`/`password` — checked
+against the page's own attribute, not against what was requested, so a
+mislabeled card field still can't be reached — or click a submit/pay
+control. The run always still ends in a hand-off; autofill only changes
+what's already filled in when the shopper gets there.
+
+`WebMcp::Autofill.call(bridge:, fields:, selectors:)` is the gate that
+actually runs it, and the outcomes a caller (or a report's `autofill:` key)
+can see are:
+
+| Outcome | Meaning |
+|---|---|
+| `:filled` | Ran. `#filled`/`#unmatched` list which fields matched a page element and which didn't; `#rate` lists any shipping-rate group it picked from. |
+| `:needs_headed_browser` | The bridge is headless, or never says either way. A bridge's `#headless?` defaults to unknown, and unknown is treated the same as headless — the shopper has to be able to see and pay in this browser, so "assume headed" isn't the safe default. |
+| `:blocked` | The checkout page itself showed a CAPTCHA/challenge marker (an embedded reCAPTCHA/hCaptcha/Turnstile iframe, a Cloudflare interstitial, a matching page title). Nothing was touched, and nothing here ever tries to solve or route around it. |
+| `:unsupported` | The bridge doesn't implement `#autofill` at all — a hand-rolled `Bridge` that only meets the base `#list_tools`/`#execute_tool` contract. |
+
+The DOM work — finding fields, refusing payment ones, detecting a
+challenge, filling through each element's native value setter so a
+React/Vue-controlled input actually notices — lives entirely in
+`assets/autofill.js`, run through `Bridges::ScriptEvaluator#autofill`, never
+as a WebMCP tool call. It treats the checkout page as untrusted content the
+same way the matcher above treats a tool's `description`: it never follows
+a link or acts on any instruction the page's own text might contain, and
+only ever reads `autocomplete`/`type` attributes and radio-group prices,
+sets a field's `.value`, or checks a radio button already on the page.
+
+A field the standard `autocomplete` match misses falls back to
+`Presets::Preset#checkout_selectors` — a platform's own CSS selectors,
+keyed by the same autocomplete token, for a checkout whose markup doesn't
+carry one. Shopify's is empty (`{}`) today: no live check has confirmed a
+fallback selector is even needed there, since Shopify Checkout's fields are
+documented to carry standard `autocomplete` values already — but that's
+unverified, not assumed safe, so nothing is guessed in its place.
 
 ### Errors
 

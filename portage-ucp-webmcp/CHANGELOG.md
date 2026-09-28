@@ -6,6 +6,13 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Docs for Phases 1-3** (docs/plans/webmcp-universal-outbound.md Phase 4,
+  no code change): the README's "Stores that don't run Portage" section now
+  documents `Presets`/`preset:`, `Matcher`/the read-vs-mutating confirm
+  rule, the fingerprint-keyed confirmed-mapping store, and a new "Approved
+  autofill of the store's checkout" section covering `Autofill`'s outcomes
+  and `Preset#checkout_selectors`. None of this had been written up before
+  now even though it shipped in earlier phases.
 - **Checkout autofill** (docs/plans/webmcp-universal-outbound.md Phase 3):
   `Bridges::ScriptEvaluator#autofill(fields, selectors:)` fills a checkout
   page's own contact/shipping fields directly — by `autocomplete` attribute,
