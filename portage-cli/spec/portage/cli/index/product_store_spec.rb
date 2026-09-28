@@ -64,4 +64,12 @@ RSpec.describe Portage::Cli::Index::ProductStore do
 
     expect(products.all).to eq([])
   end
+
+  it "accumulates sources across sightings rather than keeping only the latest (Phase 3)" do
+    products.upsert("title:x", origin: "https://a.example", seen_at: 1000, title: "X", sources: ["shopify_catalog"])
+    products.upsert("title:x", origin: "https://a.example", seen_at: 2000, title: "X", sources: ["history"])
+    products.upsert("title:x", origin: "https://a.example", seen_at: 3000, title: "X")
+
+    expect(products.find("title:x")["sources"]).to eq(%w[shopify_catalog history])
+  end
 end

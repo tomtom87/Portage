@@ -12,7 +12,10 @@ module Portage
       #
       # Entry shape: title, brand, gtin, category, aliases (other titles the
       # same product went by at a different store), stores (array of
-      # {origin:, last_seen:}).
+      # {origin:, last_seen:}), sources (which index sources ever saw it —
+      # Phase 3 adds this so Index::Exporter can tell a product only a
+      # browser import saw from one a real source found; entries written
+      # before it have none).
       class ProductStore
         PATH = File.join(Dir.home, ".portage", "index", "products.json").freeze
 
@@ -43,11 +46,14 @@ module Portage
 
         private
 
-        # `aliases`/`stores` accumulate across upserts; every other field
-        # (title, brand, gtin, category) is just the latest sighting's
-        # value, since a later source's read is no less authoritative than
-        # an earlier one's.
+        # `aliases`/`stores` accumulate across upserts (merged separately
+        # below), `sources` is the union of every sighting's; every other
+        # field (title, brand, gtin, category) is just the latest
+        # sighting's value, since a later source's read is no less
+        # authoritative than an earlier one's.
         def merge_field(field, old, new)
+          return (Array(old) + Array(new)).uniq if field == "sources"
+
           %w[aliases stores].include?(field) ? old : (new || old)
         end
 

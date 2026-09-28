@@ -386,6 +386,49 @@ RSpec.describe Portage::Cli::SearchBackends do
       end
     end
 
+    describe "browser-imported entries (docs/plans/buy-skill-and-local-browser.md Phase 3)" do
+      def imported(origin, categories: {}, sources: ["history"])
+        store_entry(origin, categories: categories).merge("sources" => sources)
+      end
+
+      before { allow(products).to receive(:all).and_return([]) }
+
+      it "routes an uncategorised import by name only, never for a generic query" do
+        allow(stores).to receive(:all).and_return([imported("https://www.allbirds.example")])
+
+        expect(backend.search("buy from allbirds")).to eq(["https://www.allbirds.example"])
+        expect(backend.search("allbirds.example wool runners")).to eq(["https://www.allbirds.example"])
+        expect(backend.search("wool runners")).to eq([])
+      end
+
+      it "doesn't match a store name inside a longer word" do
+        allow(stores).to receive(:all).and_return([imported("https://shoe.example")])
+
+        expect(backend.search("shoelaces")).to eq([])
+      end
+
+      it "routes a categorised import by category like any other index entry" do
+        allow(stores).to receive(:all).and_return([imported("https://a.example", categories: { "1" => 4 },
+                                                                                 sources: %w[bookmark history])])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+        expect(backend.search("sofa")).to eq(["https://a.example"])
+      end
+
+      it "is just as untrusted as any other index entry: never reaches Policy#merchant_allowlist" do
+        allow(stores).to receive(:all).and_return([imported("https://www.allbirds.example")])
+
+        Dir.mktmpdir do |dir|
+          policy_path = File.join(dir, "policy.json")
+          policy = Portage::Ucp::Policy.load(path: policy_path)
+
+          expect(backend.search("allbirds")).to eq(["https://www.allbirds.example"])
+          expect(policy.merchant_allowlist).to eq([])
+          expect(File.exist?(policy_path)).to be false
+        end
+      end
+    end
+
     describe "the known-stores cache (docs/plans/buy-skill-and-local-browser.md Phase 2c)" do
       let(:known) { instance_double(Portage::Cli::Index::KnownCache) }
       let(:backend) { described_class.new(stores: stores, products: products, known: known) }

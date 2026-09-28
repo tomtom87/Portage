@@ -44,3 +44,20 @@ Branch on `outcome`, never on `message`. **Only `purchased` means money moved.**
 | `webmcp_not_installed` / `webmcp_error` / `webmcp_token_unsupported` | WebMCP gem or browser bridge missing, or failing. Hand off, or fix the setup. |
 
 `portage history --json` lists past runs by the same outcomes.
+
+## `portage browser import --json`
+
+Not a purchase, so no `outcome`. Branch on `error`, then `saved` / `needs_confirmation`.
+
+| Field | Meaning | Do |
+|---|---|---|
+| `saved: false`, `needs_confirmation: true` | Found shops, wrote nothing (no terminal, no `--yes`) | Show `kept[]` (domain + `category_names`). Re-run with `--yes` only after the user approves; `--exclude host,host` drops any they don't want. |
+| `saved: false`, `needs_confirmation: false` | `--dry-run`, or nothing to save | Show `kept[]` if any. |
+| `saved: true` | Written to the local index (`sources: history`/`bookmark`) | Say how many. `portage index remove HOST` undoes one. |
+| `error: "full_disk_access_required"` | Safari: macOS needs Full Disk Access for the terminal | Relay `message`. The user changes the setting. Never work around it. |
+| `error: "permission_denied"` | Another browser's profile folder couldn't be read | Relay `message`. Same rule. |
+| `error: "no_profile"` | No profile with history or bookmarks for that browser | Try `--browser`, or `--profile-root DIR` if the user gives one. |
+| `error: "reader_unavailable"` | The `sqlite3` (or, for Safari, `plutil`) command is missing | Tell the user; nothing else reads those files. |
+
+Each `kept[]` entry's `verdict` is `ucp` (answered `/.well-known/ucp`), `indexed` / `known` (already in the local index / the published known-stores list, not probed), `webmcp`, or `handoff_only`. An empty `category_names` means the store is only used when the user names it.
+

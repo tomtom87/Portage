@@ -54,6 +54,14 @@ module Portage
         scored.sort_by { |(_id, score, order)| [-score, order] }.map(&:first)
       end
 
+      # @return [Array<String>] the taxonomy names for `ids`, in order —
+      #   `portage browser import` (Phase 3) shows a domain's guessed
+      #   categories by name so the user can judge them before saving.
+      def self.names_for(ids, known_path: KNOWN_PATH, user_path: PATH)
+        all = nodes(known_path, user_path)
+        Array(ids).filter_map { |id| all.dig(id.to_s, "name") }
+      end
+
       # --- Tokenizing the input ---
 
       # A URL slug is words joined by `-`/`_` (`hand-cut-glass` — see

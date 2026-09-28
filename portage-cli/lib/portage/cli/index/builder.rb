@@ -37,6 +37,15 @@ module Portage
         STALE_AFTER = 7 * 24 * 60 * 60
         TOP_CATEGORIES = 5
 
+        # Public so BrowserImport::Importer (Phase 3) labels a probed
+        # origin's capabilities exactly the way an index build does.
+        # @return [Array<String>] "catalog"/"cart"/"checkout", in that order.
+        def self.capabilities_of(session)
+          CAPABILITY_PREFIXES.filter_map do |label, prefix|
+            label if Array(session.capabilities).any? { |c| c == prefix || c.start_with?("#{prefix}.") }
+          end
+        end
+
         def initialize(stores: Store.new, products: ProductStore.new, cache: ProbeCache.new, sources: nil,
                        throttle: THROTTLE, max_new_probes: MAX_NEW_PROBES, out: $stdout, now: Time.now,
                        known_cache: KnownCache.new)
@@ -186,11 +195,7 @@ module Portage
           "shopify" if group.any? { |g| g[:source] == "shopify_catalog" }
         end
 
-        def capabilities_of(session)
-          CAPABILITY_PREFIXES.filter_map do |label, prefix|
-            label if Array(session.capabilities).any? { |c| c == prefix || c.start_with?("#{prefix}.") }
-          end
-        end
+        def capabilities_of(session) = self.class.capabilities_of(session)
 
         def store_products(sightings)
           eligible = sightings.select { |s| s[:title] && @stores.find(s[:origin]) }
@@ -202,7 +207,8 @@ module Portage
           key = product_key(sighting)
           category = Classifier.categories_for(sighting[:title]).first
           @products.upsert(key, origin: sighting[:origin], seen_at: @now.to_i, title: sighting[:title],
-                                brand: sighting[:brand], gtin: sighting[:gtin], category: category)
+                                brand: sighting[:brand], gtin: sighting[:gtin], category: category,
+                                sources: [sighting[:source]].compact)
         end
 
         # GTIN when a source has one (none do yet); otherwise a normalized

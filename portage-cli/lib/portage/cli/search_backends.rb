@@ -246,7 +246,9 @@ module Portage
       # PER_CATEGORY_CAP per matching category, TOTAL_CAP overall), plus
       # one thing stores.yml can't do: match a query against a *product* the
       # index has seen (by name or GTIN) and put that product's own stores
-      # first, ahead of a category guess.
+      # first, ahead of a category guess. A store the query names outright
+      # comes next (Phase 3 — the only route an uncategorised
+      # `portage browser import` domain ever gets).
       #
       # Phase 2c: also draws on the repo's own known-stores cache
       # (Index::KnownCache) — fetched lazily the first time this backend is
@@ -276,8 +278,9 @@ module Portage
           return [] if store_entries.empty? && product_entries.empty?
 
           product_origins = origins_for_products(query)
-          category_origins = origins_for_categories(Classifier.categories_for(query), exclude: product_origins)
-          (product_origins + category_origins).uniq.first([limit, TOTAL_CAP].min)
+          named = named_origins(query, exclude: product_origins)
+          category_origins = origins_for_categories(Classifier.categories_for(query), exclude: product_origins + named)
+          (product_origins + named + category_origins).uniq.first([limit, TOTAL_CAP].min)
         end
 
         private
@@ -369,6 +372,30 @@ module Portage
 
         def all_match?(these, those)
           these.all? { |a| those.any? { |b| Classifier.word_match?(a, b) } }
+        end
+
+        # A store the query names outright — its host ("allbirds.com") or
+        # its bare name as a whole word ("buy from allbirds") — whether or
+        # not it carries categories. This is the only way an uncategorised
+        # entry (a `portage browser import` domain whose titles matched no
+        # category — Phase 3) is ever routed: by name, never for a generic
+        # query.
+        def named_origins(query, exclude:)
+          tokens = Classifier.tokenize(query)
+          text = query.to_s.downcase
+          store_entries.filter_map do |entry|
+            origin = entry["origin"]
+            origin if !exclude.include?(origin) && names_store?(origin, text, tokens)
+          end
+        end
+
+        def names_store?(origin, text, tokens)
+          host = URI.parse(origin.to_s).host.to_s.downcase.delete_prefix("www.")
+          return false if host.empty?
+
+          text.include?(host) || tokens.include?(host.split(".").first)
+        rescue URI::InvalidURIError
+          false
         end
 
         def origins_for_categories(category_ids, exclude:)

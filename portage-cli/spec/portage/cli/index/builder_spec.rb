@@ -76,6 +76,9 @@ RSpec.describe Portage::Cli::Index::Builder do
       entry = products.all.find { |p| p["title"] == "Trail Boots" }
       expect(entry).not_to be_nil
       expect(entry["stores"].map { |s| s["origin"] }).to eq(["https://shop.example"])
+      # Phase 3: products carry the source that saw them, so Index::Exporter
+      # can tell a real source's product from a browser-import one.
+      expect(entry["sources"]).to eq(["shopify_catalog"])
     end
 
     it "never stores a price or stock field on a product entry" do

@@ -30,13 +30,13 @@ RSpec.configure do |config|
       # ~/.portage/index/{stores,products}.json.
       @index_stores_path = File.join(dir, "index", "stores.json")
       @index_products_path = File.join(dir, "index", "products.json")
-      @index_browser_path = File.join(dir, "index", "browser-import.json")
       # Index::KnownCache — same reasoning again, plus one more: with no
       # cache file present a spec that exercises SearchBackends::Index/
       # Doctor/Index::Builder without stubbing KnownCache itself will try
       # one real fetch (WebMock's `disable_net_connect!` above turns that
       # into a swallowed failure, same as offline — never a real request).
       @known_stores_path = File.join(dir, "index", "known-stores.json")
+      @probe_cache_path = File.join(dir, "discovery-cache.json")
       @known_products_path = File.join(dir, "index", "known-products.json")
       example.run
     end
@@ -78,8 +78,18 @@ RSpec.configure do |config|
       original.call(**kwargs)
     end
 
-    allow(Portage::Cli::Index::Sources::Browser).to receive(:new).and_wrap_original do |original, **kwargs|
-      kwargs = { path: @index_browser_path }.merge(kwargs) unless kwargs.key?(:path)
+    # Same as categories_for — Classifier.names_for (Phase 3's browser
+    # import display) reads the same ~/.portage/categories.yml override.
+    allow(Portage::Cli::Classifier).to receive(:names_for).and_wrap_original do |original, ids, **kwargs|
+      kwargs = { user_path: @classifier_user_path }.merge(kwargs) unless kwargs.key?(:user_path)
+      original.call(ids, **kwargs)
+    end
+
+    # ProbeCache — `portage browser import` (Phase 3) and every other
+    # prober that builds one with no explicit `path:` must never read or
+    # write the developer's real ~/.portage/discovery-cache.json.
+    allow(Portage::Cli::ProbeCache).to receive(:new).and_wrap_original do |original, **kwargs|
+      kwargs = { path: @probe_cache_path }.merge(kwargs) unless kwargs.key?(:path)
       original.call(**kwargs)
     end
 
