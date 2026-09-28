@@ -14,6 +14,7 @@ require_relative "webmcp/jsonable"
 require_relative "webmcp/page_wait"
 require_relative "webmcp/transport"
 require_relative "webmcp/capabilities"
+require_relative "webmcp/presets"
 
 module Portage
   module Ucp
@@ -42,21 +43,51 @@ module Portage
       #   them from the tools the page registers right now (see
       #   Capabilities), which reads the page once here, so a BridgeError can
       #   raise from connect itself.
+      # @param preset [Symbol, nil] :auto (the default) detects a known
+      #   platform from the page's own tools (Presets.detect) and, on a
+      #   match, uses its tool_names:/wire: — reading the page once more, for
+      #   the same BridgeError reason as capabilities: above. nil turns
+      #   presets off entirely (today's behavior, before this parameter
+      #   existed). A Symbol (:shopify) forces that preset without reading
+      #   the page to detect it. Either way, an explicit tool_names:/wire: in
+      #   transport_options wins over the preset's own — tool_names: key by
+      #   key, wire: outright — since a caller who bothered to pass one knows
+      #   this page better than a fingerprint match does.
       # @param transport_options [Hash] forwarded to Transport (prefix:,
       #   tool_names:, wire:, reregister_wait:).
-      def self.connect(bridge: nil, evaluate: nil, capabilities: nil, **transport_options)
+      def self.connect(bridge: nil, evaluate: nil, capabilities: nil, preset: :auto, **transport_options)
         bridge ||= Bridges::ScriptEvaluator.new(evaluate: evaluate) if evaluate
         raise ArgumentError, "connect requires either bridge: or evaluate:" unless bridge
 
-        transport = Transport.new(bridge: bridge, **transport_options)
-        Portage::Ucp::Client::Session.new(transport: transport,
-                                          capabilities: capabilities || Capabilities.for(transport))
+        resolved = resolve_preset(bridge, preset)
+        transport = Transport.new(bridge: bridge, **transport_options_for(resolved, transport_options))
+        Portage::Ucp::Client::Session.new(
+          transport: transport,
+          capabilities: capabilities || Capabilities.for(transport, handoff_checkout: resolved&.handoff_checkout)
+        )
       end
 
       # Page script installing a spec-shaped `document.modelContext` where
       # the browser has none — inject as an init script before navigation so
       # pages register into something the consumer can read.
       def self.polyfill_js = Assets.read("polyfill.js")
+
+      def self.resolve_preset(bridge, preset)
+        case preset
+        when :auto then (name = Presets.detect(bridge.list_tools)) && Presets.fetch(name)
+        when nil then nil
+        else Presets.fetch(preset)
+        end
+      end
+      private_class_method :resolve_preset
+
+      def self.transport_options_for(preset, transport_options)
+        return transport_options unless preset
+
+        { wire: preset.wire }.merge(transport_options)
+                             .merge(tool_names: preset.tool_names.merge(transport_options[:tool_names] || {}))
+      end
+      private_class_method :transport_options_for
     end
   end
 end

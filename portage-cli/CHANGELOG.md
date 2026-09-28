@@ -11,6 +11,14 @@ pre-1.0, so APIs may still shift between minor versions.
   check always fell through to adapter detection. Fixed in
   `portage-ucp-webmcp` (capabilities now come from the page's tools); the
   new `buy_spec` case goes through the real `connect`.
+- `Buy#webmcp_flow` (docs/plans/webmcp-universal-outbound.md Phase 1) now
+  detects a known WebMCP platform from the page's own tools
+  (`portage-ucp-webmcp`'s new `Presets`) and, for a page whose tools are
+  hand-off-only for checkout (Shopify's `proceed_to_checkout` is the first
+  such preset — it navigates the browser rather than returning data),
+  builds a cart, calls the hand-off tool, and reads the checkout URL off
+  its result or, failing that, the tab's own `location.href` — then hands
+  off exactly like any other WebMCP checkout.
 
 ## [0.7.5] - 2026-09-25
 

@@ -15,7 +15,13 @@ module Portage
         # and `#execute_tool(name, input)` (=> the tool's raw result), so a
         # caller with a different channel to the browser — a browser
         # extension, a CDP session, a remote grid — can write their own and
-        # hand it to Transport directly.
+        # hand it to Transport directly. `#location` (=> the tab's current
+        # URL) is optional on top of that contract — nothing in this gem's
+        # own call path needs it, but `Cli::Buy`'s hand-off-only checkout
+        # path (docs/plans/webmcp-universal-outbound.md Phase 1) reads it
+        # after calling a tool that only navigates the tab rather than
+        # returning data, and checks `respond_to?(:location)` first since a
+        # hand-rolled Bridge may not implement it.
         class ScriptEvaluator
           # How much of a driver's own error text a BridgeError quotes — the
           # same cap portage-ucp-decision puts on a Jev reply. Enough to name
@@ -61,6 +67,15 @@ module Portage
 
           def execute_tool(name, input)
             run("execute", name, input)
+          end
+
+          # Not part of the merchant-side registrar's protocol (consumer.js
+          # has no "location" operation) — reads the tab's URL straight off
+          # `window.location.href` through the same `evaluate:` callable
+          # every other call uses, so a driver failure surfaces as the same
+          # BridgeError.
+          def location
+            evaluate("Promise.resolve(window.location.href)")
           end
 
           private
