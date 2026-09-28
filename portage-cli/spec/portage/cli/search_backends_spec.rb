@@ -127,8 +127,10 @@ RSpec.describe Portage::Cli::SearchBackends do
 
   describe Portage::Cli::SearchBackends::Allowlist do
     it "merges PORTAGE_STORES and the yaml file, deduped" do
+      allow(File).to receive(:readable?).and_return(false)
       allow(File).to receive(:readable?).with("/tmp/stores.yml").and_return(true)
-      allow(YAML).to receive(:safe_load_file).and_return(["https://shop.example", "https://other.example"])
+      allow(YAML).to receive(:safe_load_file).with("/tmp/stores.yml")
+                                             .and_return(["https://shop.example", "https://other.example"])
 
       backend = described_class.new(path: "/tmp/stores.yml", env: "https://shop.example,")
 
@@ -136,8 +138,10 @@ RSpec.describe Portage::Cli::SearchBackends do
     end
 
     it "keeps the env entries when the yaml file is malformed" do
+      allow(File).to receive(:readable?).and_return(false)
       allow(File).to receive(:readable?).with("/tmp/stores.yml").and_return(true)
-      allow(YAML).to receive(:safe_load_file).and_raise(Psych::SyntaxError.new("stores.yml", 1, 1, 0, nil, nil))
+      allow(YAML).to receive(:safe_load_file).with("/tmp/stores.yml")
+                                             .and_raise(Psych::SyntaxError.new("stores.yml", 1, 1, 0, nil, nil))
 
       backend = described_class.new(path: "/tmp/stores.yml", env: "https://shop.example")
 
@@ -156,6 +160,105 @@ RSpec.describe Portage::Cli::SearchBackends do
       allow(File).to receive(:readable?).and_return(false)
 
       expect(described_class.new(path: "/nope.yml", env: nil).available?).to be false
+    end
+
+    describe "category routing (docs/plans/buy-skill-and-local-browser.md Phase 2a)" do
+      def stub_stores(entries)
+        allow(File).to receive(:readable?).and_return(false)
+        allow(File).to receive(:readable?).with("/tmp/stores.yml").and_return(true)
+        allow(YAML).to receive(:safe_load_file).with("/tmp/stores.yml").and_return(entries)
+      end
+
+      def backend
+        described_class.new(path: "/tmp/stores.yml", env: nil)
+      end
+
+      it "parses a bare URL string entry" do
+        stub_stores(["https://plain.example"])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return([])
+
+        expect(backend.search("anything")).to eq(["https://plain.example"])
+      end
+
+      it "parses a {url:, categories:} entry" do
+        stub_stores([{ "url" => "https://tagged.example", "categories" => ["1"] }])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+        expect(backend.search("anything")).to eq(["https://tagged.example"])
+      end
+
+      it "takes at most 3 tagged stores per matching category, most-matched category first" do
+        entries = (1..5).map { |i| { "url" => "https://cat1-#{i}.example", "categories" => ["1"] } } +
+                  (1..2).map { |i| { "url" => "https://cat2-#{i}.example", "categories" => ["2"] } }
+        stub_stores(entries)
+        allow(Portage::Cli::Classifier).to receive(:categories_for).with("sofa").and_return(%w[1 2])
+
+        expect(backend.search("sofa", limit: 12))
+          .to eq(%w[cat1-1 cat1-2 cat1-3 cat2-1 cat2-2].map { |h| "https://#{h}.example" })
+      end
+
+      it "never returns more than 12 in total, even across several matching categories" do
+        entries = (1..15).map { |i| { "url" => "https://s#{i}.example", "categories" => [(i % 5).to_s] } }
+        stub_stores(entries)
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(%w[0 1 2 3 4])
+
+        expect(backend.search("anything", limit: 12).length).to eq(12)
+      end
+
+      it "keeps an untagged store out unless the query names it" do
+        stub_stores([
+                      { "url" => "https://sofa.example", "categories" => ["1"] },
+                      "https://unrelated-shop.example"
+                    ])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+        expect(backend.search("buy a sofa")).to eq(["https://sofa.example"])
+        expect(backend.search("buy from unrelated-shop"))
+          .to contain_exactly("https://sofa.example", "https://unrelated-shop.example")
+      end
+
+      it "falls back to named entries plus untagged entries — never a tagged-but-unmatched one — " \
+         "when no tagged store matches the query's categories" do
+        stub_stores([
+                      { "url" => "https://sofa.example", "categories" => ["1"] },
+                      "https://unrelated-shop.example"
+                    ])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["999"])
+
+        expect(backend.search("anything")).to eq(["https://unrelated-shop.example"])
+      end
+
+      it "still includes a tagged-but-unmatched store in the fallback when the query names it" do
+        stub_stores([
+                      { "url" => "https://sofa.example", "categories" => ["1"] },
+                      "https://unrelated-shop.example"
+                    ])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["999"])
+
+        expect(backend.search("buy from sofa"))
+          .to contain_exactly("https://sofa.example", "https://unrelated-shop.example")
+      end
+
+      it "never falls back to every store once a tagged match exists — the crowding fix" do
+        untagged = (1..20).map { |i| "https://random-#{i}.example" }
+        stub_stores(untagged + [{ "url" => "https://sofa.example", "categories" => ["1"] }])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(["1"])
+
+        expect(backend.search("buy a sofa", limit: 12)).to eq(["https://sofa.example"])
+      end
+
+      it "puts a named store first, ahead of category matches, even when that fills the total cap" do
+        category_matches = %w[1 2 3 4].flat_map do |cat|
+          (1..3).map { |i| { "url" => "https://cat#{cat}-#{i}.example", "categories" => [cat] } }
+        end
+        stub_stores(category_matches + [{ "url" => "https://named.example", "categories" => ["5"] }])
+        allow(Portage::Cli::Classifier).to receive(:categories_for).and_return(%w[1 2 3 4])
+
+        result = backend.search("buy from named", limit: 12)
+
+        expect(result.first).to eq("https://named.example")
+        expect(result.length).to eq(12)
+      end
     end
   end
 end

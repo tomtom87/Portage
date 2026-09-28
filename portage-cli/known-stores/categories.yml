@@ -1,0 +1,1263 @@
+# Google Product Taxonomy (https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt),
+# top two levels only (~200 nodes), version 2021-09-21. Keys are Google's own numeric
+# category ids as strings -- keep them, they're how ~/.portage/categories.yml overrides
+# (same id) or extends (a new id) a node. `keywords` are the node's own taxonomy words
+# (its name and its parent's, lowercased, stopwords dropped), matched whole-word by
+# Classifier#word_match? -- which also normalizes simple plurals ("boot"/"boots",
+# "battery"/"batteries") -- not hand-curated, so treat a bad match as a reason to add a
+# keyword to ~/.portage/categories.yml, not a bug report.
+'1':
+  name: Animals & Pet Supplies
+  keywords:
+  - animals
+  - pet
+'3237':
+  name: Animals & Pet Supplies > Live Animals
+  keywords:
+  - live
+  - animals
+  - pet
+'2':
+  name: Animals & Pet Supplies > Pet Supplies
+  keywords:
+  - pet
+  - animals
+'166':
+  name: Apparel & Accessories
+  keywords:
+  - apparel
+'1604':
+  name: Apparel & Accessories > Clothing
+  keywords:
+  - clothing
+  - apparel
+'167':
+  name: Apparel & Accessories > Clothing Accessories
+  keywords:
+  - clothing
+  - apparel
+'184':
+  name: Apparel & Accessories > Costumes & Accessories
+  keywords:
+  - costumes
+  - apparel
+'6552':
+  name: Apparel & Accessories > Handbag & Wallet Accessories
+  keywords:
+  - handbag
+  - wallet
+  - apparel
+'6551':
+  name: Apparel & Accessories > Handbags, Wallets & Cases
+  keywords:
+  - handbags
+  - wallets
+  - cases
+  - apparel
+'188':
+  name: Apparel & Accessories > Jewelry
+  keywords:
+  - jewelry
+  - apparel
+'1933':
+  name: Apparel & Accessories > Shoe Accessories
+  keywords:
+  - shoe
+  - apparel
+'187':
+  name: Apparel & Accessories > Shoes
+  keywords:
+  - shoes
+  - apparel
+'8':
+  name: Arts & Entertainment
+  keywords:
+  - arts
+  - entertainment
+'499969':
+  name: Arts & Entertainment > Event Tickets
+  keywords:
+  - event
+  - tickets
+  - arts
+  - entertainment
+'5710':
+  name: Arts & Entertainment > Hobbies & Creative Arts
+  keywords:
+  - hobbies
+  - creative
+  - arts
+  - entertainment
+'5709':
+  name: Arts & Entertainment > Party & Celebration
+  keywords:
+  - party
+  - celebration
+  - arts
+  - entertainment
+'537':
+  name: Baby & Toddler
+  keywords:
+  - baby
+  - toddler
+'4678':
+  name: Baby & Toddler > Baby Bathing
+  keywords:
+  - baby
+  - bathing
+  - toddler
+'5859':
+  name: Baby & Toddler > Baby Gift Sets
+  keywords:
+  - baby
+  - gift
+  - sets
+  - toddler
+'5252':
+  name: Baby & Toddler > Baby Health
+  keywords:
+  - baby
+  - health
+  - toddler
+'540':
+  name: Baby & Toddler > Baby Safety
+  keywords:
+  - baby
+  - safety
+  - toddler
+'2847':
+  name: Baby & Toddler > Baby Toys & Activity Equipment
+  keywords:
+  - baby
+  - toys
+  - activity
+  - toddler
+'2764':
+  name: Baby & Toddler > Baby Transport
+  keywords:
+  - baby
+  - transport
+  - toddler
+'4386':
+  name: Baby & Toddler > Baby Transport Accessories
+  keywords:
+  - baby
+  - transport
+  - toddler
+'548':
+  name: Baby & Toddler > Diapering
+  keywords:
+  - diapering
+  - baby
+  - toddler
+'561':
+  name: Baby & Toddler > Nursing & Feeding
+  keywords:
+  - nursing
+  - feeding
+  - baby
+  - toddler
+'6952':
+  name: Baby & Toddler > Potty Training
+  keywords:
+  - potty
+  - training
+  - baby
+  - toddler
+'6899':
+  name: Baby & Toddler > Swaddling & Receiving Blankets
+  keywords:
+  - swaddling
+  - receiving
+  - blankets
+  - baby
+  - toddler
+'111':
+  name: Business & Industrial
+  keywords:
+  - business
+  - industrial
+'5863':
+  name: Business & Industrial > Advertising & Marketing
+  keywords:
+  - advertising
+  - marketing
+  - business
+  - industrial
+'112':
+  name: Business & Industrial > Agriculture
+  keywords:
+  - agriculture
+  - business
+  - industrial
+'7261':
+  name: Business & Industrial > Automation Control Components
+  keywords:
+  - automation
+  - control
+  - components
+  - business
+  - industrial
+'114':
+  name: Business & Industrial > Construction
+  keywords:
+  - construction
+  - business
+  - industrial
+'7497':
+  name: Business & Industrial > Dentistry
+  keywords:
+  - dentistry
+  - business
+  - industrial
+'2155':
+  name: Business & Industrial > Film & Television
+  keywords:
+  - film
+  - television
+  - business
+  - industrial
+'1813':
+  name: Business & Industrial > Finance & Insurance
+  keywords:
+  - finance
+  - insurance
+  - business
+  - industrial
+'135':
+  name: Business & Industrial > Food Service
+  keywords:
+  - food
+  - service
+  - business
+  - industrial
+'1827':
+  name: Business & Industrial > Forestry & Logging
+  keywords:
+  - forestry
+  - logging
+  - business
+  - industrial
+'7240':
+  name: Business & Industrial > Hairdressing & Cosmetology
+  keywords:
+  - hairdressing
+  - cosmetology
+  - business
+  - industrial
+'1795':
+  name: Business & Industrial > Heavy Machinery
+  keywords:
+  - heavy
+  - machinery
+  - business
+  - industrial
+'1475':
+  name: Business & Industrial > Hotel & Hospitality
+  keywords:
+  - hotel
+  - hospitality
+  - business
+  - industrial
+'5830':
+  name: Business & Industrial > Industrial Storage
+  keywords:
+  - industrial
+  - storage
+  - business
+'8025':
+  name: Business & Industrial > Industrial Storage Accessories
+  keywords:
+  - industrial
+  - storage
+  - business
+'500086':
+  name: Business & Industrial > Janitorial Carts & Caddies
+  keywords:
+  - janitorial
+  - carts
+  - caddies
+  - business
+  - industrial
+'1556':
+  name: Business & Industrial > Law Enforcement
+  keywords:
+  - law
+  - enforcement
+  - business
+  - industrial
+'1470':
+  name: Business & Industrial > Manufacturing
+  keywords:
+  - manufacturing
+  - business
+  - industrial
+'6987':
+  name: Business & Industrial > Material Handling
+  keywords:
+  - material
+  - handling
+  - business
+  - industrial
+'2496':
+  name: Business & Industrial > Medical
+  keywords:
+  - medical
+  - business
+  - industrial
+'2187':
+  name: Business & Industrial > Mining & Quarrying
+  keywords:
+  - mining
+  - quarrying
+  - business
+  - industrial
+'4285':
+  name: Business & Industrial > Piercing & Tattooing
+  keywords:
+  - piercing
+  - tattooing
+  - business
+  - industrial
+'138':
+  name: Business & Industrial > Retail
+  keywords:
+  - retail
+  - business
+  - industrial
+'1624':
+  name: Business & Industrial > Science & Laboratory
+  keywords:
+  - science
+  - laboratory
+  - business
+  - industrial
+'976':
+  name: Business & Industrial > Signage
+  keywords:
+  - signage
+  - business
+  - industrial
+'2047':
+  name: Business & Industrial > Work Safety Protective Gear
+  keywords:
+  - work
+  - safety
+  - protective
+  - gear
+  - business
+  - industrial
+'141':
+  name: Cameras & Optics
+  keywords:
+  - cameras
+  - optics
+'2096':
+  name: Cameras & Optics > Camera & Optic Accessories
+  keywords:
+  - camera
+  - optic
+  - cameras
+  - optics
+'142':
+  name: Cameras & Optics > Cameras
+  keywords:
+  - cameras
+  - optics
+'156':
+  name: Cameras & Optics > Optics
+  keywords:
+  - optics
+  - cameras
+'39':
+  name: Cameras & Optics > Photography
+  keywords:
+  - photography
+  - cameras
+  - optics
+'222':
+  name: Electronics
+  keywords:
+  - electronics
+'3356':
+  name: Electronics > Arcade Equipment
+  keywords:
+  - arcade
+  - electronics
+'223':
+  name: Electronics > Audio
+  keywords:
+  - audio
+  - electronics
+'3702':
+  name: Electronics > Circuit Boards & Components
+  keywords:
+  - circuit
+  - boards
+  - components
+  - electronics
+'262':
+  name: Electronics > Communications
+  keywords:
+  - communications
+  - electronics
+'1801':
+  name: Electronics > Components
+  keywords:
+  - components
+  - electronics
+'278':
+  name: Electronics > Computers
+  keywords:
+  - computers
+  - electronics
+'2082':
+  name: Electronics > Electronics Accessories
+  keywords:
+  - electronics
+'3895':
+  name: Electronics > GPS Accessories
+  keywords:
+  - gps
+  - electronics
+'339':
+  name: Electronics > GPS Navigation Systems
+  keywords:
+  - gps
+  - navigation
+  - systems
+  - electronics
+'6544':
+  name: Electronics > GPS Tracking Devices
+  keywords:
+  - gps
+  - tracking
+  - devices
+  - electronics
+'340':
+  name: Electronics > Marine Electronics
+  keywords:
+  - marine
+  - electronics
+'342':
+  name: Electronics > Networking
+  keywords:
+  - networking
+  - electronics
+'345':
+  name: Electronics > Print, Copy, Scan & Fax
+  keywords:
+  - print
+  - copy
+  - scan
+  - fax
+  - electronics
+'912':
+  name: Electronics > Radar Detectors
+  keywords:
+  - radar
+  - detectors
+  - electronics
+'500091':
+  name: Electronics > Speed Radars
+  keywords:
+  - speed
+  - radars
+  - electronics
+'4488':
+  name: Electronics > Toll Collection Devices
+  keywords:
+  - toll
+  - collection
+  - devices
+  - electronics
+'386':
+  name: Electronics > Video
+  keywords:
+  - video
+  - electronics
+'1270':
+  name: Electronics > Video Game Console Accessories
+  keywords:
+  - video
+  - game
+  - console
+  - electronics
+'1294':
+  name: Electronics > Video Game Consoles
+  keywords:
+  - video
+  - game
+  - consoles
+  - electronics
+'412':
+  name: Food, Beverages & Tobacco
+  keywords:
+  - food
+  - beverages
+  - tobacco
+'413':
+  name: Food, Beverages & Tobacco > Beverages
+  keywords:
+  - beverages
+  - food
+  - tobacco
+'422':
+  name: Food, Beverages & Tobacco > Food Items
+  keywords:
+  - food
+  - beverages
+  - tobacco
+'435':
+  name: Food, Beverages & Tobacco > Tobacco Products
+  keywords:
+  - tobacco
+  - food
+  - beverages
+'436':
+  name: Furniture
+  keywords:
+  - furniture
+'554':
+  name: Furniture > Baby & Toddler Furniture
+  keywords:
+  - baby
+  - toddler
+  - furniture
+'6433':
+  name: Furniture > Beds & Accessories
+  keywords:
+  - beds
+  - furniture
+'441':
+  name: Furniture > Benches
+  keywords:
+  - benches
+  - furniture
+'6356':
+  name: Furniture > Cabinets & Storage
+  keywords:
+  - cabinets
+  - storage
+  - furniture
+'442':
+  name: Furniture > Carts & Islands
+  keywords:
+  - carts
+  - islands
+  - furniture
+'7248':
+  name: Furniture > Chair Accessories
+  keywords:
+  - chair
+  - furniture
+'443':
+  name: Furniture > Chairs
+  keywords:
+  - chairs
+  - furniture
+'457':
+  name: Furniture > Entertainment Centers & TV Stands
+  keywords:
+  - entertainment
+  - centers
+  - stands
+  - furniture
+'6345':
+  name: Furniture > Furniture Sets
+  keywords:
+  - furniture
+  - sets
+'6860':
+  name: Furniture > Futon Frames
+  keywords:
+  - futon
+  - frames
+  - furniture
+'2786':
+  name: Furniture > Futon Pads
+  keywords:
+  - futon
+  - pads
+  - furniture
+'450':
+  name: Furniture > Futons
+  keywords:
+  - futons
+  - furniture
+'6362':
+  name: Furniture > Office Furniture
+  keywords:
+  - office
+  - furniture
+'503765':
+  name: Furniture > Office Furniture Accessories
+  keywords:
+  - office
+  - furniture
+'458':
+  name: Furniture > Ottomans
+  keywords:
+  - ottomans
+  - furniture
+'4299':
+  name: Furniture > Outdoor Furniture
+  keywords:
+  - outdoor
+  - furniture
+'6963':
+  name: Furniture > Outdoor Furniture Accessories
+  keywords:
+  - outdoor
+  - furniture
+'6915':
+  name: Furniture > Room Divider Accessories
+  keywords:
+  - room
+  - divider
+  - furniture
+'4163':
+  name: Furniture > Room Dividers
+  keywords:
+  - room
+  - dividers
+  - furniture
+'464':
+  name: Furniture > Shelving
+  keywords:
+  - shelving
+  - furniture
+'8023':
+  name: Furniture > Shelving Accessories
+  keywords:
+  - shelving
+  - furniture
+'7212':
+  name: Furniture > Sofa Accessories
+  keywords:
+  - sofa
+  - furniture
+'460':
+  name: Furniture > Sofas
+  keywords:
+  - sofas
+  - furniture
+'6913':
+  name: Furniture > Table Accessories
+  keywords:
+  - table
+  - furniture
+'6392':
+  name: Furniture > Tables
+  keywords:
+  - tables
+  - furniture
+'632':
+  name: Hardware
+  keywords:
+  - hardware
+'503739':
+  name: Hardware > Building Consumables
+  keywords:
+  - building
+  - consumables
+  - hardware
+'115':
+  name: Hardware > Building Materials
+  keywords:
+  - building
+  - materials
+  - hardware
+'128':
+  name: Hardware > Fencing & Barriers
+  keywords:
+  - fencing
+  - barriers
+  - hardware
+'543575':
+  name: Hardware > Fuel
+  keywords:
+  - fuel
+  - hardware
+'502975':
+  name: Hardware > Fuel Containers & Tanks
+  keywords:
+  - fuel
+  - containers
+  - tanks
+  - hardware
+'2878':
+  name: Hardware > Hardware Accessories
+  keywords:
+  - hardware
+'500096':
+  name: Hardware > Hardware Pumps
+  keywords:
+  - hardware
+  - pumps
+'499873':
+  name: Hardware > Heating, Ventilation & Air Conditioning
+  keywords:
+  - heating
+  - ventilation
+  - air
+  - conditioning
+  - hardware
+'1974':
+  name: Hardware > Locks & Keys
+  keywords:
+  - locks
+  - keys
+  - hardware
+'133':
+  name: Hardware > Plumbing
+  keywords:
+  - plumbing
+  - hardware
+'127':
+  name: Hardware > Power & Electrical Supplies
+  keywords:
+  - power
+  - electrical
+  - hardware
+'499982':
+  name: Hardware > Small Engines
+  keywords:
+  - small
+  - engines
+  - hardware
+'1910':
+  name: Hardware > Storage Tanks
+  keywords:
+  - storage
+  - tanks
+  - hardware
+'3650':
+  name: Hardware > Tool Accessories
+  keywords:
+  - tool
+  - hardware
+'1167':
+  name: Hardware > Tools
+  keywords:
+  - tools
+  - hardware
+'469':
+  name: Health & Beauty
+  keywords:
+  - health
+  - beauty
+'491':
+  name: Health & Beauty > Health Care
+  keywords:
+  - health
+  - beauty
+'5573':
+  name: Health & Beauty > Jewelry Cleaning & Care
+  keywords:
+  - jewelry
+  - cleaning
+  - health
+  - beauty
+'2915':
+  name: Health & Beauty > Personal Care
+  keywords:
+  - personal
+  - health
+  - beauty
+'536':
+  name: Home & Garden
+  keywords:
+  - home
+  - garden
+'574':
+  name: Home & Garden > Bathroom Accessories
+  keywords:
+  - bathroom
+  - home
+  - garden
+'359':
+  name: Home & Garden > Business & Home Security
+  keywords:
+  - business
+  - home
+  - security
+  - garden
+'696':
+  name: Home & Garden > Decor
+  keywords:
+  - decor
+  - home
+  - garden
+'5835':
+  name: Home & Garden > Emergency Preparedness
+  keywords:
+  - emergency
+  - preparedness
+  - home
+  - garden
+'2862':
+  name: Home & Garden > Fireplace & Wood Stove Accessories
+  keywords:
+  - fireplace
+  - wood
+  - stove
+  - home
+  - garden
+'6792':
+  name: Home & Garden > Fireplaces
+  keywords:
+  - fireplaces
+  - home
+  - garden
+'1679':
+  name: Home & Garden > Flood, Fire & Gas Safety
+  keywords:
+  - flood
+  - fire
+  - gas
+  - safety
+  - home
+  - garden
+'3348':
+  name: Home & Garden > Household Appliance Accessories
+  keywords:
+  - household
+  - appliance
+  - home
+  - garden
+'604':
+  name: Home & Garden > Household Appliances
+  keywords:
+  - household
+  - appliances
+  - home
+  - garden
+'630':
+  name: Home & Garden > Household Supplies
+  keywords:
+  - household
+  - home
+  - garden
+'638':
+  name: Home & Garden > Kitchen & Dining
+  keywords:
+  - kitchen
+  - dining
+  - home
+  - garden
+'689':
+  name: Home & Garden > Lawn & Garden
+  keywords:
+  - lawn
+  - garden
+  - home
+'594':
+  name: Home & Garden > Lighting
+  keywords:
+  - lighting
+  - home
+  - garden
+'2956':
+  name: Home & Garden > Lighting Accessories
+  keywords:
+  - lighting
+  - home
+  - garden
+'4171':
+  name: Home & Garden > Linens & Bedding
+  keywords:
+  - linens
+  - bedding
+  - home
+  - garden
+'4358':
+  name: Home & Garden > Parasols & Rain Umbrellas
+  keywords:
+  - parasols
+  - rain
+  - umbrellas
+  - home
+  - garden
+'985':
+  name: Home & Garden > Plants
+  keywords:
+  - plants
+  - home
+  - garden
+'729':
+  name: Home & Garden > Pool & Spa
+  keywords:
+  - pool
+  - spa
+  - home
+  - garden
+'600':
+  name: Home & Garden > Smoking Accessories
+  keywords:
+  - smoking
+  - home
+  - garden
+'6173':
+  name: Home & Garden > Umbrella Sleeves & Cases
+  keywords:
+  - umbrella
+  - sleeves
+  - cases
+  - home
+  - garden
+'2639':
+  name: Home & Garden > Wood Stoves
+  keywords:
+  - wood
+  - stoves
+  - home
+  - garden
+'5181':
+  name: Luggage & Bags
+  keywords:
+  - luggage
+  - bags
+'100':
+  name: Luggage & Bags > Backpacks
+  keywords:
+  - backpacks
+  - luggage
+  - bags
+'101':
+  name: Luggage & Bags > Briefcases
+  keywords:
+  - briefcases
+  - luggage
+  - bags
+'108':
+  name: Luggage & Bags > Cosmetic & Toiletry Bags
+  keywords:
+  - cosmetic
+  - toiletry
+  - bags
+  - luggage
+'549':
+  name: Luggage & Bags > Diaper Bags
+  keywords:
+  - diaper
+  - bags
+  - luggage
+'502974':
+  name: Luggage & Bags > Dry Boxes
+  keywords:
+  - dry
+  - boxes
+  - luggage
+  - bags
+'103':
+  name: Luggage & Bags > Duffel Bags
+  keywords:
+  - duffel
+  - bags
+  - luggage
+'104':
+  name: Luggage & Bags > Fanny Packs
+  keywords:
+  - fanny
+  - packs
+  - luggage
+  - bags
+'105':
+  name: Luggage & Bags > Garment Bags
+  keywords:
+  - garment
+  - bags
+  - luggage
+'110':
+  name: Luggage & Bags > Luggage Accessories
+  keywords:
+  - luggage
+  - bags
+'106':
+  name: Luggage & Bags > Messenger Bags
+  keywords:
+  - messenger
+  - bags
+  - luggage
+'5608':
+  name: Luggage & Bags > Shopping Totes
+  keywords:
+  - shopping
+  - totes
+  - luggage
+  - bags
+'107':
+  name: Luggage & Bags > Suitcases
+  keywords:
+  - suitcases
+  - luggage
+  - bags
+'6553':
+  name: Luggage & Bags > Train Cases
+  keywords:
+  - train
+  - cases
+  - luggage
+  - bags
+'772':
+  name: Mature
+  keywords:
+  - mature
+'773':
+  name: Mature > Erotic
+  keywords:
+  - erotic
+  - mature
+'780':
+  name: Mature > Weapons
+  keywords:
+  - weapons
+  - mature
+'783':
+  name: Media
+  keywords:
+  - media
+'784':
+  name: Media > Books
+  keywords:
+  - books
+  - media
+'499995':
+  name: Media > Carpentry & Woodworking Project Plans
+  keywords:
+  - carpentry
+  - woodworking
+  - project
+  - plans
+  - media
+'839':
+  name: Media > DVDs & Videos
+  keywords:
+  - dvds
+  - videos
+  - media
+'886':
+  name: Media > Magazines & Newspapers
+  keywords:
+  - magazines
+  - newspapers
+  - media
+'855':
+  name: Media > Music & Sound Recordings
+  keywords:
+  - music
+  - sound
+  - recordings
+  - media
+'5037':
+  name: Media > Product Manuals
+  keywords:
+  - manuals
+  - media
+'887':
+  name: Media > Sheet Music
+  keywords:
+  - sheet
+  - music
+  - media
+'922':
+  name: Office Supplies
+  keywords:
+  - office
+'6174':
+  name: Office Supplies > Book Accessories
+  keywords:
+  - book
+  - office
+'8078':
+  name: Office Supplies > Desk Pads & Blotters
+  keywords:
+  - desk
+  - pads
+  - blotters
+  - office
+'923':
+  name: Office Supplies > Filing & Organization
+  keywords:
+  - filing
+  - organization
+  - office
+'932':
+  name: Office Supplies > General Office Supplies
+  keywords:
+  - office
+'5829':
+  name: Office Supplies > Impulse Sealers
+  keywords:
+  - impulse
+  - sealers
+  - office
+'8499':
+  name: Office Supplies > Lap Desks
+  keywords:
+  - lap
+  - desks
+  - office
+'2435':
+  name: Office Supplies > Name Plates
+  keywords:
+  - name
+  - plates
+  - office
+'6519':
+  name: Office Supplies > Office & Chair Mats
+  keywords:
+  - office
+  - chair
+  - mats
+'6373':
+  name: Office Supplies > Office Carts
+  keywords:
+  - office
+  - carts
+'950':
+  name: Office Supplies > Office Equipment
+  keywords:
+  - office
+'2986':
+  name: Office Supplies > Office Instruments
+  keywords:
+  - office
+  - instruments
+'2014':
+  name: Office Supplies > Paper Handling
+  keywords:
+  - paper
+  - handling
+  - office
+'964':
+  name: Office Supplies > Presentation Supplies
+  keywords:
+  - presentation
+  - office
+'2636':
+  name: Office Supplies > Shipping Supplies
+  keywords:
+  - shipping
+  - office
+'5605':
+  name: Religious & Ceremonial
+  keywords:
+  - religious
+  - ceremonial
+'5606':
+  name: Religious & Ceremonial > Memorial Ceremony Supplies
+  keywords:
+  - memorial
+  - ceremony
+  - religious
+  - ceremonial
+'97':
+  name: Religious & Ceremonial > Religious Items
+  keywords:
+  - religious
+  - ceremonial
+'5455':
+  name: Religious & Ceremonial > Wedding Ceremony Supplies
+  keywords:
+  - wedding
+  - ceremony
+  - religious
+  - ceremonial
+'2092':
+  name: Software
+  keywords:
+  - software
+'313':
+  name: Software > Computer Software
+  keywords:
+  - computer
+  - software
+'5032':
+  name: Software > Digital Goods & Currency
+  keywords:
+  - digital
+  - currency
+  - software
+'1279':
+  name: Software > Video Game Software
+  keywords:
+  - video
+  - game
+  - software
+'988':
+  name: Sporting Goods
+  keywords:
+  - sporting
+'499713':
+  name: Sporting Goods > Athletics
+  keywords:
+  - athletics
+  - sporting
+'990':
+  name: Sporting Goods > Exercise & Fitness
+  keywords:
+  - exercise
+  - fitness
+  - sporting
+'1001':
+  name: Sporting Goods > Indoor Games
+  keywords:
+  - indoor
+  - games
+  - sporting
+'1011':
+  name: Sporting Goods > Outdoor Recreation
+  keywords:
+  - outdoor
+  - recreation
+  - sporting
+'1239':
+  name: Toys & Games
+  keywords:
+  - toys
+  - games
+'4648':
+  name: Toys & Games > Game Timers
+  keywords:
+  - game
+  - timers
+  - toys
+  - games
+'3793':
+  name: Toys & Games > Games
+  keywords:
+  - games
+  - toys
+'1249':
+  name: Toys & Games > Outdoor Play Equipment
+  keywords:
+  - outdoor
+  - play
+  - toys
+  - games
+'3867':
+  name: Toys & Games > Puzzles
+  keywords:
+  - puzzles
+  - toys
+  - games
+'1253':
+  name: Toys & Games > Toys
+  keywords:
+  - toys
+  - games
+'888':
+  name: Vehicles & Parts
+  keywords:
+  - vehicles
+'5613':
+  name: Vehicles & Parts > Vehicle Parts & Accessories
+  keywords:
+  - vehicle
+  - vehicles
+'5614':
+  name: Vehicles & Parts > Vehicles
+  keywords:
+  - vehicles

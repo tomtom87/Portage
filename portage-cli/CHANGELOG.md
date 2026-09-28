@@ -6,6 +6,45 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`Classifier` and `known-stores/categories.yml`: a shared category
+  taxonomy for `find` routing** (`docs/plans/buy-skill-and-local-browser.md`
+  Phase 2a). `known-stores/categories.yml` ships in the gem — the top two
+  levels of Google's published product taxonomy (213 nodes, keyed by
+  Google's own numeric ids, each with a handful of plain keywords, the
+  node's own taxonomy words) — and `~/.portage/categories.yml` overrides a
+  shipped node (same id) or extends the taxonomy (a new id).
+  `Portage::Cli::Classifier.categories_for(text)` takes a query, a product
+  title/description, or a store/product URL (extracting the slug from
+  `/products/`, `/collections/`, `/c/` or `/category/` and splitting
+  `-`/`_` into words) and returns category ids ranked by keyword hits — no
+  LLM, no network, so it works offline on a fresh gem/brew install. One
+  classifier for queries, catalog products, stores.yml and (later) browser
+  imports. Matching is whole-word, plus simple plural normalization
+  (`Classifier.word_match?`: an exact match, a trailing `s`/`es`, or the
+  `y`/`ies` swap — "boot"/"boots", "battery"/"batteries") — deliberately
+  not a substring check, since a substring match goes both ways regardless
+  of word boundaries ("carpet" contains "pet", "chair" contains "hair",
+  "scarf" contains "car", "hot sauce" would have hit "photography") and an
+  early classifier-spec run caught exactly that class of false positive
+  before this shipped.
+- **`stores.yml` entries may now carry `categories:`, and `find` routes by
+  them instead of crowding out other candidates.** The file stays a bare
+  URL list by default; an entry becomes `{url:, categories: [...]}` only
+  once you tag it, and `PORTAGE_STORES` is unaffected either way.
+  `SearchBackends::Allowlist#search` now classifies the query, puts any
+  entry the query names outright first (its host or bare name appears in
+  the query text, tagged or not), then adds up to 3 tagged stores per
+  matching category not already named, capped at 12 in total
+  (`Allowlist::PER_CATEGORY_CAP`/`TOTAL_CAP`, mirroring `Find::MAX_PROBES`).
+  When no tagged store matches any of the query's categories at all, it
+  falls back to named entries plus every *untagged* entry — never a
+  tagged-but-unrelated one — so a `stores.yml` with no tags at all behaves
+  exactly as it did before this change. Once at least one tagged store
+  matches, though, nothing falls back to "every store": that's the
+  crowding a heavily-populated `stores.yml` used to cause on every single
+  query. Trust is unaffected — every allowlist entry is still always a
+  candidate to `find`; this only changes which of them spend this query's
+  probe slots, and in which order.
 - **`find` gains a second backend kind: `OfferSource`, and a first
   implementation, `OfferSources::ShopifyCatalog`**
   (`docs/plans/buy-skill-and-local-browser.md` Phase 1). Unlike the
