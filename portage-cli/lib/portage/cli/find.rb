@@ -131,11 +131,13 @@ module Portage
       # Each source already returns Find#offer-shaped hashes (store:/
       # source:/checkout:/product_id:/title:/amount:/currency:/url:) and
       # swallows its own failures, so nothing here needs the try/rescue
-      # #urls_from gives the URL backends.
+      # #urls_from gives the URL backends. --max-price applies here exactly
+      # as it does to a probed store's offers in #offer.
       def source_offers
-        @offer_sources.flat_map do |source|
+        offers = @offer_sources.flat_map do |source|
           source.offers(@query, limit: PER_STORE_RESULTS, context: BuyerContext.from_env)
         end
+        offers.reject { |offer| over_max_price?(offer[:amount]) }
       end
 
       def upgradable?(existing, uri)
@@ -218,12 +220,15 @@ module Portage
 
       def offer(store, product)
         amount, currency = price_of(product)
-        return nil if @max_price && amount && amount > @max_price
+        return nil if over_max_price?(amount)
 
         { store: store[:origin], source: store[:source], checkout: store[:checkout],
           product_id: field(product, "id"), title: field(product, "title"),
           amount: amount, currency: currency, url: field(product, "url") }
       end
+
+      # An unpriced offer stays in: no price isn't the same as too dear.
+      def over_max_price?(amount) = @max_price && amount && amount > @max_price
 
       # Buyable first, then cheapest, then unpriced (see Decisions.rank —
       # core's Support::OfferRanking, the rule portage-ucp-decision's
@@ -298,7 +303,10 @@ module Portage
       end
 
       def summary(candidates, stores, offers)
-        return "Found #{offers.length} offer(s) across #{stores.length} UCP store(s)." if offers.any?
+        # Counted from the offers, not `stores`: an OfferSource's offers
+        # come from stores that were never probed.
+        selling = offers.map { |o| o[:store] }.uniq.length
+        return "Found #{offers.length} offer(s) across #{selling} store(s)." if offers.any?
         return "#{stores.length} store(s) speak UCP but none stock \"#{@query}\"." if stores.any?
 
         "Checked #{candidates.length} store(s); none of them speak UCP."
