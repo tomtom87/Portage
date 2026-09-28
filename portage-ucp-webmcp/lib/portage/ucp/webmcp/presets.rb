@@ -13,7 +13,17 @@ module Portage
       # content, which is untrusted; a fingerprint is what the mapping
       # actually depends on, and forging one costs registering all of it.
       module Presets
-        Preset = Struct.new(:tool_names, :wire, :fingerprint, :handoff_checkout, keyword_init: true)
+        # @!attribute checkout_selectors
+        #   [Hash{String=>String}] Phase 3 (docs/plans/
+        #   webmcp-universal-outbound.md) fallback CSS selectors, keyed by
+        #   the same autocomplete token `Autofill`/assets/autofill.js
+        #   already tries first — only reached when the checkout page's own
+        #   markup doesn't carry a matching `autocomplete` attribute for
+        #   that field.
+        Preset = Struct.new(:tool_names, :wire, :fingerprint, :handoff_checkout, :checkout_selectors,
+                            keyword_init: true) do
+          def checkout_selectors = self[:checkout_selectors] || {}
+        end
 
         # Shopify's own WebMCP tools (`window.Shopify.actions`, not this
         # gem's registrar). Fingerprint taken live on 2026-09-28: ColourPop,
@@ -39,7 +49,15 @@ module Portage
           fingerprint: %w[search_catalog browse_store get_product show_variant add_to_cart get_cart
                           update_cart_lines cancel_cart proceed_to_checkout manage_orders
                           search_shop_policies_and_faqs].freeze,
-          handoff_checkout: "proceed_to_checkout"
+          handoff_checkout: "proceed_to_checkout",
+          # No live check has confirmed any selector against a real Shopify
+          # checkout page (Phase 3 shipped with no browser/live storefront
+          # available this session — see the plan's Progress log). Left
+          # empty rather than guessed: Shopify Checkout's own contact/
+          # shipping fields are documented to carry standard `autocomplete`
+          # values, so `Autofill`'s own attribute match should reach them
+          # without a fallback — but that's unverified, not assumed safe.
+          checkout_selectors: {}.freeze
         ).freeze
 
         ALL = { shopify: SHOPIFY }.freeze

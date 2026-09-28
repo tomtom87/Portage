@@ -17,6 +17,7 @@ require_relative "webmcp/capabilities"
 require_relative "webmcp/fingerprint"
 require_relative "webmcp/presets"
 require_relative "webmcp/matcher"
+require_relative "webmcp/autofill"
 
 module Portage
   module Ucp

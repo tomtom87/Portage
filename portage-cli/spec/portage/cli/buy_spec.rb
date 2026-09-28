@@ -1182,6 +1182,161 @@ RSpec.describe Portage::Cli::Buy do
       end
     end
 
+    describe "Phase 3: approved autofill of the store's checkout" do
+      # Same Shopify-shaped fake page as the Phase 1 block (duplicated
+      # rather than shared, so this block reads standalone), now offering
+      # #autofill/#headless? too — everything Bridges::ScriptEvaluator
+      # would, without a real browser (the plan's own posture for Phase 3:
+      # filling logic is tested against a fake/stubbed bridge).
+      def shopify_shaped_page_with_autofill(headless:, autofill_result:)
+        names = %w[search_catalog browse_store get_product show_variant add_to_cart get_cart
+                   update_cart_lines cancel_cart proceed_to_checkout manage_orders
+                   search_shop_policies_and_faqs]
+        answers = { "search_catalog" => { "products" => [product] }, "add_to_cart" => {}, "get_cart" => webmcp_cart,
+                    "proceed_to_checkout" => { "url" => "https://shop.example/checkouts/c1" } }
+        result = autofill_result
+        Class.new do
+          define_method(:list_tools) { names.map { |name| { "name" => name, "inputSchema" => {} } } }
+          define_method(:execute_tool) { |name, _input| answers.fetch(name, {}) }
+          define_method(:headless?) { headless }
+          define_method(:autofill) { |*_args, **_kwargs| result }
+        end.new
+      end
+
+      let(:webmcp_cart) do
+        { "id" => "cart_1", "currency" => "USD", "totals" => [{ "type" => "total", "amount" => 500 }],
+          "line_items" => [{ "item" => { "id" => "p1", "price" => 500 }, "quantity" => 1 }] }
+      end
+
+      let(:ship_env) do
+        { "PORTAGE_SHIP_STREET" => "1 Main St", "PORTAGE_SHIP_CITY" => "Erie", "PORTAGE_SHIP_COUNTRY" => "US",
+          "PORTAGE_SHIP_POSTAL_CODE" => "16501", "PORTAGE_SHIP_EMAIL" => "buyer@example.com" }
+      end
+
+      let(:approving_confirm) do
+        Portage::Cli::WebmcpAutofillConfirm.new(interactive: true, input: StringIO.new("y\n"), output: StringIO.new)
+      end
+
+      it "never attempts autofill at all when the mode isn't approved (the default)" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(headless: false, autofill_result: { "blocked" => nil,
+                                                                                     "filled" => [], "unmatched" => [],
+                                                                                     "rate" => [] })
+        expect(page).not_to receive(:autofill)
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page,
+                              webmcp_autofill_confirm: approving_confirm).call
+        end
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report).not_to have_key(:autofill)
+      end
+
+      it "fills the approved fields once the shopper confirms them, opted in via autofill:" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(
+          headless: false,
+          autofill_result: { "blocked" => nil, "filled" => ["email", "shipping address-line1"], "unmatched" => [],
+                             "rate" => ["Standard shipping"] }
+        )
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: approving_confirm).call
+        end
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:autofill]).to eq(outcome: "autofill_filled", filled: ["email", "shipping address-line1"],
+                                        unmatched: [], rate: ["Standard shipping"])
+      end
+
+      it "never fills anything the shopper declines, and never calls the bridge at all" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(headless: false, autofill_result: { "blocked" => nil,
+                                                                                     "filled" => [], "unmatched" => [],
+                                                                                     "rate" => [] })
+        expect(page).not_to receive(:autofill)
+        declining_confirm = Portage::Cli::WebmcpAutofillConfirm.new(interactive: true, input: StringIO.new("n\n"),
+                                                                    output: StringIO.new)
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: declining_confirm).call
+        end
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:autofill]).to eq(outcome: "autofill_declined")
+      end
+
+      it "reports autofill_needs_headed_browser for a headless bridge, never touching the page's fields" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(headless: true, autofill_result: nil)
+        expect(page).not_to receive(:autofill)
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: approving_confirm).call
+        end
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:autofill][:outcome]).to eq("autofill_needs_headed_browser")
+      end
+
+      it "reports autofill_blocked and fills nothing when the checkout page signals a CAPTCHA/challenge" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(
+          headless: false,
+          autofill_result: { "blocked" => "captcha", "filled" => [], "unmatched" => ["email"], "rate" => [] }
+        )
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: approving_confirm).call
+        end
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:autofill][:outcome]).to eq("autofill_blocked")
+        expect(report[:autofill][:filled]).to be_empty
+      end
+
+      it "never even asks to confirm when nothing is configured to fill" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(headless: false, autofill_result: nil)
+        confirm = instance_double(Portage::Cli::WebmcpAutofillConfirm)
+        expect(confirm).not_to receive(:call)
+
+        report = with_env({ "PORTAGE_SHIP_STREET" => nil, "PORTAGE_SHIP_CITY" => nil, "PORTAGE_SHIP_COUNTRY" => nil,
+                            "PORTAGE_SHIP_POSTAL_CODE" => nil, "PORTAGE_SHIP_EMAIL" => nil }) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: confirm).call
+        end
+
+        expect(report).not_to have_key(:autofill)
+      end
+
+      # Never a card/account field, never the pay button: WebmcpAutofillFields
+      # (the only thing that ever builds `fields`) has no path to a payment
+      # field at all, and the run still ends in express_stop — the shopper
+      # finishes payment themselves on the store's own page, exactly as
+      # before Phase 3 existed.
+      it "still stops at payment and hands off as express_stop, even with autofill filled" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(
+          headless: false,
+          autofill_result: { "blocked" => nil, "filled" => ["email"], "unmatched" => [], "rate" => [] }
+        )
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: approving_confirm).call
+        end
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:checkout_url]).to eq("https://shop.example/checkouts/c1")
+      end
+    end
+
     it "reserves a pending shopper handoff record for the express-stop checkout" do
       stub_no_native_manifest
       allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge, preset: nil).and_return(webmcp_session)

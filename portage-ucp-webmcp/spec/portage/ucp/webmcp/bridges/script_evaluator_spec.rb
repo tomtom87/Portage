@@ -115,5 +115,55 @@ RSpec.describe Portage::Ucp::WebMcp::Bridges::ScriptEvaluator do
 
       expect(described_class.selenium(driver).list_tools).to eq([])
     end
+
+    it "carries headless: through each factory, and defaults to nil (unknown)" do
+      page = double("Ferrum::Page", evaluate_async: envelope)
+
+      expect(described_class.ferrum(page).headless?).to be_nil
+      expect(described_class.ferrum(page, headless: true).headless?).to be(true)
+      expect(described_class.ferrum(page, headless: false).headless?).to be(false)
+    end
+  end
+
+  describe "#headless?" do
+    it "returns whatever was passed to the constructor, nil by default" do
+      expect(described_class.new(evaluate: ->(_) {}).headless?).to be_nil
+      expect(described_class.new(evaluate: ->(_) {}, headless: true).headless?).to be(true)
+      expect(described_class.new(evaluate: ->(_) {}, headless: false).headless?).to be(false)
+    end
+  end
+
+  describe "#autofill" do
+    it "evaluates the autofill script with fields and selectors as JSON literals, and unwraps the envelope" do
+      evaluator, expressions = evaluator_returning(
+        '{"ok":true,"value":{"blocked":null,"filled":["email"],"unmatched":[],"rate":[]}}'
+      )
+
+      result = evaluator.autofill({ "email" => "a@example.com" }, selectors: { "email" => "#email" })
+
+      expect(result).to eq("blocked" => nil, "filled" => ["email"], "unmatched" => [], "rate" => [])
+      expect(expressions.last).to start_with("(#{Portage::Ucp::WebMcp::Assets.read('autofill.js')})")
+      expect(expressions.last).to end_with('({"email":"a@example.com"}, {"email":"#email"})')
+    end
+
+    it "defaults selectors to an empty object" do
+      evaluator, expressions = evaluator_returning('{"ok":true,"value":{}}')
+
+      evaluator.autofill({})
+
+      expect(expressions.last).to end_with("({}, {})")
+    end
+
+    it "raises ServerError, same as any other bridge failure, when the script itself throws" do
+      evaluator, = evaluator_returning('{"ok":false,"code":"execute_failed","error":"boom"}')
+
+      expect { evaluator.autofill({}) }.to raise_error(Portage::Ucp::Client::ServerError, "boom")
+    end
+
+    it "wraps a driver failure in BridgeError, same as #list_tools/#execute_tool" do
+      failing = described_class.new(evaluate: ->(_) { raise IOError, "target closed" })
+
+      expect { failing.autofill({}) }.to raise_error(Portage::Ucp::WebMcp::BridgeError, /target closed/)
+    end
   end
 end

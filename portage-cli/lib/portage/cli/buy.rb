@@ -19,6 +19,9 @@ require_relative "webmcp"
 require_relative "webmcp_checkout_mode"
 require_relative "webmcp_mappings"
 require_relative "webmcp_mapping_confirm"
+require_relative "webmcp_autofill_mode"
+require_relative "webmcp_autofill_fields"
+require_relative "webmcp_autofill_confirm"
 
 module Portage
   module Cli
@@ -84,12 +87,23 @@ module Portage
       #   mapping confirmation prompt never fires under it (same posture as
       #   "no TTY"), since a caller reading structured stdout has nowhere to
       #   put an interactive prompt.
+      # @param autofill [Boolean, nil] docs/plans/webmcp-universal-outbound.md
+      #   Phase 3 — `--autofill`'s value: true when the flag was passed, nil
+      #   (the default) otherwise. Only ever turns WebmcpAutofillMode on;
+      #   `PORTAGE_WEBMCP_AUTOFILL=approve`/config.json still work with this
+      #   left nil. Approving the mode is still only half of Phase 3's
+      #   opt-in — see #webmcp_autofill_confirm.
+      # @param webmcp_autofill_confirm [Portage::Cli::WebmcpAutofillConfirm, nil]
+      #   Phase 3's per-run "fill exactly these fields?" prompt. nil (the
+      #   default) builds one from the same interactive? posture as Phase
+      #   2's webmcp_mapping_confirm; injectable so a spec can simulate an
+      #   interactive "y" without a real terminal.
       # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- all keywords; one per flag, plus
       # injectable collaborators, each assigned to its own ivar
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
                      auto_open: nil, notify_webhook: nil, confidence_check: nil, transaction_log: nil,
                      max_price: nil, webmcp_bridge: nil, webmcp_mappings: nil, webmcp_mapping_confirm: nil,
-                     json: false)
+                     autofill: nil, webmcp_autofill_confirm: nil, json: false)
         # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
         raw = url.to_s.strip
         @uri = URI.parse(raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}")
@@ -106,6 +120,8 @@ module Portage
         @max_price = max_price
         @webmcp_mappings = webmcp_mappings
         @webmcp_mapping_confirm = webmcp_mapping_confirm
+        @autofill = autofill
+        @webmcp_autofill_confirm = webmcp_autofill_confirm
         @json = json
         @webmcp_bridge = webmcp_bridge
         @decisions = {}
@@ -385,8 +401,8 @@ module Portage
       # (bridge given?, gem installed?, cart/checkout capable?, token mode?)
       # from also carrying this preset-shaped fork (Metrics/CyclomaticComplexity).
       def run_webmcp_checkout(session, preset_name)
-        handoff_tool = preset_name && Portage::Ucp::WebMcp::Presets.fetch(preset_name).handoff_checkout
-        return webmcp_handoff_checkout_flow(session, handoff_tool) if handoff_tool
+        preset = preset_name && Portage::Ucp::WebMcp::Presets.fetch(preset_name)
+        return webmcp_handoff_checkout_flow(session, preset) if preset&.handoff_checkout
 
         full_buy(session, source: "webmcp", force_handoff: true)
       end
@@ -407,7 +423,14 @@ module Portage
       # data, and returns nothing url-shaped (README "Shopify storefronts")
       # — from the bridge's own `#location` once the tab has navigated
       # there, when the bridge offers one (Bridges::ScriptEvaluator does).
-      def webmcp_handoff_checkout_flow(session, handoff_tool)
+      #
+      # Once the tab has navigated to that checkout page, this is also
+      # where Phase 3's autofill runs (#attempt_webmcp_autofill) — the bridge's
+      # browser is sitting on the store's own checkout, cart already built,
+      # which is exactly the moment (and the only flow) autofill needs: a
+      # real checkout DOM, not a UCP checkout wire object #full_buy never
+      # navigates a browser to at all.
+      def webmcp_handoff_checkout_flow(session, preset)
         products = safe_search(session)
         product = select_product(products)
         unless product
@@ -420,8 +443,10 @@ module Portage
         cart = session.get_cart(cart_id: created["id"], meta: agent_meta)
         warnings = reconcile_checkout(product, cart)
 
-        result = @webmcp_bridge.execute_tool(handoff_tool, {})
-        webmcp_handoff_report("webmcp", products, cart.merge("continue_url" => url_from_handoff(result)), warnings)
+        result = @webmcp_bridge.execute_tool(preset.handoff_checkout, {})
+        autofill = attempt_webmcp_autofill(preset)
+        webmcp_handoff_report("webmcp", products, cart.merge("continue_url" => url_from_handoff(result)), warnings,
+                              autofill: autofill)
       end
 
       # Best-effort: the hand-off tool's own result shape isn't documented
@@ -436,6 +461,57 @@ module Portage
                       when Hash then result["url"] || result["continue_url"]
                       end
         from_result || (@webmcp_bridge.location if @webmcp_bridge.respond_to?(:location))
+      end
+
+      # docs/plans/webmcp-universal-outbound.md Phase 3. Three gates, in
+      # order, any of which means nothing gets typed:
+      #   1. WebmcpAutofillMode off (the default) — no attempt at all, same
+      #      shape the report had before Phase 3 existed (no `autofill:` key).
+      #   2. Nothing to fill — no PORTAGE_SHIP_*/PORTAGE_SHIP_EMAIL
+      #      configured.
+      #   3. The shopper doesn't approve the exact fields/values in
+      #      #webmcp_autofill_confirm's prompt (decision 2) — including
+      #      "can't even ask", under --json or with no TTY.
+      # Past those, Portage::Ucp::WebMcp::Autofill (portage-ucp-webmcp) does
+      # the actual work against the checkout page the bridge's browser has
+      # already navigated to; its own gates (headless?, a CAPTCHA/challenge
+      # on the page) apply independently of these three.
+      #
+      # @return [Hash, nil] nil when gate 1 or 2 stopped this before ever
+      #   reaching the shopper — the report gets no `autofill:` key at all,
+      #   same as before Phase 3. Otherwise a Hash with a stable `outcome:`
+      #   (`autofill_declined`, `autofill_needs_headed_browser`,
+      #   `autofill_blocked`, `autofill_unsupported`, `autofill_filled`) plus
+      #   whatever `filled:`/`unmatched:`/`rate:` Autofill reported.
+      def attempt_webmcp_autofill(preset)
+        return nil unless webmcp_autofill_approved?
+
+        fields = Portage::Cli::WebmcpAutofillFields.build
+        return nil if fields.empty?
+        return { outcome: "autofill_declined" } unless webmcp_autofill_confirm.call(fields)
+
+        result = webmcp_autofill.call(bridge: @webmcp_bridge, fields: fields, selectors: preset.checkout_selectors)
+        { outcome: "autofill_#{result.outcome}", filled: result.filled, unmatched: result.unmatched,
+          rate: result.rate }
+      end
+
+      def webmcp_autofill_approved?
+        Portage::Cli::WebmcpAutofillMode.approved?(override: @autofill)
+      end
+
+      def webmcp_autofill_confirm
+        @webmcp_autofill_confirm ||= Portage::Cli::WebmcpAutofillConfirm.new(interactive: !@json && $stdin.tty?)
+      end
+
+      # Injectable so a spec can stand in for portage-ucp-webmcp's real
+      # Autofill without a real browser (same reasoning as
+      # webmcp_mappings/webmcp_mapping_confirm above) — nil by default
+      # rather than a constructor kwarg since it's only ever reached once
+      # `webmcp_bridge:` and autofill are both already in play, deep enough
+      # into #call that a kwarg here would rarely be worth threading through
+      # every other spec's Buy.new.
+      def webmcp_autofill
+        @webmcp_autofill ||= Portage::Ucp::WebMcp::Autofill
       end
 
       def webmcp_checkout_mode
@@ -953,11 +1029,14 @@ module Portage
       # (and fires the auto-open/webhook side effects) rather than leaving
       # them at a dead end. `outcome` doubles as the webhook's `reason`, so a
       # relay and an agent loop branch on the same value.
-      def handoff_report(source, products, checkout, warnings, outcome:, message:)
+      # @param extra [Hash] merged straight onto the report — Phase 3's
+      #   `autofill:` (see #webmcp_handoff_report) is the only caller today.
+      def handoff_report(source, products, checkout, warnings, outcome:, message:, extra: {})
         handoff = hand_off(checkout, reason: outcome, source: source, message: message, warnings: warnings)
         checkout_report(source, products, checkout, outcome: outcome, message: message,
                                                     warnings: warnings + Array(@pending_handoff_warning),
-                                                    checkout_url: checkout_url_of(checkout), handoff: handoff)
+                                                    checkout_url: checkout_url_of(checkout), handoff: handoff,
+                                                    **extra)
       end
 
       # docs/plans/handoff-reconcile.md Phase 4 — #webmcp_flow's
@@ -966,10 +1045,18 @@ module Portage
       # auto-open/notify exactly like any other hand-off (Phases 1-3 apply
       # unchanged), even though it got here because a mode setting chose to
       # stop, not because anything was denied or escalated.
-      def webmcp_handoff_report(source, products, checkout, warnings)
+      #
+      # @param autofill [Hash, nil] docs/plans/webmcp-universal-outbound.md
+      #   Phase 3 — #webmcp_handoff_checkout_flow's own autofill attempt
+      #   (#attempt_webmcp_autofill), attached as the report's `autofill:`
+      #   key when there was one to attach. nil (the default, and always for
+      #   #finish_checkout's own force_handoff call) adds no key at all —
+      #   the report is byte-for-byte what it was before Phase 3 existed.
+      def webmcp_handoff_report(source, products, checkout, warnings, autofill: nil)
         message = "Cart and checkout are built — finish payment with the store's own express-pay button " \
                   "on the page."
-        handoff_report(source, products, checkout, warnings, outcome: "express_stop", message: message)
+        extra = autofill ? { autofill: autofill } : {}
+        handoff_report(source, products, checkout, warnings, outcome: "express_stop", message: message, extra: extra)
       end
 
       # Never fires on --dry-run (a dry run creates a real checkout but never
@@ -1098,12 +1185,12 @@ module Portage
       # is what the checkout actually holds; `products:` is only what the
       # search returned, most of which was never bought.
       def checkout_report(source, products, checkout, outcome:, message:, checkout_url: nil, handoff: nil,
-                          warnings: [])
+                          warnings: [], **extra)
         build_report(source: source, outcome: outcome, browse: true, checkout: true, products: products,
                      message: message, checkout_url: checkout_url, checkout_id: checkout["id"],
                      checkout_status: checkout["status"], currency: checkout["currency"],
                      totals: checkout["totals"], items: checkout_items(checkout), handoff: handoff,
-                     warnings: warnings, decisions: @decisions.dup)
+                     warnings: warnings, decisions: @decisions.dup, **extra)
       end
 
       def checkout_items(checkout)

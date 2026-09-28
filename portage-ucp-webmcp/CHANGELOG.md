@@ -6,6 +6,31 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Checkout autofill** (docs/plans/webmcp-universal-outbound.md Phase 3):
+  `Bridges::ScriptEvaluator#autofill(fields, selectors:)` fills a checkout
+  page's own contact/shipping fields directly — by `autocomplete` attribute,
+  never a WebMCP tool call — via a new `assets/autofill.js`, and picks the
+  cheapest shipping rate among same-named radio groups it can read a price
+  from. Never touches a field whose own `autocomplete` is payment-shaped
+  (`cc-*`/`transaction-*`) or whose `type` is hidden/password, regardless of
+  what's asked for; never clicks a submit/pay control; stops and reports
+  `blocked` on the first sign of a CAPTCHA/challenge, without trying to
+  solve or route around it. `ScriptEvaluator.ferrum`/`.playwright`/
+  `.selenium` all take a new `headless:` (default `nil`, meaning "unknown"),
+  exposed as `#headless?`. `WebMcp::Autofill.call(bridge:, fields:,
+  selectors:)` is the Ruby-side gate in front of it: `:needs_headed_browser`
+  when the bridge is headless or never says (unknown is treated as
+  headless — a shopper who can't see the browser can't pay in it either),
+  `:unsupported` for a hand-rolled Bridge with no `#autofill` at all,
+  `:blocked` when the page script signals a challenge, `:filled` otherwise
+  (with `#filled`/`#unmatched`/`#rate`). `Presets::Preset` gained
+  `checkout_selectors` (default `{}`), a platform's fallback CSS selectors
+  per autocomplete token — Shopify's is empty pending a live check (no
+  browser or live storefront available this session; noted as pending in
+  the plan's Progress log). Everything upstream of this — the opt-in gate,
+  the shopper-approval prompt, building `fields` from `PORTAGE_SHIP_*` — is
+  `portage-cli`'s job (`WebmcpAutofillMode`, `WebmcpAutofillConfirm`,
+  `WebmcpAutofillFields`); this gem never reads shopper data itself.
 - **Schema matching for unknown pages** (docs/plans/webmcp-universal-outbound.md
   Phase 2): `WebMcp::Matcher.propose(tools)` proposes a `tool_names:` mapping
   for a page `Presets.detect` doesn't recognize, scoring each of the page's
