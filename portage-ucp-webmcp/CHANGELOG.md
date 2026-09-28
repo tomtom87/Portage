@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `WebMcp.connect` with no `capabilities:` now derives them from the tools
+  the page registers (`WebMcp::Capabilities`), so `Session#advertises?`
+  answers `true`/`false` instead of `nil`. This reads the page once inside
+  `connect`, so a `BridgeError` can now raise from `connect` itself.
+  `Transport#answers?(action)` reports whether a page tool answers an
+  action after `tool_names:`/`prefix:` resolution.
+
 ## [0.1.1] - 2026-09-24
 
 - `Rack::CallEndpoint` resolves the caller through core's

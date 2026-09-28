@@ -1012,6 +1012,26 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).to have_received(:create_checkout)
     end
 
+    # Regression: a real WebMcp.connect used to build a Session with nil
+    # capabilities, so the cart/checkout gate never passed against a page and
+    # the stubbed Sessions above hid it. This one goes through the real
+    # connect, Transport and Session, with only the page faked.
+    it "runs the WebMCP flow through the real connect against a page's tools" do
+      stub_no_native_manifest
+      answers = { "search_catalog" => { "products" => [product] }, "create_cart" => {},
+                  "create_checkout" => webmcp_checkout }
+      page = Class.new do
+        define_method(:list_tools) { answers.keys.map { |name| { "name" => name, "inputSchema" => {} } } }
+        define_method(:execute_tool) { |name, _input| answers.fetch(name) }
+      end.new
+
+      report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page).call
+
+      expect(report[:source]).to eq("webmcp")
+      expect(report[:outcome]).to eq("express_stop")
+      expect(report[:checkout_url]).to eq("https://shop.example/cart/c/chk_1")
+    end
+
     it "reserves a pending shopper handoff record for the express-stop checkout" do
       stub_no_native_manifest
       allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge).and_return(webmcp_session)
