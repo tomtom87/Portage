@@ -3119,3 +3119,122 @@ unknown (Phase 2's matcher), never mapped with a stale preset.
 Not checked here: whether a checkout URL taken from the bridge's browser
 still holds the cart in another browser (Phase 1's other live check). It
 means adding to a real store's cart, so it's left for a supervised run.
+
+## 47. WebMCP's `nil`-capabilities bug: a spec double that agreed with the bug it stood in for (2026-09-28)
+
+`docs/plans/webmcp-universal-outbound.md` Phase 0 opened on a bug that made
+every earlier phase of the plan pointless before it existed: `Buy#webmcp_flow`
+called `Portage::Ucp::WebMcp.connect(bridge: @webmcp_bridge)` with no
+`capabilities:` argument. `Session#advertises?` reads straight off whatever
+`capabilities:` it was built with, and with none given that's `nil`, not an
+empty array — so `session.advertises?(CART_CAP)` returns `nil`, `&&`-ed
+against another `nil`, both falsy, and `Buy#webmcp_flow`'s own gate
+(`return nil unless session.advertises?(CART_CAP) &&
+session.advertises?(CHECKOUT_CAP)`) always fell through to platform-adapter
+detection. The WebMCP path had never once run against a real page since it
+was written.
+
+`buy_spec.rb` didn't catch it, and the reason is the interesting part: its
+existing WebMCP case stubbed `WebMcp.connect` to return an
+`instance_double(..., advertises?: true)` — a double that answers `true`
+unconditionally, regardless of what `capabilities:` `#call` actually passed
+it. The spec was asserting that `Buy` calls `connect` and behaves correctly
+*given* a session that advertises cart+checkout; it was never asserting
+that a *real* `connect` call produces such a session. A double built to
+stand in for the collaborator can quietly stand in for the collaborator's
+bug too, if nothing ever runs the real thing alongside it.
+
+The fix has two parts, matching the two things that were wrong: `WebMcp::
+Capabilities.for(transport)` (new) maps the actions a page answers, after
+`tool_names:`/`prefix:` resolution through the new `Transport#answers?`, to
+the `dev.ucp.shopping.*` capability each one starts (`search_catalog` →
+catalog, `create_cart` → cart, `create_checkout` → checkout, `get_order` →
+order — a capability counts on the *starting* action, so a catalog with
+search but no lookup still counts). `WebMcp.connect` now calls it whenever
+the caller passes no `capabilities:` of their own, reading the page once
+inside `connect` for it (a `BridgeError` can therefore now raise from
+`connect` itself, not just from a later call — `Buy#webmcp_flow` already
+rescued that error class, so this needed no new rescue). And the spec gap
+got a case built to fail without the fix and pass with it: "runs the WebMCP
+flow through the real connect against a page's tools," with no
+`instance_double` between `Buy` and `connect` at all.
+
+## 48. WebMCP preset matching: exact fingerprint, or nothing (2026-09-28)
+
+Phase 1 needed a rule for how confidently a page's tool list has to match a
+known platform before its `tool_names:`/`wire:` get applied automatically —
+`Presets.detect` runs with no shopper watching, so a wrong guess here is
+worse than a wrong guess Phase 2's `Matcher` merely *proposes* for a human
+to confirm. The rule that shipped: `Presets::SHOPIFY.fingerprint` is the
+full, exact set of tool names Shopify's WebMCP pages register (11, taken
+live — see entry 46), and `Presets.detect(tools)` matches only when a
+page's own sorted tool names equal that set exactly. Not a subset check,
+not "at least N of these," not weighted scoring — equality or nothing.
+
+Two things this rule deliberately never consults, because both are page
+content and therefore untrusted, the same boundary `Matcher`'s own module
+comment draws for a tool's `description`: a `generator` meta tag or
+`window.Shopify` global (either could be present on a page that registers
+nothing WebMCP-shaped, or absent on a real Shopify storefront running an
+unusual theme), and a tool's own name or description text in isolation (a
+page could register an eleventh, decoy tool alongside ten real ones and
+call it anything). The fingerprint is what the mapping actually depends
+on — the literal set of callable tools — so forging one costs registering
+every tool in it with a matching input schema, not just a lookalike label.
+
+The cost of exactness is that a platform changing its tool set — Shopify
+adding, dropping, or renaming even one of the eleven — makes `detect` miss
+for every store on the new set, with no partial credit and no
+notification. That's accepted, not overlooked: a miss falls through to
+Phase 2's matcher (propose-and-confirm) rather than silently applying a
+preset that's gone stale, which is the failure mode this rule exists to
+rule out. The alternative — matching on a subset or a similarity threshold
+so small platform changes don't break detection — was rejected for the
+same reason Phase 2's mutating actions need a shopper's confirmation: a
+close-but-not-exact match is exactly the shape a page trying to borrow a
+preset it doesn't actually implement would produce.
+
+## 49. WebMCP autofill: two "assume the safe thing" defaults (2026-09-28)
+
+Phase 3 needed a stance on two questions where the tempting default —
+assume the common case — is also the one that could put money in front of
+an agent instead of a shopper. Both landed on the opposite of the tempting
+default.
+
+**`ScriptEvaluator#headless?` treats "unknown" as headless.** A hand-rolled
+bridge, or one of the three built-in driver helpers (`.ferrum`/
+`.playwright`/`.selenium`) called with no `headless:` argument, reports
+`nil` — not "false," not "assume a normal desktop run with a visible
+window," which is what most callers building a bridge for interactive use
+probably are running. `WebMcp::Autofill.headless?` reads that as headless
+anyway: `!(bridge.respond_to?(:headless?) && bridge.headless? == false)` is
+true unless the bridge explicitly says `false`. The reasoning is narrow and
+specific to what autofill is for: the entire point of stopping short of
+payment and handing off is that the shopper takes over in a browser they
+can see and click in. A bridge that can't or won't say whether its browser
+is visible gives no evidence that assumption holds, and the failure mode of
+guessing "headed" and being wrong is an agent silently typing a shopper's
+address into a browser window nobody is looking at, with no one there to
+notice the run stalled at `express_stop`. Guessing "headless" and being
+wrong just means a real headed run reports `autofill_needs_headed_browser`
+and asks the caller to pass `headless: false` — a one-line, discoverable
+fix, not a silent one.
+
+**`Presets::SHOPIFY.checkout_selectors` shipped empty, not guessed.**
+Autofill matches fields by their `autocomplete` attribute first and only
+falls back to a preset's own CSS selectors when nothing on the page
+carries a matching one. Shopify Checkout's fields are documented to use
+standard `autocomplete` values, which is a real reason to expect the
+fallback is rarely needed there — but "rarely needed" was written down as
+a reason to leave the fallback empty pending a live check, not as license
+to fill it with selectors nobody has run against a real Shopify checkout
+page this session. A guessed selector that's subtly wrong (a checkout
+redesign, a locale variant, an A/B test) is worse than no selector: it
+either silently fills the wrong field or silently fills nothing while
+looking configured, versus today's honest `unmatched` entry in the
+autofill report. `checkout_selectors` defaults to `{}` on any `Preset` that
+doesn't set one (`Preset#checkout_selectors = self[:checkout_selectors] ||
+{}`), so this is the same "absent means genuinely not attempted" posture
+`Presets` already applies to `detect` missing and `Matcher` applies to a
+score below its floor — nowhere in this plan does "we don't know" get
+silently upgraded to a guess.

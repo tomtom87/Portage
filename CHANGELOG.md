@@ -9,6 +9,22 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **WebMCP outbound docs** (`docs/plans/webmcp-universal-outbound.md`
+  Phase 4, no code change). `portage-ucp-webmcp`'s README documents
+  platform presets (`Presets`/`preset:`), the schema-matcher fallback for
+  an unrecognized page and its read-vs-mutating confirm rule, and Phase 3's
+  opt-in checkout autofill (what it will and won't touch, and
+  `Preset#checkout_selectors` as a platform's own fallback); `portage-cli`'s
+  README points to `--autofill`/`PORTAGE_WEBMCP_AUTOFILL=approve`. The
+  `shop-via-ucp` skill now mentions the WebMCP path (ranks after native UCP
+  and before platform adapters when a browser is available, always ends in
+  a hand-off, and names the autofill opt-in) instead of only covering
+  native UCP/MCP. `docs/design-log.md` gained three entries: Phase 0's
+  `nil`-capabilities bug and why the spec double it was hiding behind
+  didn't catch it, Phase 1's exact-fingerprint-only matching rule, and
+  Phase 3's two "unknown means the unsafe-if-wrong option, not the common
+  case" defaults (`headless?`, `checkout_selectors`). This closes the plan
+  apart from three still-pending live checks noted in its Progress log.
 - The Homebrew formula's `test do` block now checks what `portage doctor
   --json` reports (installed via Homebrew, every bundled adapter loads)
   instead of its exit code, which depends on the user's setup

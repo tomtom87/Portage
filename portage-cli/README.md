@@ -511,6 +511,29 @@ hand-off. `token` isn't implemented yet; it reports
 `webmcp_token_unsupported` rather than attempting completion. Requires
 `gem install portage-ucp-webmcp` — not a hard dependency of `portage-cli`.
 
+Against a page whose tools aren't a known platform preset, `Buy` falls back
+to a schema-matched, shopper-confirmed mapping instead of giving up (see
+`portage-ucp-webmcp`'s README, "Stores that don't run Portage"). A mutating
+match prompts on a real TTY with `--json` off; under `--json` or with no
+TTY it stops instead (outcome `webmcp_mapping_unconfirmed`) and returns the
+proposed mapping for the caller to pass back.
+
+Once the flow hands off to the store's own checkout page, the shopper can
+opt into having it pre-filled: `--autofill`, or
+`PORTAGE_WEBMCP_AUTOFILL=approve` / config.json's `"webmcp_autofill":
+"approve"` (only that literal string turns it on — a generic truthy value
+doesn't). Even opted in, nothing is typed until a second prompt shows the
+shopper exactly which fields and values are about to be entered and they
+approve it — refused outright under `--json` or no TTY. It only ever
+touches contact email and shipping address (from `PORTAGE_SHIP_*`/the new
+`PORTAGE_SHIP_EMAIL`) plus the cheapest shipping rate it can find; it never
+touches a payment field and never clicks submit/pay, and the run still
+always ends in the same `express_stop` hand-off. A headless browser (or one
+that never says) reports `autofill_needs_headed_browser`; a CAPTCHA/
+challenge on the page reports `autofill_blocked` — see
+`portage-ucp-webmcp`'s README, "Approved autofill of the store's checkout",
+for the full field/outcome list.
+
 ### Decisions
 
 `portage buy` and `portage find` make their judgment calls
