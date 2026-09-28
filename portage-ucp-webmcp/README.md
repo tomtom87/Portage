@@ -302,11 +302,12 @@ Two limits bound an outbound call, and both block the thread that made it:
 
 ### Shopify storefronts
 
-Checked live on 2026-09-23: 6 of 8 Shopify storefronts tried (ColourPop,
-tentree, Kylie Cosmetics, Brooklinen, Allbirds, Billabong) register the same 11
-WebMCP tools of their own. Gymshark and Fashion Nova registered none. The
-tools take UCP-shaped arguments, so `wire: :auto` picks the UCP shape. Two
-names differ from Session's:
+Checked live on 2026-09-28: 7 of 9 Shopify storefronts tried (ColourPop,
+tentree, Kylie Cosmetics, Brooklinen, Allbirds, Billabong, The Light Yard)
+register the same 11 WebMCP tools of their own, with identical schemas, and
+`preset: :auto` detects all of them as `:shopify`. Gymshark and Fashion Nova
+registered none. The tools take UCP-shaped arguments, so `wire: :auto` picks
+the UCP shape. Two names differ from Session's:
 
 ```ruby
 session = Portage::Ucp::WebMcp.connect(bridge: bridge, tool_names: { create_cart: "add_to_cart" })

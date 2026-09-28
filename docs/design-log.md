@@ -3092,3 +3092,30 @@ in `portage-ucp`, `portage-cli`, `portage-ucp-shopify`, `portage-ucp-instagram`,
 1+ (the actual `ProxyConfig`/`Support::Connection` seam, CLI flags, doctor
 reachability/gateway checks, inbound) is unaffected by any of this and
 starts from a codebase that now knows exactly what it's replacing.
+
+## 46. WebMCP Shopify preset fingerprint, taken live (2026-09-28)
+
+`docs/plans/webmcp-universal-outbound.md` Phase 1 shipped `Presets::SHOPIFY`
+with a fingerprint of the 7 tool names the 2026-09-23 sweep had written
+down, out of 11 it counted. `Presets.detect` matches exact sets only, so
+that fingerprint would never match a real store. The sweep was rerun the
+same day: headless Chrome through Ferrum, `WebMcp.polyfill_js` injected
+before page scripts (a browser with no `navigator.modelContext` and no polyfill
+gets no tools: Shopify only exposes `window.Shopify.actions` there), 5 s wait, `bridge.list_tools`.
+
+| Store | Tools | `detect` |
+|---|---|---|
+| ColourPop, tentree, Kylie Cosmetics, Brooklinen, Allbirds, Billabong, The Light Yard | 11 | `:shopify` |
+| Gymshark, Fashion Nova | 0 | `nil` |
+
+All seven register the same names **and** byte-identical input schemas
+(one distinct SHA-256 set across them). The four names missing from the
+first pass: `browse_store`, `show_variant`, `manage_orders`,
+`search_shop_policies_and_faqs`. They stay unmapped; none has been checked
+against a Session method. Matching is by exact name set, so when Shopify
+adds, drops or renames a tool, `detect` misses and the page is treated as
+unknown (Phase 2's matcher), never mapped with a stale preset.
+
+Not checked here: whether a checkout URL taken from the bridge's browser
+still holds the cart in another browser (Phase 1's other live check). It
+means adding to a real store's cart, so it's left for a supervised run.
