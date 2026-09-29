@@ -38,6 +38,32 @@ Only `buy`, `find`, `compare`, `doctor`, and `payment enroll` accept `--proxy*`
 flags — those are the network-touching commands. `portage orders reconcile` is a
 read-only console helper in this codebase and doesn't take them.
 
+## Plain proxy environment variables
+
+A route nothing above configures falls back to the standard variables. How
+`Support::Connection` reads them:
+
+- **Per scheme.** `https_proxy`/`HTTPS_PROXY` for an `https://` target,
+  `http_proxy`/`HTTP_PROXY` for an `http://` one. Ruby's own
+  `Net::HTTP.start(..., p_addr: :ENV)` default reads only `http_proxy`, for any
+  scheme; Portage doesn't rely on it, except in the one gap listed under
+  [Known gaps](#known-gaps).
+- **Lowercase wins** when both spellings are set.
+- **Credentials in the URL work.** `http://user:pass@proxy.internal:3128` reaches
+  the proxy as `Proxy-Authorization: Basic …`.
+- **`no_proxy`/`NO_PROXY`** is a comma-separated list of hostnames. `example.com`
+  and `.example.com` both bypass `example.com` and every subdomain of it, and `*`
+  bypasses everything. Entries match hostnames only: a `host:port` entry or a CIDR
+  range (`10.0.0.0/8`) never matches.
+- **`--no-env-proxy`** turns this fallback off, and the `payment` route never uses
+  it unless you name a proxy for payment explicitly.
+- `portage doctor` reports the effective proxy per route, credentials redacted.
+
+```bash
+http_proxy=http://user:pass@proxy.internal:3128 no_proxy=localhost,127.0.0.1 \
+  portage buy --query "hoodie" --dry-run --json
+```
+
 ## Corporate egress
 
 The common case: an internal squid/proxy server every outbound request to a store
@@ -283,8 +309,8 @@ above reach them:
   gem.
 - **`Client.fetch_manifest`** — the manifest GET `Client.discover` makes before it
   ever reaches Faraday — is still a bare `Net::HTTP.get_response`, so it inherits
-  Ruby stdlib's `http_proxy`-only env-proxy quirk (see the root README's own
-  "Running behind a proxy" section) rather than picking up `ProxyConfig` or even
+  Ruby stdlib's `http_proxy`-only env-proxy quirk (see
+  [Plain proxy environment variables](#plain-proxy-environment-variables)) rather than picking up `ProxyConfig` or even
   correctly reading `HTTPS_PROXY` for an `https://` manifest URL.
 
 Both are pre-existing gaps in `portage-ucp-client`'s own transport, not something

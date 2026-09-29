@@ -57,11 +57,13 @@ own docs page lists what it reads). Full walkthrough, incl. seeding a store allo
 what to do when the free search backend comes back empty:
 [CLI usage tutorial](../cli-usage-tutorial.md).
 
-**Pointing an agent at it:** drop the [`shop-via-ucp`](../skills/shop-via-ucp.md)
-skill into your agent's skills directory instead of hand-rolling prompts — it prefers
-`portage-ucp-client`/`portage` over raw MCP calls when available, and encodes the
-guardrails that matter when neither is. [`serve-via-ucp`](../skills/serve-via-ucp.md)
-is the merchant-side counterpart, for *setting up* a store's own UCP endpoint instead.
+**Pointing an agent at it:** install the [`buy` plugin](../skills/buy.md#install) in
+Claude Code, or add it to Codex, Cursor, OpenCode and other agents
+([other agents](../skills/buy.md#other-agents)), instead of hand-rolling prompts. The
+smaller [`shop-via-ucp`](../skills/shop-via-ucp.md) skill drives a store's UCP endpoint
+directly and encodes the guardrails that matter when `portage` isn't available.
+[`serve-via-ucp`](../skills/serve-via-ucp.md) is the merchant-side counterpart, for
+*setting up* a store's own UCP endpoint instead.
 
 ## Usage
 
