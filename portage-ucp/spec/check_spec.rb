@@ -53,5 +53,31 @@ RSpec.describe Portage::Ucp::Check do
       expect(report[:platform]).to be_nil
       expect(report).not_to have_key(:live_probe)
     end
+
+    it "follows a <link rel=\"ucp\"> manifest pointer when /.well-known/ucp is missing" do
+      stub_request(:get, "https://shop.example/.well-known/ucp").to_return(status: 404)
+      stub_request(:get, "https://shop.example/")
+        .to_return(status: 200, body: '<head><link href="/api/ucp.json" rel="ucp"></head>')
+      stub_request(:get, "https://shop.example/api/ucp.json")
+        .to_return(status: 200, body: { ucp_version: "2026-04-08" }.to_json)
+
+      report = described_class.call("shop.example")
+
+      expect(report[:native_ucp]).to eq("ucp_version" => "2026-04-08")
+      expect(report[:manifest_url]).to eq("https://shop.example/api/ucp.json")
+      expect(report).not_to have_key(:platform)
+    end
+
+    it "falls back to platform detection when the linked manifest doesn't load" do
+      stub_request(:get, "https://shop.example/.well-known/ucp").to_return(status: 404)
+      stub_request(:get, "https://shop.example/")
+        .to_return(status: 200, body: '<link rel="ucp" href="/ucp.json"><script src="https://cdn.shopify.com/x.js"></script>')
+      stub_request(:get, "https://shop.example/ucp.json").to_return(status: 404)
+
+      report = described_class.call("shop.example")
+
+      expect(report[:native_ucp]).to be_nil
+      expect(report[:platform]).to eq("Shopify")
+    end
   end
 end

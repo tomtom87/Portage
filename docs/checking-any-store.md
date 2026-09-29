@@ -30,7 +30,7 @@ If you only have the core gem, `portage-ucp-check` is a small CLI, shipped with 
 bundle exec portage-ucp-check your-shop.example
 ```
 
-It tries the cheap answer first — `GET /.well-known/ucp` on the URL you gave it. If that's already there (a Shopify store with the native Universal Commerce Agent app, say), it prints the manifest as-is and stops; no adapter needed.
+It tries the cheap answer first — `GET /.well-known/ucp` on the URL you gave it. If that's already there (a Shopify store with the native Universal Commerce Agent app, say), it prints the manifest as-is and stops; no adapter needed. If not, it looks for a `<link rel="ucp" href="...">` manifest pointer in the homepage, the same fallback `portage buy` follows, and reports that manifest with its `manifest_url`.
 
 If there's no native manifest, it looks at the homepage for platform tells (Shopify's `cdn.shopify.com`, WooCommerce's plugin path, BigCommerce's CDN host, etc.) and names the matching `portage-ucp-<adapter>` gem. When that adapter's env vars (the same ones its `exe/` reads — see [Adapter requirements](adapter-requirements.md)) are already set, it goes one step further: requires the gem, builds a real `Client`/`Adapter`, and calls `search_catalog` against the live store, so the recommendation is a confirmed-working adapter rather than a guess from string-matching.
 
