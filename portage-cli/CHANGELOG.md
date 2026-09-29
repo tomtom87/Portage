@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-29
+
 - **`portage check <url> [--json]`.** Reports whether Portage can buy from a store and
   how: `verdict` (`automated`, `webmcp`, `handoff`, `unsupported`), `next_step`, and the
   detail behind them (native UCP, platform, adapter install and missing env, hand-off-only,
@@ -13,8 +15,8 @@ pre-1.0, so APIs may still shift between minor versions.
   Plain GETs only, hand-off-only hosts are not contacted, and WebMCP is read only from an
   already-open Portage profile tab. Exits `0` for `automated` and `webmcp`. The hand-off-only
   test moved into a shared `HandoffHost` so `buy` and `check` can't disagree.
-  Following a homepage `<link rel="ucp">` manifest pointer needs the next portage-ucp
-  release, where `Ucp::Check` learned it.
+  Follows a homepage `<link rel="ucp">` manifest pointer through `portage-ucp` 0.11.0,
+  which this release now requires (`~> 0.11`).
 
 ## [0.9.0] - 2026-09-29
 

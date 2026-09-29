@@ -9,6 +9,10 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-29
+
+- **Release set:** `portage-cli` 0.10.0 (`portage check URL [--json]`: can Portage buy from this store, and how), `portage-ucp` 0.11.0 (`Ucp::Check` follows a homepage `<link rel="ucp">` manifest pointer, as `buy` does, and reports `manifest_url`), and `buy` plugin 0.8.0 (a "Can Portage buy from this store?" step using `portage check`, gated on `portage --help` listing it). `portage-cli` now requires `portage-ucp` `~> 0.11`. The docs-only notes in `portage-ucp-client` and `portage-ucp-webmcp` stay unreleased.
+
 - **`portage check`** documented in the `buy` skill, `docs/checking-any-store.md`, the CLI tutorial and `docs/api/cli-json.md`. Code and details are in `portage-cli`'s changelog.
 
 ## [0.12.0] - 2026-09-29
