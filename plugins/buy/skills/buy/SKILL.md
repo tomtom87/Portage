@@ -13,7 +13,7 @@ You are the user's shopping agent. You find what they want, show real offers, an
    - `brew install tomtom87/portage/portage` (macOS/Linux; bundles every adapter)
    - `gem install portage-cli` (any Ruby >= 3.2)
 2. Run `portage doctor --json` and read it. It covers shipping address, search backends, agent profile, payment methods and proxy. Fix what's missing before buying (section 1).
-3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `index`, `browser` and `setup` subcommands and the `--handoff-target` flag ship in a recent-enough `portage`, not every install. If one isn't listed, fall back as described where it's mentioned.
+3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `check`, `index`, `browser` and `setup` subcommands and the `--handoff-target` flag ship in a recent-enough `portage`, not every install. If one isn't listed, fall back as described where it's mentioned.
 
 **Minimum version these references assume:** `portage-cli` `0.9.0` (with `portage-ucp-webmcp` `0.2.0` or newer for the Portage browser profile and WebMCP autofill). Older installs still work: step 3 above checks `portage --help` before using `index`, `browser`, `setup` or `--handoff-target`, and `brew upgrade portage` or `gem update portage-cli` brings an install up to date.
 
@@ -40,6 +40,13 @@ You are the user's shopping agent. You find what they want, show real offers, an
 - **Approval level.** `portage policy show --json` includes `require_approval`: `any` (the default), `person` or `off`. If the user runs you from a terminal, suggest `portage policy set --require-approval person`, which they run themselves. Under `person` only a yes the user types in their own terminal (`portage approve QUOTE_ID`) lets a purchase through, not one you relay. Raising it needs nothing. Lowering it asks for a yes at a terminal, so you can't do it. Never try to work around this by editing `~/.portage/policy.json` or the quote files under `~/.portage/quotes/`, or by opening a terminal of your own.
 
 ## 2. The buying flow
+
+**Can Portage buy from this store?** (if `portage --help` lists `check`.) Run `portage check URL --json`, read `verdict` and `next_step`, and tell the user plainly which it is:
+- `automated`: Portage can build the order itself. Payment is still theirs to approve.
+- `webmcp`: Portage builds the cart through the store's own page tools and the user pays in their browser.
+- `handoff`: Portage opens the store and the user buys. `next_step` says what would automate it (`adapter.missing_env` names the env vars), but adapters act as the store's owner, so don't set one up for someone else's store.
+- `unsupported`: nothing usable was found. Portage can only open the store.
+`check` makes plain GET requests only, never a cart, and skips hand-off-only hosts without contacting them. If `webmcp.status` is `skipped`, say WebMCP wasn't checked rather than that the store lacks it. Exit `0` means `automated` or `webmcp`. If `check` isn't listed, run a `--dry-run` instead.
 
 **Step 1: check history.** Run `portage history --json` so you don't buy something twice.
 

@@ -128,3 +128,7 @@ Each `kept[]` entry's `verdict` is `ucp` (answered `/.well-known/ucp`), `indexed
 | `open` `error: "LaunchError"` | The browser started but never answered its own debugging port in time | Relay `message`; try again, or check nothing else is using `--port`. |
 
 This is a dedicated profile, never the user's default one — Portage never reads its password, cookie or autofill store. Firefox and Safari aren't supported for driving (Chromium-family only: `chrome`/`edge`/`brave`/`arc`).
+
+## Store check
+
+`portage check URL --json` reports `verdict` (`automated`, `webmcp`, `handoff` or `unsupported`), `next_step`, and the detail behind them: `native_ucp`, `platform`, `recommended_gem`, `live_probe`, `handoff_only`, `adapter` (`gem`, `installed`, `missing_env`) and `webmcp` (`status`: `available`, `none`, `skipped` or `error`, plus `tools` and `reason`). It exits `0` for `automated` and `webmcp`, `1` otherwise. WebMCP is only read from a tab the Portage browser profile already has open on that store; `check` never launches a browser.

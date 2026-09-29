@@ -157,6 +157,7 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
        portage find --query "..." [--max-price N] [--limit N] [--json]
        portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                               [--max-price N] [--json]
+       portage check <url> [--json]
        portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--json]
                     [--choose REF | --compare REF | --view REF]
        portage approve QUOTE_ID [--via auto|tty|agent] [--relayed-yes | --view] [--json]
@@ -229,7 +230,7 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 
 ## Running behind a proxy
 
-`buy`, `find`, `compare`, `doctor` and `payment enroll` take `--proxy*` flags. The same settings work as `PORTAGE_PROXY*` env vars or a `"proxy"` section in `~/.portage/config.json`. Anything left unconfigured falls back to the standard `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` variables, except payment traffic, which goes direct unless you name a proxy for it. `portage doctor` shows the effective proxy for each route, with credentials redacted. Recipes for corporate egress, rotating pools, API gateways, mitmproxy and nginx/Cloudflare, plus the env-var caveats, are in [`docs/proxy.md`](docs/proxy.md).
+`buy`, `find`, `compare`, `check`, `doctor` and `payment enroll` take `--proxy*` flags. The same settings work as `PORTAGE_PROXY*` env vars or a `"proxy"` section in `~/.portage/config.json`. Anything left unconfigured falls back to the standard `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` variables, except payment traffic, which goes direct unless you name a proxy for it. `portage doctor` shows the effective proxy for each route, with credentials redacted. Recipes for corporate egress, rotating pools, API gateways, mitmproxy and nginx/Cloudflare, plus the env-var caveats, are in [`docs/proxy.md`](docs/proxy.md).
 
 ## Requirements
 

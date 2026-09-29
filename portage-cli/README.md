@@ -133,6 +133,7 @@ portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
 portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                        [--max-price N] [--json]
+portage check <url> [--json]
 portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--json]
              [--choose REF | --compare REF | --view REF]
 portage approve QUOTE_ID [--via auto|tty|agent] [--relayed-yes | --view] [--json]
@@ -217,6 +218,18 @@ credentials" dead-end case, so it's scriptable in CI. A flag that can't be
 used (an unreadable value, an out-of-range threshold) stops the buy before
 anything runs: on stderr normally, or as a JSON report with `outcome:
 "invalid_option"` under `--json`.
+
+### Check
+
+`portage check <url> [--json]` answers "can Portage buy from this store, and how?".
+It checks for a native `/.well-known/ucp` manifest, detects the platform, notes
+whether its adapter gem is installed and which env vars are missing, and looks for
+WebMCP tools, using the same hand-off-only rules as `buy`. `verdict` is
+`automated`, `webmcp`, `handoff` or `unsupported`, with a plain-English
+`next_step`. Exits `0` for `automated` and `webmcp`. It sends plain GETs only, and
+never contacts a hand-off-only host. WebMCP is read only from a tab your Portage
+browser profile already has open on the store; it never launches a browser.
+Takes the `--proxy*` flags.
 
 ### Compare
 
