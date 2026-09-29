@@ -261,6 +261,71 @@ portage setup
 Piped, from CI, or with `--json`, it's exactly `portage doctor --json`'s
 read-only report — always safe to run non-interactively.
 
+## Picking and approving at the terminal
+
+`find` prints a `search_id` and a `ref` for each offer (`--json` has them as
+`search_id` and `offer_ref`). Two commands turn those into the person's decisions.
+Run them yourself, at a terminal, and they ask you on `/dev/tty`.
+
+**Pick the store.** `portage pick` lists the latest search's offers, plus a last
+choice, "Compare an offer across stores":
+
+```
+$ portage pick
+  1. https://shop.example — Cold Brew — 24.00 USD
+  2. https://other.example — Cold Brew — 22.00 USD
+  3. Compare an offer across stores
+Pick an offer (1-3, v N to view, Enter to cancel): v 2
+Opened https://other.example/products/cold.
+Pick an offer (1-3, v N to view, Enter to cancel): 2
+[picked] Picked Cold Brew from https://other.example — next: `portage buy --offer of_bbbbbb --dry-run`.
+```
+
+`v 2` opens offer 2's product page in your browser and asks again. Viewing is never an
+answer. Only pages on the offer's own store host are opened. Enter on its own cancels.
+Choosing "Compare" asks which offer, runs `portage compare` on it, then shows the pick
+again over its results.
+
+**Price it, then approve the total.** A dry run saves a quote and prints its `quote_id`
+(`--json` has it as `quote_id`):
+
+```
+$ portage buy --offer of_bbbbbb --qty 2 --dry-run
+$ portage approve qt_5c0d1e2f3a4b
+Cold Brew — https://other.example
+  qty 2, total 44.00 USD — https://other.example/products/cold
+Buy 2 × Cold Brew from https://other.example for 44.00 USD? [y/N, v to view] y
+[approved] Approved 2 × Cold Brew from https://other.example for 44.00 USD — next: `portage buy --quote qt_5c0d1e2f3a4b --yes`.
+$ portage buy --quote qt_5c0d1e2f3a4b --yes
+```
+
+`v` opens the product page and asks again. `buy --quote ... --yes` buys exactly that quote.
+If the price has gone up since the dry run it refuses (`quote_changed`) and nothing is
+charged; each quote is used once.
+
+**The approval policy.** `--require-approval` says what a real `buy --yes` needs:
+
+```bash
+portage policy set --require-approval person   # only a yes you type yourself counts
+portage policy set --require-approval any      # the default: yours, or one an agent relays
+portage policy set --require-approval off      # `--yes` alone buys
+portage policy show                            # ends with `require_approval: any (default)`
+```
+
+Lowering it (for example `person` to `off`) asks for a yes at the terminal. It's stored in
+`~/.portage/policy.json`. Under `any` or `person`, a `buy --yes` with no approved `--quote`
+doesn't buy: it dry-runs and reports `needs_approval`.
+
+!!! warning "Upgrade note"
+    Before this setting, `--yes` alone bought. Under the default `any` it no longer does. To
+    restore the old behaviour, run `portage policy set --require-approval off` from a
+    terminal.
+
+`person` raises the bar but isn't a hard guarantee: an agent with a shell can edit
+`~/.portage/policy.json` or the quote files, or run its own terminal. For agents, see
+[Agentic flow](agentic-flow.md#the-approval-policy). The "Compare" choice uses your proxy
+settings from the environment and `config.json`; `pick` has no `--proxy` flags.
+
 ## Hand-off: how a purchase actually finishes (Tiers A/B/C)
 
 Most stores don't let `portage buy` complete payment itself. It builds the

@@ -6,6 +6,51 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Human pick and approve** (`docs/plans/human-pick-and-approve.md`, Phases 1-3).
+  Loop steps 3 and 5 now have a ready-made interface for a person at a terminal
+  and for an agent relaying their answer.
+  - **Offer refs.** Each `find` offer carries an `offer_ref` (`of_` and 6 hex
+    digits), and the report a `search_id` (`se_` and 8 hex digits). Both are saved
+    with the search in history, so `history --json` searches now hold `search_id`
+    and `offers[]`. `compare` saves its offers with refs and a `search_id` too.
+    `portage buy --offer REF` takes the store, product and query from the saved
+    offer; an unknown ref is `offer_not_found`.
+  - **Quotes.** A `buy --dry-run` that priced a checkout saves a quote in
+    `~/.portage/quotes/` and reports `quote_id`. `buy --quote QUOTE_ID --yes`
+    buys exactly that quote, capped at the quoted total: if the real checkout costs
+    more (or is in another currency) it refuses with `quote_changed`, carrying
+    `quoted_total` and `current_total`, without charging or handing off. Quotes don't
+    expire and are used once (`purchased` or any hand-off). `quote_not_found` and
+    `quote_used` cover the rest.
+  - **`portage pick`.** Loop step 3. `needs_pick` returns `choices[]` (`ref`, `label`,
+    `url`, plus the offer's fields) and a last "Compare an offer across stores"
+    choice; `--choose REF` relays an answer (`picked`, `by: "agent_relayed"`),
+    `--compare REF` runs compare and shows the pick again over its results,
+    `--search LAST|SEARCH_ID` picks the search. At a terminal it asks on `/dev/tty`
+    (`by: "person"`).
+  - **`portage approve QUOTE_ID`.** Loop step 5. `needs_approval` returns a
+    `summary` (title, store, qty, total, `total_display`, `url`); `--relayed-yes`
+    records `approved_by: "agent_relayed"`; a yes typed at a terminal records
+    `"person"`. The quote also keeps `approved`, `approved_by` and `approved_at`.
+  - **`--via auto|tty|agent`.** `tty` asks on `/dev/tty` (so it works with stdout
+    piped) and returns `no_terminal` when there's none; `agent` asks nobody;
+    `auto` is `tty` with a terminal and no `--json`, else `agent`.
+  - **`--view REF` / `approve --view` and `v N` / `v` at a prompt** open the product
+    page and never count as an answer. Only an `http(s)` URL on the offer's own
+    store host is opened; anything else is `view_refused`. `pick`'s compare
+    choice uses the proxy settings from env and config (there are no `--proxy`
+    flags on `pick`).
+  - **`policy set --require-approval person|any|off`** (default `any`, stored as
+    `require_approval` in `~/.portage/policy.json`, always shown by `policy show`).
+    Lowering it needs a yes typed at a terminal. It raises the bar against an agent
+    but isn't a hard guarantee: a process with a shell can edit the policy or quote
+    files. Docs: `docs/api/cli-json.md`, `docs/agentic-flow.md`,
+    `docs/cli-usage-tutorial.md`.
+  - **Upgrade note.** Under the default `any`, a `buy --yes` without an approved
+    `--quote` no longer buys: it dry-runs and returns `needs_approval` (exit `0`).
+    Restore the old behaviour with `portage policy set --require-approval off`
+    from a terminal. `buy --query`'s numbered pick now asks on `/dev/tty` too.
+
 - Documentation only, no code change. The README said a
   `webmcp_mapping_unconfirmed` report returns the proposed mapping "for the
   caller to pass back". No flag takes a mapping back, and `Buy` has no

@@ -133,7 +133,7 @@ Amazon and similar retailers restrict automated purchasing agents in their terms
 These rules hold in every tier, for the CLI and the plugin:
 
 - **No raw card data.** Card data never passes through Portage. Payment methods are tokens from `portage payment enroll`, kept in your OS keychain, and the plugin refuses anything that looks like a card number.
-- **You approve every payment.** Nothing is bought without your explicit yes. A search result is never bought on `--yes` alone: you name the store. The plugin shows the exact total and asks before each purchase, and one yes covers one purchase. In a browser hand-off, you click pay.
+- **You approve every payment.** Nothing is bought without your explicit yes. A search result is never bought on `--yes` alone: you name the store. The plugin shows you the offers to pick from and the exact total to approve, each with a link to the product page, and one yes covers one purchase. `portage policy set --require-approval person` makes only a yes you type in your own terminal count. In a browser hand-off, you click pay.
 - **Your browser's secrets stay closed.** Portage never reads your browser's password, cookie or autofill stores, and never attaches to your default browser profile.
 - **No CAPTCHA or bot-wall bypass.** Portage reports it and hands off.
 - **Spending caps.** `portage policy set` adds per-transaction, rolling and velocity caps and a store allowlist.
@@ -151,10 +151,15 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
                           [--handoff-target default|print|profile|agent:NAME]
                           [--decision-backend jev|laya] [--min-confidence N] [--json]
                           [--wait [--wait-timeout DURATION|off]]
+       portage buy --offer REF [--qty N] [--yes] [--dry-run] ...
+       portage buy --quote QUOTE_ID --yes [--json] ...
        portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
        portage find --query "..." [--max-price N] [--limit N] [--json]
        portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                               [--max-price N] [--json]
+       portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--json]
+                    [--choose REF | --compare REF | --view REF]
+       portage approve QUOTE_ID [--via auto|tty|agent] [--relayed-yes | --view] [--json]
        portage history [list] [--purchases|--searches] [--limit N] [--json]
        portage history clear [--purchases|--searches]
        portage payment list [--json]
@@ -169,6 +174,7 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
                            [--rolling-cap N --rolling-window-seconds N --currency CUR]
                            [--velocity-count N --velocity-window-seconds N]
                            [--allow HOST ...] [--clear-allowlist]
+                           [--require-approval person|any|off]  (lowering asks at a terminal)
        portage orders reconcile [--checkout ID] [--json]
        portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
        portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
@@ -198,7 +204,7 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.6.3 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](docs/skills/buy.md) |
+| `buy` plugin | 0.7.0 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](docs/skills/buy.md) |
 | [`portage-cli`](portage-cli/) | 0.8.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
 | [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Shop through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
 | [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
