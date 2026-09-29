@@ -185,7 +185,7 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.6.2 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](docs/skills/buy.md) |
+| `buy` plugin | 0.6.3 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](docs/skills/buy.md) |
 | [`portage-cli`](portage-cli/) | 0.8.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
 | [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Shop through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
 | [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
