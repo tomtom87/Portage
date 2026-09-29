@@ -1,6 +1,6 @@
 # Agentic Payments: Stored Tokens, Policy, Confirmation
 
-**Status:** planned, not started
+**Status:** shipped — Phases 0–3 landed 2026-09-14 (`38e1722`, `0ad5243`, `c3acad3`, `f4161db`, `5bfecfe`); follow-ups in design-log §33–36
 **Driver:** focus group feedback — agent reaches payment step in `portage buy` and dead-ends with "No --payment-token given" ([portage-cli/lib/portage/cli/buy.rb:265-268](../../portage-cli/lib/portage/cli/buy.rb#L265-L268))
 
 ## Context
