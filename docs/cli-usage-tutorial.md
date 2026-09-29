@@ -309,9 +309,9 @@ egress, a rotating residential pool, an API gateway, mitmproxy for debugging, an
 nginx/Cloudflare in front of the MCP/WebMCP endpoints, and
 the [CLI reference](cli-reference.md#proxy) for the full flag/env
 reference. Below that layer, the plain `http_proxy`/`HTTPS_PROXY`/`NO_PROXY` env
-vars are still the fallback for any route left unconfigured — see the root
-[`README.md`](https://github.com/tomtom87/Portage#running-behind-a-proxy) for the stdlib quirks worth
-knowing there. `portage doctor` reports the effective proxy per route, credentials
+vars are still the fallback for any route left unconfigured — see
+[plain proxy environment variables](proxy.md#plain-proxy-environment-variables)
+for how they're read. `portage doctor` reports the effective proxy per route, credentials
 redacted.
 
 ## Known issue: `Client.discover` can't parse real 2026-08-25 manifests

@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **README rewrite.** Opens with what Portage does, then installing the `buy` plugin (`/plugin install buy@portage`), adding it to other agents with dotagents or as a plain skill, and a first `find`/`buy --dry-run`. Adds a Safety section, merges the doc map and gem list into one table, syncs the usage banner with `portage --help`, and moves the proxy env-var caveats (corrected against the code) into `docs/proxy.md`. The docs site's buy page now pulls its install steps from the README.
+
 - **`buy` plugin 0.6.2.** The skill's minimum version is now `portage-cli` 0.8.0 (plus `portage-ucp-webmcp` 0.2.0 for the browser profile and autofill), which shipped in 0.11.0. It still checks `portage --help` before using newer commands, so older installs keep working.
 
 ## [0.11.0] - 2026-09-29
