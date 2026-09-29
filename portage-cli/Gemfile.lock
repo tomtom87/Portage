@@ -38,7 +38,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-cli (0.8.0)
+    portage-cli (0.9.0)
       irb (>= 1.6)
       portage-ucp (~> 0.10)
       portage-ucp-client (~> 0.6, >= 0.6.3)

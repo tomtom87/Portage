@@ -31,7 +31,7 @@ Two ways in: let Claude shop for you with the `buy` plugin, or run the `portage`
 <!-- buy-plugin-install-start -->
 The plugin teaches Claude Code to shop through the `portage` CLI, so install the CLI first.
 
-1. **Install the CLI** (`portage-cli` 0.8.0 or newer):
+1. **Install the CLI** (`portage-cli` 0.9.0 or newer):
 
     ```bash
     brew install tomtom87/portage/portage
@@ -204,8 +204,8 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.7.0 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](docs/skills/buy.md) |
-| [`portage-cli`](portage-cli/) | 0.8.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
+| `buy` plugin | 0.7.1 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](docs/skills/buy.md) |
+| [`portage-cli`](portage-cli/) | 0.9.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
 | [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Shop through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
 | [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
 | [`portage-ucp-decision`](portage-ucp-decision/) | 0.1.1 | Agent builders | Offer ranking, escalation policy, confidence gate (Jev/Laya), `PolicyGuard` | – |

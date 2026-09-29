@@ -15,9 +15,9 @@ You are the user's shopping agent. You find what they want, show real offers, an
 2. Run `portage doctor --json` and read it. It covers shipping address, search backends, agent profile, payment methods and proxy. Fix what's missing before buying (section 1).
 3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `index`, `browser` and `setup` subcommands and the `--handoff-target` flag ship in a recent-enough `portage`, not every install. If one isn't listed, fall back as described where it's mentioned.
 
-**Minimum version these references assume:** `portage-cli` `0.8.0` (with `portage-ucp-webmcp` `0.2.0` or newer for the Portage browser profile and WebMCP autofill). Older installs still work: step 3 above checks `portage --help` before using `index`, `browser`, `setup` or `--handoff-target`, and `brew upgrade portage` or `gem update portage-cli` brings an install up to date.
+**Minimum version these references assume:** `portage-cli` `0.9.0` (with `portage-ucp-webmcp` `0.2.0` or newer for the Portage browser profile and WebMCP autofill). Older installs still work: step 3 above checks `portage --help` before using `index`, `browser`, `setup` or `--handoff-target`, and `brew upgrade portage` or `gem update portage-cli` brings an install up to date.
 
-**`pick` and `approve`.** The buying flow in section 2 uses `portage pick`, `portage approve`, `buy --offer` and `buy --quote`, which are newer than `0.8.0` (unreleased at the time of writing: it needs a `portage-cli` that lists `pick` and `approve` in `portage --help`). If they aren't listed, tell the user to upgrade rather than falling back to passing `--yes` yourself.
+**`pick` and `approve`.** The buying flow in section 2 uses `portage pick`, `portage approve`, `buy --offer` and `buy --quote`, which first shipped in `portage-cli` `0.9.0`. If they aren't listed in `portage --help`, tell the user to upgrade rather than falling back to passing `--yes` yourself.
 
 ## 1. Setup (only for what doctor reports missing)
 
