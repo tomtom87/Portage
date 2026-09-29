@@ -412,6 +412,67 @@ RSpec.describe Portage::Cli::Buy do
     end
   end
 
+  describe "a quote's cap (buy --quote)" do
+    def priced(amount, currency: "USD")
+      incomplete_checkout.merge("currency" => currency, "totals" => [{ "type" => "total", "amount" => amount }],
+                                "continue_url" => "https://shop.example/cart/c/1")
+    end
+
+    def buy_against(checkout, **overrides)
+      session = fake_session(advertises_checkout: true, checkout: checkout, completed: completed_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1",
+                                   quote_total: 2400, quote_currency: "USD", **overrides).call
+      [report, session]
+    end
+
+    it "refuses with quote_changed, both totals, no hand-off and no charge, when the total went up" do
+      report, session = buy_against(priced(2500))
+
+      expect(report).to include(outcome: "quote_changed", quoted_total: 2400, quoted_currency: "USD",
+                                current_total: 2500, current_currency: "USD", handoff: nil)
+      expect(report[:message]).to include("24.00 USD", "25.00 USD")
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "refuses when the currency differs or the total is missing" do
+      changed_currency, = buy_against(priced(2400, currency: "GBP"))
+      unpriced, = buy_against(priced(2400).merge("totals" => []))
+
+      expect([changed_currency[:outcome], unpriced[:outcome]]).to eq(%w[quote_changed quote_changed])
+      expect(unpriced[:current_total]).to be_nil
+    end
+
+    it "does not hand off a checkout that needs escalation once the price has gone up" do
+      report, = buy_against(priced(2500).merge("status" => "requires_escalation"))
+
+      expect(report).to include(outcome: "quote_changed", handoff: nil)
+    end
+
+    it "buys at the quoted total" do
+      report, session = buy_against(priced(2400))
+
+      expect(report[:outcome]).to eq("purchased")
+      expect(session).to have_received(:complete_checkout)
+    end
+
+    it "buys at a lower total" do
+      report, session = buy_against(priced(2000))
+
+      expect(report[:outcome]).to eq("purchased")
+      expect(session).to have_received(:complete_checkout)
+    end
+
+    it "sets no cap without a quote" do
+      session = fake_session(advertises_checkout: true, checkout: priced(999_999), completed: completed_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+
+      expect(report[:outcome]).to eq("purchased")
+    end
+  end
+
   describe "reconciling the checkout against what was requested" do
     it "warns when the store drops the requested line item entirely" do
       checkout = incomplete_checkout.merge("line_items" => [])

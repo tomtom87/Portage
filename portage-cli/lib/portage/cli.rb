@@ -16,6 +16,7 @@ require_relative "cli/buy"
 require_relative "cli/find"
 require_relative "cli/compare"
 require_relative "cli/history"
+require_relative "cli/quotes"
 require_relative "cli/payment_methods"
 require_relative "cli/proxy_settings"
 require_relative "cli/handoff_only"
@@ -42,6 +43,8 @@ module Portage
                                 [--handoff-target default|print|profile|agent:NAME]
                                 [--decision-backend jev|laya] [--min-confidence N] [--json]
                                 [--wait [--wait-timeout DURATION|off]]
+             portage buy --offer REF [--qty N] [--yes] [--dry-run] ...
+             portage buy --quote QUOTE_ID --yes [--json] ...
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
@@ -150,7 +153,7 @@ module Portage
 
     def self.record_find(report)
       History.new.record_search(query: report[:query], offer_count: report[:offers].length,
-                                message: report[:message])
+                                message: report[:message], offers: report[:offers])
     end
     private_class_method :record_find
 
@@ -245,11 +248,21 @@ module Portage
 
       parsed[:handoff_target] = handoff_target(parsed, url)
       return 1 unless parsed[:handoff_target]
+
+      dispatch_buy(parsed, url)
+    end
+    private_class_method :run_buy
+
+    # A saved quote or offer names its own store; otherwise a url does, and
+    # with neither the search picks one.
+    def self.dispatch_buy(parsed, url)
+      return buy_from_quote(parsed) if parsed[:quote]
+      return buy_from_offer(parsed) if parsed[:offer]
       return execute_buy(parsed, url) if url
 
       buy_from_search(parsed)
     end
-    private_class_method :run_buy
+    private_class_method :dispatch_buy
 
     # Built and validated up front, same posture as #confidence_check — an
     # unknown --handoff-target/PORTAGE_HANDOFF_TARGET/config.json value is a
@@ -278,6 +291,52 @@ module Portage
     end
     private_class_method :buy_from_search
 
+    # `--offer REF`: the store, product and query come from the saved
+    # `find` that produced the ref, as if they'd been passed as flags.
+    def self.buy_from_offer(parsed)
+      offer = History.new.offer(parsed[:offer])
+      unless offer
+        invalid_buy_option("No saved offer #{parsed[:offer]} — run `portage find` again.",
+                           url: nil, json: parsed[:json], outcome: "offer_not_found")
+        return 1
+      end
+
+      parsed[:offer_ref] = parsed[:offer]
+      parsed[:buy][:query] = offer["query"].to_s
+      execute_buy(parsed, offer["store"], product_id: offer["product_id"])
+    end
+    private_class_method :buy_from_offer
+
+    # `--quote QUOTE_ID`: buys what a `--dry-run` showed. Buy is handed the
+    # quoted total as a cap and refuses (`quote_changed`) if the real
+    # checkout costs more, so the person's approval always covers the total
+    # that gets charged. The quote is spent by #settle_quote, once the run
+    # purchases or hands off.
+    def self.buy_from_quote(parsed)
+      quote = usable_quote(parsed)
+      return 1 unless quote
+
+      parsed[:quote_record] = quote
+      buy = parsed[:buy]
+      buy.merge!(qty: quote["qty"], product_id: quote["product_id"], query: quote["query"].to_s)
+      buy.merge!(quote_total: quote["total"], quote_currency: quote["currency"])
+      execute_buy(parsed, quote["store"])
+    end
+    private_class_method :buy_from_quote
+
+    def self.usable_quote(parsed)
+      quote = Quotes.new.find(parsed[:quote])
+      unless quote
+        return invalid_buy_option("No saved quote #{parsed[:quote]} — run `portage buy ... --dry-run --json` " \
+                                  "for a new one.", url: nil, json: parsed[:json], outcome: "quote_not_found")
+      end
+      return quote unless quote["used_at"]
+
+      invalid_buy_option("Quote #{parsed[:quote]} has already been used — dry-run again for a new one.",
+                         url: quote["store"], json: parsed[:json], outcome: "quote_used")
+    end
+    private_class_method :usable_quote
+
     def self.pick_offer(report, json)
       output = json ? JSON.pretty_generate(report) : format_find(report)
       puts output
@@ -297,17 +356,45 @@ module Portage
     private_class_method :prompt_for_offer
 
     def self.execute_buy(parsed, url, product_id: nil)
+      options = buy_options(parsed, url, product_id: product_id)
+      report = Buy.new(**options).call
+      record_buy(report, options[:query])
+      report = settle_quote(report, parsed, options)
+      result = parsed[:wait] ? wait_for_handoff(report, parsed) : nil
+      print_buy_report(report, result, parsed[:json])
+      buy_exit_code(report)
+    end
+    private_class_method :execute_buy
+
+    def self.buy_options(parsed, url, product_id: nil)
       options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check],
                                    handoff_target: parsed[:handoff_target], json: !parsed[:json].nil?)
       options[:product_id] ||= product_id
       options[:webmcp_bridge] = profile_webmcp_bridge(url) if parsed[:handoff_target].profile?
-      report = Buy.new(**options).call
-      record_buy(report, options[:query])
-      result = parsed[:wait] ? wait_for_handoff(report, parsed) : nil
-      print_buy_report(report, result, parsed[:json])
-      report[:checkout] || report[:browse] ? 0 : 1
+      options
     end
-    private_class_method :execute_buy
+    private_class_method :buy_options
+
+    def self.buy_exit_code(report) = report[:checkout] || report[:browse] ? 0 : 1
+    private_class_method :buy_exit_code
+
+    # A dry run saves a quote and reports its `quote_id`. A run of a saved
+    # quote spends it once it purchases or hands off; any other outcome
+    # (needs_confirmation, a dry run, an error) leaves it usable.
+    def self.settle_quote(report, parsed, options)
+      quote = parsed[:quote_record]
+      if quote
+        Quotes.new.consume(quote["quote_id"]) if report[:outcome] == "purchased" || report[:handoff]
+        return report[:outcome] == "quote_changed" ? report.merge(quote_id: quote["quote_id"]) : report
+      end
+      return report unless report[:outcome] == "dry_run"
+
+      saved = Quotes.new.create(offer_ref: parsed[:offer_ref], store: report[:url],
+                                product_id: options[:product_id], query: options[:query], qty: options[:qty],
+                                total: report_total(report), currency: report[:currency])
+      saved ? report.merge(quote_id: saved["quote_id"]) : report
+    end
+    private_class_method :settle_quote
 
     # docs/plans/buy-skill-and-local-browser.md Phase 6: `--handoff-target
     # profile` gives `portage buy` a browser of its own — the Portage
@@ -458,14 +545,14 @@ module Portage
     # any other, with outcome `invalid_option`, so an agent loop reading
     # stdout gets JSON rather than nothing and a line on stderr.
     # @return [nil]
-    def self.invalid_buy_option(message, url:, json:)
+    def self.invalid_buy_option(message, url:, json:, outcome: "invalid_option")
       unless json
         warn message
         return nil
       end
 
       puts JSON.pretty_generate(url: url, checkout_url: nil, products: [], warnings: [], source: "none",
-                                outcome: "invalid_option", browse: false, checkout: false, message: message)
+                                outcome: outcome, browse: false, checkout: false, message: message)
       nil
     end
     private_class_method :invalid_buy_option
@@ -510,7 +597,7 @@ module Portage
       parser.parse!(argv)
       url = reinterpret_bare_query(url, buy, parsed)
       buy[:query] ||= ""
-      return parsed if url || !buy[:query].strip.empty?
+      return parsed if buy_target?(url, buy, parsed)
 
       warn USAGE
       nil
@@ -518,6 +605,11 @@ module Portage
       invalid_buy_option(e.message, url: url, json: json)
     end
     private_class_method :parse_buy_options
+
+    def self.buy_target?(url, buy, parsed)
+      url || !buy[:query].strip.empty? || parsed[:offer] || parsed[:quote]
+    end
+    private_class_method :buy_target?
 
     # Bare arg is normally the store URL (`portage buy <url> --query "..."`),
     # but `portage buy "coffee"` — no --query, and "coffee" doesn't look like
@@ -583,6 +675,8 @@ module Portage
     # and the catalog search once a store is settled, so it's registered once
     # here rather than twice on the same parser.
     def self.add_search_options(parser, buy, parsed)
+      parser.on("--offer REF") { |v| parsed[:offer] = v }
+      parser.on("--quote QUOTE_ID") { |v| parsed[:quote] = v }
       parser.on("--query QUERY") { |v| parsed[:find][:query] = buy[:query] = v }
       parser.on("--store URL") { |v| parsed[:store] = v }
       parser.on("--limit N", Integer) { |v| parsed[:find][:limit] = v }
@@ -1454,12 +1548,18 @@ module Portage
       lines = ["[#{report[:outcome]}] #{report[:message]} (source: #{report[:source]})"]
       report[:products].each { |p| lines << "  - #{product_line(p)}" }
       lines.concat(format_checkout(report))
+      lines.concat(format_quote(report))
       lines << "  checkout: #{report[:checkout_url]}" if report[:checkout_url]
       lines.concat(format_handoff(report[:handoff])) if report[:handoff]
       lines.concat(format_decisions(report[:decisions])) if report[:decisions]&.any?
       lines.join("\n")
     end
     private_class_method :format_report
+
+    def self.format_quote(report)
+      report[:quote_id] ? ["  quote: #{report[:quote_id]}"] : []
+    end
+    private_class_method :format_quote
 
     # What the checkout holds, as opposed to the search results above it,
     # and where it differs from the request.
@@ -1500,6 +1600,7 @@ module Portage
     def self.offer_line(offer)
       parts = ["#{offer[:store]} — #{offer[:title]} (#{offer[:product_id]})", format_price(offer)]
       parts << "browse only" unless offer[:checkout]
+      parts << "ref #{offer[:offer_ref]}" if offer[:offer_ref]
       parts.join(" — ")
     end
     private_class_method :offer_line

@@ -1,4 +1,5 @@
 require "uri"
+require "securerandom"
 require "portage/ucp"
 require "portage/ucp/client"
 
@@ -62,7 +63,7 @@ module Portage
         sourced = source_offers
         return report(candidates: candidates, message: no_candidates_message) if nothing_to_go_on?(candidates, sourced)
 
-        offers = rank(sourced + probed.flat_map { |store| offers_for(store) })
+        offers = rank(sourced + probed.flat_map { |store| offers_for(store) }).map { |o| with_offer_ref(o) }
         report(candidates: candidates, stores: store_summaries(stores), offers: offers,
                message: summary(candidates, stores, offers))
       rescue Portage::Ucp::Client::MissingAgentProfileError
@@ -77,6 +78,12 @@ module Portage
       # probe or rank — split out of #call to keep its own branching under
       # the complexity budget.
       def nothing_to_go_on?(candidates, sourced) = candidates.empty? && sourced.empty?
+
+      # A short opaque id `portage buy --offer` resolves from history, so a
+      # later step can point at one offer without re-sending its store,
+      # product id and query. Added last, after ranking, so it never
+      # influences the order.
+      def with_offer_ref(offer) = { offer_ref: "of_#{SecureRandom.hex(3)}" }.merge(offer)
 
       # --- Step 1: ask the backends who might sell this ---
 

@@ -32,6 +32,18 @@ RSpec.describe Portage::Cli::Find do
     double
   end
 
+  it "gives every offer a short opaque offer_ref, distinct within a search" do
+    allow(Portage::Ucp::Client).to receive(:discover)
+      .and_return(session(products: [product, product.merge("id" => "p2")]))
+
+    report = find(backends: [backend("duckduckgo", ["https://shop.example"])]).call
+
+    refs = report[:offers].map { |o| o[:offer_ref] }
+    expect(refs.length).to eq(2)
+    expect(refs).to all(match(/\Aof_[0-9a-f]{6}\z/))
+    expect(refs.uniq.length).to eq(2)
+  end
+
   it "returns nothing without a query" do
     report = described_class.new(query: "  ", cache: cache, throttle: 0, backends: []).call
 
@@ -259,7 +271,7 @@ RSpec.describe Portage::Cli::Find do
       report = find(backends: [], offer_sources: [offer_source([catalog_offer])]).call
 
       expect(report[:candidates]).to be_empty
-      expect(report[:offers]).to eq([catalog_offer])
+      expect(report[:offers]).to match([include(catalog_offer)])
       expect(report[:message]).to eq("Found 1 offer(s) across 1 store(s).")
     end
 

@@ -115,12 +115,18 @@ module Portage
       #   default) builds one from the same interactive? posture as Phase
       #   2's webmcp_mapping_confirm; injectable so a spec can simulate an
       #   interactive "y" without a real terminal.
+      # @param quote_total [Integer, nil] minor units — set by `buy --quote`:
+      #   the total the person was quoted. Every path that would charge or
+      #   hand off the real checkout first checks its total against this
+      #   (with `quote_currency:`) and reports `quote_changed` instead if it
+      #   is higher, in another currency, or missing. See #finish_checkout.
       # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- all keywords; one per flag, plus
       # injectable collaborators, each assigned to its own ivar
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
                      auto_open: nil, notify_webhook: nil, handoff_target: nil, confidence_check: nil,
                      transaction_log: nil, max_price: nil, webmcp_bridge: nil, webmcp_mappings: nil,
-                     webmcp_mapping_confirm: nil, autofill: nil, webmcp_autofill_confirm: nil, json: false)
+                     webmcp_mapping_confirm: nil, autofill: nil, webmcp_autofill_confirm: nil, json: false,
+                     quote_total: nil, quote_currency: nil)
         # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
         raw = url.to_s.strip
         @uri = URI.parse(raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}")
@@ -141,6 +147,8 @@ module Portage
         @autofill = autofill
         @webmcp_autofill_confirm = webmcp_autofill_confirm
         @json = json
+        @quote_total = quote_total
+        @quote_currency = quote_currency
         @webmcp_bridge = webmcp_bridge
         @decisions = {}
       end
@@ -970,6 +978,8 @@ module Portage
       end
 
       def finish_checkout(session, source, products, checkout, warnings = [], force_handoff: false)
+        return quote_changed_report(source, products, checkout, warnings) if quote_exceeded?(checkout)
+
         escalation = decide_escalation(checkout, warnings)
         return escalated_report(source, products, checkout, warnings, escalation) if escalation[:escalate]
         return dry_run_report(source, products, checkout, warnings) if @dry_run
@@ -977,6 +987,32 @@ module Portage
         return confirmation_needed_report(source, products, checkout, warnings) unless confirmed?
 
         complete(session, source, products, checkout, warnings)
+      end
+
+      # First in #finish_checkout, ahead of the escalation gates: a
+      # `quote_changed` refusal never hands off, since that would spend the
+      # quote and open a checkout the person never approved. #complete is
+      # the only place this file charges, and it is reached only through
+      # #finish_checkout.
+      def quote_exceeded?(checkout)
+        return false unless @quote_total
+
+        total = checkout_total(checkout)
+        total.nil? || total > @quote_total || checkout["currency"] != @quote_currency
+      end
+
+      def quote_changed_report(source, products, checkout, warnings)
+        total = checkout_total(checkout)
+        checkout_report(source, products, checkout, outcome: "quote_changed", warnings: warnings,
+                                                    quoted_total: @quote_total, quoted_currency: @quote_currency,
+                                                    current_total: total, current_currency: checkout["currency"],
+                                                    message: quote_changed_message(total, checkout["currency"]))
+      end
+
+      def quote_changed_message(total, currency)
+        format_money = ->(amount, cur) { amount ? "#{format('%.2f', amount / 100.0)} #{cur}".strip : "unknown" }
+        "The price changed since the quote (was #{format_money.call(@quote_total, @quote_currency)}, " \
+          "now #{format_money.call(total, currency)}) — nothing was bought."
       end
 
       # Hand off vs. keep going is Decisions.escalation's call

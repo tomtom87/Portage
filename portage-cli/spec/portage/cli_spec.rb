@@ -366,6 +366,187 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "buy --offer and quotes" do
+    let(:dry_run) do
+      report.merge(outcome: "dry_run", checkout_id: "chk_1", checkout_status: "ready_for_complete", currency: "USD",
+                   totals: [{ "type" => "total", "amount" => 2400 }],
+                   items: [{ id: "v1", title: "Cold Brew", quantity: 1 }])
+    end
+    let(:purchased) { dry_run.merge(outcome: "purchased") }
+    let(:quotes) { Portage::Cli::Quotes.new }
+
+    # Each Buy.new gets the next report; every option set is recorded.
+    def stub_buys(*reports)
+      calls = []
+      queue = reports.dup
+      allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+        calls << opts
+        instance_double(Portage::Cli::Buy, call: queue.shift || reports.last)
+      }
+      calls
+    end
+
+    def json_of(&)
+      JSON.parse(capture_stdout(&), symbolize_names: true)
+    end
+
+    def saved_quote(**fields)
+      quotes.create(store: "https://shop.example", product_id: "p1", qty: 2, total: 2400, currency: "USD",
+                    query: "cold", **fields)
+    end
+
+    describe "--offer" do
+      let(:history) do
+        instance_double(Portage::Cli::History, record_search: nil, record_purchase: nil).tap do |h|
+          allow(Portage::Cli::History).to receive(:new).and_return(h)
+          allow(h).to receive(:offer).with("of_aaaaaa")
+                                     .and_return("offer_ref" => "of_aaaaaa", "store" => "https://shop.example",
+                                                 "product_id" => "p1", "query" => "cold")
+          allow(h).to receive(:offer).with("of_nope").and_return(nil)
+        end
+      end
+
+      it "buys the saved offer's store and product, as if they'd been passed as flags" do
+        history
+        calls = stub_buys(dry_run)
+
+        capture_stdout { described_class.run(%w[buy --offer of_aaaaaa --dry-run]) }
+
+        expect(calls.first).to include(url: "https://shop.example", product_id: "p1", query: "cold",
+                                       dry_run: true)
+      end
+
+      it "reports an unknown ref as an offer_not_found outcome and buys nothing" do
+        history
+        calls = stub_buys(dry_run)
+
+        out = json_of { expect(described_class.run(%w[buy --offer of_nope --json])).to eq(1) }
+
+        expect(out).to include(outcome: "offer_not_found", browse: false, checkout: false)
+        expect(out[:message]).to include("of_nope")
+        expect(calls).to be_empty
+      end
+    end
+
+    describe "a --dry-run" do
+      it "saves a quote and reports its quote_id" do
+        history = instance_double(Portage::Cli::History, record_search: nil, record_purchase: nil)
+        allow(Portage::Cli::History).to receive(:new).and_return(history)
+        allow(history).to receive(:offer).and_return("offer_ref" => "of_aaaaaa", "store" => "https://shop.example",
+                                                     "product_id" => "p1", "query" => "cold")
+        stub_buys(dry_run)
+
+        out = json_of { described_class.run(%w[buy --offer of_aaaaaa --qty 2 --dry-run --json]) }
+
+        expect(out[:quote_id]).to match(/\Aqt_[0-9a-f]{12}\z/)
+        expect(quotes.find(out[:quote_id])).to include(
+          "offer_ref" => "of_aaaaaa", "store" => "https://shop.example", "product_id" => "p1", "qty" => 2,
+          "total" => 2400, "currency" => "USD", "approved" => false
+        )
+      end
+
+      it "saves a quote without an offer_ref for a plain url buy" do
+        stub_buys(dry_run)
+
+        out = json_of { described_class.run(%w[buy shop.example --query cold --dry-run --json]) }
+
+        expect(quotes.find(out[:quote_id])).to include("offer_ref" => nil, "query" => "cold", "qty" => 1)
+      end
+
+      it "prints the quote in plain output too" do
+        stub_buys(dry_run)
+
+        text = capture_stdout { described_class.run(%w[buy shop.example --query cold --dry-run]) }
+
+        expect(text).to match(/quote: qt_[0-9a-f]{12}/)
+      end
+
+      it "saves no quote for a run that isn't a dry run" do
+        stub_buys(dry_run.merge(outcome: "needs_confirmation"))
+
+        out = json_of { described_class.run(%w[buy shop.example --query cold --json]) }
+
+        expect(out).not_to have_key(:quote_id)
+      end
+    end
+
+    describe "--quote" do
+      it "refuses an unknown quote with a quote_not_found outcome" do
+        calls = stub_buys(purchased)
+
+        out = json_of { expect(described_class.run(%w[buy --quote qt_000000000000 --yes --json])).to eq(1) }
+
+        expect(out).to include(outcome: "quote_not_found")
+        expect(calls).to be_empty
+      end
+
+      it "hands Buy the quoted total and currency as its cap, and reports what it buys" do
+        quote = saved_quote
+        calls = stub_buys(purchased)
+
+        out = json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
+
+        expect(out[:outcome]).to eq("purchased")
+        expect(calls.length).to eq(1)
+        expect(calls.first).to include(url: "https://shop.example", product_id: "p1", query: "cold", qty: 2,
+                                       yes: true, quote_total: 2400, quote_currency: "USD")
+      end
+
+      it "reports Buy's quote_changed refusal with the quote_id, and leaves the quote unspent" do
+        quote = saved_quote(total: 2000)
+        stub_buys(report.merge(outcome: "quote_changed", browse: true, checkout: true, quoted_total: 2000,
+                               current_total: 2400, handoff: nil))
+
+        out = json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
+
+        expect(out).to include(outcome: "quote_changed", quote_id: quote["quote_id"], quoted_total: 2000,
+                               current_total: 2400)
+        expect(quotes.find(quote["quote_id"])).not_to have_key("used_at")
+      end
+
+      it "spends the quote on a purchase, and refuses a second run with quote_used" do
+        quote = saved_quote
+        calls = stub_buys(purchased)
+
+        json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
+        out = json_of { expect(described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"])).to eq(1) }
+
+        expect(quotes.find(quote["quote_id"])).to include("used_at")
+        expect(out).to include(outcome: "quote_used")
+        expect(calls.length).to eq(1)
+      end
+
+      it "spends the quote on a hand-off outcome too" do
+        quote = saved_quote
+        stub_buys(dry_run.merge(outcome: "policy_blocked", handoff: { opened: true, notified: false }))
+
+        json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
+
+        expect(quotes.find(quote["quote_id"])).to include("used_at")
+      end
+
+      it "leaves the quote usable after an outcome that neither bought nor handed off" do
+        quote = saved_quote
+        stub_buys(dry_run.merge(outcome: "no_payment_token"))
+
+        json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
+
+        expect(quotes.find(quote["quote_id"])).not_to have_key("used_at")
+      end
+
+      it "doesn't reprice or spend the quote without --yes" do
+        quote = saved_quote
+        calls = stub_buys(dry_run.merge(outcome: "needs_confirmation"))
+
+        out = json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--json"]) }
+
+        expect(out[:outcome]).to eq("needs_confirmation")
+        expect(calls.length).to eq(1)
+        expect(quotes.find(quote["quote_id"])).not_to have_key("used_at")
+      end
+    end
+  end
+
   describe "history" do
     def stub_history
       instance_double(Portage::Cli::History).tap do |h|
@@ -383,7 +564,22 @@ RSpec.describe Portage::Cli do
 
       capture_stdout { described_class.run(["find", "--query", "cold"]) }
 
-      expect(h).to have_received(:record_search).with(query: "cold", offer_count: 0, message: "none")
+      expect(h).to have_received(:record_search).with(query: "cold", offer_count: 0, message: "none", offers: [])
+    end
+
+    it "hands the offers, with their refs, to the saved search" do
+      offers = [{ offer_ref: "of_aaaaaa", store: "https://shop.example", product_id: "p1", title: "Cold Brew",
+                  amount: 2400, currency: "USD" }]
+      allow(Portage::Cli::Find).to receive(:new)
+        .and_return(instance_double(Portage::Cli::Find,
+                                    call: { query: "cold", candidates: [], stores: [], offers: offers,
+                                            message: "Found 1 offer(s)." }))
+      h = stub_history
+      allow(h).to receive(:record_search)
+
+      capture_stdout { described_class.run(["find", "--query", "cold"]) }
+
+      expect(h).to have_received(:record_search).with(hash_including(offers: offers))
     end
 
     it "records every buy that created a checkout as a purchase, with its outcome and what it holds" do
@@ -426,7 +622,7 @@ RSpec.describe Portage::Cli do
 
       capture_stdout { described_class.run(["buy", "--query", "cold"]) }
 
-      expect(h).to have_received(:record_search).with(query: "cold", offer_count: 0, message: "none")
+      expect(h).to have_received(:record_search).with(query: "cold", offer_count: 0, message: "none", offers: [])
     end
 
     it "lists purchases and searches" do
