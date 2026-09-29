@@ -32,10 +32,11 @@ module Portage
       end
 
       # Nests everything under a "ucp" envelope, and keys `capabilities` by
-      # capability name (matching what live Shopify UCP rollouts — Casper,
-      # Allbirds, Glossier, and 34+ others — actually serve as of manifest
-      # "version": "2026-08-25"; see docs/well-known-ucp.md and
-      # portage-ucp-client's Client.discover, which this shape now matches).
+      # capability name. That is the shape live Shopify UCP rollouts (Casper,
+      # Allbirds, Glossier, and 34+ others) serve under their own manifest
+      # "version": "2026-08-25", and the shape portage-ucp-client's
+      # Client.discover reads. Only the shape is borrowed: `version` here is
+      # still UCP_VERSION ("2026-04-08"), the spec revision this gem targets.
       def to_h
         ucp = {
           version: UCP_VERSION,

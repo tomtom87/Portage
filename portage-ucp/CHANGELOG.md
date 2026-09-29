@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Documentation only, no code change. Fixes two wrong comments. `Authenticator`
+  pointed at a `mutating_only:` option that `Mcp::Server.build` doesn't have:
+  it only authenticates tools whose adapter method takes `idempotency_key:`,
+  and no option changes that. `Manifest#to_h` read as if this manifest reports
+  `"version": "2026-08-25"`. That is what live Shopify stores serve. This
+  manifest reports `UCP_VERSION`, `"2026-04-08"`.
+
 ## [0.10.0] - 2026-09-25
 
 - **Proxy support** (`docs/plans/proxy-support.md` Phases 1 and 3).
