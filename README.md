@@ -4,9 +4,14 @@
 
 <p align="center">
   <a href="https://rubygems.org/gems/portage-cli"><img src="https://img.shields.io/gem/v/portage-cli" alt="gem version"></a>
+  <a href="https://rubygems.org/gems/portage-cli"><img src="https://img.shields.io/gem/dt/portage-cli" alt="gem downloads"></a>
+  <a href="https://github.com/tomtom87/homebrew-portage"><img src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Ftomtom87%2Fhomebrew-portage%2Fmain%2FFormula%2Fportage.rb&search=portage-cli-(%5Cd%2B%5C.%5Cd%2B%5C.%5Cd%2B)&replace=%241&label=homebrew&color=orange" alt="homebrew"></a>
   <img src="https://img.shields.io/badge/ruby-%3E%3D%203.2-red" alt="ruby">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="license">
   <a href="https://portage.readthedocs.io/en/latest/"><img src="https://img.shields.io/badge/docs-readthedocs-blue" alt="docs"></a>
+  <a href="#install-the-buy-plugin"><img src="https://img.shields.io/badge/claude%20code-plugin-D97757?logo=claude&logoColor=white" alt="Claude Code plugin"></a>
+  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-supported-black?logo=modelcontextprotocol" alt="MCP"></a>
+  <a href="https://ucp.dev"><img src="https://img.shields.io/badge/UCP-supported-4B32C3" alt="UCP"></a>
 </p>
 
 <p align="center">
