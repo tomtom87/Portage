@@ -17,6 +17,29 @@ from this repo's own marketplace (`.claude-plugin/marketplace.json`).
 
 {% include-markdown "../../README.md" start="<!-- other-agents-start -->" end="<!-- other-agents-end -->" %}
 
+## You pick the store and approve the total
+
+The agent never chooses the store and never says yes for you. At two points it stops and asks:
+
+1. **Pick.** After a search, the agent runs `portage pick --json` and shows you the offers, each with a link to the store's product page. You choose one (or "Compare an offer across stores"). It can open a page in your browser if you ask.
+2. **Approve.** After a dry run, it shows the exact total for that offer, with the product link, and asks yes or no. A yes covers that one quote, at that total. If the price rises before it buys, `portage` refuses (`quote_changed`) and nothing is charged.
+
+By default (`require_approval: any`) the agent relays your answer with `portage approve --relayed-yes`. For more assurance, run this once in your own terminal:
+
+```bash
+portage policy set --require-approval person
+```
+
+Then a purchase goes through only after you type yes in your own terminal (`portage approve QUOTE_ID`), and the agent asks you to do that instead of relaying. Lowering the setting also needs a yes at a terminal, so the agent can't turn it off. Details: [the approval policy](../agentic-flow.md#the-approval-policy) and the [CLI JSON reference](../api/cli-json.md#policy-set-require-approval).
+
+!!! warning "Upgrade note"
+    Under the default `any`, a `buy --yes` without an approved `--quote` no longer buys. It dry-runs and asks for approval. To keep the old behaviour, run `portage policy set --require-approval off` from a terminal.
+
+!!! note "`person` is not a hard guarantee"
+    A model can't type on your terminal, but an agent with a shell can edit `~/.portage/policy.json` or the quote files in `~/.portage/quotes/`, or open a terminal of its own with `script` or `expect`. `person` raises the bar. It doesn't replace not giving an untrusted agent a shell. Also, the "compare" choice uses your proxy settings from the environment and `config.json` (`pick` has no `--proxy` flags).
+
+This needs a `portage-cli` newer than `0.8.0`, with `pick` and `approve` (unreleased at the time of writing).
+
 ## The skill
 
 The text below is the skill itself, as the agent reads it. Its `references/` links go to the

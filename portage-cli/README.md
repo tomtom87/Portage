@@ -127,10 +127,15 @@ portage buy <url> --query "..." [--qty N] [--payment-token TOKEN] [--product-id 
                                 [--handoff-target default|print|profile|agent:NAME]
                                 [--decision-backend jev|laya] [--min-confidence N] [--json]
                                 [--wait [--wait-timeout DURATION|off]]
+portage buy --offer REF [--qty N] [--yes] [--dry-run] ...
+portage buy --quote QUOTE_ID --yes [--json] ...
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
 portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                        [--max-price N] [--json]
+portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--json]
+             [--choose REF | --compare REF | --view REF]
+portage approve QUOTE_ID [--via auto|tty|agent] [--relayed-yes | --view] [--json]
 portage history [list] [--purchases|--searches] [--limit N] [--json]
 portage history clear [--purchases|--searches]
 portage payment list [--json]
@@ -145,6 +150,7 @@ portage policy set [--per-transaction-cap N --currency CUR]
                     [--rolling-cap N --rolling-window-seconds N --currency CUR]
                     [--velocity-count N --velocity-window-seconds N]
                     [--allow HOST ...] [--clear-allowlist]
+                    [--require-approval person|any|off]  (lowering asks at a terminal)
 portage orders reconcile [--checkout ID] [--json]
 portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
 portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
@@ -360,6 +366,21 @@ An empty policy (nothing ever set) means every check passes; this is an
 opt-in guardrail, not a default-deny one. Per-token scopes (merchant/amount
 limits bound to one enrolled card) are set via `portage payment enroll
 --scope-*` above, not here.
+
+`portage policy set --require-approval person|any|off` (default `any`) sets what a
+real `buy --yes` needs: `off` is `--yes` alone; `any` needs `--quote QUOTE_ID` for a
+quote approved with `portage approve` (by the person, or relayed by an agent with
+`--relayed-yes`); `person` needs the person's own yes at a terminal. Otherwise the run
+is a dry run that returns `needs_approval`. Lowering the level asks for a yes at a
+terminal. Stored as `require_approval` in `~/.portage/policy.json`. It raises the bar
+against an agent but isn't a hard guarantee: a process with a shell can edit that file
+or the quote files in `~/.portage/quotes/`. The whole flow (`find`, `pick`, `buy
+--offer --dry-run`, `approve`, `buy --quote --yes`) is in the
+[CLI JSON reference](../docs/api/cli-json.md) and the
+[tutorial](../docs/cli-usage-tutorial.md#picking-and-approving-at-the-terminal). Upgrade
+note: under the default `any`, `buy --yes` with no approved `--quote` no longer buys;
+restore the old behaviour with `portage policy set --require-approval off` from a
+terminal.
 
 ### Tiers: how a purchase actually finishes
 

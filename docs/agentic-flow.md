@@ -52,19 +52,28 @@ build the same thing into your own agent.
 | 0. Preflight | `portage --version`, `portage doctor --json` | Missing shipping address or search keys: ask the person to run `portage setup` |
 | 1. Check history | `portage history --json` | Already bought? Say so before buying again |
 | 2. Find offers | `portage find --query "<item>" [--max-price N] --json` | `offers[]`: `store`, `product_id`, `title`, `amount` (minor units), `currency`, `checkout` |
-| 3. Person picks | (your UI) | The person chooses the store. Never let the model pick for them |
-| 4. Dry run | `portage buy <store> --query "<item>" --product-id ID [--qty N] --dry-run --json` | `outcome: "dry_run"`; show the entry in `totals` with `type: "total"` |
-| 5. Approve | (your UI) | The person says yes to that exact total |
-| 6. Buy | same command with `--yes` instead of `--dry-run` | `outcome`: only `purchased` means money moved |
+| 3. Person picks | `portage pick --json`, or your UI | `needs_pick`: show `choices[]` (each with a `url`), relay the answer with `pick --choose REF`. Never let the model pick for them |
+| 4. Dry run | `portage buy --offer REF --dry-run --json` (or `buy <store> --query "<item>" --product-id ID [--qty N] --dry-run --json`) | `outcome: "dry_run"` with a `quote_id`; show the entry in `totals` with `type: "total"` |
+| 5. Approve | `portage approve QUOTE_ID --json`, or your UI | `needs_approval`: show `summary`, relay a yes with `approve QUOTE_ID --relayed-yes`. The person says yes to that exact total |
+| 6. Buy | `portage buy --quote QUOTE_ID --yes --json` | `outcome`: only `purchased` means money moved. `quote_changed` means the price rose and nothing was bought |
 | 7. Track | `portage orders reconcile --json`, or `buy ... --wait` | Settled hand-offs, order status |
 
 Every field and outcome is listed in the [CLI JSON reference](api/cli-json.md). Branch on
 fields, never on the human-readable `message`.
 
+Steps 3 and 5 are ready-made. `portage pick` and `portage approve` either ask the person on
+their own terminal (`/dev/tty`, so it works even when stdout is piped to you) or, under
+`--json`, hand you a `needs_pick` or `needs_approval` outcome with the choices or summary
+and a product link, for you to show in your own UI. Both are optional: if you'd rather
+build your own pick and approval, do, and keep `(your UI)` in those two rows. Either way, a
+real `buy --yes` now needs a `--quote` the person approved (see
+[the approval policy](#the-approval-policy)).
+
 ### Expose a few tools, not a shell
 
 Give the model narrow tools that map to single commands. Don't give it a general shell:
-a shell would let it pass `--yes` itself, raise caps, or edit the store allowlist.
+a shell would let it pass `--yes` itself, raise caps, or edit the store allowlist, the
+approval policy or the saved quotes.
 
 ```json
 [
@@ -81,31 +90,47 @@ a shell would let it pass `--yes` itself, raise caps, or edit the store allowlis
     }
   },
   {
-    "name": "price_offer",
-    "description": "Dry-run a checkout at the store the user picked. Never charges.",
+    "name": "pick_offer",
+    "description": "Optional. Show the person's saved search as choices and relay their answer. Returns the picked offer's offer_ref.",
     "input_schema": {
       "type": "object",
       "properties": {
-        "store": { "type": "string" },
-        "query": { "type": "string" },
-        "product_id": { "type": "string" },
+        "choose": { "type": "string", "description": "The offer_ref the person chose. Omit to get the choices." }
+      }
+    }
+  },
+  {
+    "name": "price_offer",
+    "description": "Dry-run a checkout at the offer the user picked. Never charges. Returns a quote_id.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "offer_ref": { "type": "string" },
         "qty": { "type": "integer", "minimum": 1 }
       },
-      "required": ["store", "query", "product_id"]
+      "required": ["offer_ref"]
+    }
+  },
+  {
+    "name": "approve_quote",
+    "description": "Optional. Ask the person to approve a quote's total. Returns whether they did.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "quote_id": { "type": "string" }
+      },
+      "required": ["quote_id"]
     }
   },
   {
     "name": "purchase",
-    "description": "Buy an offer the user has approved at its dry-run total.",
+    "description": "Buy a quote the user has approved at its dry-run total.",
     "input_schema": {
       "type": "object",
       "properties": {
-        "store": { "type": "string" },
-        "query": { "type": "string" },
-        "product_id": { "type": "string" },
-        "qty": { "type": "integer", "minimum": 1 }
+        "quote_id": { "type": "string" }
       },
-      "required": ["store", "query", "product_id"]
+      "required": ["quote_id"]
     }
   },
   { "name": "purchase_history", "description": "Past searches and purchases.", "input_schema": { "type": "object", "properties": {} } },
@@ -119,8 +144,9 @@ model provider's SDK.
 ### Keep the approval on your side
 
 The model can ask to buy. Only the person can approve. Put that rule in your code, not in
-the prompt: record the dry-run total when you show it, record the person's yes, and let
-`purchase` run only for an approved offer. One yes covers one purchase.
+the prompt. The dry run gives you a `quote_id` that pins the store, product, quantity and
+total the person saw; `buy --quote QUOTE_ID --yes` buys exactly that, and refuses with
+`quote_changed` (nothing charged) if the real checkout costs more. Each quote is used once.
 
 ```ruby
 require "json"
@@ -134,49 +160,87 @@ rescue JSON::ParserError
   { "error" => "unparseable_output", "stderr" => err }
 end
 
-def total_of(report)
-  Array(report["totals"]).find { |t| t["type"] == "total" }&.fetch("amount", nil)
-end
-
-APPROVALS = {} # offer key => dry-run total the person approved
-
-def offer_key(input) = input.values_at("store", "product_id", "qty").join("|")
-
 def run_tool(name, input)
   case name
   when "find_offers"
     args = ["find", "--query", input["query"]]
     args += ["--max-price", input["max_price"].to_s] if input["max_price"]
     portage(*args)
+  when "pick_offer"
+    # Optional: the built-in step 3. Answer only with what the person chose.
+    input["choose"] ? portage("pick", "--choose", input["choose"]) : portage("pick")
   when "price_offer"
-    report = portage("buy", input["store"], "--query", input["query"],
-                     "--product-id", input["product_id"], "--qty", (input["qty"] || 1).to_s, "--dry-run")
-    if report["outcome"] == "dry_run" && ask_person_to_approve(input, report) # your UI
-      APPROVALS[offer_key(input)] = total_of(report)
+    # Dry-run only. The report carries "quote_id".
+    portage("buy", "--offer", input["offer_ref"], "--qty", (input["qty"] || 1).to_s, "--dry-run")
+  when "approve_quote"
+    # Optional: the built-in step 5. `approve` without --relayed-yes only returns
+    # needs_approval and a summary. Your code shows it to the person, and relays a yes only
+    # if they gave one. The model never supplies the yes.
+    report = portage("approve", input["quote_id"])
+    if report["outcome"] == "needs_approval" && ask_person_to_approve(report["summary"]) # your UI
+      portage("approve", input["quote_id"], "--relayed-yes")
+    else
+      report
     end
-    report
   when "purchase"
-    approved_total = APPROVALS.delete(offer_key(input)) # one yes, one purchase
-    return { "error" => "not_approved", "message" => "Ask the user to approve a dry run first." } unless approved_total
-
-    portage("buy", input["store"], "--query", input["query"],
-            "--product-id", input["product_id"], "--qty", (input["qty"] || 1).to_s, "--yes")
+    # portage refuses this unless the quote is approved enough for the policy. Otherwise it
+    # returns needs_approval and buys nothing, so this tool needs no checks of its own.
+    portage("buy", "--quote", input["quote_id"], "--yes")
   when "purchase_history" then portage("history")
   when "check_orders" then portage("orders", "reconcile")
   end
 end
 ```
 
-`ask_person_to_approve` is your UI: show the title, store and total from the report (the
-`totals` amount is in minor units of `currency`) and wait for an explicit yes. Two
-backstops sit behind your gate:
+`ask_person_to_approve` is your UI: show the title, store and total from the `summary`
+(`total_display`, or `total` in minor units of `currency`), with its `url` as a link, and
+wait for an explicit yes. Under `--require-approval person` a relayed yes isn't recorded (see
+[the approval policy](#the-approval-policy)), so there your tool should instead ask the
+person to run `portage approve QUOTE_ID` in their own terminal.
+
+If you build your own pick or approval instead, the same rules apply: the model never
+supplies the answer, your code records it, and `purchase` runs only for an approved quote.
+Portage will still turn a `--yes` with no approved quote into a dry run under the default
+policy, so record the approval with `portage approve` (or set `--require-approval off`) for
+`purchase` to go through.
+
+Two backstops sit behind your gate:
 
 - **Spending caps.** `portage policy set` caps each purchase, a rolling window and
   purchase velocity, and can restrict stores to an allowlist. Over a cap, `buy` returns
   `policy_blocked` instead of buying. Never raise a cap to get past one unless the person
   tells you to.
 - **Store choice.** `buy` refuses `--yes` on a search result without a named store. Your
-  `purchase` tool always passes the store the person picked.
+  `price_offer` tool should only accept an `offer_ref` the person picked (from `pick`'s
+  `picked` outcome, or your own UI), and `purchase` only takes a quote made from it.
+
+### The approval policy
+
+`portage policy set --require-approval person|any|off` says what a real `buy --yes` needs.
+`portage policy show --json` reports the current level as `require_approval` (`any` when
+never set).
+
+| Level | A real `buy --yes` buys when |
+|---|---|
+| `off` | `--yes` alone. The CLI asks nobody. |
+| `any` (default) | It runs `--quote QUOTE_ID` for a quote the person approved, or one you relayed with `approve --relayed-yes`. |
+| `person` | It runs `--quote QUOTE_ID` for a quote the person approved at their own terminal with `portage approve QUOTE_ID`. A relayed yes doesn't count. |
+
+Otherwise the `--yes` run is turned into a dry run and returns `needs_approval` with the
+`quote_id`. It never charges or hands off. Raising the level needs nothing. Lowering it
+asks for a yes at a terminal, and fails with no terminal, so an agent can't lower it.
+
+!!! warning "Upgrade note"
+    Under the default `any`, a `buy --yes` without an approved `--quote` no longer buys. It
+    dry-runs and returns `needs_approval`. To keep the old behaviour, run
+    `portage policy set --require-approval off` from a terminal.
+
+!!! note "`person` is not a hard guarantee"
+    `person` raises the bar: a model can't type on `/dev/tty`. But an agent with a shell can
+    edit `~/.portage/policy.json` or the quote files under `~/.portage/quotes/` directly,
+    or make a terminal of its own (`script`, `expect`). That's why the tools above are
+    narrow ones, not a shell. Use `person` for an agent that runs from your own terminal,
+    and keep the approval in your code for anything else.
 
 ### Handle the outcome
 
@@ -186,7 +250,8 @@ Most stores don't let a third party complete payment, so most runs end in a hand
 | Outcome group | Examples | What the agent does |
 |---|---|---|
 | Done | `purchased` | Report the order and total. Offer to track it. |
-| Needs the person | `dry_run`, `needs_confirmation` | Show the total and ask. |
+| Needs the person | `dry_run`, `needs_confirmation`, `needs_pick`, `needs_approval` | Show the choices or total and ask, then relay the answer. |
+| Price moved | `quote_changed` | Nothing was bought. Show both totals, dry-run again for a new quote and ask again. |
 | Hand-off | `requires_escalation`, `permission_denied`, `no_payment_token`, `express_stop`, `low_confidence` | "Your cart is ready at <store>. Open <checkout_url> to review and pay." Don't retry. |
 | Hand-off only | `handoff_only` | Give `checkout_url` and the legal notice. Never automate the site. |
 | Blocked | `policy_blocked`, `checkout_mismatch` (only when `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is set; otherwise mismatches show up in `warnings`) | Explain why, using `decisions`. Don't work around it. |
@@ -292,6 +357,9 @@ reject raw card numbers) so you don't have to re-derive them.
 
 - The person picks the store and approves every payment, enforced in code.
 - The model has narrow tools, not a shell.
+- `portage policy set --require-approval person` when the agent runs from the person's own
+  terminal. Know its limits (above): it isn't a hard guarantee against an agent with a shell.
+- `pick` and `approve` are always called with `--json`, never with `--via tty`.
 - Spending caps are set (`portage policy set`).
 - Only `purchased` counts as bought; every hand-off gives the person `checkout_url`.
 - No retries without checking `history` or `orders reconcile` first.

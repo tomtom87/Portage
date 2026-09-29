@@ -45,7 +45,7 @@ and [Security](security.md).
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.6.3 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](skills/buy.md) |
+| `buy` plugin | 0.7.0 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](skills/buy.md) |
 | `portage-cli` | 0.8.0 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
 | `shop-via-ucp` skill | – | Agent builders | Shop through a store's UCP endpoint, with or without `portage` | [skill](skills/shop-via-ucp.md) |
 | `portage-ucp-client` | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [API](api/portage-ucp-client.md), [README](core-gems/portage-ucp-client.md) |

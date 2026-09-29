@@ -1,6 +1,6 @@
 # CLI JSON reference
 
-This page is the machine-readable contract of `portage` (gem `portage-cli` 0.8.0) for agents and scripts that drive it with `--json`.
+This page is the machine-readable contract of `portage` (gem `portage-cli` 0.8.0, plus the unreleased `pick`, `approve`, offer ref, quote and approval-policy changes described below) for agents and scripts that drive it with `--json`.
 
 For flags and human-readable output, see the [CLI reference](../cli-reference.md). For how an agent loop uses these reports end to end, see [Agentic flow](../agentic-flow.md).
 
@@ -30,7 +30,9 @@ Diagnostics go to stderr, never into the JSON. Examples:
 |---|---|---|
 | `buy` | The report has `checkout: true` or `browse: true` | Both are false |
 | `find`, `compare` | At least one offer | No offers |
+| `pick`, `approve` | `picked`, `approved`, `viewed`, `needs_pick`, `needs_approval` | Any other outcome (`cancelled`, `search_not_found`, `offer_not_found`, `quote_not_found`, `quote_used`, `view_refused`, `no_terminal`, `invalid_option`, `error`) |
 | `doctor`, `configure`, `setup` | No finding has `level: "warning"` | At least one warning |
+| `policy set` | Applied | A lowering of `--require-approval` that wasn't confirmed at a terminal (nothing changed), or a usage error |
 | `history`, `policy show`, `orders reconcile`, `index show`, `index sources`, `browser profile init/status` | Always | Not used |
 | `payment list` | Always | Not used |
 | `browser import` | No `error` key | `error` present |
@@ -40,14 +42,14 @@ A non-zero exit is not a failure of the tool. Read the JSON first.
 
 For `buy`, the exit code follows the flags, not the `outcome`. Do not use it to detect a purchase.
 
-- `purchased`, `dry_run`, `needs_confirmation`, `express_stop`, `requires_escalation`, `policy_blocked`, `low_confidence`, `checkout_mismatch`, `no_payment_token`, `permission_denied` exit `0`. So do `no_match`, `browse_only`, `store_refused` and `unsupported_wire_shape`.
-- `handoff_only`, `dead_end`, `agent_profile_missing`, `request_rejected`, `adapter_misconfigured`, `adapter_error`, `webmcp_*` and `invalid_option` exit `1`.
+- `purchased`, `dry_run`, `needs_confirmation`, `needs_approval`, `quote_changed`, `express_stop`, `requires_escalation`, `policy_blocked`, `low_confidence`, `checkout_mismatch`, `no_payment_token`, `permission_denied` exit `0`. So do `no_match`, `browse_only`, `store_refused` and `unsupported_wire_shape`.
+- `handoff_only`, `dead_end`, `agent_profile_missing`, `request_rejected`, `adapter_misconfigured`, `adapter_error`, `webmcp_*`, `invalid_option`, and, from `buy --offer` and `buy --quote`, `offer_not_found`, `quote_not_found` and `quote_used` exit `1`.
 
-Source: `cli.rb` (`execute_buy`, `run_find`, `report_doctor`, `report_browser_import`)
+Source: `cli.rb` (`execute_buy`, `buy_exit_code`, `print_prompt_result`, `run_find`, `report_doctor`, `report_browser_import`)
 
 ### Usage errors
 
-Only `buy` turns a usage error into JSON. A bad `--qty`, `--min-confidence` or `--handoff-target` under `--json` prints this and exits `1`:
+`buy` turns a usage error into JSON. A bad `--qty`, `--min-confidence` or `--handoff-target` under `--json` prints this and exits `1`:
 
 ```json
 {
@@ -63,7 +65,7 @@ Only `buy` turns a usage error into JSON. A bad `--qty`, `--min-confidence` or `
 }
 ```
 
-`url` is the store URL if one was given, otherwise `null`. Every other command reports a usage error on stderr and exits `1`, with no JSON:
+`url` is the store URL if one was given, otherwise `null`. `pick` and `approve` under `--json` print a shorter one, `{ "outcome": "invalid_option", "message": "..." }` (a bad `--via` value, an unknown flag, or `approve` with no `QUOTE_ID`), and exit `1`. Every other command reports a usage error on stderr and exits `1`, with no JSON:
 
 - A missing required argument prints the usage text.
 - An unknown flag on `find`, `compare`, `doctor`, `history`, `orders`, `index show`, `payment` or `policy` raises an uncaught `OptionParser` exception (Ruby backtrace on stderr, exit `1`).
@@ -75,14 +77,30 @@ Source: `cli.rb` (`invalid_buy_option`, `parse_buy_options`, `parse_find_options
 
 ### Non-TTY behaviour
 
-With no TTY on stdin nothing prompts.
+With no TTY on stdin nothing prompts on stdin. The commands that ask the person (`pick`, `approve`, and the numbered pick in `buy --query`) ask on `/dev/tty`, the controlling terminal, so they still reach a person when stdout is piped. Which one runs is set by `--via`, described under [Prompt surfaces](#prompt-surfaces).
 
-- `buy` with no URL and no `--store` runs a `find`, prints the [find report](#find), and stops. It exits `0` if there were offers, else `1`. `--yes` alone is not enough: a person or `--store` must name the merchant.
+- `buy` with no URL and no `--store` runs a `find`, prints the [find report](#find), and stops, unless there is a controlling terminal and no `--json`: then it asks the person to pick on that terminal. It exits `0` if there were offers, else `1`. `--yes` alone is not enough: a person or `--store` must name the merchant.
 - `buy` with `--json` never prompts for WebMCP mapping or autofill confirmation.
 - `setup` and `doctor` print the [doctor report](#doctor). The wizard only runs on a TTY without `--json`.
 - `browser import` without `--yes` saves nothing and reports `needs_confirmation: true`.
+- `pick` and `approve` with `--json` (and the default `--via auto`) ask nobody. They return `needs_pick` or `needs_approval` for the caller to show.
+- Lowering `policy set --require-approval` needs a yes typed at a terminal. With none, it changes nothing, prints why on stderr and exits `1`.
 
-Source: `cli.rb` (`buy_from_search`, `pick_offer`, `run_wizard?`, `run_browser_import`)
+Source: `cli.rb` (`buy_from_search`, `pick_offer`, `run_wizard?`, `run_browser_import`, `confirm_lowering`), `cli/human_prompt.rb`
+
+### Prompt surfaces
+
+`pick` and `approve` take `--via auto|tty|agent`:
+
+| `--via` | Behaviour |
+|---|---|
+| `auto` (default) | `tty` if a controlling terminal can be opened and the run isn't `--json`, else `agent`. |
+| `tty` | Asks the person on `/dev/tty`, even under `--json` (the answer is then printed as the JSON report). With no terminal it returns `no_terminal`, exit `1`. An answer typed here is recorded `by: "person"`. |
+| `agent` | Asks nobody. Returns `needs_pick` or `needs_approval` with what to show. The caller relays the answer (`--choose`, `--relayed-yes`), recorded as `agent_relayed`. |
+
+An agent should always pass `--json` and leave `--via` alone. Without `--json`, `auto` may try to ask on the user's own terminal. At a `tty` prompt, `v N` (pick) or `v` (approve) opens the product page and asks again; viewing is never an answer. A blank answer cancels.
+
+Source: `cli/human_prompt.rb`
 
 ## find
 
@@ -99,6 +117,7 @@ Source: `cli/find.rb` (`report`, `offer`, `store_summaries`), `cli.rb` (`run_fin
 | `stores` | array | Candidates that were probed, plus hand-off-only ones. Each has `origin`, `source`, `checkout`, `handoff_only`. |
 | `offers` | array | Ranked offers. Buyable first, then cheapest, then unpriced. |
 | `message` | string or null | A summary, or the reason nothing was found. |
+| `search_id` | string | Names the saved search (`se_` and 8 hex digits) for `pick --search`. Omitted when no offers were saved. |
 
 `stores[].checkout` is `true` when the store advertises both cart and checkout. Hand-off-only hosts are listed with `checkout: false` and are never fetched.
 
@@ -107,6 +126,7 @@ Offer object:
 | Field | Type | Meaning |
 |---|---|---|
 | `store` | string | Store origin, for example `https://www.burton.com`. |
+| `offer_ref` | string | A short id (`of_` and 6 hex digits), saved with the search. Pass it to `buy --offer` and `pick --choose`. |
 | `source` | string | Where the store came from: a search backend or offer source name (`duckduckgo`, `shopify_catalog`, ...). |
 | `checkout` | boolean or null | `true`: buyable through UCP. `false`: browse or hand-off only. `null`: unknown (seen on `shopify_catalog` offers). |
 | `product_id` | string | Pass this to `buy --product-id`. |
@@ -124,8 +144,10 @@ Offer object:
   "stores": [
     { "origin": "https://www.burton.com", "source": "duckduckgo", "checkout": true, "handoff_only": false }
   ],
+  "search_id": "se_3f9a1c22",
   "offers": [
     {
+      "offer_ref": "of_a1b2c3",
       "store": "https://www.burton.com",
       "source": "duckduckgo",
       "checkout": true,
@@ -147,8 +169,13 @@ When nothing is found, `offers` is `[]` and `message` says why (no backend, no c
 ## buy
 
 `portage buy <url> --query "..." [flags] --json`
+`portage buy --offer REF [flags] --json`
+`portage buy --quote QUOTE_ID --yes --json`
 
 Every report is one object with an `outcome`. Only `purchased` means money moved.
+
+- `--offer REF` takes the store, product and catalog query from the saved offer, as if you had passed them. An unknown ref returns `offer_not_found` (exit `1`).
+- `--quote QUOTE_ID` buys what a `--dry-run` priced: the store, product, quantity and total come from the quote. See [quotes](#quotes).
 
 Source: `cli/buy.rb` (`build_report`, `checkout_report`, `handoff_report`, `finalize_handoff`), `cli.rb` (`execute_buy`)
 
@@ -182,6 +209,9 @@ Checkout reports (those that created a checkout) add:
 | `would` | object | Only on a WebMCP `dry_run` against a preset that hands off through its own tool: `line_items`, `handoff_checkout`, `autofill`. |
 | `tool_names_proposal` | object | Only on `webmcp_mapping_unconfirmed`. Maps a slot to `{tool_name, confidence, reason}`. |
 | `reconcile` | object | Only with `--wait`. See [buy --wait](#buy-wait-ndjson-stream). |
+| `quote_id` | string | On `dry_run` (and `needs_approval`, `quote_changed`): the saved [quote](#quotes). Omitted if it couldn't be saved. |
+| `quoted_total`, `quoted_currency`, `current_total`, `current_currency` | integer, string | Only on `quote_changed`. Totals in minor units. |
+| `summary` | object | Only on `needs_approval`. See [needs_approval](#needs_approval). |
 
 ### Outcomes
 
@@ -192,6 +222,11 @@ Only `purchased` means the order was placed.
 | `purchased` | Order placed. | no |
 | `dry_run` | Checkout priced, `--dry-run` stopped it. Nothing charged. | no |
 | `needs_confirmation` | Checkout ready, `--yes` was not passed. | no |
+| `needs_approval` | A real `--yes` run had no quote approved enough for [`require_approval`](#policy-set-require-approval). Nothing was bought or handed off. See [needs_approval](#needs_approval). | no |
+| `quote_changed` | `--quote` run: the real checkout costs more than the quote (or is in another currency, or has no total). Nothing was bought or handed off, and the quote stays usable. | no |
+| `offer_not_found` | `--offer REF` isn't a saved offer. | no |
+| `quote_not_found` | `--quote` names no saved quote. | no |
+| `quote_used` | The quote was already bought or handed off. | no |
 | `express_stop` | WebMCP cart and checkout built. The store's own express-pay button finishes it. | yes |
 | `requires_escalation` | The store needs a human step (verification, terms, 3-D Secure). | yes |
 | `checkout_mismatch` | Checkout does not match the request. Only when `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is on. Otherwise mismatches are only `warnings`. | yes |
@@ -214,6 +249,8 @@ Only `purchased` means the order was placed.
 | `webmcp_mapping_unconfirmed` | The page's tools need the user to approve a mapping. See `tool_names_proposal`. | no |
 | `webmcp_token_unsupported` | `webmcp_checkout_mode=token` is set. Only `express_stop` is implemented. | no |
 | `invalid_option` | A flag was refused before the buy started. | no |
+
+Before any of the gates below, a real `--yes` run without an approved `--quote` is turned into a dry run and reported as `needs_approval` (unless `require_approval` is `off`). The quote's total is also a cap: `quote_changed` comes before every gate below.
 
 The gates run in this order, and only on a real `--yes` run: escalation, then policy, then confidence. A `--dry-run` or a run without `--yes` only runs the escalation check, so `policy_blocked` and `low_confidence` cannot appear there.
 
@@ -312,6 +349,55 @@ A policy block:
 
 Other fields (`products`, `warnings`, `checkout_id`, `totals`, `items`) are as in the table above.
 
+### needs_approval
+
+Returned by `buy` when a real run (`--yes`, no `--dry-run`) isn't approved enough, and by `approve` when the agent surface is used. Nothing is charged and nothing is handed off.
+
+- `buy --yes` with no `--quote`: it ran as a dry run. The report is that dry run's (`checkout_id`, `totals`, `items`, and so on) with `outcome: "needs_approval"`, `quote_id` and `summary`. If it never got as far as a priced checkout (`no_match`, a dead end), it's reported as it is and has no `quote_id`.
+- `buy --quote QUOTE_ID --yes` for a quote that isn't approved enough: no store call is made. The report is only `url`, `checkout_url: null`, `products: []`, `warnings: []`, `source: "none"`, `browse: false`, `checkout: false`, `outcome`, `quote_id`, `summary` and `message`. It exits `0`.
+
+`summary`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `quote_id` | string | The quote to approve, then buy. |
+| `title` | string or null | What the checkout holds. |
+| `store` | string | Store origin. |
+| `product_id` | string | The product. |
+| `qty` | integer | Quantity. |
+| `total`, `currency` | integer or null, string | The total in minor units. |
+| `total_display` | string | The total formatted for people, for example `24.00 USD`. `unknown` when there's no total. |
+| `url` | string or null | The offer's product page, as `find` returned it. Show it as a link. |
+| `approved_by` | string or null | `person` or `agent_relayed` when the quote is already approved. Under `require_approval: person`, `agent_relayed` isn't enough, and neither is null. |
+
+```json
+{
+  "outcome": "needs_approval",
+  "quote_id": "qt_5c0d1e2f3a4b",
+  "summary": {
+    "quote_id": "qt_5c0d1e2f3a4b",
+    "title": "Cold Brew",
+    "store": "https://shop.example",
+    "product_id": "p1",
+    "qty": 2,
+    "total": 2400,
+    "currency": "USD",
+    "total_display": "24.00 USD",
+    "url": "https://shop.example/products/cold",
+    "approved_by": null
+  },
+  "message": "Nothing was bought. Quote qt_5c0d1e2f3a4b (2 × Cold Brew from https://shop.example for 24.00 USD) needs approval first (require_approval: any). Approve it with `portage approve qt_5c0d1e2f3a4b`, then run `portage buy --quote qt_5c0d1e2f3a4b --yes`."
+}
+```
+
+(Trimmed: a `buy` report also carries the fields above.)
+
+### quotes
+
+A `--dry-run` that priced a checkout saves a quote to `~/.portage/quotes/QUOTE_ID.json` and reports its `quote_id` (`qt_` and 12 hex digits). `buy --quote QUOTE_ID --yes` buys exactly it: the real run is capped at the quoted total and currency, and refuses with `quote_changed` if the checkout costs more. Quotes never expire. Each is used once: it is spent by a `purchased` outcome or any hand-off. A `quote_changed`, `needs_approval` or error leaves it usable.
+
+The file's fields (the format is private and may change): `quote_id`, `offer_ref`, `store`, `product_id`, `query`, `qty`, `total`, `currency`, `title`, `url`, `created_at`, `approved` (boolean), and, once approved, `approved_by` (`person` or `agent_relayed`) and `approved_at`; and `used_at` once spent. A relayed yes never downgrades a quote the person already approved.
+
 ### Recording
 
 A buy that created a checkout is written to history as a purchase, whatever its outcome. One that never got that far is written as a search. History entries are covered under [history](#history).
@@ -343,7 +429,7 @@ Finds the same product at other stores. It returns the [find report](#find) shap
 
 Source: `cli/compare.rb`
 
-Each offer has the [find offer fields](#find) plus:
+The report also carries a `search_id`, and its offers carry `offer_ref`, so a compare's offers can be picked or bought like `find`'s. Each offer has the [find offer fields](#find) plus:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -352,6 +438,98 @@ Each offer has the [find offer fields](#find) plus:
 | `store_host` | string | The candidate store's host. |
 
 Prices are catalog prices, not landed prices. `--results` limits how many offers are kept (default 5). If the origin cannot be resolved (not a store URL, hand-off only, no UCP, product not found) the report has empty `candidates`, `stores` and `offers`, and `message` says why. It exits `1`.
+
+## pick
+
+`portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--choose REF | --compare REF | --view REF] --json`
+
+Loop step 3: the person picks the store from a saved search's offers. `--search` defaults to `LAST`, the latest search that kept offers. Not a purchase, so nothing is bought. See [Prompt surfaces](#prompt-surfaces) for `--via`.
+
+Source: `cli/pick.rb`, `cli/offer_choice.rb`, `cli.rb` (`run_pick`)
+
+| Call | Result |
+|---|---|
+| `pick --json` | `needs_pick`. |
+| `pick --choose REF --json` | `picked`, `by: "agent_relayed"`. |
+| `pick --compare REF --json` | Compares offer `REF` across stores, then `needs_pick` over the results. |
+| `pick --view REF --json` | `viewed`, or `view_refused`. |
+| `pick --via tty` (or `auto` without `--json`, at a terminal) | Asks the person; `picked` with `by: "person"`, or `cancelled`. |
+
+`needs_pick`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `outcome` | string | `needs_pick`. |
+| `search_id`, `query` | string | The search the choices come from. After `--compare`, the new search that holds the compare's offers. |
+| `choices` | array | The offers, then one more choice, `compare`. |
+| `message` | string | Human text with the relay commands. |
+
+Each `choices[]` entry:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `ref` | string | The `offer_ref`, or `compare` for the last choice. Pass it to `--choose` (or `--compare`). |
+| `label` | string | Ready to show: store, title and price, plus `browse only` when `checkout` is `false`. |
+| `url` | string or null | The offer's product page as `find` returned it. Show it as a link. `null` for `compare`. |
+| `store`, `product_id`, `title`, `amount`, `currency`, `checkout` | varies | The offer's own fields. Not present on the `compare` choice. |
+| `relay` | string | Only on `compare`: the command that runs it. |
+
+`picked` carries `search_id`, `offer_ref`, `store`, `product_id`, `title`, `url`, `by` (`person` or `agent_relayed`) and a `message` naming the next step, `portage buy --offer REF --dry-run`.
+
+`--compare REF` runs the same compare `portage compare` does, from that offer's store and product. It saves the compare as a search of its own, the compared offer first, so `--choose` and `buy --offer` resolve its refs; pass the returned `search_id` (or rely on `LAST`). With no results the report is the old search's `needs_pick`, and `message` says nothing was found. Compare uses the proxy settings from env and `config.json`. `pick` has no `--proxy` flags.
+
+`--view REF` opens the offer's product page in the browser and does nothing else: it is never a pick. It only opens an `http(s)` URL on the offer's own store host (compared without a leading `www.`), with no credentials in it. Anything else gives `view_refused` and opens nothing, since store data is untrusted. `viewed` carries `offer_ref`, `url`, `opened` (whether a browser could be opened) and `message`. `view_refused` carries `offer_ref` (from `pick`), `url`, `store` and the reason as `message`.
+
+Other outcomes: `cancelled` (a blank answer at a terminal), `search_not_found` (no saved search, or no such `--search`), `offer_not_found` (`REF` isn't one of the search's offers, or for `--view`, isn't saved), `no_terminal`.
+
+```json
+{
+  "outcome": "needs_pick",
+  "search_id": "se_3f9a1c22",
+  "query": "cold brew",
+  "choices": [
+    {
+      "ref": "of_a1b2c3",
+      "label": "https://shop.example — Cold Brew — 24.00 USD",
+      "store": "https://shop.example",
+      "product_id": "p1",
+      "title": "Cold Brew",
+      "amount": 2400,
+      "currency": "USD",
+      "checkout": true,
+      "url": "https://shop.example/products/cold"
+    },
+    {
+      "ref": "compare",
+      "label": "Compare an offer across stores",
+      "url": null,
+      "relay": "portage pick --search se_3f9a1c22 --compare REF"
+    }
+  ],
+  "message": "Show these choices to the person (with each url as a link), then relay their answer: ..."
+}
+```
+
+## approve
+
+`portage approve QUOTE_ID [--via auto|tty|agent] [--relayed-yes | --view] --json`
+
+Loop step 5: the person says yes to a quote's exact total. Not a purchase. It never charges. See [Prompt surfaces](#prompt-surfaces) for `--via`. `QUOTE_ID` comes first.
+
+Source: `cli/approve.rb`, `cli.rb` (`run_approve`)
+
+| Call | Result |
+|---|---|
+| `approve QUOTE_ID --json` | `needs_approval` with `summary`. |
+| `approve QUOTE_ID --relayed-yes --json` | `approved`, `approved_by: "agent_relayed"`. Under `require_approval: person` it isn't recorded: the result is `needs_approval` telling the agent to ask the person to run `portage approve QUOTE_ID` themselves. |
+| `approve QUOTE_ID --view --json` | `viewed`, or `view_refused`. Never an approval. |
+| `approve QUOTE_ID` at a terminal | Shows title, store, quantity and total, asks yes/no (`v` opens the page). A yes gives `approved`, `approved_by: "person"`. Anything else gives `cancelled`. |
+
+`needs_approval` is described under [buy](#needs_approval). `approved` carries `quote_id`, `approved_by`, `summary` and a `message` naming the next step, `portage buy --quote QUOTE_ID --yes`. `viewed` carries `quote_id`, `url`, `opened` and `message`, with the same host rule as `pick --view`; `view_refused` carries `quote_id`, `url`, `store` and `message`.
+
+Other outcomes: `quote_not_found`, `quote_used` (the quote was already bought or handed off), `cancelled`, `no_terminal`, and `error` (the approval couldn't be saved).
+
+Whether an approval is enough to buy is the [approval policy's](#policy-set-require-approval) call, made when `buy --quote --yes` runs.
 
 ## history
 
@@ -389,7 +567,7 @@ Purchase entry:
 | `message` | string | Report message. |
 | `at` | integer | Unix time. |
 
-Search entry: `query`, `url` (omitted for a cross-store `find`), `offer_count`, `message`, `at`. `compare` also records a search, with a `query` starting `compare:`.
+Search entry: `query`, `url` (omitted for a cross-store `find`), `offer_count`, `message`, `at`. A search that kept offers also has `search_id` and `offers[]` (`offer_ref`, `store`, `product_id`, `title`, `amount`, `currency`, `url`, `checkout`, `found_at`, and `query` for a compare's offers). `compare` also records a search, with a `query` starting `compare:`.
 
 "What did I buy" is the purchases whose `outcome` is `purchased`. Every other purchase still carries the `checkout_url`. A `buy` that ends in `no_match`, `browse_only`, `dead_end` or a store error has no checkout, so it is a search entry with no `outcome`. Both lists are capped at 200 entries. `history clear` prints text, not JSON.
 
@@ -430,9 +608,9 @@ Keys with no value are omitted.
 
 ## policy show
 
-`portage policy show --json` prints the contents of `~/.portage/policy.json`. It is `{}` when no policy is set. It exits `0`.
+`portage policy show --json` prints the contents of `~/.portage/policy.json`, with `require_approval` always added at its effective value. It exits `0`.
 
-Source: `cli.rb` (`run_policy_show`), `portage-ucp/lib/portage/ucp/policy.rb`
+Source: `cli.rb` (`run_policy_show`), `cli/approval_policy.rb`, `portage-ucp/lib/portage/ucp/policy.rb`
 
 | Key | Shape |
 |---|---|
@@ -441,8 +619,33 @@ Source: `cli.rb` (`run_policy_show`), `portage-ucp/lib/portage/ucp/policy.rb`
 | `velocity` | `{ "count": int, "window_seconds": int }` |
 | `merchant_allowlist` | array of hosts |
 | `token_scopes` | object keyed by token reference. Each has `merchants`, `max_amount`, `currency` as set at enrol time. |
+| `require_approval` | `any`, `person` or `off`. Always present: `any` when never set. |
 
-Only keys that were set appear. `policy set` prints the resulting policy as text (or `(no policy configured — every check passes)`), not `--json`.
+The other keys appear only when they were set. With nothing set the output is `{ "require_approval": "any" }`. In text, `policy show` ends with `require_approval: any (default)`.
+
+## policy set --require-approval
+
+`portage policy set --require-approval person|any|off`
+
+What a real `buy --yes` needs before it may charge or hand off. Default `any`. Stored as `require_approval` in `~/.portage/policy.json`, next to the caps. There is deliberately no env var or `config.json` override.
+
+| Level | A real `buy --yes` buys when |
+|---|---|
+| `off` | Always: `--yes` alone, as before this setting existed. |
+| `any` | It runs `--quote QUOTE_ID` for a quote approved by the person (`approved_by: "person"`) or relayed by an agent (`agent_relayed`). |
+| `person` | It runs `--quote QUOTE_ID` for a quote the person approved at a terminal. A relayed yes doesn't count. |
+
+Otherwise the run is refused with [`needs_approval`](#needs_approval) and a `quote_id`, and never charges or hands off. A `--dry-run` is never gated. An unrecognised stored value is treated as `person`.
+
+Raising the level (or setting the same one) needs nothing. Lowering it (`person` to `any` or `off`, `any` to `off`) needs a yes typed on the terminal, so an agent that can run `policy set` can't lower it. With no terminal it changes nothing, prints why on stderr and exits `1`. A refused lowering also leaves every other flag in the same `policy set` call unapplied.
+
+!!! warning "Upgrade note"
+    Under the default `any`, a `buy --yes` without an approved `--quote` no longer buys. It dry-runs and returns `needs_approval`. To restore the old behaviour, run `portage policy set --require-approval off` from a terminal.
+
+!!! note "Limits"
+    `person` raises the bar but isn't a hard guarantee. A model can't type on `/dev/tty`, but an agent with a shell can edit `~/.portage/policy.json` or the quote files under `~/.portage/quotes/` directly, or make a terminal of its own (`script`, `expect`). The gate lives in the CLI (`portage buy`), not in `portage-ucp`, so a program that calls the Ruby library directly isn't governed by it. Use `person` for an agent running from your own terminal, and keep the approval in your own code for anything else.
+
+Other keys' `policy set` output is unchanged: it prints the resulting policy as text (or `(no policy configured — every spending check passes)`), not `--json`.
 
 ## payment list
 

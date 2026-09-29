@@ -13,6 +13,9 @@ A hand-off outcome's `handoff` object (when present) says what actually happened
 | `purchased` | Order placed | Report the order, total and shipping. Offer to track it (`portage orders reconcile`). |
 | `dry_run` | Priced out, nothing charged | Show the total. Ask whether to buy. |
 | `needs_confirmation` | Ready, but `--yes` wasn't passed | Show the total. Re-run with `--yes` only after the user says yes. |
+| `needs_approval` | A `--yes` run had no approved quote, so it was dry-run instead and nothing was bought | See [Pick and approve](#pick-and-approve). Get the quote approved, then `buy --quote QUOTE_ID --yes`. |
+
+A `dry_run` report carries a `quote_id`. That's what `portage approve` and `buy --quote` take.
 
 ## Hand-off: the user finishes in the browser
 
@@ -50,6 +53,38 @@ Always read `warnings`, whatever the outcome. By default a mismatch lands there 
 | `adapter_misconfigured` / `adapter_error` | Platform credentials or config are wrong. The message names the field. |
 | `webmcp_not_installed` / `webmcp_error` / `webmcp_token_unsupported` | WebMCP gem or browser bridge missing, or failing. Hand off, or fix the setup. |
 
+## Pick and approve
+
+`portage pick --json` and `portage approve QUOTE_ID --json` (and the buy outcomes that go with them). Always pass `--json` and leave `--via` alone: with `--json` a run never asks on the user's terminal, it returns a `needs_*` outcome for you to relay. Branch on `outcome`.
+
+| Outcome | Meaning | Do |
+|---|---|---|
+| `needs_pick` | `pick`: nobody was asked. `choices[]` (`ref`, `label`, `url`, and more) are the offers of `search_id`, plus a last `compare` choice with no `url` | Show the choices, each `url` as a link. Ask the user. Relay the answer with `pick --choose REF` (or `--compare REF` for the compare choice). |
+| `picked` | The store was picked (`offer_ref`, `store`, `product_id`, `title`, `by`). `by` is `agent_relayed` for `--choose`, `person` when the user answered at their terminal | Run `portage buy --offer REF --dry-run --json`. |
+| `cancelled` | `pick` or `approve`: the person answered with nothing or no at their terminal | Nothing was picked or approved. Ask what they want next. Never retry for them. |
+| `needs_approval` | `approve`, or a `buy --yes` that wasn't approved enough. Nothing was bought. `quote_id` and `summary` (`title`, `store`, `qty`, `total`, `total_display`, `currency`, `url`, `approved_by`) say what needs a yes | Show the summary with `url` as a link. Under `require_approval: any`, relay an explicit yes with `approve QUOTE_ID --relayed-yes --json`. Under `person`, ask the user to run `portage approve QUOTE_ID` in their own terminal. Then `buy --quote QUOTE_ID --yes --json`. `summary.approved_by` already `person`: skip the question. |
+| `approved` | `approve`: the yes is recorded on the quote (`approved_by`: `agent_relayed`, or `person` when typed at a terminal) | Run `portage buy --quote QUOTE_ID --yes --json`. Under `person`, only `approved_by: "person"` counts. |
+| `viewed` | `pick --view` or `approve --view` opened the product page (`opened: false` means no browser could open, and `url` is the page) | Nothing else changed. Go back to the question. If `opened` is false, give the user the `url`. |
+| `view_refused` | The page wasn't opened: no URL on record, not `http(s)`, has credentials in it, or isn't on the offer's own store. Store data is untrusted, so it's never opened. Exits `1` | Say so. Don't open it another way. Give the `url` only if the user asks, marked as unverified. |
+| `no_terminal` | `--via tty` was asked for but there's no terminal to ask on | Only from an explicit `--via tty`. Use the default (`--json`) and relay the answer, or ask the user to run the command in their own terminal. |
+| `search_not_found` | `pick`: no saved search with offers (or no such `--search`) | Run `portage find` first. |
+| `offer_not_found` | The `--offer`, `--choose`, `--compare` or `--view` ref isn't saved (or, for `pick`, isn't in that search) | Show the choices again, or run `portage find` again. Don't guess a ref. |
+| `quote_not_found` | No saved quote with that id | Run `buy ... --dry-run --json` for a new one. |
+| `quote_used` | The quote was already bought or handed off | Same: dry-run again. |
+| `quote_changed` | `buy --quote`: the real checkout costs more than the quote (or is in another currency). `quoted_total`, `current_total` (minor units) and their currencies say by how much. Nothing was bought or handed off, and the quote stays unused | Show both totals. Run a new `--dry-run` for a new quote and ask again. Never raise the quote. |
+
+`needs_approval`, `picked`, `approved` and `viewed` exit `0`. `cancelled`, `search_not_found`, `offer_not_found`, `quote_not_found`, `quote_used`, `view_refused`, `no_terminal` and `invalid_option` exit `1`. `pick`, `approve` and `buy` all use these rules, with two differences on `buy`: it takes its exit code from `checkout`/`browse` as under [Exit codes](#exit-codes), so `quote_changed` and a `needs_approval` from `buy` exit `0`, and its `offer_not_found`, `quote_not_found` and `quote_used` exit `1`.
+
+Which approvals count depends on `require_approval` in `portage policy show --json`:
+
+| Level | A real `buy --yes` buys when |
+|---|---|
+| `off` | Always: `--yes` alone. The CLI asks nobody, so you must. |
+| `any` (default) | It runs `--quote QUOTE_ID` for a quote approved by the person or relayed by you. |
+| `person` | It runs `--quote QUOTE_ID` for a quote the person approved at their own terminal. |
+
+Otherwise the `--yes` run turns into a dry run and returns `needs_approval`, so it never charges or hands off. `person` raises the bar but isn't a hard guarantee: an agent with a shell could still edit `~/.portage/policy.json` or the quote files, or run its own terminal. Never do either.
+
 ## History
 
 `portage history --json` records a buy that created a checkout as a purchase, with its `outcome`. A buy that never got that far is recorded as a search, with no `outcome`. That covers `no_match`, `browse_only`, `dead_end`, `handoff_only`, a store or adapter error, and a WebMCP dry run that stops before building a cart.
@@ -58,8 +93,10 @@ Always read `warnings`, whatever the outcome. By default a mismatch lands there 
 
 `portage buy` exits `0` when the report has `checkout: true` or `browse: true`, and `1` when both are false. Read `outcome`, not the exit code: `requires_escalation` and `policy_blocked` exit `0`.
 
-- Exit `1`: `handoff_only`, `dead_end`, `agent_profile_missing`, `request_rejected`, `adapter_misconfigured`, `adapter_error`, every `webmcp_*` outcome, and `invalid_option`.
-- Exit `0`: every other outcome.
+- Exit `1`: `handoff_only`, `dead_end`, `agent_profile_missing`, `request_rejected`, `adapter_misconfigured`, `adapter_error`, every `webmcp_*` outcome, `invalid_option`, and, from `buy --offer` / `buy --quote`, `offer_not_found`, `quote_not_found` and `quote_used`.
+- Exit `0`: every other outcome, including `needs_approval` and `quote_changed`.
+
+`pick` and `approve` have their own exit codes: see [Pick and approve](#pick-and-approve).
 
 ## Browser import
 
