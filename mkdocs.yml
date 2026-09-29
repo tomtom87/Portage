@@ -1,6 +1,6 @@
 site_name: Portage
 site_description: Ruby gems that expose a commerce backend to AI shopping agents over MCP and UCP.
-site_url: https://portage-ucp.readthedocs.io/en/latest/
+site_url: https://portage.readthedocs.io/en/latest/
 repo_url: https://github.com/tomtom87/Portage
 repo_name: tomtom87/Portage
 edit_uri: edit/main/docs/
@@ -56,6 +56,8 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.inlinehilite
   - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
 
 plugins:
   - search
@@ -70,9 +72,18 @@ plugins:
         Getting started:
           - index.md
           - getting-started/quickstart.md
+          - agentic-flow.md
+          - cli-usage-tutorial.md
           - walkthrough.md
           - cli-reference.md
-          - cli-usage-tutorial.md
+        API reference:
+          - api/index.md
+          - api/cli-json.md
+          - api/portage-ucp.md
+          - api/portage-ucp-client.md
+          - api/portage-ucp-decision.md
+          - api/portage-ucp-journal.md
+          - api/portage-ucp-webmcp.md
         Concepts:
           - concepts/ucp-overview.md
           - well-known-ucp.md
@@ -118,9 +129,10 @@ nav:
   - Home: index.md
   - Getting started:
       - Quickstart: getting-started/quickstart.md
-      - Walkthrough: walkthrough.md
-      - CLI reference: cli-reference.md
+      - Agentic flow tutorial: agentic-flow.md
       - CLI usage tutorial: cli-usage-tutorial.md
+      - Walkthrough (Ruby client): walkthrough.md
+      - CLI reference: cli-reference.md
   - Concepts:
       - UCP overview: concepts/ucp-overview.md
       - Serving /.well-known/ucp: well-known-ucp.md
@@ -137,6 +149,14 @@ nav:
       - Library usage: library-usage.md
       - Adapter requirements: adapter-requirements.md
       - Running behind a proxy: proxy.md
+  - API reference:
+      - Overview: api/index.md
+      - CLI JSON output: api/cli-json.md
+      - portage-ucp: api/portage-ucp.md
+      - portage-ucp-client: api/portage-ucp-client.md
+      - portage-ucp-decision: api/portage-ucp-decision.md
+      - portage-ucp-journal: api/portage-ucp-journal.md
+      - portage-ucp-webmcp: api/portage-ucp-webmcp.md
   - Adapters:
       - Feature matrix: adapters/feature-matrix.md
       - Shopify: adapters/shopify.md

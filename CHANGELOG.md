@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Docs site pass.** New home page, a rewritten quickstart, an agentic flow tutorial (the `buy` skill, your own loop around `portage --json` with the approval gate in code, and direct UCP/MCP), and an API reference section: CLI JSON output, `portage-ucp`, `portage-ucp-client`, `portage-ucp-decision`, `portage-ucp-journal` and `portage-ucp-webmcp`, each checked against the source. Fixes the `site_url`, the `portage-ucp-client` discover examples (HTTP needs `meta: { agent_profile: }` and returns hashes), and the claim that AP2 mandates are shape-checked only.
+
 - **README rewrite.** Opens with what Portage does, then installing the `buy` plugin (`/plugin install buy@portage`), adding it to other agents with dotagents or as a plain skill, and a first `find`/`buy --dry-run`. Adds a Safety section, merges the doc map and gem list into one table, syncs the usage banner with `portage --help`, and moves the proxy env-var caveats (corrected against the code) into `docs/proxy.md`. The docs site's buy page now pulls its install steps from the README.
 
 - **`buy` plugin 0.6.2.** The skill's minimum version is now `portage-cli` 0.8.0 (plus `portage-ucp-webmcp` 0.2.0 for the browser profile and autofill), which shipped in 0.11.0. It still checks `portage --help` before using newer commands, so older installs keep working.
