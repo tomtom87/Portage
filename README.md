@@ -1,9 +1,13 @@
-# Portage
+<h1 align="center">
+  <img src="docs/assets/portage-logo.svg" alt="Portage" width="520">
+</h1>
 
-[![gem version](https://img.shields.io/gem/v/portage-cli)](https://rubygems.org/gems/portage-cli)
-![ruby](https://img.shields.io/badge/ruby-%3E%3D%203.2-red)
-![license](https://img.shields.io/badge/license-MIT-blue)
-[![docs](https://img.shields.io/badge/docs-readthedocs-blue)](https://portage.readthedocs.io/en/latest/)
+<p align="center">
+  <a href="https://rubygems.org/gems/portage-cli"><img src="https://img.shields.io/gem/v/portage-cli" alt="gem version"></a>
+  <img src="https://img.shields.io/badge/ruby-%3E%3D%203.2-red" alt="ruby">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="license">
+  <a href="https://portage.readthedocs.io/en/latest/"><img src="https://img.shields.io/badge/docs-readthedocs-blue" alt="docs"></a>
+</p>
 
 Portage lets an AI agent find and buy things from real online stores for you, and you approve every payment. It ships as a command-line tool (`portage`), a Claude Code plugin (`buy`) that drives it, and Ruby gems that let any store serve the same open protocols ([MCP](https://modelcontextprotocol.io) and [UCP](https://ucp.dev)) to shopping agents. It is for people who want an agent to shop for them, developers building shopping agents, and merchants who want agents to buy from their store.
 
