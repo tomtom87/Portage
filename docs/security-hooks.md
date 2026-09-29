@@ -5,6 +5,7 @@
 Read this before wiring a server up to anything real — every default here is deliberately locked down, not permissive-by-omission:
 
 - **Authentication**: `Portage::Ucp::UnconfiguredAuthenticator` (the default) rejects every mutating call until you configure a real one. Implement `#call(server_context)` to return a truthy auth context, or raise `Portage::Ucp::AuthenticationError`.
+- **What counts as mutating**: `Mcp::Server.build` sends a call to the authenticator and the rate limiter only when its adapter method takes `idempotency_key:`. Every other tool skips both, and no option changes that. That includes `list_payment_methods` and `list_addresses`, by design: they take `oauth_token:`, not a bare `subject:`, so a caller learns nothing without the shopper's own token (`docs/design-log.md` §32). An adapter must derive the shopper from that token on every call.
 - **Rate limiting**: `Portage::Ucp::NullRateLimiter` (the default) never limits. Implement `#check!(key, capability)` and raise `Portage::Ucp::RateLimitExceededError` to block a call.
 - **PAN guard**: `Portage::Ucp::PaymentTokenGuard` rejects any `payment_token` that looks like a raw card number (digits-only, Luhn-valid, 12–19 chars) before it ever reaches your `Adapter` — `complete_checkout` must receive a tokenized credential.
 - **Idempotency**: every mutating capability action takes an `idempotency_key:` — your `Adapter` is responsible for deduping retries (see `portage-ucp-shopify`'s in-process dedup table for one approach).
