@@ -37,6 +37,47 @@ RSpec.describe Portage::Cli::History do
     expect(history.searches.first).to include("url" => "https://shop.example")
   end
 
+  describe "saved offers" do
+    def offer(ref, **fields)
+      { offer_ref: ref, store: "https://shop.example", product_id: "p1", title: "Cold Brew", amount: 2400,
+        currency: "USD" }.merge(fields)
+    end
+
+    it "keeps a search's offers, with when they were found, and resolves an offer_ref to one of them" do
+      history(now: Time.at(1_700_000_000))
+        .record_search(query: "cold", offer_count: 1, message: "ok", offers: [offer("of_aaaaaa")])
+
+      expect(history.offer("of_aaaaaa")).to eq(
+        "offer_ref" => "of_aaaaaa", "store" => "https://shop.example", "product_id" => "p1",
+        "title" => "Cold Brew", "amount" => 2400, "currency" => "USD", "found_at" => 1_700_000_000,
+        "query" => "cold"
+      )
+    end
+
+    it "leaves the offers key off a search that found none" do
+      history.record_search(query: "cold", offer_count: 0, message: "none")
+
+      expect(history.searches.first).not_to have_key("offers")
+    end
+
+    it "finds an offer in an older search, and returns nil for an unknown ref" do
+      h = history
+      h.record_search(query: "cold", offer_count: 1, message: "ok", offers: [offer("of_aaaaaa")])
+      h.record_search(query: "tea", offer_count: 1, message: "ok", offers: [offer("of_bbbbbb", product_id: "p2")])
+
+      expect(h.offer("of_aaaaaa")).to include("product_id" => "p1", "query" => "cold")
+      expect(h.offer("of_nope")).to be_nil
+    end
+
+    it "prefers the most recent search when a ref appears twice" do
+      h = history
+      h.record_search(query: "old", offer_count: 1, message: "ok", offers: [offer("of_aaaaaa", amount: 100)])
+      h.record_search(query: "new", offer_count: 1, message: "ok", offers: [offer("of_aaaaaa", amount: 200)])
+
+      expect(h.offer("of_aaaaaa")).to include("amount" => 200, "query" => "new")
+    end
+  end
+
   it "keeps only the most recent MAX_ENTRIES purchases" do
     h = history
     (described_class::MAX_ENTRIES + 5).times do |i|

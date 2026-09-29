@@ -47,6 +47,9 @@ RSpec.configure do |config|
       # developer's real ~/.portage/config.json or ~/.portage/policy.json.
       @config_path = File.join(dir, "config.json")
       @policy_path = File.join(dir, "policy.json")
+      # Quotes — `portage buy --dry-run` saves one; never under the
+      # developer's real ~/.portage/quotes/.
+      @quotes_dir = File.join(dir, "quotes")
       example.run
     end
   end
@@ -125,6 +128,11 @@ RSpec.configure do |config|
 
     allow(Portage::Cli::Config).to receive(:load).and_wrap_original do |original, **kwargs|
       kwargs = { path: @config_path }.merge(kwargs) unless kwargs.key?(:path)
+      original.call(**kwargs)
+    end
+
+    allow(Portage::Cli::Quotes).to receive(:new).and_wrap_original do |original, **kwargs|
+      kwargs = { dir: @quotes_dir }.merge(kwargs) unless kwargs.key?(:dir)
       original.call(**kwargs)
     end
 

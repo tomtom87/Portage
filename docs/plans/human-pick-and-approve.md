@@ -159,3 +159,4 @@ restart prompt.
 
 | Date | Phase | Result |
 |---|---|---|
+| 2026-09-29 | 1 | `find` offers carry `offer_ref` (saved in history); `buy --offer REF`; `--dry-run` saves a quote in `~/.portage/quotes/` and returns `quote_id`; `buy --quote ID --yes` caps Buy at the quoted total, refusing `quote_changed` on the real run if higher, single use; specs. |

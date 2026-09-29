@@ -40,9 +40,22 @@ module Portage
 
       # @param url [String, nil] the store, for a `portage buy` that never
       #   reached a checkout there; nil for a cross-store `portage find`.
-      def record_search(query:, offer_count:, message:, url: nil)
+      # @param offers [Array<Hash>] a `find`'s offers, kept so `portage buy
+      #   --offer REF` can resolve an `offer_ref` later (see #offer).
+      def record_search(query:, offer_count:, message:, url: nil, offers: [])
         append("searches", { "query" => query, "url" => url, "offer_count" => offer_count, "message" => message,
-                             "at" => @now }.compact)
+                             "offers" => (saved_offers(offers) unless offers.empty?), "at" => @now }.compact)
+      end
+
+      # @return [Hash, nil] the saved offer for `ref` (store, product_id,
+      #   title, amount, currency, found_at) plus the `query` of the search
+      #   that found it, from the most recent search that holds it.
+      def offer(ref)
+        store["searches"].reverse_each do |search|
+          found = Array(search["offers"]).find { |saved| saved["offer_ref"] == ref }
+          return found.merge("query" => search["query"]) if found
+        end
+        nil
       end
 
       def purchases(limit: MAX_ENTRIES) = store["purchases"].last(limit)
@@ -57,6 +70,14 @@ module Portage
       end
 
       private
+
+      def saved_offers(offers)
+        offers.map do |offer|
+          { "offer_ref" => offer[:offer_ref], "store" => offer[:store], "product_id" => offer[:product_id],
+            "title" => offer[:title], "amount" => offer[:amount], "currency" => offer[:currency],
+            "found_at" => @now }
+        end
+      end
 
       def append(kind, entry)
         store[kind] = (store[kind] + [entry]).last(MAX_ENTRIES)
