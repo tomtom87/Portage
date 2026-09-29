@@ -439,6 +439,26 @@ The report also carries a `search_id`, and its offers carry `offer_ref`, so a co
 
 Prices are catalog prices, not landed prices. `--results` limits how many offers are kept (default 5). If the origin cannot be resolved (not a store URL, hand-off only, no UCP, product not found) the report has empty `candidates`, `stores` and `offers`, and `message` says why. It exits `1`.
 
+## check
+
+`portage check <url> [--json]`
+
+Reports whether Portage can buy from a store and how. The scheme defaults to `https`. Exits `0` for `automated` and `webmcp`, `1` otherwise, and `1` with the usage on stderr for a missing or bad URL. Takes the `--proxy*` flags.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `url` | string | The URL checked. |
+| `native_ucp` | object or null | The store's `/.well-known/ucp` manifest, if it serves one. |
+| `platform`, `recommended_gem` | string or null | The detected commerce platform and its adapter gem. |
+| `live_probe` | object | Only when a platform was found: `status` (`ok`, `skipped`, `error`) and `reason` or `sample_product`. |
+| `handoff_only` | boolean | The host is on your hand-off-only list or is a built-in hand-off retailer. Such a host is never contacted. |
+| `adapter` | object or null | `gem`, `installed` and `missing_env` for the detected platform. |
+| `webmcp` | object | `status` (`available`, `none`, `skipped`, `error`), `tools` (names) and `reason`. |
+| `verdict` | string | `automated`, `webmcp`, `handoff` or `unsupported`. |
+| `next_step` | string | What to do, in plain English. |
+
+Verdicts follow the order `buy` uses: hand-off-only, then native UCP, then WebMCP, then a usable adapter. Source: `cli/check.rb`, `cli/check_next_step.rb`
+
 ## pick
 
 `portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--choose REF | --compare REF | --view REF] --json`

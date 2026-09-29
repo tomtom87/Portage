@@ -1,6 +1,30 @@
 # Checking any store
 
-`portage-ucp-check` is a small CLI, shipped with the core gem, for the question this whole documentation set has been building toward: "does this store need portage-ucp at all, and if so, which adapter?"
+## With the `portage` CLI
+
+```bash
+portage check your-shop.example
+portage check your-shop.example --json
+```
+
+`portage check` answers "can Portage buy from this store, and how?" and gives the answer `portage buy` would act on. It wraps the check described below, then adds what only the CLI knows: whether the host is on your hand-off-only list (or is a built-in hand-off retailer such as Amazon, Walmart, eBay, Best Buy or Etsy), whether the matching adapter gem is installed and which env vars it still needs, and whether the store's page exposes WebMCP tools.
+
+`verdict` is one of:
+
+| Verdict | Meaning |
+|---|---|
+| `automated` | The store speaks UCP natively, or a configured adapter answered a live probe. |
+| `webmcp` | Portage can build the cart through the page's WebMCP tools. You pay in your browser. |
+| `handoff` | A hand-off-only host, or a platform was detected but its adapter isn't usable. Portage opens the store and you buy. |
+| `unsupported` | Nothing usable was found. |
+
+`next_step` says in plain English what to do about it. It exits `0` for `automated` and `webmcp`, `1` otherwise, and takes the same `--proxy*` flags as `buy` and `find`. The full field list is in [the CLI JSON reference](api/cli-json.md#check).
+
+`check` sends plain GET requests only and never builds a cart. A hand-off-only host is not contacted at all. WebMCP tools exist only on a live page, so `check` reads them from a tab your Portage browser profile already has open on that store (`portage browser profile open --url URL`); it never launches a browser. Without one, or without `portage-ucp-webmcp` installed, `webmcp.status` is `skipped` and `reason` says why.
+
+## With `portage-ucp-check` (library only)
+
+If you only have the core gem, `portage-ucp-check` is a small CLI, shipped with the core gem, for the question this whole documentation set has been building toward: "does this store need portage-ucp at all, and if so, which adapter?"
 
 ```bash
 bundle exec portage-ucp-check your-shop.example

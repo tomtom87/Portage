@@ -6,6 +6,14 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`portage check <url> [--json]`.** Reports whether Portage can buy from a store and
+  how: `verdict` (`automated`, `webmcp`, `handoff`, `unsupported`), `next_step`, and the
+  detail behind them (native UCP, platform, adapter install and missing env, hand-off-only,
+  WebMCP status). Wraps `Portage::Ucp::Check` and follows the precedence `buy` uses.
+  Plain GETs only, hand-off-only hosts are not contacted, and WebMCP is read only from an
+  already-open Portage profile tab. Exits `0` for `automated` and `webmcp`. The hand-off-only
+  test moved into a shared `HandoffHost` so `buy` and `check` can't disagree.
+
 ## [0.9.0] - 2026-09-29
 
 - **Human pick and approve** (`docs/plans/human-pick-and-approve.md`, Phases 1-3).

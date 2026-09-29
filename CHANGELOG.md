@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`portage check`** documented in the `buy` skill, `docs/checking-any-store.md`, the CLI tutorial and `docs/api/cli-json.md`. Code and details are in `portage-cli`'s changelog.
+
 ## [0.12.0] - 2026-09-29
 
 - **Release set:** `portage-cli` 0.9.0 (human pick and approve, `docs/plans/human-pick-and-approve.md` Phases 1-3: offer refs and `buy --offer`, priced quotes and `buy --quote` with `quote_changed`, `portage pick`, `portage approve`, product-page viewing and `policy set --require-approval`). Under the default `require_approval: any`, a `buy --yes` without an approved `--quote` now dry-runs and returns `needs_approval` instead of buying; `portage policy set --require-approval off`, run from a terminal, restores the old behaviour. `buy` plugin 0.7.1 names `portage-cli` 0.9.0 as the release that ships `pick` and `approve`. The docs-only `[Unreleased]` notes in `portage-ucp`, `portage-ucp-client` and `portage-ucp-webmcp` stay unreleased: no code changed there.
