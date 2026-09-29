@@ -314,7 +314,9 @@ Source: `portage-ucp/lib/portage/ucp/dispatcher.rb`
 
 Each tool's input schema is built from the adapter method's keyword parameters. Required keywords (`keyreq`) become `required`. Property types are left unconstrained (`{}`).
 
-A call counts as mutating when its adapter method takes `idempotency_key:`. Only mutating calls run the authenticator and the rate limiter. Read-only calls skip both. If either rejects, the tool returns an error response with the exception message rather than raising.
+A call counts as mutating when its adapter method takes `idempotency_key:`. Only mutating calls run the authenticator and the rate limiter. Read-only calls skip both, and `build` has no option to change that. If either rejects, the tool returns an error response with the exception message rather than raising.
+
+`list_payment_methods` and `list_addresses` skip both by design. They take `oauth_token:` so the shopper's own token, not the authenticator, guards them (see [Portage extensions](#portage-extensions-appportage-ucp)).
 
 `traceparent` in the request's `_meta` becomes the correlation id when it matches the W3C format. Otherwise a UUID is generated. `_meta["ucp-agent.profile"]` is passed through as `agent_profile`.
 
