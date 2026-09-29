@@ -163,16 +163,16 @@ Thirteen gems, mirroring how Faraday/Devise split core-vs-adapter:
 |---|---|---|
 | [`portage-ucp`](portage-ucp/) | 0.10.0 | Protocol-only core: `Adapter` contract, capability registry, manifest builder, MCP server wrapper. |
 | [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Client SDK — connect to somebody else's manifest, or drive your own `Adapter`, as the shopper's agent. Loopback/stdio/HTTP behind one interface. |
-| [`portage-ucp-webmcp`](portage-ucp-webmcp/) | 0.1.1 | WebMCP transport onto the same `Adapter` contract — inbound (`document.modelContext`) and outbound (drives a page's WebMCP tools via a browser driver). |
+| [`portage-ucp-webmcp`](portage-ucp-webmcp/) | 0.2.0 | WebMCP transport onto the same `Adapter` contract — inbound (`document.modelContext`) and outbound (drives a page's WebMCP tools via a browser driver). |
 | [`portage-ucp-decision`](portage-ucp-decision/) | 0.1.1 | System One decision layer — offer ranking, escalation policy, a confidence gate (Jev/Laya), typed `PolicyGuard` wrapper. |
 | [`portage-ucp-journal`](portage-ucp-journal/) | 0.1.1 | Buyer-side purchase journal + the injectable `Store` abstraction it's built on. |
-| [`portage-cli`](portage-cli/) | 0.7.4 | Ships the `portage` command — `buy`, `find`, `compare`, `history`, `payment`, `policy`, `doctor`, `generate`. |
+| [`portage-cli`](portage-cli/) | 0.8.0 | Ships the `portage` command — `buy`, `find`, `compare`, `history`, `payment`, `policy`, `doctor`, `generate`. |
 | [`portage-ucp-shopify`](portage-ucp-shopify/) | 0.5.1 | Shopify — Admin + Storefront GraphQL APIs. |
-| [`portage-ucp-wix`](portage-ucp-wix/) | 0.1.4 | Wix — Stores Catalog and eCommerce REST APIs. |
-| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | 0.2.1 | WooCommerce — Admin REST API and Store API. |
-| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | 0.1.4 | BigCommerce — v3 Catalog/Carts/Checkouts and v2 Orders APIs. |
-| [`portage-ucp-magento`](portage-ucp-magento/) | 0.1.4 | Magento/Adobe Commerce — REST v1 (admin-token catalog/order, guest-cart cart/checkout). |
-| [`portage-ucp-etsy`](portage-ucp-etsy/) | 0.1.4 | Etsy — real catalog/order via Open API v3; checkout is redirect-link only (Etsy's public API has no cart/checkout endpoint). |
+| [`portage-ucp-wix`](portage-ucp-wix/) | 0.1.5 | Wix — Stores Catalog and eCommerce REST APIs. |
+| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | 0.2.2 | WooCommerce — Admin REST API and Store API. |
+| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | 0.1.5 | BigCommerce — v3 Catalog/Carts/Checkouts and v2 Orders APIs. |
+| [`portage-ucp-magento`](portage-ucp-magento/) | 0.1.5 | Magento/Adobe Commerce — REST v1 (admin-token catalog/order, guest-cart cart/checkout). |
+| [`portage-ucp-etsy`](portage-ucp-etsy/) | 0.1.5 | Etsy — real catalog/order via Open API v3; checkout is redirect-link only (Etsy's public API has no cart/checkout endpoint). |
 | [`portage-ucp-instagram`](portage-ucp-instagram/) | 0.1.5 | Instagram/Facebook Shops — real catalog via Meta's Graph API Commerce Catalog; checkout is redirect-link only. `get_order` is deprecated (Meta removes Order Management endpoints 2026-10-27; after that, catalog search/product + checkout handoff only). |
 
 A backend on some other stack writes its own thin `Adapter` subclass against `portage-ucp`

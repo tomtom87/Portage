@@ -9,6 +9,20 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-29
+
+- **Release set:** `portage-cli` 0.8.0 (Phases 1-7 of
+  `docs/plans/buy-skill-and-local-browser.md`: offer sources and the Shopify
+  Catalog, categories and routing caps, the local store index and known-stores
+  list, browser import, the `setup` wizard, hand-off targets and hand-off-only
+  hosts, the Portage browser profile and retailer offer sources),
+  `portage-ucp-webmcp` 0.2.0 (WebMCP Phases 1-4: platform presets, schema
+  matching, approved checkout autofill), and patch releases of
+  `portage-ucp-bigcommerce`, `-etsy`, `-magento`, `-wix` (0.1.5) and
+  `-woocommerce` (0.2.2), whose exes crashed at launch. `portage-cli` needs
+  `portage-ucp-webmcp` 0.2.0 or newer for its WebMCP paths and treats an
+  older install as absent.
+
 - **Docs + `buy` skill release** (`docs/plans/buy-skill-and-local-browser.md`
   Phase 8, the plan's last phase). Documents everything Phases 1-7 shipped —
   offer sources/Shopify Catalog, categories/`Classifier`, the local store

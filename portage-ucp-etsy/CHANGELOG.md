@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-29
+
 - This gem had no `exe/` or `examples/`, unlike every other adapter in this
   project (`portage-ucp-shopify`/`-wix`/`-woocommerce`/`-bigcommerce`/
   `-magento`) — there was no way to point an MCP client at a `command` for

@@ -6,6 +6,15 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-29
+
+- **Requires `portage-ucp-webmcp` 0.2.0 or newer for WebMCP paths.**
+  `Webmcp.available?` now treats an older install as not installed
+  (`Webmcp::MIN_VERSION`), since `WebMcp::Autofill`, `Presets`, `Matcher`
+  and `Fingerprint` first shipped in 0.2.0. With 0.1.1 installed, the
+  profile hand-off falls back to showing the link instead of raising a
+  `NameError`.
+
 - **`find --max-price` now filters offer-source offers too.** Offers from
   `OfferSources` (`ShopifyCatalog`, the retailer APIs) skipped the
   `--max-price` check that probed stores' offers go through, so a
