@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-29
+
 - `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`
   manifest pointer in the homepage when `/.well-known/ucp` is missing, the same fallback
   `portage buy` uses. The report adds `manifest_url` when the manifest came from that link.
