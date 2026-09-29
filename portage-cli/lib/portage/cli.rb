@@ -15,6 +15,7 @@ require_relative "cli/browser_profile"
 require_relative "cli/buy"
 require_relative "cli/find"
 require_relative "cli/compare"
+require_relative "cli/check"
 require_relative "cli/history"
 require_relative "cli/quotes"
 require_relative "cli/money"
@@ -56,6 +57,7 @@ module Portage
              portage find --query "..." [--max-price N] [--limit N] [--json]
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                                     [--max-price N] [--json]
+             portage check <url> [--json]
              portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--json]
                           [--choose REF | --compare REF | --view REF]
              portage approve QUOTE_ID [--via auto|tty|agent] [--relayed-yes | --view] [--json]
@@ -93,13 +95,13 @@ module Portage
              portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
              portage --version
 
-           proxy flags (buy/find/compare/doctor/payment enroll):
+           proxy flags (buy/find/compare/check/doctor/payment enroll):
              [--proxy URL] [--proxy-mode forward|gateway] [--proxy-header "Name: value"]
              [--no-proxy HOSTS] [--proxy-route ROUTE=URL|direct] [--proxy-chain URL,URL,...]
              [--proxy-passthrough HEADER] [--proxy-ca FILE] [--no-env-proxy]
     USAGE
 
-    COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
+    COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare, "check" => :run_check,
                  "pick" => :run_pick, "approve" => :run_approve,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
                  "orders" => :run_orders, "index" => :run_index, "browser" => :run_browser,
@@ -206,6 +208,53 @@ module Portage
     # conversion, and no attempt to handle zero-decimal currencies like JPY.
     def self.to_minor_units(major) = (major * 100).round
     private_class_method :to_minor_units
+
+    # --- check ---
+
+    # `portage check <url>` — can Portage buy from this store, and how?
+    # Exit 0 for `automated`/`webmcp`, 1 for anything else (and for a bad
+    # or missing URL, with the usage on stderr).
+    def self.run_check(argv)
+      opts = parse_check_options(argv)
+      return 1 unless opts
+      return 1 unless apply_proxy_settings(opts[:proxy])
+
+      report = Check.new(opts[:url]).call
+      puts opts[:json] ? JSON.pretty_generate(report) : format_check(report)
+      Check::USABLE_VERDICTS.include?(report[:verdict]) ? 0 : 1
+    end
+    private_class_method :run_check
+
+    def self.parse_check_options(argv)
+      opts = { proxy: {} }
+      OptionParser.new do |parser|
+        parser.on("--json") { opts[:json] = true }
+        ProxySettings.add_options(parser, opts[:proxy])
+      end.parse!(argv)
+      opts[:url] = argv.shift.to_s.strip
+      return opts if !opts[:url].empty? && argv.empty? && valid_check_url?(opts[:url])
+
+      warn USAGE
+      nil
+    end
+    private_class_method :parse_check_options
+
+    def self.valid_check_url?(url)
+      uri = URI.parse(url =~ %r{\Ahttps?://}i ? url : "https://#{url}")
+      uri.is_a?(URI::HTTP) && !uri.host.to_s.empty?
+    rescue URI::InvalidURIError
+      false
+    end
+    private_class_method :valid_check_url?
+
+    def self.format_check(report)
+      lines = ["#{report[:url]}: #{report[:verdict]}"]
+      lines << "  platform: #{report[:platform]}" if report[:platform]
+      lines << "  webmcp: #{report[:webmcp][:status]}#{" (#{report[:webmcp][:reason]})" if report[:webmcp][:reason]}"
+      lines << "  next: #{report[:next_step]}"
+      lines.join("\n")
+    end
+    private_class_method :format_check
 
     # --- compare ---
 

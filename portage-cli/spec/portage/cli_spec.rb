@@ -1937,3 +1937,69 @@ RSpec.describe Portage::Cli do
     $stdout = old
   end
 end
+
+RSpec.describe Portage::Cli, ".run check" do
+  let(:report) do
+    { url: "https://shop.example/", native_ucp: nil, platform: "WooCommerce",
+      recommended_gem: "portage-ucp-woocommerce", handoff_only: false,
+      adapter: { gem: "portage-ucp-woocommerce", installed: true, missing_env: [] },
+      webmcp: { status: "skipped", tools: [], reason: "nope" }, verdict: "handoff", next_step: "Set things." }
+  end
+
+  def stub_check(overrides = {})
+    allow(Portage::Cli::Check).to receive(:new).and_return(instance_double(Portage::Cli::Check,
+                                                                           call: report.merge(overrides)))
+  end
+
+  it "prints usage to stderr and exits 1 without a url" do
+    expect { expect(described_class.run(["check"])).to eq(1) }.to output(/usage: portage buy/).to_stderr
+  end
+
+  it "prints usage and exits 1 for a bad url" do
+    expect { expect(described_class.run(["check", "http://"])).to eq(1) }.to output(/usage/).to_stderr
+  end
+
+  it "prints a few human lines and exits 1 for a hand-off verdict" do
+    stub_check
+
+    expect { expect(described_class.run(["check", "shop.example"])).to eq(1) }
+      .to output(%r{shop.example/: handoff\n  platform: WooCommerce\n  webmcp: skipped.*\n  next: Set things}).to_stdout
+    expect(Portage::Cli::Check).to have_received(:new).with("shop.example")
+  end
+
+  it "exits 0 for automated and webmcp verdicts" do
+    %w[automated webmcp].each do |verdict|
+      stub_check(verdict: verdict)
+      expect { expect(described_class.run(["check", "shop.example"])).to eq(0) }.to output.to_stdout
+    end
+  end
+
+  it "exits 1 for unsupported" do
+    stub_check(verdict: "unsupported")
+
+    expect { expect(described_class.run(["check", "shop.example"])).to eq(1) }.to output.to_stdout
+  end
+
+  it "prints pretty JSON with --json" do
+    stub_check(verdict: "automated")
+    out = StringIO.new
+    $stdout = out
+    code = described_class.run(["check", "shop.example", "--json"])
+    $stdout = STDOUT
+
+    parsed = JSON.parse(out.string)
+    expect(code).to eq(0)
+    expect(parsed.keys).to include("url", "native_ucp", "platform", "handoff_only", "adapter", "webmcp", "verdict",
+                                   "next_step")
+    expect(out.string).to include("\n  \"verdict\": \"automated\"")
+  end
+
+  it "accepts the shared proxy flags" do
+    stub_check
+    allow(Portage::Ucp::Support::ProxyConfig).to receive(:current=)
+
+    expect { described_class.run(["check", "shop.example", "--proxy", "http://proxy.example:8080"]) }
+      .to output.to_stdout
+    expect(Portage::Ucp::Support::ProxyConfig).to have_received(:current=)
+  end
+end

@@ -13,6 +13,7 @@ require_relative "checkout_handoff"
 require_relative "money"
 require_relative "notifier"
 require_relative "handoff_only"
+require_relative "handoff_host"
 require_relative "offer_sources"
 require_relative "handoff_target"
 require_relative "handoff_agents"
@@ -189,32 +190,10 @@ module Portage
       # "handoff_only_hosts" is the user's own list (see HandoffOnly).
       def handoff_only?
         @handoff_only ||= HandoffOnly.new
-        return true if @handoff_only.host?(@uri.host)
-        return true if OfferSources.retail_handoff_host?(@uri.host)
-
-        etsy_buyer_host?
+        HandoffHost.restricted?(@uri.host, handoff_only: @handoff_only)
       end
 
-      # Phase 7 (docs/plans/buy-skill-and-local-browser.md):
-      # portage-ucp-etsy is a *seller*-side adapter — a shop owner with
-      # their own ETSY_* credentials set still reaches #adapter_flow
-      # unchanged below, the same "only your own store" rule every other
-      # adapter already gets (see the class comment at the top of this
-      # file). An ordinary buyer with no Etsy credentials of their own
-      # gets routed to hand-off here instead of a homepage fetch +
-      # platform detection that would just be scraping a stranger's
-      # listing — the buyer-side offer OfferSources::EtsyListings hands
-      # `find` has nothing this process can check out anyway.
-      def etsy_buyer_host?
-        HandoffOnly.matches_any?(@uri.host, %w[etsy.com]) && !etsy_adapter_configured?
-      end
-
-      def etsy_adapter_configured?
-        platform = Portage::Ucp::Resolver::PLATFORMS.find { |p| p.name == "Etsy" }
-        return false unless platform
-
-        Portage::Ucp::Resolver.missing_env(platform, Portage::Ucp::Resolver.env_for(platform)).empty?
-      end
+      def etsy_buyer_host? = HandoffHost.etsy_buyer_host?(@uri.host)
 
       # No checkout was ever built — there's nothing to browse or complete,
       # just a link and why. `checkout_url` is built, never fetched: the
