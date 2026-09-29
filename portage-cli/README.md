@@ -737,9 +737,24 @@ hand-off. `token` isn't implemented yet; it reports
 Against a page whose tools aren't a known platform preset, `Buy` falls back
 to a schema-matched, shopper-confirmed mapping instead of giving up (see
 `portage-ucp-webmcp`'s README, "Stores that don't run Portage"). A mutating
-match prompts on a real TTY with `--json` off; under `--json` or with no
-TTY it stops instead (outcome `webmcp_mapping_unconfirmed`) and returns the
-proposed mapping for the caller to pass back.
+match prompts on a real TTY with `--json` off. Under `--json`, or with no
+TTY, it stops instead: outcome `webmcp_mapping_unconfirmed`, with the
+proposal in `tool_names_proposal`.
+
+No flag passes a mapping back. From the CLI, re-run the same command in
+your own terminal without `--json` and answer the prompt. `--dry-run` is
+enough, because the mapping is confirmed before the dry-run check. The
+approved mapping is saved to `~/.portage/webmcp_mappings.json`, and later
+runs reuse it with no prompt.
+
+`Buy` has no `tool_names:` keyword either. A library caller has two hooks.
+`webmcp_mapping_confirm:` takes any object whose `call(proposal, tools)`
+returns a `tool_names:` hash, or nil to stop with
+`webmcp_mapping_unconfirmed`. `Buy` saves whatever hash it returns to
+`webmcp_mappings:`, the store approved mappings are read from (default: a
+`Portage::Cli::WebmcpMappings` on `~/.portage/webmcp_mappings.json`).
+Outside `Buy`, pass `tool_names:` to `Portage::Ucp::WebMcp.connect`
+yourself.
 
 `dry_run: true` against a page whose preset hands off through its own
 checkout tool (Shopify's `proceed_to_checkout`) stops after the read-only

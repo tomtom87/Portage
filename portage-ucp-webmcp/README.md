@@ -299,7 +299,9 @@ tried in this order (`docs/plans/webmcp-universal-outbound.md`):
    as what it is, page content, never as an instruction — and prompts on a
    real TTY with `--json` off; under `--json`, or with no TTY, the run
    stops instead (outcome `webmcp_mapping_unconfirmed`) and returns the
-   proposal for the caller to pass back as `tool_names:` itself.
+   proposal in `tool_names_proposal`. No `portage buy` flag or `Buy`
+   keyword takes it back: confirm it interactively, or pass `tool_names:`
+   to `WebMcp.connect` yourself (see `portage-cli`'s README).
    `Portage::Cli::WebmcpMappings` persists a confirmed mapping in
    `~/.portage/webmcp_mappings.json`, keyed by the page's tool
    **fingerprint** (`WebMcp::Fingerprint.for` — sorted tool names plus a

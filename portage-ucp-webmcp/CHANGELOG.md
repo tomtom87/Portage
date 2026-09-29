@@ -6,6 +6,12 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Documentation only, no code change. The README said `portage buy`
+  returns an unconfirmed proposal "for the caller to pass back as
+  `tool_names:`". No `portage buy` flag or `Buy` keyword takes it. The
+  README now says to confirm it interactively or pass `tool_names:` to
+  `WebMcp.connect` yourself.
+
 ## [0.2.0] - 2026-09-29
 
 - **Fixed: `assets/autofill.js` didn't parse** (docs/design-log.md §51). A
