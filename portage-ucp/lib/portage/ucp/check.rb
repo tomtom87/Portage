@@ -8,7 +8,9 @@ module Portage
     # `portage-ucp-check <url>` — point it at any storefront and find out what
     # portage-ucp can do with it. Checks for a native `/.well-known/ucp`
     # manifest first (the store may already speak UCP without this gem, see
-    # README's "Why /.well-known/ucp?"); if there isn't one, detects the
+    # README's "Why /.well-known/ucp?"), then a `<link rel="ucp" href=...>`
+    # manifest pointer in the homepage (the same fallback `portage buy`
+    # follows); if there isn't one, detects the
     # commerce platform from the page itself (see Resolver) and names
     # the matching portage-ucp-<adapter> gem — probing it live when that
     # adapter's env vars are already set, so "best match" means a
@@ -30,6 +32,10 @@ module Portage
         return { url: @uri.to_s, native_ucp: manifest } if manifest
 
         body, headers = fetch_homepage
+        linked = manifest_link(body)
+        manifest = linked && fetch_json(linked)
+        return { url: @uri.to_s, native_ucp: manifest, manifest_url: linked.to_s } if manifest
+
         platform = Resolver.detect_platform(body, headers)
 
         report = { url: @uri.to_s, native_ucp: nil, platform: platform&.name, recommended_gem: platform&.gem }
@@ -42,7 +48,11 @@ module Portage
       def fetch_manifest
         manifest_uri = @uri.dup
         manifest_uri.path = MANIFEST_PATH
-        response = get(manifest_uri)
+        fetch_json(manifest_uri)
+      end
+
+      def fetch_json(uri)
+        response = get(uri)
         return nil unless response.is_a?(Net::HTTPSuccess)
 
         JSON.parse(response.body)
@@ -57,6 +67,18 @@ module Portage
         [response.body, response.to_hash]
       rescue StandardError
         [nil, {}]
+      end
+
+      # `<link rel="ucp" href="...">` in either attribute order, resolved
+      # against the store URL.
+      def manifest_link(body)
+        return nil unless body
+
+        match = body.match(/<link[^>]+rel=["']ucp["'][^>]+href=["']([^"']+)["']/i) ||
+                body.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']ucp["']/i)
+        match && URI.join(@uri, match[1])
+      rescue URI::Error
+        nil
       end
 
       def probe(platform)

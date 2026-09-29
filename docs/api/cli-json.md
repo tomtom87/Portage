@@ -448,7 +448,8 @@ Reports whether Portage can buy from a store and how. The scheme defaults to `ht
 | Field | Type | Meaning |
 |---|---|---|
 | `url` | string | The URL checked. |
-| `native_ucp` | object or null | The store's `/.well-known/ucp` manifest, if it serves one. |
+| `native_ucp` | object or null | The store's `/.well-known/ucp` manifest, or the one its homepage points at with `<link rel="ucp">`. |
+| `manifest_url` | string | Present only when `native_ucp` came from a `<link rel="ucp">` pointer: the URL it was fetched from. |
 | `platform`, `recommended_gem` | string or null | The detected commerce platform and its adapter gem. |
 | `live_probe` | object | Only when a platform was found: `status` (`ok`, `skipped`, `error`) and `reason` or `sample_product`. |
 | `handoff_only` | boolean | The host is on your hand-off-only list or is a built-in hand-off retailer. Such a host is never contacted. |

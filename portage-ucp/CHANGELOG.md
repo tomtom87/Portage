@@ -6,6 +6,10 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`
+  manifest pointer in the homepage when `/.well-known/ucp` is missing, the same fallback
+  `portage buy` uses. The report adds `manifest_url` when the manifest came from that link.
+
 - Documentation only, no code change. Fixes two wrong comments. `Authenticator`
   pointed at a `mutating_only:` option that `Mcp::Server.build` doesn't have:
   it only authenticates tools whose adapter method takes `idempotency_key:`,
