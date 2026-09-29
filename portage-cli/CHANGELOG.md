@@ -6,6 +6,16 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Documentation only, no code change. The README said a
+  `webmcp_mapping_unconfirmed` report returns the proposed mapping "for the
+  caller to pass back". No flag takes a mapping back, and `Buy` has no
+  `tool_names:` keyword. The README now says what each caller can do. From
+  the CLI, re-run the command in a real terminal without `--json`
+  (`--dry-run` is enough) and answer the prompt; the approved mapping is
+  saved to `~/.portage/webmcp_mappings.json`. From Ruby, inject
+  `webmcp_mapping_confirm:` or `webmcp_mappings:`, or pass `tool_names:` to
+  `WebMcp.connect` yourself.
+
 ## [0.8.0] - 2026-09-29
 
 - **Requires `portage-ucp-webmcp` 0.2.0 or newer for WebMCP paths.**
