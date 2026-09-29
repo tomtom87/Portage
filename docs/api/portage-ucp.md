@@ -294,6 +294,14 @@ Order of checks in `#call`:
 
 `Mcp::Server.build` creates its `Dispatcher` with only `adapter:`, `registry:`, `logger:` and `journal:`. It does not forward `confirmer:`, `policy:`, `transaction_log:` or `order_ledger:`. A `complete_checkout` tool call therefore uses the default `Confirmer::Terminal`, which prompts on `$stdin`. That is the same stream a stdio MCP transport uses. To change these, build the `Dispatcher` yourself and call it from your own tools.
 
+Over stdio, that default breaks every `complete_checkout` call:
+
+- The prompt goes to `$stdout` with no newline, so it is glued to the front of the next JSON-RPC frame the server writes. The client can't parse that frame.
+- The answer is read from `$stdin`, so the confirmer takes the client's next JSON-RPC frame as its answer, and the server never handles that frame. With no next frame, it waits 120 seconds.
+- Anything but `y` denies, so the call fails with `ConfirmationDeniedError` and nothing is charged.
+
+`Server.build` has no `confirmer:` option, so there is no way around this through it today.
+
 Source: `portage-ucp/lib/portage/ucp/dispatcher.rb`
 
 ## MCP server
@@ -316,6 +324,8 @@ To run over stdio:
 server = Portage::Ucp::Mcp::Server.build(adapter: adapter)
 MCP::Server::Transports::StdioTransport.new(server).open
 ```
+
+`complete_checkout` can't succeed this way today. See the stdio note under [Dispatcher](#dispatcher).
 
 For HTTP, mount the returned server with the `mcp` gem's own Rack or Streamable HTTP transport. That code lives in the `mcp` gem, not here. Wrap the mounted app in `Rack::SignatureVerification` if you want signed requests.
 
