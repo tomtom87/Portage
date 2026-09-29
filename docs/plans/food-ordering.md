@@ -1,6 +1,6 @@
 # Food Ordering: Instacart Hand-off Now, UCP Food Later
 
-**Status:** planned (2026-09-29). Track A (Instacart hand-off) not started. Track B (UCP food ordering) is watch-only until the charter publishes a schema.
+**Status:** A0 done (2026-09-29). **Track A blocked on Instacart:** Developer Platform applications are closed with no waitlist (individuals are eligible in principle). Resumes at A1 when applications reopen or the user holds a key. Track B is watch-only: still no food schema or open endpoints.
 **Driver:** users asked whether `portage buy` can order food. The delivery apps don't offer a public agent interface yet (research below), so this plan does the one thing that works today and prepares for the standard that's coming.
 
 ## Context
@@ -17,12 +17,12 @@
 
 **Why a hand-off is the right shape.** Portage's rule is that the shopper approves every payment. Instacart's MCP stops at a shareable page with the items pre-selected; the shopper picks a store, reviews and pays on instacart.com. That's the same shape as the existing Amazon/Etsy hand-off path in `Buy#handoff_only_report` ([buy.rb:204](../../portage-cli/lib/portage/cli/buy.rb#L204)). The difference: for Amazon we only *build* a URL and never make a request; for Instacart we make one documented, keyed API call to *create* the page. That's allowed because it's the service's own published interface, not automation of its site.
 
-**What's still unverified** (Phase A0 settles these before any code):
+**A0 answers** (doc-derived, not live-verified; full detail and sources in [design-log.md](../design-log.md) section 53):
 
-1. Whether an individual can get and use an Instacart Developer Platform key for personal shopping, or whether the terms limit it to approved partners. If personal use isn't allowed, Track A stops at A0.
-2. Exact request/response shape of the shopping-list tool (expected: line items of name + quantity + unit, response carries a page URL).
-3. Whether the production key needs Instacart's review, and how long that takes.
-4. Regions: Instacart is US and Canada. UK users (and Deliveroo/Just Eat) get nothing from Track A.
+1. **Personal use:** terms don't prohibit it and individuals (18+, US/Canada) may apply, but access needs an approved application and its use case; applications are currently closed, no waitlist. No key can be obtained today.
+2. **Shopping-list shape:** REST `POST https://connect.instacart.com/idp/v1/products/products_link` (dev `connect.dev.instacart.tools`), Bearer key, body `title` + `line_items[{name, quantity, unit}]`, response `{"products_link_url": ...}`. MCP tool is `create-shopping-list`; its exact params are undocumented on the pages read, so read them from `tools/list`. Prefer the REST endpoint in A1.
+3. **Production key:** needs demo approval; docs cite 30-40 days from request to production key.
+4. **Regions:** US and Canada only. UK users get nothing from Track A.
 
 ## Non-negotiable constraints
 
@@ -36,9 +36,9 @@
 
 ### Phase A0: verify terms and API shape (no code)
 
-- Read the Instacart Developer Platform terms and key-signup flow. Record answers to unverified items 1–4 above in [design-log.md](../design-log.md) as a new section.
-- With a dev key, call the shopping-list tool once against `mcp.dev.instacart.tools` and record the real request and response.
-- **Exit:** personal-use key allowed → continue to A1. Not allowed → mark Track A "blocked on Instacart terms" here and stop.
+- (Done 2026-09-29, docs only.) Read the Instacart Developer Platform terms and key-signup flow. Record answers to unverified items 1–4 above in [design-log.md](../design-log.md) as a new section.
+- (Not done: needs a key, and applications are closed.) With a dev key, call the shopping-list tool once against `mcp.dev.instacart.tools` and record the real request and response.
+- **Exit:** blocked. Terms don't forbid personal use but applications are closed, so there is no key. A1 must start with a live dev-key call by the user (recording the real `create-shopping-list` schema and response) before any code.
 
 ### Phase A1: `InstacartList` client
 
@@ -96,7 +96,9 @@ B1 gets written up as a proper phased plan once the schema exists.
 | Date | Phase | Result | Commit |
 |---|---|---|---|
 | 2026-09-29 | Plan | Written. Research: no open food-delivery agent interface; Instacart MCP is list/recipe pages only; UCP food charter has no schema. | — |
+| 2026-09-29 | A0 | Docs-only research. Terms don't bar individuals but Instacart applications are closed (no waitlist), so **Track A blocked**. Shapes recorded from docs (REST `products_link`, MCP `create-shopping-list`); production key takes 30-40 days; US/Canada only. Live call not made (no key). Design-log section 53. | see git log |
+| 2026-09-29 | B0 | Checked ucp.dev and GitHub. Food TC formed 2026-07-16; spec v2026-08-25 adds grocery readiness only. Still no food schema, no open endpoints. B1 stays blocked. | see git log |
 
 ## Restart prompt (next session)
 
-> Work Phase A0 of docs/plans/food-ordering.md on branch `plans/food-ordering`. Verify Instacart Developer Platform terms (can an individual use a key for personal shopping?), key signup, production review, regions, and the shopping-list tool's real request/response against `mcp.dev.instacart.tools`. Record findings as a new design-log section and a progress-log row. If personal use isn't allowed, mark Track A blocked. Also check the UCP food-ordering charter for a published schema and log it under B0. Commit; don't push.
+> Read docs/plans/food-ordering.md on branch `plans/food-ordering`. Track A is blocked (Instacart Developer Platform applications closed as of 2026-09-29). First re-check https://company.instacart.com/business/developers for applications reopening, and ask the user whether they hold an Instacart dev key. If yes, start A1 with a live dev-key call (`tools/list` on mcp.dev.instacart.tools, then one `create-shopping-list`, or the REST `products_link` call) and record the real request/response in the design log before writing `InstacartList`. If no, do only B0: re-check the UCP food charter and spec releases (github.com/Universal-Commerce-Protocol/ucp) for a food schema and open endpoints, log the result, and stop. Commit; don't push.

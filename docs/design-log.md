@@ -3509,3 +3509,82 @@ shopper uses this on any given site, and whether that complies with that
 site's own terms, is their call and their responsibility, not a legal
 opinion this gem is positioned to give. `legal_notice` sticks to what a
 site's terms say and stops there.
+
+## 53. Food ordering Phase A0: Instacart terms, API shape, UCP food status (2026-09-29)
+
+Research only, no code (see [plans/food-ordering.md](plans/food-ordering.md)).
+Everything below is **doc-derived, not live-verified**: no Instacart key
+exists, so no call was made to `mcp.dev.instacart.tools` or the REST host.
+
+**1. Can an individual use a key for personal shopping?** Unclear and, for
+now, moot. The
+[Developer Terms](https://docs.instacart.com/developer_platform_api/guide/terms_and_policies/developer_terms/)
+apply to "the individual or entity" using the API and don't name a
+"Partner" tier. They don't prohibit personal use, but they tie access to
+building an application that lets users reach Instacart or display its
+content, they let Instacart require an application and approve or reject
+it, and they bar applications whose main purpose is to move users off
+Instacart. The
+[developers page](https://company.instacart.com/business/developers) says
+individuals and businesses may apply (18+, US/Canada resident or
+registered business) and states the use case up front. The decisive line
+on that page: applications are **currently closed, with no waitlist**. So
+an individual can't get a key today, whatever the terms would allow. Its
+stated audience is B2C apps (meal planning, recipe, health), and Portage
+would be an unusual fit: a locally run agent tool where each user supplies
+their own key.
+
+**2. Key signup.** Apply via the Developer Platform, agree to the IDP
+terms, then create keys in the Developer Dashboard
+([Get an API key](https://docs.instacart.com/developer_platform_api/get_started/api-keys)):
+name, environment (Development or Production), permission level
+(read-only, read-write, admin). Key format `keys.<hex>`. The
+[Get started](https://docs.instacart.com/developer_platform_api/get_started/overview)
+page says access request to demo approval to production key averages
+**30-40 days**, so production needs Instacart review of a demo. No rate
+limits documented on the pages read.
+
+**3. Shopping-list shape (doc-derived).**
+- MCP ([tutorial](https://docs.instacart.com/developer_platform_api/guide/tutorials/mcp)):
+  streamable HTTP, `https://mcp.instacart.com/mcp` (dev
+  `https://mcp.dev.instacart.tools/mcp`), header `Authorization: Bearer
+  <API_KEY>`. Tools: `create-recipe` and `create-shopping-list`. The docs
+  say the agent learns input parameters from the tool schema and don't list
+  them; the MCP input and output fields are unconfirmed and A1 must read
+  them from `tools/list`.
+- REST ([reference](https://docs.instacart.com/developer_platform_api/api/products/create_shopping_list_page)):
+  `POST https://connect.instacart.com/idp/v1/products/products_link` (dev
+  `https://connect.dev.instacart.tools/idp/v1/products/products_link`),
+  Bearer auth. Body: `title` (required), `line_items` (required),
+  optional `link_type` (`shopping_list` default, or `recipe`), `image_url`,
+  `expires_in` (days, max 365), `instructions`, `landing_page_configuration`.
+  Line item: `name` (required, product search term), optional `quantity`
+  (default 1.0), `unit` (default `each`), `display_text`, `product_ids`,
+  `upcs`, `line_item_measurements`, `filters`. Response:
+  `{"products_link_url": "<url>"}`. The URL carries affiliate params
+  (`aff_id`, `offer_id`, `affiliate_platform=idp_partner`).
+- Implication: the REST endpoint has a fully documented shape and is the
+  simpler client (plain JSON POST, one response field) than JSON-RPC over
+  streamable HTTP. Prefer REST in A1 unless MCP is needed.
+
+**4. Regions.** US and Canada only (applicant must be a US/Canada resident
+or registered business; Instacart Marketplace itself is US/Canada). UK is
+out of scope.
+
+**5. B0: UCP food charter.** Still no food schema and no open endpoints.
+Food Technical Council formed 2026-07-16 (Block/Square, DoorDash, Google,
+Toast, Uber Eats;
+[announcement](https://github.com/Universal-Commerce-Protocol/ucp/discussions/593)),
+which names no schema or timeline. Latest spec release
+[v2026-08-25](https://github.com/Universal-Commerce-Protocol/ucp/releases)
+adds grocery readiness (location search/lookup, operating hours,
+fulfillment location context, fractional quantities) and multi-vertical
+refactoring, with no restaurant-delivery extension. Roadmap:
+[UCP Checker](https://ucpchecker.com/blog/ucp-food-ordering-charter-roadmap)
+("no schema to validate against"). Neither B1 unblock signal is met. The
+grocery additions in v2026-08-25 may matter to retail checkout support
+later and are worth a separate look.
+
+**Verdict.** Track A is **blocked on Instacart's closed applications**, not
+on a terms prohibition. Revisit when applications reopen, or if the user
+already holds a key.
