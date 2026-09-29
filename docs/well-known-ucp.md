@@ -41,17 +41,44 @@ GET https://your-shop.myshopify.com/.well-known/ucp
 ```
 
 ```json
-// GET /.well-known/ucp — Shopify's native manifest
+// GET /.well-known/ucp — Shopify's native manifest. Trimmed from a live
+// store's, fetched 2026-09-29. Every entry also has "spec" and "schema"
+// URLs, and some have "extends", "requires" or "config". Those are left out.
 {
-  "ucp_version": "2026-01-23",
-  "business": { "name": "Your Store" },
-  "capabilities": [
-    { "name": "dev.ucp.shopping.checkout", "version": "1" },
-    { "name": "dev.ucp.shopping.order", "version": "1" }
-  ],
-  "payment_handlers": [],
-  "signing_keys": []
+  "ucp": {
+    "version": "2026-08-25",
+    "supported_versions": {
+      "2026-04-08": "https://your-shop.myshopify.com/.well-known/ucp/2026-04-08",
+      "2026-01-23": "https://your-shop.myshopify.com/.well-known/ucp/2026-01-23"
+    },
+    "services": {
+      "dev.ucp.shopping": [
+        { "version": "2026-08-25", "transport": "mcp", "endpoint": "https://your-shop.myshopify.com/api/ucp/mcp" },
+        { "version": "2026-04-08", "transport": "embedded" }
+      ]
+    },
+    "capabilities": {
+      "dev.ucp.shopping.catalog.search": [{ "version": "2026-08-25" }],
+      "dev.ucp.shopping.catalog.lookup": [{ "version": "2026-08-25" }],
+      "dev.shopify.catalog": [{ "version": "2026-08-25" }],
+      "dev.ucp.shopping.cart": [{ "version": "2026-08-25" }],
+      "dev.ucp.shopping.checkout": [{ "version": "2026-08-25" }],
+      "dev.ucp.shopping.fulfillment": [{ "version": "2026-08-25" }],
+      "dev.ucp.shopping.discount": [{ "version": "2026-08-25" }],
+      "dev.ucp.shopping.order": [{ "version": "2026-08-25" }],
+      "dev.ucp.common.identity_linking": [{ "version": "2026-08-25" }]
+    },
+    "payment_handlers": {
+      "com.google.pay": [{ "id": "gpay", "version": "2026-01-11" }],
+      "dev.shopify.card": [{ "id": "shopify.card", "version": "2026-01-15" }],
+      "dev.shopify.shop_pay": [{ "id": "shop_pay", "version": "2026-04-08" }]
+    }
+  }
 }
 ```
 
-Two gaps this leaves, both of which `Portage::Ucp::Manifest` closes: `signing_keys` is always empty — Shopify's app doesn't generate or hold keys, so an agent that verifies manifest authenticity (Google's do) treats it as unverified — and its `ucp_version` trails the spec this gem targets (`2026-04-08`). `dev.ucp.shopping.cart` and `dev.ucp.shopping.catalog` aren't advertised at all — that's the gap `portage-ucp-shopify`'s `Adapter` fills, on top of the same `/.well-known/ucp` path, just self-hosted and signed.
+Everything nests under `ucp`, and `services`, `capabilities` and `payment_handlers` are keyed by name. `Portage::Ucp::Manifest` has used the same nesting, with capabilities keyed by name, since `portage-ucp` 0.8.0. `Portage::Ucp::Client.discover` reads both this shape and the older flat one.
+
+The gap is signing. There's no `signing_keys` and no signature, so an agent has nothing to verify the manifest against. `Portage::Ucp::Manifest` emits `signing_keys`, and signs the body when you give it a signer.
+
+Cart and catalog are both advertised. Shopify splits catalog into `dev.ucp.shopping.catalog.search` and `dev.ucp.shopping.catalog.lookup`. `Portage::Ucp::Manifest` advertises one `dev.ucp.shopping.catalog` for all three catalog actions (see the [tool-gating investigation](ucp-tool-gating-investigation.md)). The version runs ahead of this gem, too: Shopify serves `2026-08-25`, and `Portage::Ucp::Manifest` reports `2026-04-08` (`UCP_VERSION`).
