@@ -2,6 +2,7 @@ require "portage/cli"
 require "portage/ucp"
 require "portage/ucp/decision"
 require "tmpdir"
+require "stringio"
 require "webmock/rspec"
 
 WebMock.disable_net_connect!
@@ -140,6 +141,16 @@ RSpec.configure do |config|
       kwargs = { path: @policy_path }.merge(kwargs) unless kwargs.key?(:path)
       original.call(**kwargs)
     end
+
+    # HumanPrompt (docs/plans/human-pick-and-approve.md Phase 2) — no spec
+    # ever opens the real /dev/tty: by default there's "no controlling
+    # terminal", so `--via auto` resolves to `agent` and `--via tty` fails
+    # cleanly. A spec that wants a person at the terminal stubs
+    # open_terminal to return a FakeTerminal (or injects `terminal:`).
+    allow(Portage::Cli::HumanPrompt).to receive(:open_terminal).and_raise(Errno::ENXIO)
+
+    # ProductPage — `pick --view`/`approve --view` never open a real browser.
+    allow_any_instance_of(Portage::Cli::ProductPage).to receive(:system).and_return(true)
   end
 
   # `Cli.apply_proxy_settings` (docs/plans/proxy-support.md Phase 2) sets
@@ -161,4 +172,18 @@ def with_env(vars)
   yield
 ensure
   previous.each { |k, v| v.nil? ? ENV.delete(k) : ENV[k] = v }
+end
+
+# A stand-in for /dev/tty (HumanPrompt's `terminal:`): answers each question
+# with the next scripted line, and keeps everything written to it.
+class FakeTerminal
+  def initialize(*answers)
+    @input = StringIO.new(answers.map { |answer| "#{answer}\n" }.join)
+    @output = StringIO.new
+  end
+
+  def gets = @input.gets
+  def print(*) = @output.print(*)
+  def puts(*) = @output.puts(*)
+  def written = @output.string
 end

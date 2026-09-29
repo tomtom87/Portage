@@ -13,6 +13,11 @@ RSpec.describe Portage::Cli do
       .and_return(instance_double(Portage::Cli::History, record_search: nil, record_purchase: nil))
   end
 
+  # docs/plans/human-pick-and-approve.md Phase 2: `--require-approval`
+  # defaults to `any`. Specs of a `--yes` purchase itself (not of the gate)
+  # set it `off`, which is the behaviour they were written against.
+  def require_approval(level) = Portage::Ucp::Policy.load.set("require_approval", level)
+
   describe ".run" do
     it "prints usage and returns 1 for an unknown command" do
       expect { expect(described_class.run(["nope"])).to eq(1) }.to output.to_stderr
@@ -270,7 +275,10 @@ RSpec.describe Portage::Cli do
     end
     let(:found) { { query: "cold", candidates: [], stores: [], offers: [offer], message: "Found 1 offer(s)." } }
 
-    before { allow($stdin).to receive(:tty?).and_return(false) }
+    before do
+      allow($stdin).to receive(:tty?).and_return(false)
+      require_approval("off")
+    end
 
     def stub_buy
       captured = nil
@@ -301,8 +309,8 @@ RSpec.describe Portage::Cli do
       expect(Portage::Cli::Buy).not_to have_received(:new)
     end
 
-    it "buys the picked offer by product id when a human picks one" do
-      allow($stdin).to receive_messages(tty?: true, gets: "1\n")
+    it "buys the picked offer by product id when a human picks one at the terminal" do
+      allow(Portage::Cli::HumanPrompt).to receive(:open_terminal).and_return(FakeTerminal.new("1"))
       allow(Portage::Cli::Find).to receive(:new).and_return(instance_double(Portage::Cli::Find, call: found))
       captured = stub_buy
 
@@ -311,14 +319,24 @@ RSpec.describe Portage::Cli do
       expect(captured.call).to include(url: "https://shop.example", product_id: "p1", query: "cold")
     end
 
-    it "quits without buying on an empty or out-of-range pick" do
-      allow($stdin).to receive_messages(tty?: true, gets: "\n")
+    it "quits without buying on an empty pick" do
+      allow(Portage::Cli::HumanPrompt).to receive(:open_terminal).and_return(FakeTerminal.new(""))
       allow(Portage::Cli::Find).to receive(:new).and_return(instance_double(Portage::Cli::Find, call: found))
       allow(Portage::Cli::Buy).to receive(:new)
 
       capture_stdout { described_class.run(["buy", "--query", "cold"]) }
 
       expect(Portage::Cli::Buy).not_to have_received(:new)
+    end
+
+    it "asks again after an out-of-range pick" do
+      allow(Portage::Cli::HumanPrompt).to receive(:open_terminal).and_return(FakeTerminal.new("9", "1"))
+      allow(Portage::Cli::Find).to receive(:new).and_return(instance_double(Portage::Cli::Find, call: found))
+      captured = stub_buy
+
+      capture_stdout { described_class.run(["buy", "--query", "cold", "--yes"]) }
+
+      expect(captured.call).to include(product_id: "p1", yes: true)
     end
 
     it "still needs a url or a query" do
@@ -471,6 +489,8 @@ RSpec.describe Portage::Cli do
     end
 
     describe "--quote" do
+      before { require_approval("off") }
+
       it "refuses an unknown quote with a quote_not_found outcome" do
         calls = stub_buys(purchased)
 
@@ -1424,6 +1444,487 @@ RSpec.describe Portage::Cli do
       expect(Portage::Cli::SetupWizard).not_to receive(:new)
 
       capture_stdout { described_class.run(%w[setup]) }
+    end
+  end
+
+  describe "human pick and approve (docs/plans/human-pick-and-approve.md Phase 2)" do
+    let(:quotes) { Portage::Cli::Quotes.new }
+    let(:dry_run) do
+      report.merge(outcome: "dry_run", checkout_id: "chk_1", checkout_status: "ready_for_complete", currency: "USD",
+                   totals: [{ "type" => "total", "amount" => 2400 }],
+                   items: [{ id: "v1", title: "Cold Brew", quantity: 1 }])
+    end
+    let(:purchased) { dry_run.merge(outcome: "purchased") }
+    let(:offers) do
+      [{ offer_ref: "of_aaaaaa", store: "https://shop.example", source: "brave", checkout: true, product_id: "p1",
+         title: "Cold Brew", amount: 2400, currency: "USD", url: "https://shop.example/products/cold" },
+       { offer_ref: "of_bbbbbb", store: "https://other.example", source: "brave", checkout: false, product_id: "p2",
+         title: "Cold Brew Can", amount: nil, currency: nil, url: "https://evil.example/cold" }]
+    end
+    let(:found) { { query: "cold", candidates: [], stores: [], offers: offers, message: "Found 2 offer(s)." } }
+
+    # A real History under this example's tmpdir, instead of the file-wide
+    # instance_double, so a search saved by one command is read by the next.
+    around { |example| Dir.mktmpdir { |dir| @history_path = File.join(dir, "history.json") and example.run } }
+
+    before do
+      allow(Portage::Cli::History).to receive(:new).and_wrap_original do |original, **|
+        original.call(path: @history_path)
+      end
+      allow(RbConfig::CONFIG).to receive(:[]).and_call_original
+      allow(RbConfig::CONFIG).to receive(:[]).with("host_os").and_return("darwin23")
+    end
+
+    def json_of(status: nil)
+      result = nil
+      out = capture_stdout { result = yield }
+      expect(result).to eq(status) if status
+      JSON.parse(out, symbolize_names: true)
+    end
+
+    def stub_buys(*reports)
+      calls = []
+      queue = reports.dup
+      allow(Portage::Cli::Buy).to receive(:new) { |**opts|
+        calls << opts
+        instance_double(Portage::Cli::Buy, call: queue.shift || reports.last)
+      }
+      calls
+    end
+
+    def search!
+      allow(Portage::Cli::Find).to receive(:new).and_return(instance_double(Portage::Cli::Find, call: found))
+      json_of { described_class.run(%w[find --query cold --json]) }
+    end
+
+    def saved_quote(**fields)
+      quotes.create(store: "https://shop.example", product_id: "p1", qty: 2, total: 2400, currency: "USD",
+                    query: "cold", title: "Cold Brew", url: "https://shop.example/products/cold", **fields)
+    end
+
+    def at_terminal(*answers)
+      FakeTerminal.new(*answers).tap do |terminal|
+        allow(Portage::Cli::HumanPrompt).to receive(:open_terminal).and_return(terminal)
+      end
+    end
+
+    describe "find and compare save a search_id" do
+      it "reports the saved search's id with find's offers" do
+        out = search!
+
+        expect(out[:search_id]).to match(/\Ase_[0-9a-f]{8}\z/)
+        expect(Portage::Cli::History.new.search(out[:search_id])["offers"].map { |o| o["offer_ref"] })
+          .to eq(%w[of_aaaaaa of_bbbbbb])
+      end
+
+      it "saves compare's offers with their refs, searched by the compared product's title" do
+        compared = { query: "Cold Brew", candidates: [], stores: [], offers: [offers.last.merge(match: :likely)],
+                     message: "Found 1 offer(s)." }
+        allow(Portage::Cli::Compare).to receive(:new).and_return(instance_double(Portage::Cli::Compare,
+                                                                                 call: compared))
+
+        out = json_of { described_class.run(%w[compare https://shop.example --product-id p1 --json]) }
+
+        expect(out[:search_id]).to match(/\Ase_/)
+        expect(Portage::Cli::History.new.offer("of_bbbbbb")).to include("store" => "https://other.example",
+                                                                        "query" => "Cold Brew")
+      end
+    end
+
+    describe "portage pick" do
+      it "hands the agent render-ready choices, each with its url, plus the compare choice" do
+        search_id = search![:search_id]
+
+        out = json_of(status: 0) { described_class.run(%w[pick --json]) }
+
+        expect(out).to include(outcome: "needs_pick", search_id: search_id, query: "cold")
+        expect(out[:choices].map { |c| c[:ref] }).to eq(%w[of_aaaaaa of_bbbbbb compare])
+        expect(out[:choices].first).to include(label: "https://shop.example — Cold Brew — 24.00 USD",
+                                               url: "https://shop.example/products/cold", product_id: "p1")
+        expect(out[:choices].last).to include(label: "Compare an offer across stores", url: nil)
+        expect(out[:message]).to include("--choose REF")
+      end
+
+      it "records a relayed --choose as picked by agent_relayed" do
+        search_id = search![:search_id]
+
+        argv = ["pick", "--search", search_id, "--choose", "of_bbbbbb", "--json"]
+        out = json_of(status: 0) { described_class.run(argv) }
+
+        expect(out).to include(outcome: "picked", offer_ref: "of_bbbbbb", store: "https://other.example",
+                               product_id: "p2", by: "agent_relayed")
+      end
+
+      it "refuses a --choose that isn't one of the search's offers" do
+        search!
+
+        out = json_of(status: 1) { described_class.run(%w[pick --choose of_zzzzzz --json]) }
+
+        expect(out[:outcome]).to eq("offer_not_found")
+      end
+
+      it "reports search_not_found before any search was saved" do
+        out = json_of(status: 1) { described_class.run(%w[pick --json]) }
+
+        expect(out[:outcome]).to eq("search_not_found")
+      end
+
+      it "fails cleanly with no_terminal when --via tty has no controlling terminal" do
+        search!
+
+        out = json_of(status: 1) { described_class.run(%w[pick --via tty --json]) }
+
+        expect(out[:outcome]).to eq("no_terminal")
+        expect(out[:message]).to include("/dev/tty")
+      end
+
+      it "asks the person at the terminal and records their pick as by: person" do
+        search!
+        terminal = at_terminal("2")
+
+        text = capture_stdout { expect(described_class.run(%w[pick])).to eq(0) }
+
+        expect(terminal.written).to include("1. https://shop.example — Cold Brew — 24.00 USD",
+                                            "3. Compare an offer across stores")
+        expect(text).to include("[picked]", "portage buy --offer of_bbbbbb --dry-run")
+      end
+
+      it "reports cancelled on a blank answer" do
+        search!
+        at_terminal("")
+
+        out = json_of(status: 1) { described_class.run(%w[pick --via tty --json]) }
+
+        expect(out[:outcome]).to eq("cancelled")
+      end
+
+      it "opens the product page on `v N` and asks again — viewing is never the answer" do
+        search!
+        terminal = at_terminal("v 1", "1")
+        allow_any_instance_of(Portage::Cli::ProductPage).to receive(:system).and_return(true)
+
+        out = json_of { described_class.run(%w[pick --via tty --json]) }
+
+        expect(terminal.written).to include("Opened https://shop.example/products/cold.")
+        expect(out).to include(outcome: "picked", offer_ref: "of_aaaaaa", by: "person")
+      end
+
+      it "runs compare on the offer named after the compare choice, then picks from its results" do
+        search!
+        at_terminal("3", "1", "2")
+        compared = { query: "Cold Brew", offers: [{ offer_ref: "of_cccccc", store: "https://third.example",
+                                                    product_id: "p9", title: "Cold Brew", amount: 2000,
+                                                    currency: "USD", checkout: true, url: nil }],
+                     message: "Found 1 offer(s) for \"Cold Brew\"." }
+        allow(Portage::Cli::Compare).to receive(:new).and_return(instance_double(Portage::Cli::Compare,
+                                                                                 call: compared))
+
+        out = json_of { described_class.run(%w[pick --via tty --json]) }
+
+        expect(Portage::Cli::Compare).to have_received(:new)
+          .with(origin_url: "https://shop.example", origin_product_id: "p1")
+        expect(out).to include(outcome: "picked", offer_ref: "of_cccccc", by: "person")
+        expect(Portage::Cli::History.new.offer("of_cccccc")).to include("query" => "Cold Brew")
+      end
+
+      it "compares from --compare REF for the agent, the compared offer first" do
+        search!
+        compared = { query: "Cold Brew", offers: [offers.last], message: "Found 1 offer(s)." }
+        allow(Portage::Cli::Compare).to receive(:new).and_return(instance_double(Portage::Cli::Compare,
+                                                                                 call: compared))
+
+        out = json_of(status: 0) { described_class.run(%w[pick --compare of_aaaaaa --json]) }
+
+        expect(out[:outcome]).to eq("needs_pick")
+        expect(out[:choices].map { |c| c[:ref] }).to eq(%w[of_aaaaaa of_bbbbbb compare])
+        expect(Portage::Cli::History.new.offer("of_aaaaaa")).to include("query" => "cold")
+      end
+
+      it "--view opens the offer's page and does nothing else" do
+        search!
+        opened = []
+        allow_any_instance_of(Portage::Cli::ProductPage).to receive(:system) { |_page, *args| opened << args }
+
+        out = json_of(status: 0) { described_class.run(%w[pick --view of_aaaaaa --json]) }
+
+        expect(out).to include(outcome: "viewed", offer_ref: "of_aaaaaa", opened: true)
+        expect(opened).to eq([["open", "https://shop.example/products/cold"]])
+      end
+
+      it "--view refuses a url that isn't on the offer's store host (view_refused)" do
+        search!
+        opened = []
+        allow_any_instance_of(Portage::Cli::ProductPage).to receive(:system) { |_page, *args| opened << args }
+
+        out = json_of(status: 1) { described_class.run(%w[pick --view of_bbbbbb --json]) }
+
+        expect(out[:outcome]).to eq("view_refused")
+        expect(out[:message]).to include("evil.example")
+        expect(opened).to be_empty
+      end
+
+      it "refuses an unknown --via" do
+        out = json_of(status: 1) { described_class.run(%w[pick --via dialog --json]) }
+
+        expect(out[:outcome]).to eq("invalid_option")
+      end
+    end
+
+    describe "portage approve" do
+      it "hands the agent a needs_approval summary with the product page" do
+        quote = saved_quote
+
+        out = json_of(status: 0) { described_class.run(["approve", quote["quote_id"], "--json"]) }
+
+        expect(out).to include(outcome: "needs_approval", quote_id: quote["quote_id"])
+        expect(out[:summary]).to include(title: "Cold Brew", store: "https://shop.example", qty: 2, total: 2400,
+                                         total_display: "24.00 USD", url: "https://shop.example/products/cold")
+        expect(out[:message]).to include("--relayed-yes", "portage buy --quote #{quote['quote_id']} --yes")
+      end
+
+      it "falls back to the offer's title and url for a quote saved without them" do
+        search!
+        quote = quotes.create(store: "https://shop.example", product_id: "p1", qty: 1, total: 2400,
+                              currency: "USD", offer_ref: "of_aaaaaa")
+
+        out = json_of { described_class.run(["approve", quote["quote_id"], "--json"]) }
+
+        expect(out[:summary]).to include(title: "Cold Brew", url: "https://shop.example/products/cold")
+      end
+
+      it "records a relayed yes as approved_by agent_relayed" do
+        quote = saved_quote
+
+        out = json_of(status: 0) { described_class.run(["approve", quote["quote_id"], "--relayed-yes", "--json"]) }
+
+        expect(out).to include(outcome: "approved", approved_by: "agent_relayed")
+        expect(quotes.find(quote["quote_id"])).to include("approved" => true, "approved_by" => "agent_relayed")
+      end
+
+      it "records a yes typed at the terminal as approved_by person, after an optional `v`" do
+        quote = saved_quote
+        terminal = at_terminal("v", "y")
+
+        text = capture_stdout { expect(described_class.run(["approve", quote["quote_id"]])).to eq(0) }
+
+        expect(terminal.written).to include("2 × Cold Brew from https://shop.example for 24.00 USD",
+                                            "Opened https://shop.example/products/cold.")
+        expect(text).to include("[approved]")
+        expect(quotes.find(quote["quote_id"])).to include("approved_by" => "person", "approved_at" => Integer)
+      end
+
+      it "reports cancelled and approves nothing on a no" do
+        quote = saved_quote
+        at_terminal("n")
+
+        out = json_of(status: 1) { described_class.run(["approve", quote["quote_id"], "--via", "tty", "--json"]) }
+
+        expect(out[:outcome]).to eq("cancelled")
+        expect(quotes.find(quote["quote_id"])).to include("approved" => false)
+      end
+
+      it "reuses quote_not_found and quote_used" do
+        used = saved_quote
+        quotes.consume(used["quote_id"])
+
+        missing = json_of(status: 1) { described_class.run(%w[approve qt_000000000000 --json]) }
+        spent = json_of(status: 1) { described_class.run(["approve", used["quote_id"], "--relayed-yes", "--json"]) }
+
+        expect([missing[:outcome], spent[:outcome]]).to eq(%w[quote_not_found quote_used])
+        expect(quotes.find(used["quote_id"])).not_to have_key("approved_by")
+      end
+
+      it "--view opens the page without approving; an off-host url is view_refused" do
+        quote = saved_quote
+        bad = saved_quote(url: "javascript:alert(1)")
+
+        viewed = json_of(status: 0) { described_class.run(["approve", quote["quote_id"], "--view", "--json"]) }
+        refused = json_of(status: 1) { described_class.run(["approve", bad["quote_id"], "--view", "--json"]) }
+
+        expect(viewed).to include(outcome: "viewed", quote_id: quote["quote_id"])
+        expect(refused[:outcome]).to eq("view_refused")
+        expect(quotes.find(quote["quote_id"])).to include("approved" => false)
+      end
+
+      it "needs a QUOTE_ID" do
+        expect { expect(described_class.run(%w[approve])).to eq(1) }.to output(/QUOTE_ID/).to_stderr
+      end
+    end
+
+    describe "the --require-approval gate on buy --yes" do
+      it "under the default (any), runs a --yes with no quote as a dry run and returns needs_approval" do
+        calls = stub_buys(dry_run)
+
+        out = json_of(status: 0) { described_class.run(%w[buy shop.example --query cold --yes --json]) }
+
+        expect(calls.length).to eq(1)
+        expect(calls.first).to include(yes: false, dry_run: true)
+        expect(out).to include(outcome: "needs_approval", checkout_id: "chk_1")
+        expect(out[:quote_id]).to match(/\Aqt_/)
+        expect(out[:summary]).to include(quote_id: out[:quote_id], title: "Cold Brew", total_display: "24.00 USD")
+        expect(out[:message]).to include("Nothing was bought", "portage approve #{out[:quote_id]}",
+                                         "portage buy --quote #{out[:quote_id]} --yes")
+        expect(quotes.find(out[:quote_id])).to include("approved" => false, "title" => "Cold Brew")
+      end
+
+      it "says the same in plain output" do
+        stub_buys(dry_run)
+
+        text = capture_stdout { described_class.run(%w[buy shop.example --query cold --yes]) }
+
+        expect(text).to include("[needs_approval]", "approve: 1 × Cold Brew from https://shop.example for 24.00 USD")
+      end
+
+      it "reports a gated run that never reached a priced checkout as it is" do
+        stub_buys(report.merge(outcome: "no_match"))
+
+        out = json_of { described_class.run(%w[buy shop.example --query cold --yes --json]) }
+
+        expect(out[:outcome]).to eq("no_match")
+      end
+
+      it "gates buy --offer REF --yes too, and the quote keeps the offer's ref and page" do
+        search!
+        stub_buys(dry_run)
+
+        out = json_of { described_class.run(%w[buy --offer of_aaaaaa --yes --json]) }
+
+        expect(out[:outcome]).to eq("needs_approval")
+        expect(quotes.find(out[:quote_id])).to include("offer_ref" => "of_aaaaaa",
+                                                       "url" => "https://shop.example/products/cold")
+      end
+
+      it "gates buy --query's terminal pick too (a pick is never asked for under --json)" do
+        allow(Portage::Cli::Find).to receive(:new).and_return(instance_double(Portage::Cli::Find, call: found))
+        at_terminal("1")
+        calls = stub_buys(dry_run)
+
+        text = capture_stdout { described_class.run(%w[buy --query cold --yes]) }
+
+        expect(text).to include("[needs_approval]")
+        expect(calls.first).to include(url: "https://shop.example", product_id: "p1", dry_run: true, yes: false)
+      end
+
+      it "never gates a --dry-run" do
+        calls = stub_buys(dry_run)
+
+        out = json_of { described_class.run(%w[buy shop.example --query cold --yes --dry-run --json]) }
+
+        expect(out[:outcome]).to eq("dry_run")
+        expect(calls.first).to include(yes: true, dry_run: true)
+      end
+
+      it "refuses an unapproved --quote with needs_approval and that quote's id, without running Buy" do
+        quote = saved_quote
+        calls = stub_buys(purchased)
+
+        out = json_of(status: 0) { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
+
+        expect(out).to include(outcome: "needs_approval", quote_id: quote["quote_id"], checkout: false)
+        expect(calls).to be_empty
+        expect(quotes.find(quote["quote_id"])).not_to have_key("used_at")
+      end
+
+      it "buys an approved --quote under any, relayed or not" do
+        quote = saved_quote
+        quotes.approve(quote["quote_id"], by: "agent_relayed")
+        calls = stub_buys(purchased)
+
+        out = json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
+
+        expect(out[:outcome]).to eq("purchased")
+        expect(calls.first).to include(yes: true, quote_total: 2400)
+      end
+
+      it "under person, refuses a relayed approval and buys only the person's own" do
+        require_approval("person")
+        relayed = saved_quote
+        quotes.approve(relayed["quote_id"], by: "agent_relayed")
+        own = saved_quote
+        quotes.approve(own["quote_id"], by: "person")
+        calls = stub_buys(purchased)
+
+        refused = json_of { described_class.run(["buy", "--quote", relayed["quote_id"], "--yes", "--json"]) }
+        bought = json_of { described_class.run(["buy", "--quote", own["quote_id"], "--yes", "--json"]) }
+
+        expect(refused).to include(outcome: "needs_approval", quote_id: relayed["quote_id"])
+        expect(refused[:message]).to include("approved by agent_relayed", "--via tty")
+        expect(bought[:outcome]).to eq("purchased")
+        expect(calls.length).to eq(1)
+      end
+
+      it "under person, gates a --yes with no quote the same way" do
+        require_approval("person")
+        calls = stub_buys(dry_run)
+
+        out = json_of { described_class.run(%w[buy shop.example --query cold --yes --json]) }
+
+        expect(out[:outcome]).to eq("needs_approval")
+        expect(calls.first).to include(dry_run: true, yes: false)
+      end
+
+      it "under off, --yes alone buys as before" do
+        require_approval("off")
+        calls = stub_buys(purchased)
+
+        out = json_of { described_class.run(%w[buy shop.example --query cold --yes --json]) }
+
+        expect(out[:outcome]).to eq("purchased")
+        expect(calls.first).to include(yes: true, dry_run: false)
+      end
+    end
+  end
+
+  describe "policy --require-approval (docs/plans/human-pick-and-approve.md Phase 2)" do
+    def persisted = JSON.parse(File.read(@policy_path))
+
+    def level_after(*args)
+      capture_stdout { @status = described_class.run(["policy", "set", *args]) }
+      Portage::Cli::ApprovalPolicy.level
+    end
+
+    it "shows the default, marked as such, in text and JSON" do
+      text = capture_stdout { described_class.run(%w[policy show]) }
+      json = JSON.parse(capture_stdout { described_class.run(%w[policy show --json]) })
+
+      expect(text).to include("no policy configured", "require_approval: any (default)")
+      expect(json).to include("require_approval" => "any")
+    end
+
+    it "raises the level without asking" do
+      expect(level_after("--require-approval", "person")).to eq("person")
+      expect(@status).to eq(0)
+      expect(persisted).to include("require_approval" => "person")
+    end
+
+    it "refuses to lower it with no terminal, and changes nothing else in the same call" do
+      require_approval("person")
+
+      expect { expect(level_after("--require-approval", "off", "--allow", "shop.example")).to eq("person") }
+        .to output(/needs a yes typed at a terminal/).to_stderr
+      expect(@status).to eq(1)
+      expect(persisted).not_to have_key("merchant_allowlist")
+    end
+
+    it "lowers it after a yes typed at the terminal" do
+      require_approval("person")
+      terminal = FakeTerminal.new("y")
+      allow(Portage::Cli::HumanPrompt).to receive(:open_terminal).and_return(terminal)
+
+      expect(level_after("--require-approval", "any")).to eq("any")
+      expect(terminal.written).to include("Lower require_approval from person to any?")
+    end
+
+    it "keeps the level on a no" do
+      allow(Portage::Cli::HumanPrompt).to receive(:open_terminal).and_return(FakeTerminal.new("n"))
+
+      expect { expect(level_after("--require-approval", "off")).to eq("any") }.to output(/left at any/).to_stderr
+      expect(@status).to eq(1)
+    end
+
+    it "refuses an unknown level" do
+      expect { expect(described_class.run(%w[policy set --require-approval sometimes])).to eq(1) }
+        .to output(/invalid argument/).to_stderr
     end
   end
 

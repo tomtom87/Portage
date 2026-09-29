@@ -20,7 +20,7 @@ RSpec.describe Portage::Cli::Quotes do
     expect(quotes.find(quote["quote_id"])).to eq(
       "quote_id" => quote["quote_id"], "offer_ref" => "of_aaaaaa", "store" => "https://shop.example",
       "product_id" => "p1", "query" => "cold", "qty" => 2, "total" => 4800, "currency" => "USD",
-      "created_at" => 1_700_000_000, "approved" => false
+      "title" => nil, "url" => nil, "created_at" => 1_700_000_000, "approved" => false
     )
     expect(File).to exist(File.join(@dir, "#{quote['quote_id']}.json"))
   end
@@ -36,6 +36,33 @@ RSpec.describe Portage::Cli::Quotes do
     quotes(now: Time.at(1_700_000_500)).consume(id)
 
     expect(quotes.find(id)).to include("used_at" => 1_700_000_500, "total" => 4800)
+  end
+
+  it "keeps the title and product page it was given" do
+    quote = create(title: "Cold Brew", url: "https://shop.example/products/cold")
+
+    expect(quotes.find(quote["quote_id"])).to include("title" => "Cold Brew", "url" => "https://shop.example/products/cold")
+  end
+
+  it "records who approved a quote, and when" do
+    id = create["quote_id"]
+
+    approved = quotes(now: Time.at(1_700_000_100)).approve(id, by: "agent_relayed")
+
+    expect(approved).to include("approved" => true, "approved_by" => "agent_relayed", "approved_at" => 1_700_000_100)
+    expect(quotes.find(id)).to include("approved_by" => "agent_relayed")
+  end
+
+  it "never lets a relayed yes downgrade the person's own approval" do
+    id = create["quote_id"]
+    quotes.approve(id, by: "person")
+
+    expect(quotes.approve(id, by: "agent_relayed")).to include("approved_by" => "person")
+    expect(quotes.find(id)).to include("approved_by" => "person")
+  end
+
+  it "returns nil when approving an unknown quote" do
+    expect(quotes.approve("qt_000000000000", by: "person")).to be_nil
   end
 
   it "ignores consuming an unknown quote" do

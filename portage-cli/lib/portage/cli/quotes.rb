@@ -23,13 +23,17 @@ module Portage
       end
 
       # @param total [Integer, nil] minor units of `currency`.
+      # @param title [String, nil] what the checkout holds, for `portage
+      #   approve`'s summary.
+      # @param url [String, nil] the offer's product page, for `approve --view`.
       # @return [Hash, nil] the saved quote (string keys, `quote_id` set), or
       #   nil when it couldn't be written — a quote that can't be saved just
       #   isn't offered, never a failed dry run.
-      def create(store:, product_id:, qty:, total:, currency:, query: nil, offer_ref: nil)
+      def create(store:, product_id:, qty:, total:, currency:, query: nil, offer_ref: nil, title: nil, url: nil)
         quote = { "quote_id" => "qt_#{SecureRandom.hex(6)}", "offer_ref" => offer_ref, "store" => store,
                   "product_id" => product_id, "query" => query, "qty" => qty, "total" => total,
-                  "currency" => currency, "created_at" => @now, "approved" => false }
+                  "currency" => currency, "title" => title, "url" => url, "created_at" => @now,
+                  "approved" => false }
         write(quote)
       end
 
@@ -41,6 +45,19 @@ module Portage
         parsed if parsed.is_a?(Hash)
       rescue StandardError
         nil
+      end
+
+      # Records the person's yes to this quote's total
+      # (docs/plans/human-pick-and-approve.md Phase 2): `by` is "person" for
+      # a yes typed at the tty, "agent_relayed" for one an agent passed on.
+      # A relayed yes never downgrades a quote the person already approved.
+      # @return [Hash, nil] the updated quote, nil when unknown or unwritable.
+      def approve(quote_id, by:)
+        quote = find(quote_id)
+        return nil unless quote
+        return quote if quote["approved_by"] == "person"
+
+        write(quote.merge("approved" => true, "approved_by" => by, "approved_at" => @now))
       end
 
       # Marks the quote spent. Best-effort, like every other local record.

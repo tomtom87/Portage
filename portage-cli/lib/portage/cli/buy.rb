@@ -10,6 +10,7 @@ require_relative "setting"
 require_relative "decisions"
 require_relative "confidence_check"
 require_relative "checkout_handoff"
+require_relative "money"
 require_relative "notifier"
 require_relative "handoff_only"
 require_relative "offer_sources"
@@ -1010,10 +1011,11 @@ module Portage
       end
 
       def quote_changed_message(total, currency)
-        format_money = ->(amount, cur) { amount ? "#{format('%.2f', amount / 100.0)} #{cur}".strip : "unknown" }
-        "The price changed since the quote (was #{format_money.call(@quote_total, @quote_currency)}, " \
-          "now #{format_money.call(total, currency)}) — nothing was bought."
+        "The price changed since the quote (was #{quoted_amount(@quote_total, @quote_currency)}, " \
+          "now #{quoted_amount(total, currency)}) — nothing was bought."
       end
+
+      def quoted_amount(amount, currency) = amount ? Money.format_amount(amount, currency) : "unknown"
 
       # Hand off vs. keep going is Decisions.escalation's call
       # (docs/plans/system-one-decision-layer.md § Responsibilities 2): a
