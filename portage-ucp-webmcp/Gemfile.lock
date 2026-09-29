@@ -18,7 +18,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-webmcp (0.1.1)
+    portage-ucp-webmcp (0.2.0)
       portage-ucp (~> 0.10)
       portage-ucp-client (~> 0.6, >= 0.6.2)
       rack (~> 3.0)

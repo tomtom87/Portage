@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-29
+
 - Fixes a `NoMethodError` at launch: `exe/portage-ucp-woocommerce` handed
   the server `Server.build(adapter:).start`, but `Server.build` returns a
   plain `MCP::Server` (mcp gem 0.25.0), which has no `#start` — only
