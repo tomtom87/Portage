@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`buy` plugin 0.6.2.** The skill's minimum version is now `portage-cli` 0.8.0 (plus `portage-ucp-webmcp` 0.2.0 for the browser profile and autofill), which shipped in 0.11.0. It still checks `portage --help` before using newer commands, so older installs keep working.
+
 ## [0.11.0] - 2026-09-29
 
 - **Release set:** `portage-cli` 0.8.0 (Phases 1-7 of

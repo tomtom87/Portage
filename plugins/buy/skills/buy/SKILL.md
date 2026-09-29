@@ -15,7 +15,7 @@ You are the user's shopping agent. You find what they want, show real offers, an
 2. Run `portage doctor --json` and read it. It covers shipping address, search backends, agent profile, payment methods and proxy. Fix what's missing before buying (section 1).
 3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `index`, `browser` and `setup` subcommands and the `--handoff-target` flag ship in a recent-enough `portage`, not every install. If one isn't listed, fall back as described where it's mentioned.
 
-**Minimum version these references assume:** `portage-cli` `0.7.5` plus every change under that gem's `CHANGELOG.md` `[Unreleased]` section (Phases 1-7 of `docs/plans/buy-skill-and-local-browser.md` — `find` offer sources, categories/local index, browser import, `setup`, hand-off targets/hand-off-only hosts, the Portage browser profile, retailer offer sources). None of that has shipped as its own tagged gem release yet, so an install from RubyGems/Homebrew today may only have `0.7.5` itself — that's exactly why step 3 above checks `portage --help` before assuming any of it exists, rather than trusting a version number alone.
+**Minimum version these references assume:** `portage-cli` `0.8.0` (with `portage-ucp-webmcp` `0.2.0` or newer for the Portage browser profile and WebMCP autofill). Older installs still work: step 3 above checks `portage --help` before using `index`, `browser`, `setup` or `--handoff-target`, and `brew upgrade portage` or `gem update portage-cli` brings an install up to date.
 
 ## 1. Setup (only for what doctor reports missing)
 
