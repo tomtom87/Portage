@@ -2,7 +2,7 @@
 
 A shopper tells their AI agent: *"Find me a snowboard under $600 and buy it."* This shopper has no account with you, no API key, no relationship with your store beyond finding it — none of that is required on their end. Their agent discovered your store's manifest at `/.well-known/ucp`, saw `dev.ucp.shopping.catalog`/`cart`/`checkout` advertised, and connects over MCP using nothing but that public manifest.
 
-Below is that agent's side of the conversation — runnable today via `portage-ucp-client`'s loopback transport (`Client.for_adapter`), which drives your real `Adapter` in-process through the exact same `Authenticator`/`RateLimiter`/`Dispatcher` stack a real stdio/HTTP connection would, just without the wire hop. Swap `Client.for_adapter(adapter)` for `Client.discover("https://your-shop.example")` and this is unchanged for a real remote store — that's the point of one client interface across all three transports (§ `portage-ucp-client`).
+Below is that agent's side of the conversation — runnable today via `portage-ucp-client`'s loopback transport (`Client.for_adapter`), which drives your real `Adapter` in-process through the exact same `Authenticator`/`RateLimiter`/`Dispatcher` stack a real stdio/HTTP connection would, just without the wire hop. Swap `Client.for_adapter(adapter)` for `Client.discover("https://your-shop.example")` and the same calls work against a real remote store, with two differences: over HTTP every call needs `meta: { agent_profile: url }` (or it raises `MissingAgentProfileError`), and results come back as string-keyed hashes shaped by the store. See the [`portage-ucp-client` API](api/portage-ucp-client.md).
 
 ```ruby
 require "portage/ucp"

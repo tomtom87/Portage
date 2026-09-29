@@ -15,7 +15,7 @@ got:
 | `Portage::Ucp::Client.for_adapter(adapter)` | Loopback over an in-process `Adapter` — no subprocess, no socket. Still runs the real authenticator/rate-limiter/`Dispatcher` stack, just without the wire hop. For driving your own store's `Adapter` directly. |
 | `Portage::Ucp::Client.connect(command: ...)` | stdio, spawns a subprocess (an MCP server exe). |
 | `Portage::Ucp::Client.connect(url: ...)` | Streamable HTTP, connects to a remote MCP endpoint. |
-| `Portage::Ucp::Client.discover(url)` | Fetches `<url>/.well-known/ucp`, parses the manifest, and connects to whatever transport it advertises — the entry point for buying from a store you've never talked to before. |
+| `Portage::Ucp::Client.discover(url)` | Fetches `<url>/.well-known/ucp`, parses the manifest, and connects to its `mcp` service — the entry point for buying from a store you've never talked to before. |
 
 Depends only on `portage-ucp` and the `mcp` gem's client half — no adapter gem is
 a dependency.
@@ -39,11 +39,13 @@ require "portage/ucp/client"
 
 # Discover and connect to a live store you've never talked to before:
 session = Portage::Ucp::Client.discover("https://your-shop.example")
+meta = { agent_profile: "https://example.com/agent-profile.json" } # required over HTTP
 
-products = session.search_catalog(query: "snowboard", limit: 5)
-checkout = session.create_checkout(line_items: [{ product_id: products.first.id, quantity: 1 }])
-completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: "spt_1a2b3c...")
-order = session.get_order(order_id: "gid://shopify/Order/9001")
+results = session.search_catalog(query: "snowboard", limit: 5, meta: meta) # string-keyed Hash, shaped by the store
+product_id = "..." # pick from results
+checkout = session.create_checkout(line_items: [{ product_id: product_id, quantity: 1 }], meta: meta)
+completed = session.complete_checkout(checkout_id: checkout["id"], payment_token: "spt_1a2b3c...", meta: meta)
+order = session.get_order(order_id: "gid://shopify/Order/9001", meta: meta)
 ```
 
 `Session` generates an `idempotency_key` for you on every mutating call unless you
