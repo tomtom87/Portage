@@ -17,6 +17,13 @@ require_relative "cli/find"
 require_relative "cli/compare"
 require_relative "cli/history"
 require_relative "cli/quotes"
+require_relative "cli/money"
+require_relative "cli/human_prompt"
+require_relative "cli/product_page"
+require_relative "cli/approval_policy"
+require_relative "cli/offer_choice"
+require_relative "cli/pick"
+require_relative "cli/approve"
 require_relative "cli/payment_methods"
 require_relative "cli/proxy_settings"
 require_relative "cli/handoff_only"
@@ -49,6 +56,9 @@ module Portage
              portage find --query "..." [--max-price N] [--limit N] [--json]
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                                     [--max-price N] [--json]
+             portage pick [--search LAST|SEARCH_ID] [--via auto|tty|agent] [--json]
+                          [--choose REF | --compare REF | --view REF]
+             portage approve QUOTE_ID [--via auto|tty|agent] [--relayed-yes | --view] [--json]
              portage history [list] [--purchases|--searches] [--limit N] [--json]
              portage history clear [--purchases|--searches]
              portage payment list [--json]
@@ -63,6 +73,7 @@ module Portage
                                  [--rolling-cap N --rolling-window-seconds N --currency CUR]
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
+                                 [--require-approval person|any|off]  (lowering asks at a terminal)
              portage orders reconcile [--checkout ID] [--json]
              portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
              portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
@@ -89,6 +100,7 @@ module Portage
     USAGE
 
     COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare,
+                 "pick" => :run_pick, "approve" => :run_approve,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
                  "orders" => :run_orders, "index" => :run_index, "browser" => :run_browser,
                  "doctor" => :run_doctor,
@@ -145,17 +157,25 @@ module Portage
       return 1 unless apply_proxy_settings(options.delete(:proxy))
 
       report = Find.new(**options).call
-      record_find(report)
+      report = with_search_id(report, record_find(report))
       puts json ? JSON.pretty_generate(report) : format_find(report)
       report[:offers].any? ? 0 : 1
     end
     private_class_method :run_find
 
+    # @return [Hash, nil] the saved search entry.
     def self.record_find(report)
       History.new.record_search(query: report[:query], offer_count: report[:offers].length,
                                 message: report[:message], offers: report[:offers])
     end
     private_class_method :record_find
+
+    # docs/plans/human-pick-and-approve.md Phase 2: the saved search's id,
+    # for `portage pick --search`. Additive; absent when nothing was saved.
+    def self.with_search_id(report, entry)
+      entry.is_a?(Hash) && entry["search_id"] ? report.merge(search_id: entry["search_id"]) : report
+    end
+    private_class_method :with_search_id
 
     def self.parse_find_options(argv)
       opts = {}
@@ -198,15 +218,25 @@ module Portage
       return 1 unless apply_proxy_settings(options.delete(:proxy))
 
       report = Compare.new(origin_url: url, **options).call
-      # Recorded as a search, not a purchase — compare never checks out. The
-      # query string names the compare so `portage history list` doesn't
-      # read it as a plain text search for the origin product's own title.
-      History.new.record_search(query: "compare: #{url} (product #{options[:origin_product_id]})",
-                                offer_count: report[:offers].length, message: report[:message])
+      report = with_search_id(report, record_compare(url, options[:origin_product_id], report))
       puts json ? JSON.pretty_generate(report) : format_compare(report)
       report[:offers].any? ? 0 : 1
     end
     private_class_method :run_compare
+
+    # Recorded as a search, not a purchase — compare never checks out. The
+    # query string names the compare so `portage history list` doesn't
+    # read it as a plain text search for the origin product's own title.
+    # Its offers are kept with their refs, like `find`'s
+    # (docs/plans/human-pick-and-approve.md Phase 2), each carrying the
+    # catalog query compare searched with (the origin product's title), so
+    # `buy --offer REF` searches for the product, not for "compare: ...".
+    def self.record_compare(url, product_id, report)
+      offers = report[:offers].map { |offer| offer.merge(query: report[:query]) }
+      History.new.record_search(query: "compare: #{url} (product #{product_id})", offer_count: offers.length,
+                                message: report[:message], offers: offers)
+    end
+    private_class_method :record_compare
 
     def self.parse_compare_options(argv)
       url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
@@ -280,13 +310,16 @@ module Portage
     # caller picks. `--yes` alone deliberately isn't enough to get here —
     # without a URL the merchant would have been chosen by a search ranker
     # rather than by a person, so either `--store` (handled above) or an
-    # interactive pick has to name it. Piped/CI runs list the offers and stop.
+    # interactive pick has to name it. Runs with no terminal (or under
+    # --json) list the offers and stop.
     def self.buy_from_search(parsed)
       report = Find.new(**parsed[:find]).call
-      record_find(report)
+      report = with_search_id(report, record_find(report))
       offer = pick_offer(report, parsed[:json])
       return report[:offers].any? ? 0 : 1 unless offer
 
+      parsed[:offer_ref] = offer[:offer_ref]
+      parsed[:page] = { title: offer[:title], url: offer[:url] }
       execute_buy(parsed, offer[:store], product_id: offer[:product_id])
     end
     private_class_method :buy_from_search
@@ -302,6 +335,7 @@ module Portage
       end
 
       parsed[:offer_ref] = parsed[:offer]
+      parsed[:page] = { title: offer["title"], url: offer["url"] }
       parsed[:buy][:query] = offer["query"].to_s
       execute_buy(parsed, offer["store"], product_id: offer["product_id"])
     end
@@ -312,9 +346,19 @@ module Portage
     # checkout costs more, so the person's approval always covers the total
     # that gets charged. The quote is spent by #settle_quote, once the run
     # purchases or hands off.
+    #
+    # docs/plans/human-pick-and-approve.md Phase 2: a real run (`--yes`, not
+    # `--dry-run`) of a quote that isn't approved enough for
+    # `--require-approval` is refused with `needs_approval` before Buy
+    # runs, so it never charges and never hands off.
     def self.buy_from_quote(parsed)
       quote = usable_quote(parsed)
       return 1 unless quote
+
+      level = ApprovalPolicy.level
+      if real_run?(parsed) && !ApprovalPolicy.satisfied?(quote, level)
+        return refuse_unapproved_quote(parsed, quote, level)
+      end
 
       parsed[:quote_record] = quote
       buy = parsed[:buy]
@@ -337,29 +381,51 @@ module Portage
     end
     private_class_method :usable_quote
 
-    def self.pick_offer(report, json)
-      output = json ? JSON.pretty_generate(report) : format_find(report)
-      puts output
-      return nil unless $stdin.tty? && report[:offers].any?
+    def self.refuse_unapproved_quote(parsed, quote, level)
+      summary = Approve.summary(quote)
+      report = { url: quote["store"], checkout_url: nil, products: [], warnings: [], source: "none", browse: false,
+                 checkout: false }.merge(Approve.needs_approval(summary, message: approval_message(summary, level)))
+      print_buy_report(report, nil, parsed[:json])
+      buy_exit_code(report)
+    end
+    private_class_method :refuse_unapproved_quote
 
-      prompt_for_offer(report[:offers])
+    # With a terminal (and no --json) the person picks there, through the
+    # same HumanPrompt numbered pick `portage pick` uses; otherwise the
+    # offers are printed and nothing is bought.
+    def self.pick_offer(report, json)
+      prompt = HumanPrompt.new(json: json)
+      unless prompt.tty? && report[:offers].any?
+        puts json ? JSON.pretty_generate(report) : format_find(report)
+        return nil
+      end
+
+      prompt_for_offer(prompt, report)
     end
     private_class_method :pick_offer
 
-    def self.prompt_for_offer(offers)
-      print "\nPick 1-#{offers.length} to buy (Enter to quit): "
-      choice = $stdin.gets.to_s.strip
-      return nil unless choice.match?(/\A\d+\z/)
-
-      offers[choice.to_i - 1] if choice.to_i.between?(1, offers.length)
+    def self.prompt_for_offer(prompt, report)
+      prompt.say(report[:message].to_s)
+      choices = report[:offers].map { |offer| OfferChoice.for(offer) }
+      index = prompt.choose("Pick one to buy", choices, view: OfferChoice.method(:view_message))
+      index && report[:offers][index]
     end
     private_class_method :prompt_for_offer
 
+    # docs/plans/human-pick-and-approve.md Phase 2: under
+    # `--require-approval any|person` a real `--yes` run with no approved
+    # `--quote` is run as a dry run instead — never charged, never handed
+    # off — which prices it and saves a quote, and the report becomes
+    # `needs_approval` naming that quote and the next steps. Done here, not
+    # in Buy, so Buy's library callers aren't governed by the CLI policy.
     def self.execute_buy(parsed, url, product_id: nil)
+      gated = approval_gate?(parsed)
+      parsed[:buy] = parsed[:buy].merge(yes: false, dry_run: true) if gated
       options = buy_options(parsed, url, product_id: product_id)
       report = Buy.new(**options).call
       record_buy(report, options[:query])
       report = settle_quote(report, parsed, options)
+      report = needs_approval_report(report) if gated
       result = parsed[:wait] ? wait_for_handoff(report, parsed) : nil
       print_buy_report(report, result, parsed[:json])
       buy_exit_code(report)
@@ -375,8 +441,45 @@ module Portage
     end
     private_class_method :buy_options
 
-    def self.buy_exit_code(report) = report[:checkout] || report[:browse] ? 0 : 1
+    # `needs_approval` exits 0 like Buy's own `needs_confirmation`: the run
+    # did what it could and is waiting on the person.
+    def self.buy_exit_code(report)
+      report[:outcome] == "needs_approval" || report[:checkout] || report[:browse] ? 0 : 1
+    end
     private_class_method :buy_exit_code
+
+    def self.real_run?(parsed) = parsed[:buy][:yes] && !parsed[:buy][:dry_run]
+    private_class_method :real_run?
+
+    # An approved quote already passed ApprovalPolicy in #buy_from_quote.
+    def self.approval_gate?(parsed)
+      real_run?(parsed) && !parsed[:quote_record] && ApprovalPolicy.level != "off"
+    end
+    private_class_method :approval_gate?
+
+    # A gated run that got as far as a priced checkout saved a quote; one
+    # that didn't (no match, a dead end) is reported as it is — nothing
+    # was bought either way.
+    def self.needs_approval_report(report)
+      quote = report[:quote_id] && Quotes.new.find(report[:quote_id])
+      return report unless quote
+
+      summary = Approve.summary(quote)
+      report.merge(Approve.needs_approval(summary, message: approval_message(summary, ApprovalPolicy.level)))
+    end
+    private_class_method :needs_approval_report
+
+    def self.approval_message(summary, level)
+      id = summary[:quote_id]
+      held = if summary[:approved_by]
+               "Quote #{id} was approved by #{summary[:approved_by]}, which require_approval #{level} doesn't accept."
+             else
+               "Quote #{id} (#{Approve.describe(summary)}) needs approval first (require_approval: #{level})."
+             end
+      how = level == "person" ? "`portage approve #{id} --via tty` at a terminal" : "`portage approve #{id}`"
+      "Nothing was bought. #{held} Approve it with #{how}, then run `portage buy --quote #{id} --yes`."
+    end
+    private_class_method :approval_message
 
     # A dry run saves a quote and reports its `quote_id`. A run of a saved
     # quote spends it once it purchases or hands off; any other outcome
@@ -391,10 +494,20 @@ module Portage
 
       saved = Quotes.new.create(offer_ref: parsed[:offer_ref], store: report[:url],
                                 product_id: options[:product_id], query: options[:query], qty: options[:qty],
-                                total: report_total(report), currency: report[:currency])
+                                total: report_total(report), currency: report[:currency],
+                                **quote_page(report, parsed))
       saved ? report.merge(quote_id: saved["quote_id"]) : report
     end
     private_class_method :settle_quote
+
+    # What `portage approve` shows (docs/plans/human-pick-and-approve.md
+    # Phase 2): the title of what's in the checkout, else the picked
+    # offer's, and the offer's product page when the buy came from one.
+    def self.quote_page(report, parsed)
+      page = parsed[:page] || {}
+      { title: Array(report[:items]).first&.dig(:title) || page[:title], url: page[:url] }
+    end
+    private_class_method :quote_page
 
     # docs/plans/buy-skill-and-local-browser.md Phase 6: `--handoff-target
     # profile` gives `portage buy` a browser of its own — the Portage
@@ -684,6 +797,94 @@ module Portage
     end
     private_class_method :add_search_options
 
+    # --- pick / approve (docs/plans/human-pick-and-approve.md Phase 2) ---
+
+    # Outcomes a pick/approve run exits 0 on: an answer, a page shown, or a
+    # question handed to the agent. Everything else (cancelled, not found,
+    # used, refused, no terminal) exits 1.
+    PROMPT_OK_OUTCOMES = %w[picked approved viewed needs_pick needs_approval].freeze
+
+    def self.run_pick(argv)
+      opts = parse_prompt_options(argv) do |parser, o|
+        parser.on("--search ID") { |v| o[:search] = v }
+        parser.on("--choose REF") { |v| o[:choose] = v }
+        parser.on("--compare REF") { |v| o[:compare] = v }
+        parser.on("--view REF") { |v| o[:view] = v }
+      end
+      return 1 unless opts
+
+      pick = Pick.new(prompt: HumanPrompt.new(via: opts[:via], json: opts[:json]), comparer: method(:compare_offer),
+                      **opts.slice(:search, :choose, :view, :compare))
+      print_prompt_result(pick.call, opts[:json])
+    end
+    private_class_method :run_pick
+
+    def self.run_approve(argv)
+      quote_id = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      opts = parse_prompt_options(argv) do |parser, o|
+        parser.on("--relayed-yes") { o[:relayed_yes] = true }
+        parser.on("--view") { o[:view] = true }
+      end
+      return 1 unless opts
+      return prompt_usage(opts[:json], "portage approve needs a QUOTE_ID.") unless quote_id
+
+      approve = Approve.new(quote_id: quote_id, prompt: HumanPrompt.new(via: opts[:via], json: opts[:json]),
+                            **opts.slice(:relayed_yes, :view))
+      print_prompt_result(approve.call, opts[:json])
+    end
+    private_class_method :run_approve
+
+    # `--via`/`--json` for both commands, plus whatever the block adds.
+    # @return [Hash, nil] nil on a bad flag (already reported).
+    def self.parse_prompt_options(argv)
+      opts = { via: "auto" }
+      json = argv.include?("--json")
+      OptionParser.new do |parser|
+        parser.on("--via SURFACE", HumanPrompt::VIAS) { |v| opts[:via] = v }
+        parser.on("--json") { opts[:json] = true }
+        yield parser, opts
+      end.parse!(argv)
+      opts
+    rescue OptionParser::ParseError => e
+      prompt_usage(json, e.message)
+      nil
+    end
+    private_class_method :parse_prompt_options
+
+    def self.prompt_usage(json, message)
+      json ? puts(JSON.pretty_generate(outcome: "invalid_option", message: message)) : warn("#{message}\n#{USAGE}")
+      1
+    end
+    private_class_method :prompt_usage
+
+    # Pick's "Compare an offer across stores": the same Compare run
+    # `portage compare` does, from the saved offer's store and product.
+    def self.compare_offer(offer)
+      return { offers: [], message: "Couldn't compare — see the proxy error above." } unless apply_proxy_settings({})
+
+      Compare.new(origin_url: offer["store"], origin_product_id: offer["product_id"]).call
+    end
+    private_class_method :compare_offer
+
+    def self.print_prompt_result(result, json)
+      puts json ? JSON.pretty_generate(result) : format_prompt_result(result)
+      PROMPT_OK_OUTCOMES.include?(result[:outcome]) ? 0 : 1
+    end
+    private_class_method :print_prompt_result
+
+    def self.format_prompt_result(result)
+      lines = ["[#{result[:outcome]}] #{result[:message]}"]
+      Array(result[:choices]).each_with_index { |choice, index| lines << "  #{index + 1}. #{choice_line(choice)}" }
+      lines << "  #{approval_line(result[:summary])}" if result[:summary]
+      lines.join("\n")
+    end
+    private_class_method :format_prompt_result
+
+    def self.choice_line(choice)
+      [choice[:label], choice[:url], ("ref #{choice[:ref]}" if choice[:ref])].compact.join(" — ")
+    end
+    private_class_method :choice_line
+
     # --- history ---
 
     def self.run_history(argv)
@@ -877,52 +1078,109 @@ module Portage
     end
     private_class_method :run_policy
 
+    # `require_approval` is always shown at its effective value, the
+    # default included, so "what does `--yes` need right now" is never a
+    # guess.
     def self.run_policy_show(argv)
       json = false
       OptionParser.new { |parser| parser.on("--json") { json = true } }.parse!(argv)
-      policy = Portage::Ucp::Policy.load.to_h
-      puts json ? JSON.pretty_generate(policy) : format_policy(policy)
+      policy = Portage::Ucp::Policy.load
+      effective = policy.to_h.merge(ApprovalPolicy::KEY => ApprovalPolicy.level(policy))
+      puts json ? JSON.pretty_generate(effective) : format_policy(policy)
       0
     end
     private_class_method :run_policy_show
 
     def self.format_policy(policy)
-      return "(no policy configured — every check passes)" if policy.empty?
-
-      JSON.pretty_generate(policy)
+      spending = policy.to_h.except(ApprovalPolicy::KEY)
+      body = spending.empty? ? "(no policy configured — every spending check passes)" : JSON.pretty_generate(spending)
+      default = " (default)" unless ApprovalPolicy.configured?(policy)
+      "#{body}\nrequire_approval: #{ApprovalPolicy.level(policy)}#{default}"
     end
     private_class_method :format_policy
 
     def self.parse_policy_set_options(argv)
       opts = { allow: [] }
       OptionParser.new do |parser|
-        parser.on("--per-transaction-cap N", Integer) { |v| opts[:per_transaction_cap] = v }
-        parser.on("--rolling-cap N", Integer) { |v| opts[:rolling_cap] = v }
-        parser.on("--rolling-window-seconds N", Integer) { |v| opts[:rolling_window_seconds] = v }
-        parser.on("--currency CUR") { |v| opts[:currency] = v }
+        add_policy_cap_options(parser, opts)
         parser.on("--velocity-count N", Integer) { |v| opts[:velocity_count] = v }
         parser.on("--velocity-window-seconds N", Integer) { |v| opts[:velocity_window_seconds] = v }
         parser.on("--allow HOST") { |v| opts[:allow] << v }
         parser.on("--clear-allowlist") { opts[:clear_allowlist] = true }
+        parser.on("--require-approval LEVEL", ApprovalPolicy::LEVELS) { |v| opts[:require_approval] = v }
       end.parse!(argv)
       opts
     end
     private_class_method :parse_policy_set_options
 
+    def self.add_policy_cap_options(parser, opts)
+      parser.on("--per-transaction-cap N", Integer) { |v| opts[:per_transaction_cap] = v }
+      parser.on("--rolling-cap N", Integer) { |v| opts[:rolling_cap] = v }
+      parser.on("--rolling-window-seconds N", Integer) { |v| opts[:rolling_window_seconds] = v }
+      parser.on("--currency CUR") { |v| opts[:currency] = v }
+    end
+    private_class_method :add_policy_cap_options
+
     # Each `--*` group is applied independently and only when its required
     # fields are present — `portage policy set --allow shop.example.com`
     # touches only the allowlist, leaving caps/velocity untouched, so caps
     # and the allowlist can be configured in separate invocations.
+    #
+    # `--require-approval` goes first: a lowering the person doesn't confirm
+    # at the terminal refuses the whole invocation, so nothing else in it
+    # changes either.
     def self.run_policy_set(argv)
       opts = parse_policy_set_options(argv)
       policy = Portage::Ucp::Policy.load
+      return 1 unless require_approval_applied?(policy, opts[:require_approval])
+
       set_policy_cap(policy, opts)
       set_policy_velocity(policy, opts)
       set_policy_allowlist(policy, opts)
-      puts format_policy(policy.to_h)
+      puts format_policy(policy)
       0
+    rescue OptionParser::ParseError => e
+      warn "#{e.message}\n#{USAGE}"
+      1
     end
     private_class_method :run_policy_set
+
+    # docs/plans/human-pick-and-approve.md Phase 2: raising the level (or
+    # setting the same one) needs nothing; lowering it (person -> any/off,
+    # any -> off) needs a yes typed on the tty, since an agent with a shell
+    # can run `policy set` but can't type on /dev/tty. No terminal, no
+    # change.
+    # @return [Boolean] false when a lowering was refused (nothing changed).
+    def self.require_approval_applied?(policy, level)
+      return true unless level
+
+      current = ApprovalPolicy.level(policy)
+      return false if ApprovalPolicy.lowering?(current, level) && !confirm_lowering(current, level)
+
+      policy.set(ApprovalPolicy::KEY, level)
+      true
+    end
+    private_class_method :require_approval_applied?
+
+    def self.confirm_lowering(current, level)
+      prompt = HumanPrompt.new(via: "tty")
+      return true if prompt.confirm("Lower require_approval from #{current} to #{level}? #{lowering_effect(level)}")
+
+      warn "require_approval left at #{current}."
+      false
+    rescue HumanPrompt::NoTerminal
+      warn "Lowering require_approval (#{current} -> #{level}) needs a yes typed at a terminal, and there's no " \
+           "terminal here — nothing changed. Run it yourself from a terminal."
+      false
+    end
+    private_class_method :confirm_lowering
+
+    def self.lowering_effect(level)
+      return "`portage buy --yes` would then buy without anyone approving the total." if level == "off"
+
+      "An agent relaying your yes would then be enough to buy."
+    end
+    private_class_method :lowering_effect
 
     def self.set_policy_cap(policy, opts)
       if opts[:per_transaction_cap]
@@ -1557,9 +1815,16 @@ module Portage
     private_class_method :format_report
 
     def self.format_quote(report)
-      report[:quote_id] ? ["  quote: #{report[:quote_id]}"] : []
+      lines = report[:quote_id] ? ["  quote: #{report[:quote_id]}"] : []
+      lines << "  approve: #{approval_line(report[:summary])}" if report[:summary]
+      lines
     end
     private_class_method :format_quote
+
+    def self.approval_line(summary)
+      [Approve.describe(summary), summary[:url]].compact.join(" — ")
+    end
+    private_class_method :approval_line
 
     # What the checkout holds, as opposed to the search results above it,
     # and where it differs from the request.
@@ -1593,6 +1858,7 @@ module Portage
     def self.format_find(report)
       lines = [report[:message].to_s]
       report[:offers].each_with_index { |offer, index| lines << "  #{index + 1}. #{offer_line(offer)}" }
+      lines << "  search: #{report[:search_id]} (portage pick --search #{report[:search_id]})" if report[:search_id]
       lines.join("\n")
     end
     private_class_method :format_find
@@ -1608,6 +1874,7 @@ module Portage
     def self.format_compare(report)
       lines = [report[:message].to_s]
       report[:offers].each_with_index { |offer, index| lines << "  #{index + 1}. #{compare_offer_line(offer)}" }
+      lines << "  search: #{report[:search_id]} (portage pick --search #{report[:search_id]})" if report[:search_id]
       lines.join("\n")
     end
     private_class_method :format_compare
@@ -1615,6 +1882,7 @@ module Portage
     def self.compare_offer_line(offer)
       parts = ["[#{offer[:match]}] #{offer[:store]} — #{offer[:title]} (#{offer[:product_id]})", format_price(offer)]
       parts << "browse only" unless offer[:checkout]
+      parts << "ref #{offer[:offer_ref]}" if offer[:offer_ref]
       parts.join(" — ")
     end
     private_class_method :compare_offer_line
@@ -1626,9 +1894,7 @@ module Portage
     end
     private_class_method :format_price
 
-    def self.format_amount(amount, currency)
-      "#{format('%.2f', amount / 100.0)}#{" #{currency}" if currency}"
-    end
+    def self.format_amount(amount, currency) = Money.format_amount(amount, currency)
     private_class_method :format_amount
   end
 end

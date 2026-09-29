@@ -441,6 +441,7 @@ RSpec.describe Portage::Cli::Buy do
 
       expect([changed_currency[:outcome], unpriced[:outcome]]).to eq(%w[quote_changed quote_changed])
       expect(unpriced[:current_total]).to be_nil
+      expect(unpriced[:message]).to include("was 24.00 USD, now unknown")
     end
 
     it "does not hand off a checkout that needs escalation once the price has gone up" do

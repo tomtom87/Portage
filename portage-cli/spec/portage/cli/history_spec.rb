@@ -40,7 +40,7 @@ RSpec.describe Portage::Cli::History do
   describe "saved offers" do
     def offer(ref, **fields)
       { offer_ref: ref, store: "https://shop.example", product_id: "p1", title: "Cold Brew", amount: 2400,
-        currency: "USD" }.merge(fields)
+        currency: "USD", url: "https://shop.example/products/cold", checkout: true }.merge(fields)
     end
 
     it "keeps a search's offers, with when they were found, and resolves an offer_ref to one of them" do
@@ -49,9 +49,18 @@ RSpec.describe Portage::Cli::History do
 
       expect(history.offer("of_aaaaaa")).to eq(
         "offer_ref" => "of_aaaaaa", "store" => "https://shop.example", "product_id" => "p1",
-        "title" => "Cold Brew", "amount" => 2400, "currency" => "USD", "found_at" => 1_700_000_000,
+        "title" => "Cold Brew", "amount" => 2400, "currency" => "USD",
+        "url" => "https://shop.example/products/cold", "checkout" => true, "found_at" => 1_700_000_000,
         "query" => "cold"
       )
+    end
+
+    it "keeps an already-saved, string-keyed offer's found_at when it's saved again" do
+      saved = offer("of_aaaaaa").transform_keys(&:to_s).merge("found_at" => 1_600_000_000)
+      history(now: Time.at(1_700_000_000)).record_search(query: "compare", offer_count: 1, message: "ok",
+                                                         offers: [saved])
+
+      expect(history.offer("of_aaaaaa")).to include("store" => "https://shop.example", "found_at" => 1_600_000_000)
     end
 
     it "leaves the offers key off a search that found none" do
@@ -67,6 +76,35 @@ RSpec.describe Portage::Cli::History do
 
       expect(h.offer("of_aaaaaa")).to include("product_id" => "p1", "query" => "cold")
       expect(h.offer("of_nope")).to be_nil
+    end
+
+    it "gives a search that kept offers a search_id, and none to one that didn't" do
+      h = history
+      kept = h.record_search(query: "cold", offer_count: 1, message: "ok", offers: [offer("of_aaaaaa")])
+      empty = h.record_search(query: "tea", offer_count: 0, message: "none")
+
+      expect(kept["search_id"]).to match(/\Ase_[0-9a-f]{8}\z/)
+      expect(empty).not_to have_key("search_id")
+    end
+
+    it "finds the latest search with offers for LAST (or nil), and any one by its search_id" do
+      h = history
+      first = h.record_search(query: "cold", offer_count: 1, message: "ok", offers: [offer("of_aaaaaa")])
+      second = h.record_search(query: "tea", offer_count: 1, message: "ok", offers: [offer("of_bbbbbb")])
+      h.record_search(query: "none", offer_count: 0, message: "none")
+
+      expect([h.search, h.search("LAST"), h.search("last")].map { |s| s["query"] }).to eq(%w[tea tea tea])
+      expect(h.search(first["search_id"])["query"]).to eq("cold")
+      expect(second["search_id"]).not_to eq(first["search_id"])
+      expect(h.search("se_00000000")).to be_nil
+    end
+
+    it "buys an offer saved with its own query by that query, not the search's" do
+      h = history
+      h.record_search(query: "compare: https://shop.example (product p1)", offer_count: 1, message: "ok",
+                      offers: [offer("of_aaaaaa", query: "Cold Brew")])
+
+      expect(h.offer("of_aaaaaa")).to include("query" => "Cold Brew")
     end
 
     it "prefers the most recent search when a ref appears twice" do

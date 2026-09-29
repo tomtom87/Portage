@@ -1,5 +1,6 @@
 require "json"
 require "fileutils"
+require "securerandom"
 
 module Portage
   module Cli
@@ -40,20 +41,39 @@ module Portage
 
       # @param url [String, nil] the store, for a `portage buy` that never
       #   reached a checkout there; nil for a cross-store `portage find`.
-      # @param offers [Array<Hash>] a `find`'s offers, kept so `portage buy
-      #   --offer REF` can resolve an `offer_ref` later (see #offer).
+      # @param offers [Array<Hash>] a `find`'s (or `compare`'s) offers, kept
+      #   so `portage buy --offer REF` can resolve an `offer_ref` later (see
+      #   #offer). A search that keeps offers also gets a `search_id`, which
+      #   `portage pick --search` names it by (docs/plans/
+      #   human-pick-and-approve.md Phase 2).
+      # @return [Hash] the saved entry.
       def record_search(query:, offer_count:, message:, url: nil, offers: [])
-        append("searches", { "query" => query, "url" => url, "offer_count" => offer_count, "message" => message,
-                             "offers" => (saved_offers(offers) unless offers.empty?), "at" => @now }.compact)
+        kept = offers.empty? ? nil : saved_offers(offers)
+        append("searches", { "search_id" => kept && "se_#{SecureRandom.hex(4)}", "query" => query, "url" => url,
+                             "offer_count" => offer_count, "message" => message, "offers" => kept,
+                             "at" => @now }.compact)
+      end
+
+      # @param id [String, nil] a `search_id`, or nil/"LAST" for the most
+      #   recent search that kept offers.
+      # @return [Hash, nil]
+      def search(id = nil)
+        with_offers = store["searches"].select { |search| Array(search["offers"]).any? }
+        return with_offers.last if id.nil? || id.casecmp?("last")
+
+        with_offers.reverse.find { |search| search["search_id"] == id }
       end
 
       # @return [Hash, nil] the saved offer for `ref` (store, product_id,
-      #   title, amount, currency, found_at) plus the `query` of the search
-      #   that found it, from the most recent search that holds it.
+      #   title, amount, currency, url, checkout, found_at) plus the catalog
+      #   `query` to buy it with — the offer's own when it was saved with
+      #   one (a compare result, searched by the compared product's title),
+      #   else that of the search that found it — from the most recent
+      #   search that holds it.
       def offer(ref)
         store["searches"].reverse_each do |search|
           found = Array(search["offers"]).find { |saved| saved["offer_ref"] == ref }
-          return found.merge("query" => search["query"]) if found
+          return { "query" => search["query"] }.merge(found) if found
         end
         nil
       end
@@ -71,11 +91,15 @@ module Portage
 
       private
 
+      # Takes a report's symbol-keyed offers or already-saved string-keyed
+      # ones (`pick` re-saves the offer it compared alongside the results).
       def saved_offers(offers)
         offers.map do |offer|
-          { "offer_ref" => offer[:offer_ref], "store" => offer[:store], "product_id" => offer[:product_id],
-            "title" => offer[:title], "amount" => offer[:amount], "currency" => offer[:currency],
-            "found_at" => @now }
+          offer = offer.transform_keys(&:to_s)
+          saved = { "offer_ref" => offer["offer_ref"], "store" => offer["store"], "product_id" => offer["product_id"],
+                    "title" => offer["title"], "amount" => offer["amount"], "currency" => offer["currency"],
+                    "url" => offer["url"], "checkout" => offer["checkout"], "found_at" => offer["found_at"] || @now }
+          offer["query"] ? saved.merge("query" => offer["query"]) : saved
         end
       end
 

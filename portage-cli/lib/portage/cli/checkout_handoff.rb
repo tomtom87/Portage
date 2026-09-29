@@ -1,6 +1,7 @@
 require "uri"
 require_relative "config"
 require_relative "setting"
+require_relative "browser_opener"
 
 module Portage
   module Cli
@@ -14,13 +15,11 @@ module Portage
     # --auto-open / --no-auto-open) beats PORTAGE_AUTO_OPEN_CHECKOUT, which
     # beats ~/.portage/config.json's "auto_open_checkout" (Config).
     #
-    # No new gem for the actual open — every other shell-out in this repo
-    # (PaymentMethods::KeychainBackend, SecretServiceBackend) hand-rolls
-    # `system` rather than pulling in launchy for something the OS already
-    # provides. `system(cmd, url)` (array form, never an interpolated
-    # string) so a merchant-controlled checkout_url can't inject into a
-    # shell.
+    # The open itself is BrowserOpener's array-form `system` shell-out, so
+    # a merchant-controlled checkout_url can't inject into a shell.
     class CheckoutHandoff
+      include BrowserOpener
+
       ENV_VAR = "PORTAGE_AUTO_OPEN_CHECKOUT".freeze
       CONFIG_KEY = "auto_open_checkout".freeze
 
@@ -46,24 +45,6 @@ module Portage
         URI.parse(url).scheme == "https"
       rescue URI::InvalidURIError
         false
-      end
-
-      def open_browser(url)
-        command = platform_command
-        return false unless command
-
-        !!system(command, url)
-      rescue StandardError => e
-        warn "portage: couldn't open #{url} (#{e.message})"
-        false
-      end
-
-      def platform_command
-        case RbConfig::CONFIG["host_os"]
-        when /darwin/i then "open"
-        when /linux|bsd/i then "xdg-open"
-        when /mswin|mingw|cygwin/i then "start"
-        end
       end
     end
   end
