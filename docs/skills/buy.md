@@ -19,6 +19,8 @@ from this repo's own marketplace (`.claude-plugin/marketplace.json`).
 
 ## The skill
 
-The text below is the skill itself, as the agent reads it.
+The text below is the skill itself, as the agent reads it. Its `references/` links go to the
+[outcomes](references/outcomes.md), [hand-off-only retailers](references/handoff-only.md) and
+[raw UCP fallback](references/raw-ucp.md) pages, which include those files as they ship.
 
-{% include-markdown "../../plugins/buy/skills/buy/SKILL.md" start="\n---\n\n" heading-offset=2 %}
+{% include-markdown "../../plugins/buy/skills/buy/SKILL.md" start="\n---\n\n" heading-offset=2 rewrite-relative-urls=false %}

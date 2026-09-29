@@ -10,7 +10,7 @@ online store. Talk to that store's commerce backend over MCP (tool calls) using 
 (Universal Commerce Protocol) as the commerce-capability layer.
 
 **If you're running inside Claude Code (or another host with the plugin system), prefer
-the [`buy` plugin](../../plugins/buy/skills/buy/SKILL.md) instead of this skill.** It
+the [`buy` plugin](https://portage.readthedocs.io/en/latest/skills/buy/) instead of this skill.** It
 covers everything below plus the parts this file doesn't: finding stores with no URL
 in hand (`portage find`, a local store index built from your own bookmarks/history or
 the repo's published known-stores list), the setup wizard, hand-off to your own browser
