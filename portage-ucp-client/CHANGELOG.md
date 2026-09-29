@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- Documentation only, no code change. Fixes a wrong comment on
+  `Client.ucp_section`. It said `Portage::Ucp::Manifest` still emits the old
+  flat manifest shape. It hasn't since `portage-ucp` 0.8.0, which nests
+  everything under `ucp` like live Shopify stores do. The flat fallback
+  stays, and the comment now says why: a store may still serve a manifest
+  from an older `portage-ucp`.
+
 ## [0.6.3] - 2026-09-24
 
 - `Client.connect(url:, proxy:)` and `Client.discover(url, proxy:)` take a

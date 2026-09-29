@@ -92,9 +92,14 @@ module Portage
 
       # Real UCP manifests (confirmed live on Casper, Allbirds, Glossier, and
       # 34+ other Shopify UCP rollouts as of "2026-08-25") nest everything one
-      # level deeper under a "ucp" key. This gem's own server side
-      # (Portage::Ucp::Manifest) still emits the old flat shape, so both are
-      # supported rather than picking one — see docs/well-known-ucp.md.
+      # level deeper under a "ucp" key. Portage::Ucp::Manifest has emitted
+      # the same nested shape since portage-ucp 0.8.0. The flat fallback
+      # stays for stores still serving a manifest from an older portage-ucp:
+      # there, services and capabilities sit at the top level and
+      # capabilities is an array of {name:, version:}. This gem needing
+      # portage-ucp 0.8 says nothing about what a store runs, so dropping
+      # the fallback would break discovery against those stores — see
+      # docs/well-known-ucp.md.
       def self.ucp_section(manifest)
         manifest["ucp"] || manifest
       end
