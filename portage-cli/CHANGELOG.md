@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-29
+
 - **Human pick and approve** (`docs/plans/human-pick-and-approve.md`, Phases 1-3).
   Loop steps 3 and 5 now have a ready-made interface for a person at a terminal
   and for an agent relaying their answer.

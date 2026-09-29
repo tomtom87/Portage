@@ -38,7 +38,7 @@ Then a purchase goes through only after you type yes in your own terminal (`port
 !!! note "`person` is not a hard guarantee"
     A model can't type on your terminal, but an agent with a shell can edit `~/.portage/policy.json` or the quote files in `~/.portage/quotes/`, or open a terminal of its own with `script` or `expect`. `person` raises the bar. It doesn't replace not giving an untrusted agent a shell. Also, the "compare" choice uses your proxy settings from the environment and `config.json` (`pick` has no `--proxy` flags).
 
-This needs a `portage-cli` newer than `0.8.0`, with `pick` and `approve` (unreleased at the time of writing).
+This needs `portage-cli` 0.9.0 or newer, the first release with `pick` and `approve`.
 
 ## The skill
 
