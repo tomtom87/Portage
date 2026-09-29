@@ -19,7 +19,7 @@ in this gem.
 | `Portage::Ucp::Adapter` | The contract your backend implements — override only the catalog/cart/checkout/order/identity methods you support; the rest stay unadvertised. |
 | `Portage::Ucp::CapabilityRegistry` | Figures out which capabilities an `Adapter` actually backs. |
 | `Portage::Ucp::Dispatcher` | Routes a capability+action call to the right `Adapter` method. |
-| `Portage::Ucp::Mcp::Server` | Wraps an `Adapter` as an MCP server — one `MCP::Tool` per advertised action, stdio or Streamable HTTP. |
+| `Portage::Ucp::Mcp::Server` | Wraps an `Adapter` as an MCP server — one `MCP::Tool` per advertised action; serve it over stdio or Streamable HTTP with the `mcp` gem's transports. |
 | `Portage::Ucp::Manifest` | Builds the signed `/.well-known/ucp` discovery document. |
 | `Portage::Ucp::Rack::ManifestEndpoint` | Serves that manifest over Rack. |
 | `Portage::Ucp::Rack::WebhookEndpoint` | HMAC-verified inbound order-lifecycle webhooks. |
@@ -32,7 +32,7 @@ in this gem.
 | `Portage::Ucp::PolicyGuard` / `Portage::Ucp::Policy` | Per-transaction/rolling/velocity caps and a merchant allowlist, checked before `complete_checkout` dispatch; configured via `portage-cli`'s `portage policy show/set`. |
 | `Portage::Ucp::Support::OfferRanking` / `Portage::Ucp::Support::Escalation` | The offer-ranking rule (buyable, then priced, then cheapest, ties stable) and the escalation rule (`requires_escalation`, then a mismatch). `portage-ucp-decision` wraps both as typed verdicts; `portage-cli` calls them directly. |
 | `Portage::Ucp::PaymentEnrollmentGuard` | Validates every `create_payment_enrollment`/`get_payment_enrollment` result an `Adapter` returns — `status` must be `"pending"` (with a `setup_url`, no `payment_token`) or `"complete"` (with a `payment_token`, no `setup_url`). Runs automatically in `Dispatcher#call`. |
-| `Portage::Ucp::Ap2::PaymentMandate` / `Portage::Ucp::Ap2::MandateGuard` | A typed shape for an AP2 payment mandate, and shape-only validation (required fields + expiry — not cryptographic verification) run automatically on any `mandate:` argument passed through `Dispatcher#call`. |
+| `Portage::Ucp::Ap2::PaymentMandate` / `Portage::Ucp::Ap2::MandateGuard` | A typed shape for an AP2 payment mandate, and validation (required fields + expiry, plus signature verification when `mandate_trusted_keys` is configured) run automatically on any `mandate:` argument passed through `Dispatcher#call`. |
 
 Security defaults are all locked down, not permissive-by-omission —
 `UnconfiguredAuthenticator` rejects every mutating call until you configure a real
