@@ -4,10 +4,11 @@ module Portage
     #   tool call, return an auth context (any truthy value) or raise
     #   Portage::Ucp::AuthenticationError. There is deliberately no default that
     #   allows anonymous mutation — an unconfigured server rejects every
-    #   mutating capability call (see UNCONFIGURED below). Read-only catalog
-    #   calls MAY be left open at the consumer's explicit choice by not
-    #   requiring authentication for those specific actions (see
-    #   Mcp::Server.build's `mutating_only:`).
+    #   mutating capability call (see UnconfiguredAuthenticator below).
+    #   Mcp::Server.build calls it only for mutating tools: those whose
+    #   adapter method takes `idempotency_key:`. Every other tool (catalog
+    #   search, product, cart, checkout and order lookups) never reaches it,
+    #   and Server.build has no option to change that.
     class Authenticator
       def call(_server_context)
         raise NotImplementedError, "#{self.class} must implement #call"
