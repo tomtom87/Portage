@@ -91,6 +91,12 @@ RSpec.configure do |config|
       original.call(**kwargs)
     end
 
+    # Doctor's default index_database — same reasoning as the two stores above.
+    allow(Portage::Cli::Index::Database).to receive(:new).and_wrap_original do |original, **kwargs|
+      kwargs = { path: Portage::Cli::Index::Database.path_for(@index_stores_path) }.merge(kwargs)
+      original.call(**kwargs)
+    end
+
     # Same as categories_for — Classifier.names_for (Phase 3's browser
     # import display) reads the same ~/.portage/categories.yml override.
     allow(Portage::Cli::Classifier).to receive(:names_for).and_wrap_original do |original, ids, **kwargs|

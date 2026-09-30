@@ -341,6 +341,34 @@ RSpec.describe Portage::Cli::Doctor do
       expect(finding.message).to include("2 store(s)", "3 product(s)", "3 day(s) ago")
     end
 
+    describe "the index database (docs/plans/local-catalogue.md Phase 1)" do
+      let(:database) { Portage::Cli::Index::Database.new(path: File.join(Dir.mktmpdir, "index.sqlite3")) }
+      let(:stores) { instance_double(Portage::Cli::Index::Store, exists?: false) }
+      let(:products) { instance_double(Portage::Cli::Index::ProductStore) }
+
+      def finding_with_database
+        described_class.new(install_doctor: install_doctor, index_stores: stores, index_products: products,
+                            index_database: database,
+                            known_cache: instance_double(Portage::Cli::Index::KnownCache, stale?: false,
+                                                                                          exists?: false))
+                       .call.find { |f| f.check == "index" }
+      end
+
+      it "reports the path, row counts and FTS5 availability, even before anything is indexed" do
+        finding = finding_with_database
+
+        expect(finding.message).to include(database.path, "FTS5")
+        expect(finding.details[:database]).to eq(database.info)
+        expect(finding.details[:database]).to include(stores: 0, products: 0)
+      end
+
+      it "counts real rows" do
+        database.put("stores", "https://a.example", { "origin" => "https://a.example" })
+
+        expect(finding_with_database.details[:database]).to include(stores: 1, products: 0, exists: true)
+      end
+    end
+
     describe "the known-stores cache (Phase 2c)" do
       let(:stores) { instance_double(Portage::Cli::Index::Store, exists?: false) }
       let(:products) { instance_double(Portage::Cli::Index::ProductStore) }
