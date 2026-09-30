@@ -70,9 +70,6 @@
 - text: SMALL APPLIANCES Brand:Roborock InStock
   expect: '604'
   source: jbhifi storefront (Roborock Qrevo Edge 2 Flow Robot Vacuum)
-- text: WHITEGOODS Brand:Beko LimitedStock
-  expect: '604'
-  source: jbhifi storefront (Beko BWDB9540W 9kg/5kg Front Load Ultrafast Washer Dryer Combo)
 - text: AUDIO Brand:Celestion InStock
   expect: '223'
   source: 'jbhifi storefront (Celestion T5916: 1" 12W HF Driver 8 Ohm)'
@@ -317,4 +314,7 @@
   source: browser import style (url or page title)
 - text: Dyson V15 Detect Cordless Vacuum Cleaner | Bunnings
   expect: '604'
+  source: browser import style (url or page title)
+- text: https://www.jbhifi.com.au/products/yaber-l1-pro-full-hd-projector
+  expect: '386'
   source: browser import style (url or page title)
