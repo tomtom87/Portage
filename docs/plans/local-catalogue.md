@@ -1,6 +1,6 @@
 # Local Catalogue: SQLite Index, Storefront Crawl, Product Cards, Packaging
 
-**Status:** Phases 1-3 done, Phase 4 next
+**Status:** done (Phases 1-4). Release cut, MIT-0 decision and ClawHub publish are the user's, see "Next".
 **Branch:** `local-catalogue` (off `main`)
 **Driver:** a Grok thread proposing a full local product catalogue, card-shaped output for agents, and Omarchy/OpenClaw packaging. Other ideas from that thread (merchant promo config, localhost shopping UI, beacon registry) are **out of scope** here and come back as their own plans.
 
@@ -160,6 +160,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 | 2026-09-30 | 1 | **Done** (commits `Store the local index in SQLite`, `Report the index database in portage doctor`; unpushed). `rake`-equivalent for portage-cli: rspec 1103 -> 1131 examples, 0 failures; rubocop clean, no new disables. Existing `store_spec`/`product_store_spec` pass unchanged. See "Phase 1 results" below the table. |
 | 2026-09-30 | 2 | **Done** (commits `Classify long texts without comparing every word to every keyword`, `Crawl a Shopify store's products.json into the local index`, `Add portage index search and page index show --products`, `Document the catalogue crawl and index search`; unpushed). portage-cli rspec 1131 -> 1201 examples, 0 failures; rubocop clean, no new disables; each commit green on its own. `index add` crawls only with `--crawl`. Live: thelightyard.co.uk 164 products in 3.5s, JB Hi-Fi 5,000 (page cap) in 36s, re-crawls upsert with no duplicates. See "Phase 2 results".
 | 2026-09-30 | 3 | **Done** (commits `Carry the UCP product on find offers and index search hits`, `Document product cards in the buy skill and CLI reference`; unpushed). portage-cli rspec 1201 -> 1211 examples, 0 failures; rubocop clean, no new disables. `find` and `shopify_catalog` offers carry `product`; `index search` is `live: false` with a price-free `product` per hit. `claude plugin validate .` passes. Headless `/buy` run **skipped** (claude -p: "OAuth session expired"), replaced by a manual render check on real `find --json`. See "Phase 3 results".
+| 2026-09-30 | 4 | **Done** (commits `Add OpenClaw metadata to the buy skill and check it against the plugin`, `Document installing the buy skill on OpenClaw and Omarchy`; unpushed). portage-cli rspec 1211 -> 1218 examples, 0 failures; rubocop clean. `claude plugin validate .` passes. Arch container: `mise use -g gem:portage-cli` gives a working `portage --version`/`doctor --json` (needs a compiler). **Skipped:** ClawHub dry run/scan (blocked, nothing published), OpenClaw runtime gating, Omarchy skill path (unverifiable). See "Phase 4 results".
 
 ### Phase 1 results (2026-09-30)
 
@@ -280,27 +281,42 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 
 **Not done, deliberately:** no price range or currency in index cards (the index has no price); no image beyond the first; no new card object.
 
-## Restart prompt (Phase 4)
+### Phase 4 results (2026-09-30)
 
-```text
-Read docs/plans/local-catalogue.md in full, then implement Phase 4 only (packaging for OpenClaw and Omarchy). Phases 1-3 (SQLite index store, storefront catalogue crawl and `index search`, card-ready output) are done on the local-catalogue branch; read their progress-log rows and the "Phase 1 results", "Phase 2 results" and "Phase 3 results" sections first.
+**Built:**
+- `plugins/buy/skills/buy/SKILL.md` frontmatter gains `version: 0.8.0` (= `plugins/buy/.claude-plugin/plugin.json`) and `metadata.openclaw`: `homepage`, `requires.bins: [portage]`, `requires.config: [~/.portage/.env, ~/.portage/config.json]`, a brew `install` spec (`tomtom87/portage/portage`, bins `portage`) and 18 `envVars`, all `required: false`, each with a description. No `requires.env`, `primaryEnv` or licence field. Same file, no fork.
+- `portage-cli/spec/packaging/buy_skill_frontmatter_spec.rb` (7 examples): frontmatter parses as YAML with name/description/semver version; skill version equals `plugin.json`; bins/config/install/homepage are as declared; nothing is `required`; every `PORTAGE_*`/`BRAVE_*`/`GOOGLE_*`/`ETSY_*` name in the skill and its references is declared (and the `_CITY`... suffix forms the skill lists next to `PORTAGE_SHIP_STREET`); nothing declared that the skill never mentions. Written first and seen failing, then made green. Mutation check: bumping `plugin.json` alone fails it.
+- README "Other agents" gains OpenClaw and Omarchy bullets (the docs site includes that block, so `docs/skills/buy.md` needs no edit). Root CHANGELOG `[Unreleased]` entry. portage-cli has no code change, so no CHANGELOG entry there.
 
-Setup: git checkout local-catalogue (Phases 1-3 are committed there and unpushed, so don't branch off main). Confirm `git log --oneline` shows the Phase 3 commits ("Carry the UCP product on find offers and index search hits", "Document product cards in the buy skill and CLI reference", "Log local catalogue Phase 3 results and validation") and that the baseline is green: `cd portage-cli && rtk proxy bundle exec rspec --format progress` (1211 examples, 0 failures) and `rtk proxy bundle exec rubocop` (clean). `rake` is not in the portage-cli bundle; rspec + rubocop is the "rake spec" equivalent. The `rtk proxy` prefix stops a hook from mangling output.
+**Validation:**
+1. **`claude plugin validate .`: pass** (marketplace) and `claude plugin validate plugins/buy` (plugin manifest): pass. Neither reads SKILL.md frontmatter beyond what Claude Code already accepts.
+2. **OpenClaw skill-format docs re-fetched** (docs.openclaw.ai/clawhub/skill-format, /clawhub/publishing, /tools/skills). The metadata shape used matches the "complete frontmatter" example. `envVars` with `required: false` is the documented home for optional vars.
+3. **Arch container (`archlinux:latest`, linux/amd64 under emulation on an arm64 Mac): pass, with two findings.**
+   - `mise use -g gem:portage-cli` resolved the **released 0.10.0** gem (rubygems already has it, and it includes the SQLite index), and `portage --version` gave 0.10.0. `portage doctor --json` ran; the index check reported "Index database: ...index.sqlite3 (0 store row(s), 0 product row(s), FTS5 available)". So the mise route already installs what this branch documents.
+   - The branch's own gem (built with `gem build`, `gem install --user-install`) gave the same `--version` and doctor output.
+   - **Finding: it needs a C compiler.** With only `ruby mise git`, both routes fail building `bigdecimal` (native extension on Ruby 3.4); with `base-devel` they succeed. `sqlite3` was not the problem. README says so. Whether Omarchy ships `base-devel` is unverified.
+   - Container quirk, not a product issue: pacman's sandbox fails under qemu emulation (`seccomp` error), so the test script sets `DisableSandbox`.
+4. **Real-host checks that do not apply:** none touched `~/.portage`; the scratch dir is `tmp/validate/p4/`.
 
-Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 4" and the branch. The main thread briefs and reviews only.
+**Skipped, honestly:**
+- **ClawHub scan/dry run: not run.** `clawhub` is not installed, and running it via `npx clawhub@latest skill publish --dry-run` was blocked by the permission classifier as a possible public-surface action, so I did not retry it another way. Nothing was published. ClawHub's docs say `--dry-run` exists but does not check category slugs. **Still to do by the user:** run `npx clawhub@latest skill publish plugins/buy/skills/buy --slug <slug> --dry-run` (and, if wanted, a throwaway slug from the personal account) to see the real metadata-mismatch scan. The spec above is our stand-in for that scan.
+- **OpenClaw runtime gating** (skill hidden when `portage` is missing): not run, no OpenClaw install here. The docs say skills are "filtered at load time based on ... binary presence"; not exercised.
+- **Omarchy skill path: not verified.** A read of the Omarchy manual was blocked, so nothing Omarchy-specific is documented. README points to the agent's own skills directory instead.
+- Headless `claude -p /buy` was not re-tried (the Phase 3 skip stands).
 
-Rules: KISS, DRY, TDD (failing specs or checks first). One skill, no fork: add OpenClaw metadata to plugins/buy/skills/buy/SKILL.md frontmatter. Nothing may publish anywhere: the ClawHub publish, and the MIT-0 licensing decision (open decision 3), are the user's call. Do not run `clawhub publish` without the user's explicit yes in chat, and if a throwaway-slug publish is needed to test the scan, do it only from the user's personal account (see project memory "Plugin submission: personal account"), after asking. Do not cut a release (open decision 4).
+**Judgement calls:**
+- **No existing plugin-version check existed** (searched Rakefile, script/, specs, CI), so "reuse the existing machinery" had nothing to reuse. The drift check is one spec, in the portage-cli suite because that is the only suite CI runs; it skips itself outside the monorepo.
+- **The skill `version` is a second place to bump at release.** Cutting a release that bumps `plugin.json` must also bump SKILL.md `version`, or the spec fails (deliberately).
+- **Shipping suffix vars are declared by name** (`PORTAGE_SHIP_CITY` etc.), because the skill lists them as `_CITY`... next to `PORTAGE_SHIP_STREET`. `PORTAGE_HANDOFF_TARGET` and the other flag-style vars are declared too, since ClawHub scans for any named var. Not declared: vars the skill never names (`PORTAGE_CURRENCY`, `WALMART_*`...).
+- **`.env` and `config.json` under `requires.config`** as the plan said; they are optional in practice (portage runs without them and `doctor` reports gaps).
+- **OpenClaw doc verified** its personal skills dir is `~/.agents/skills` (default state) and managed is `~/.openclaw/skills`, so the existing dotagents route already lands there.
 
-Phase 3 facts to build on (verify in the code, they may have drifted):
-- The buy skill (plugins/buy/skills/buy/SKILL.md) has a new "Showing offers as product cards" section under step 2 and names `index search` and `live: false`. Its frontmatter today is name + description only; plugins/buy/.claude-plugin/plugin.json is at version 0.8.0 and is what the skill `version` must follow. Find what already checks plugin versions (Rakefile, script/, specs) before adding a drift check.
-- Every env var the skill names must appear under metadata.openclaw.envVars (all required: false), or ClawHub's scan blocks the publish. Grep the skill and its references (handoff-only.md, outcomes.md, raw-ucp.md) for PORTAGE_*, search keys, retailer keys, so the list matches.
-- portage-cli is 0.10.0 with the SQLite index (sqlite3 gem, precompiled for macOS/Linux; Homebrew builds the vendored SQLite from source, ~1 minute). The brew formula is script/homebrew-formula and the tap tomtom87/portage.
-- `claude plugin validate .` passes on the branch (Phase 3). Headless `claude -p` failed with an expired OAuth session in the Phase 3 environment, so check first whether it works; if not, record a skip instead of faking it.
-- Live validation dirs go under tmp/validate/ (untracked) with HOME pointed away from the real ~/.portage. Docker is available (Phase 1 used ruby:3.3); the Arch container check uses archlinux:latest with `mise use -g gem:portage-cli`. Note the published gem is 0.10.0-or-older on rubygems until a release, so `mise use -g gem:portage-cli` there installs the released gem, not the branch: say so in the log, and test the branch gem via `gem install` of the locally built .gem as well.
+**Bugs caught:** the first frontmatter draft failed YAML parsing (unquoted `: ` inside env var descriptions), which the parse spec caught before anything was validated elsewhere. A spec read the skill as US-ASCII in this shell locale (`invalid byte sequence`), fixed by reading as UTF-8.
 
-Before writing code: re-read the plan's Phase 4 section, docs.openclaw.ai/clawhub/skill-format (fetch it again, formats drift), README.md's "Other agents" block, the docs site pages for the skill (docs/skills/buy.md, mkdocs.yml), and the existing plugin-version checks. Verify Omarchy's actual skill paths before writing them down; if you cannot verify, say so in the docs rather than guess.
+## Next (for the user)
 
-Live validation: never touch the real ~/.portage. Record failures and skips honestly (an unverifiable Omarchy path, an OpenClaw runtime you cannot run, a ClawHub scan you may not publish to).
+1. Decide MIT-0: ClawHub republishes every skill as MIT-0, the repo is MIT (open decision 3).
+2. Run the ClawHub dry run yourself (see "Skipped"), then publish when ready. Nothing has been published.
+3. Cut the release when you want it (open decision 4): bump `plugins/buy/.claude-plugin/plugin.json` **and** SKILL.md `version` together, CHANGELOG, `rake publish_all`, `rake homebrew:update`.
+4. Unrelated leftovers: category keywords in `known-stores/categories.yml` (Phase 2), and re-running the headless `/buy` card check on an authenticated session (Phase 3).
 
-Finish: record the validation results in the plan. Add a Phase 4 progress-log row and a "Phase 4 results" section (judgement calls, bugs caught by specs or review), set the plan Status to done, and add a CHANGELOG [Unreleased] entry (root, and portage-cli if it changes). Commit on local-catalogue in logical commits, with normal-prose messages and no attribution lines, and don't push. Do not replace this section with another restart prompt: Phase 4 is the last phase, so leave a short "Next" note (release cut, MIT-0 decision, ClawHub publish) for the user.
-```
