@@ -45,8 +45,8 @@ and [Security](security.md).
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.8.0 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](skills/buy.md) |
-| `portage-cli` | 0.10.0 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
+| `buy` plugin | 0.9.0 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](skills/buy.md) |
+| `portage-cli` | 0.11.0 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
 | `shop-via-ucp` skill | – | Agent builders | Shop through a store's UCP endpoint, with or without `portage` | [skill](skills/shop-via-ucp.md) |
 | `portage-ucp-client` | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [API](api/portage-ucp-client.md), [README](core-gems/portage-ucp-client.md) |
 | `portage-ucp-decision` | 0.1.1 | Agent builders | Offer ranking, escalation policy, confidence gate (Jev/Laya), `PolicyGuard` | [API](api/portage-ucp-decision.md), [README](core-gems/portage-ucp-decision.md) |

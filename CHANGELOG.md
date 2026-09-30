@@ -9,7 +9,11 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
-- **README: OpenClaw on ClawHub.** A static "OpenClaw skill" badge in the badge row links to the ClawHub listing (`tomtom87/portage-buy`; ClawHub has no official badge endpoint), and the OpenClaw bullet in "Other agents" now documents `openclaw skills install @tomtom87/portage-buy` and `clawhub install @tomtom87/portage-buy` alongside the manual copy route, replacing "planned but not published". The docs site picks it up through the existing include on `docs/skills/buy.md`. The listing goes live when `buy` 0.8.0 is published.
+## [0.14.0] - 2026-10-01
+
+- **Release set:** `portage-cli` 0.11.0 (the SQLite local index, `portage index build --sources storefront_products` to crawl a store's products, `portage index search`, the UCP `product` field on offers, and the whole-taxonomy category classifier) and `buy` plugin 0.9.0 (product cards, and the OpenClaw metadata with `version` in the skill frontmatter, kept equal to `plugin.json`). `portage-cli` gains a `sqlite3` `~> 2.9` dependency and keeps `portage-ucp` `~> 0.11`. The skill's minimum `portage-cli` stays 0.9.0, because it only uses `index` and the `product` field when they are there. No other gem changed, so the docs-only notes in `portage-ucp-client` and `portage-ucp-webmcp` stay unreleased. The ClawHub listing is published separately, at `buy` 0.9.0.
+
+- **README: OpenClaw on ClawHub.** A static "OpenClaw skill" badge in the badge row links to the ClawHub listing (`tomtom87/portage-buy`; ClawHub has no official badge endpoint), and the OpenClaw bullet in "Other agents" now documents `openclaw skills install @tomtom87/portage-buy` and `clawhub install @tomtom87/portage-buy` alongside the manual copy route, replacing "planned but not published". The docs site picks it up through the existing include on `docs/skills/buy.md`. The listing goes live when `buy` 0.9.0 is published.
 
 - **README: Omarchy install steps.** The Omarchy bullet now installs with Omarchy's own helper
   (`omarchy-mise-install gem:portage-cli portage`), says a stock Omarchy needs `sudo pacman -S --needed

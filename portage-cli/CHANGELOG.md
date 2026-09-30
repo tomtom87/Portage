@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-01
+
 - **Category classification uses the whole taxonomy.** `known-stores/categories.yml` is now generated
   by `script/categories` (stdlib only) from Google's product taxonomy, edition 2021-09-21, instead of
   coming from a script that was never committed. It keeps the same ids and the same top-two-level keys
