@@ -47,7 +47,7 @@ module Portage
       # @return [Array<String>] category ids, most keyword hits first. Ties
       #   keep the shipped file's own order. Empty when nothing matches.
       def self.categories_for(text, known_path: KNOWN_PATH, user_path: PATH)
-        words = tokenize(text)
+        words = tokenize(text).to_h { |word| [word, true] }
         return [] if words.empty?
 
         scored = nodes(known_path, user_path).filter_map { |id, node| rank(id, node, words) }
@@ -90,14 +90,31 @@ module Portage
 
       # --- Scoring one node against the tokenized input ---
 
+      # `words` is a Hash of word => true: each keyword checks its few #word_match? forms
+      # against it, rather than every word against every keyword — the
+      # same matches, but a long product-tag text (Index::Sources::
+      # StorefrontProducts, docs/plans/local-catalogue.md Phase 2) no
+      # longer costs words x keywords comparisons.
       def self.rank(id, node, words)
         keywords = Array(node["keywords"])
-        hits = keywords.count { |keyword| words.any? { |word| word_match?(word, keyword) } }
+        hits = keywords.count { |keyword| match_forms(keyword).any? { |form| words.key?(form) } }
         return nil unless hits.positive?
 
         [id, hits, node["order"].to_i]
       end
       private_class_method :rank
+
+      # Every word #word_match? accepts for `keyword`: itself, its "s"/"es"
+      # plurals, the singular it is a plural of, and the "y"/"ies" swap.
+      def self.match_forms(keyword)
+        forms = [keyword, "#{keyword}s", "#{keyword}es"]
+        forms << keyword.delete_suffix("s") if keyword.end_with?("s")
+        forms << keyword.delete_suffix("es") if keyword.end_with?("es")
+        forms << "#{keyword[0..-2]}ies" if keyword.end_with?("y")
+        forms << "#{keyword[0..-4]}y" if keyword.end_with?("ies")
+        forms
+      end
+      private_class_method :match_forms
 
       # Whole-word only, plus the plural forms a keyword list and a real
       # query/title actually differ by: an exact match, one plus a trailing
