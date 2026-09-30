@@ -79,7 +79,8 @@ module Portage
              portage orders reconcile [--checkout ID] [--json]
              portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
              portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
-             portage index show [--stores|--products] [--json]
+             portage index show [--stores|--products [--page N] [--per-page N]] [--json]
+             portage index search QUERY [--category ID] [--store HOST] [--limit N] [--json]
              portage index add <url> [--crawl] [--json]
              portage index remove <host> [--json]
              portage index sources [--json]
@@ -1362,6 +1363,7 @@ module Portage
       "build" => ->(argv) { run_index_build(argv, refresh: false) },
       "refresh" => ->(argv) { run_index_build(argv, refresh: true) },
       "show" => ->(argv) { run_index_show(argv) },
+      "search" => ->(argv) { run_index_search(argv) },
       "add" => ->(argv) { run_index_add(argv) },
       "remove" => ->(argv) { run_index_remove(argv) },
       "sources" => ->(argv) { run_index_sources(argv) }
@@ -1420,31 +1422,104 @@ module Portage
     end
     private_class_method :format_index_build
 
+    INDEX_SHOW_PER_PAGE = 50
+
     def self.run_index_show(argv)
-      opts = { kind: nil, json: false }
+      opts = { kind: nil, json: false, page: 1, per_page: INDEX_SHOW_PER_PAGE }
       OptionParser.new do |parser|
         parser.on("--stores") { opts[:kind] = "stores" }
         parser.on("--products") { opts[:kind] = "products" }
+        parser.on("--page N", Integer) { |v| opts[:page] = [v, 1].max }
+        parser.on("--per-page N", Integer) { |v| opts[:per_page] = [v, 1].max }
         parser.on("--json") { opts[:json] = true }
       end.parse!(argv)
 
-      result = { stores: opts[:kind] == "products" ? [] : Index::Store.new.all,
-                 products: opts[:kind] == "stores" ? [] : Index::ProductStore.new.all }
+      result = opts[:kind] == "products" ? index_products_page(opts) : index_show_all(opts[:kind])
       puts opts[:json] ? JSON.pretty_generate(result) : format_index_show(result)
       0
     end
     private_class_method :run_index_show
 
+    def self.index_show_all(kind)
+      { stores: kind == "products" ? [] : Index::Store.new.all, products: kind == "stores" ? [] : Index::ProductStore.new.all }
+    end
+    private_class_method :index_show_all
+
+    # `--products` pages (docs/plans/local-catalogue.md Phase 2): a crawled
+    # index can hold thousands.
+    def self.index_products_page(opts)
+      products = Index::ProductStore.new
+      { stores: [], products: products.page(opts[:page], per_page: opts[:per_page]), page: opts[:page],
+        per_page: opts[:per_page], products_total: products.count }
+    end
+    private_class_method :index_products_page
+
     def self.format_index_show(result)
-      lines = ["Stores:"]
-      result[:stores].each { |s| lines << "  #{s['origin']} (#{Array(s['sources']).join(', ')})" }
-      lines << "(none)" if result[:stores].empty?
+      paged = result.key?(:page)
+      lines = paged ? [] : index_store_lines(result[:stores])
       lines << "Products:"
       result[:products].each { |p| lines << "  #{p['title'] || p['key']}" }
       lines << "(none)" if result[:products].empty?
+      lines << index_page_line(result) if paged
       lines.join("\n")
     end
     private_class_method :format_index_show
+
+    def self.index_store_lines(stores)
+      lines = ["Stores:"] + stores.map { |s| "  #{s['origin']} (#{Array(s['sources']).join(', ')})" }
+      stores.empty? ? lines + ["(none)"] : lines
+    end
+    private_class_method :index_store_lines
+
+    def self.index_page_line(result)
+      first = ((result[:page] - 1) * result[:per_page]) + 1
+      last = first + result[:products].length - 1
+      return "Page #{result[:page]} is past the end (#{result[:products_total]} product(s))." if last < first
+
+      "Showing #{first}-#{last} of #{result[:products_total]}. Next: --page #{result[:page] + 1}" \
+        "#{" --per-page #{result[:per_page]}" unless result[:per_page] == INDEX_SHOW_PER_PAGE}"
+    end
+    private_class_method :index_page_line
+
+    # `portage index search` (docs/plans/local-catalogue.md Phase 2): local
+    # index entries only, no request. Exits 1 with no hits.
+    def self.run_index_search(argv)
+      opts = { category: nil, store: nil, limit: 20, json: false }
+      OptionParser.new do |parser|
+        parser.on("--category ID") { |v| opts[:category] = v }
+        parser.on("--store HOST") { |v| opts[:store] = v }
+        parser.on("--limit N", Integer) { |v| opts[:limit] = [v, 1].max }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+      query = argv.join(" ").strip
+      return (warn USAGE) || 1 if query.empty?
+
+      result = index_search(query, opts)
+      puts opts[:json] ? JSON.pretty_generate(result) : format_index_search(result)
+      result[:products].empty? ? 1 : 0
+    end
+    private_class_method :run_index_search
+
+    def self.index_search(query, opts)
+      products = Index::ProductStore.new
+      filters = opts.slice(:category, :store, :limit)
+      { query: query, engine: products.search_engine, filters: filters,
+        products: products.search(query, **filters) }
+    end
+    private_class_method :index_search
+
+    def self.format_index_search(result)
+      return "No index products match \"#{result[:query]}\"." if result[:products].empty?
+
+      lines = result[:products].map do |p|
+        hosts = Array(p["stores"]).filter_map { |s| URI.parse(s["origin"].to_s).host }.join(", ")
+        ["#{p['title']}#{" — #{p['brand']}" if p['brand']}", ("(#{hosts})" unless hosts.empty?), p["url"]]
+          .compact.join(" ")
+      end
+      lines << "(FTS5 isn't available in this SQLite, so this was a plain text match.)" if result[:engine] == "like"
+      lines.join("\n")
+    end
+    private_class_method :format_index_search
 
     def self.run_index_add(argv)
       json = !argv.delete("--json").nil?

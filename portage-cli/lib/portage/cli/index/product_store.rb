@@ -1,4 +1,6 @@
+require "json"
 require_relative "database"
+require_relative "search"
 
 module Portage
   module Cli
@@ -56,6 +58,42 @@ module Portage
         end
 
         def exists? = @db.exists?
+
+        def count = @db.count("products")
+
+        # `index show --products`: one page of entries, in insertion order.
+        def page(number, per_page:)
+          return [] unless exists?
+
+          offset = ([number.to_i, 1].max - 1) * per_page
+          rows = @db.execute("SELECT data FROM products ORDER BY id LIMIT ? OFFSET ?", [per_page, offset])
+          rows.map { |(data)| JSON.parse(data) }
+        end
+
+        # `portage index search` (docs/plans/local-catalogue.md Phase 2):
+        # every query word must match title, brand, category or an alias
+        # (as a prefix, after dropping a plural ending), best bm25 first.
+        # Without FTS5 (a system SQLite built without it) the same filters
+        # run as a LIKE scan, unranked. Untrusted seeds, same as every
+        # other entry: no price, no stock.
+        # @param store [String, nil] a host or URL; matches that host's origin.
+        # @return [Array<Hash>] entries.
+        def search(query, category: nil, store: nil, limit: 20)
+          words = Search.words(query)
+          return [] if words.empty? || !exists?
+
+          sql, binds = Search.sql(words, category: category, host: Search.host_of(store), limit: limit,
+                                         fts: search_engine == "fts5")
+          @db.execute(sql, binds).map { |(data)| JSON.parse(data) }
+        end
+
+        # "fts5", or "like" when the database has no products_fts table.
+        def search_engine
+          return Schema.fts5_available? ? "fts5" : "like" unless exists?
+
+          fts = @db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products_fts'")
+          fts.empty? ? "like" : "fts5"
+        end
 
         private
 
