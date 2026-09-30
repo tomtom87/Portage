@@ -134,6 +134,7 @@ Offer object:
 | `amount` | integer or null | Price in minor units. `null` when unpriced. |
 | `currency` | string or null | ISO currency code. |
 | `url` | string or null | Product page. |
+| `product` | object | The store's UCP `Product` wire hash as served (`title`, `description`, `price_range`, `variants[]`, `options[]`, `handle`, `url`, ...), with `media` cut to the first image. Enough to draw a product card. Left out when the offer source holds no UCP product (the retailer APIs). Not saved into `history`. Its prices are the live ones the flat `amount` came from. |
 
 ```json
 {
@@ -744,10 +745,15 @@ Store entries are the `stores` rows of `~/.portage/index/index.sqlite3`. Each ha
 `portage index search QUERY [--category ID] [--store HOST] [--limit N] --json` searches the local index only. It sends no request. Every word of `QUERY` has to match a product's title, brand, category id or a former title (as a prefix, with a plural ending dropped), best match first.
 
 ```json
-{ "query": "wall light", "engine": "fts5",
+{ "query": "wall light", "engine": "fts5", "live": false,
   "filters": { "category": null, "store": "thelightyard.co.uk", "limit": 20 },
-  "products": [ { "key": "title:...", "title": "...", "url": "https://.../products/...", "stores": [] } ] }
+  "products": [ { "key": "title:...", "title": "...", "url": "https://.../products/...", "stores": [],
+                  "product": { "title": "...", "handle": "...", "url": "https://.../products/...",
+                               "media": [ { "type": "image", "url": "https://..." } ],
+                               "options": [], "variants": [ { "id": "gid://shopify/ProductVariant/1" } ] } } ] }
 ```
+
+`live` is always `false`. Each hit keeps its index entry fields and adds `product`: the persisted part of a UCP `Product` wire hash (`title`, `handle`, `url`, `media` with the first image, `options`, `variants` with only their `id`, `categories`). It is built only from what the index keeps, so it has no `id`, `description`, `price_range` or availability, and a field the entry never had is left out. There is never a price.
 
 `engine` is `fts5`, or `like` when the SQLite in use has no FTS5 (the same filters, as an unranked text match). `products` are index entries, the same shape as `index show --products`. Exits `0` with hits and `1` with none, or with no query (usage on stderr). The results are seeds: re-check the price and stock live (`find --store`, `buy --dry-run`) before quoting either.
 

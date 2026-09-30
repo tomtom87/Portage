@@ -51,12 +51,17 @@ build the same thing into your own agent.
 |---|---|---|
 | 0. Preflight | `portage --version`, `portage doctor --json` | Missing shipping address or search keys: ask the person to run `portage setup` |
 | 1. Check history | `portage history --json` | Already bought? Say so before buying again |
-| 2. Find offers | `portage find --query "<item>" [--max-price N] --json` | `offers[]`: `store`, `product_id`, `title`, `amount` (minor units), `currency`, `checkout` |
+| 2. Find offers | `portage find --query "<item>" [--max-price N] --json` | `offers[]`: `store`, `product_id`, `title`, `amount` (minor units), `currency`, `checkout`, and `product` (the store's UCP product, for a card) |
 | 3. Person picks | `portage pick --json`, or your UI | `needs_pick`: show `choices[]` (each with a `url`), relay the answer with `pick --choose REF`. Never let the model pick for them |
 | 4. Dry run | `portage buy --offer REF --dry-run --json` (or `buy <store> --query "<item>" --product-id ID [--qty N] --dry-run --json`) | `outcome: "dry_run"` with a `quote_id`; show the entry in `totals` with `type: "total"` |
 | 5. Approve | `portage approve QUOTE_ID --json`, or your UI | `needs_approval`: show `summary`, relay a yes with `approve QUOTE_ID --relayed-yes`. The person says yes to that exact total |
 | 6. Buy | `portage buy --quote QUOTE_ID --yes --json` | `outcome`: only `purchased` means money moved. `quote_changed` means the price rose and nothing was bought |
 | 7. Track | `portage orders reconcile --json`, or `buy ... --wait` | Settled hand-offs, order status |
+
+An offer's `product` field is the store's UCP `Product` wire hash as served (first image only), so a UI
+can draw a product card (image, title, price, options) from the offer alone, without a second
+request. `portage index search --json` returns `product` too, but from the local index: it has no
+price, and the result is marked `live: false`. Re-fetch live before quoting a price or claiming stock.
 
 Every field and outcome is listed in the [CLI JSON reference](api/cli-json.md). Branch on
 fields, never on the human-readable `message`.
