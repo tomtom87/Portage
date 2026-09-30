@@ -1,6 +1,75 @@
 ---
 name: buy
 description: Find, compare and buy products from real online stores for the user through the `portage` CLI. Covers search across stores, price comparison, dry-run checkout, purchase with a tokenized payment method under spending caps, hand-off to the user's own browser to pay, and order tracking to the user's shipping address. Use whenever the user asks to buy, order, shop for, reorder, price-check or find where to get something, compare offers across stores, check whether a store supports automated checkout, set up shopping (shipping address, search keys, payment method, spending limits), or track an order Portage placed. Amazon and other hand-off-only retailers are never automated — the skill opens the page and the user buys.
+version: 0.8.0
+metadata:
+  openclaw:
+    homepage: https://portage.readthedocs.io/en/latest/
+    requires:
+      bins:
+        - portage
+      config:
+        - ~/.portage/.env
+        - ~/.portage/config.json
+    install:
+      - kind: brew
+        formula: tomtom87/portage/portage
+        bins: [portage]
+    envVars:
+      - name: BRAVE_SEARCH_API_KEY
+        required: false
+        description: "Brave Search API key for open-ended product queries. Set in ~/.portage/.env by the user, never pasted into chat."
+      - name: GOOGLE_CSE_KEY
+        required: false
+        description: "Google Programmable Search API key, used with GOOGLE_CSE_CX for open-ended product queries."
+      - name: GOOGLE_CSE_CX
+        required: false
+        description: "Google Programmable Search engine id, used with GOOGLE_CSE_KEY."
+      - name: PORTAGE_SHIP_STREET
+        required: false
+        description: "Shipping address street line."
+      - name: PORTAGE_SHIP_CITY
+        required: false
+        description: "Shipping address city."
+      - name: PORTAGE_SHIP_REGION
+        required: false
+        description: "Shipping address state or region."
+      - name: PORTAGE_SHIP_POSTAL_CODE
+        required: false
+        description: "Shipping address postal code."
+      - name: PORTAGE_SHIP_COUNTRY
+        required: false
+        description: "Shipping address country code."
+      - name: PORTAGE_SHIP_FIRST_NAME
+        required: false
+        description: "Optional first name on the shipping address."
+      - name: PORTAGE_SHIP_LAST_NAME
+        required: false
+        description: "Optional last name on the shipping address."
+      - name: PORTAGE_SHIP_PHONE
+        required: false
+        description: "Optional phone number on the shipping address."
+      - name: PORTAGE_AGENT_PROFILE
+        required: false
+        description: "URL of the hosted UCP agent profile, which real UCP stores verify before answering."
+      - name: PORTAGE_HANDOFF_TARGET
+        required: false
+        description: "Where a hand-off opens the checkout: default, print, profile or agent:NAME."
+      - name: PORTAGE_AUTO_OPEN_CHECKOUT
+        required: false
+        description: "Whether a hand-off opens the checkout URL in the browser automatically."
+      - name: PORTAGE_ABORT_ON_CHECKOUT_MISMATCH
+        required: false
+        description: "When on, a checkout that does not match what was asked for aborts instead of warning."
+      - name: ETSY_API_KEY
+        required: false
+        description: "Etsy API key, only for Etsy hand-off pages."
+      - name: ETSY_ACCESS_TOKEN
+        required: false
+        description: "Etsy access token, only for Etsy hand-off pages."
+      - name: ETSY_SHOP_ID
+        required: false
+        description: "Etsy shop id, only for Etsy hand-off pages."
 ---
 
 # Buy

@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`buy` skill: OpenClaw metadata, one skill.** `plugins/buy/skills/buy/SKILL.md` frontmatter gains `version` (kept equal to `plugins/buy/.claude-plugin/plugin.json`) and a `metadata.openclaw` block: `requires.bins: [portage]`, `requires.config`, a brew `install` spec, `homepage`, and an `envVars` entry (all `required: false`) for every env var the skill and its references name, which is what ClawHub's metadata-mismatch scan checks. A new spec (`portage-cli/spec/packaging/buy_skill_frontmatter_spec.rb`) fails if the frontmatter stops parsing, the version drifts from the plugin, or an env var is named without being declared. README's "Other agents" block gains OpenClaw and Omarchy notes. Nothing is published to ClawHub.
+
 - **`buy` skill: product cards.** A new section on showing offers as product cards from the offer's `product` field (image, title, price or range, store, key options, link), host-agnostic, and on treating `index search` hits (`live: false`, no price) as seeds to re-fetch live. Documented in `docs/api/cli-json.md` and `docs/agentic-flow.md`. Code is in `portage-cli`'s changelog.
 
 ## [0.13.0] - 2026-09-29
