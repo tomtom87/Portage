@@ -164,6 +164,44 @@ RSpec.describe Portage::Cli::Find do
                                              title: "Cold Brew", amount: 2400, currency: "USD", checkout: true)
   end
 
+  describe "product field" do
+    let(:full) do
+      product.merge("handle" => "cold-brew", "description" => { "plain" => "Smooth." },
+                    "media" => [{ "type" => "image", "url" => "https://cdn.example/1.jpg" }],
+                    "options" => [{ "name" => "Size", "values" => [{ "label" => "Large" }] }],
+                    "variants" => [{ "id" => "v1", "title" => "Large",
+                                     "price" => { "amount" => 2400, "currency" => "USD" } }])
+    end
+
+    it "carries the store's product wire hash as served, next to the flat fields" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [full]))
+
+      offer = find(backends: [backend("duckduckgo", ["https://shop.example"])]).call[:offers].first
+
+      expect(offer[:product]).to eq(full)
+      expect(offer).to include(store: "https://shop.example", product_id: "p1", title: "Cold Brew",
+                               amount: 2400, currency: "USD", url: "https://shop.example/p1", checkout: true)
+    end
+
+    it "keeps only the first image" do
+      two = full.merge("media" => [{ "type" => "image", "url" => "a" }, { "type" => "image", "url" => "b" }])
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [two]))
+
+      offer = find(backends: [backend("duckduckgo", ["https://shop.example"])]).call[:offers].first
+
+      expect(offer[:product]["media"]).to eq([{ "type" => "image", "url" => "a" }])
+    end
+
+    it "does not persist the product into history" do
+      offer = { offer_ref: "of_1", store: "https://s.example", product_id: "p", title: "T", amount: 1, currency: "USD",
+                url: "https://s.example/p", checkout: true, product: full }
+
+      saved = Portage::Cli::History.new.record_search(query: "q", offer_count: 1, message: nil, offers: [offer])
+
+      expect(saved["offers"].first).not_to have_key("product")
+    end
+  end
+
   it "unwraps search_catalog's wire envelope instead of treating it as the product list" do
     allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [product]))
 

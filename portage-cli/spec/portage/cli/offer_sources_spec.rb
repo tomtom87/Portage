@@ -39,7 +39,17 @@ RSpec.describe Portage::Cli::OfferSources::ShopifyCatalog do
 
     expect(offers).to eq([{ store: "https://lemsshoes.com", source: "shopify_catalog", checkout: nil,
                             product_id: "gid://shopify/ProductVariant/9", title: "Trail Boots",
-                            amount: 12_000, currency: "GBP", url: "https://lemsshoes.com/products/x" }])
+                            amount: 12_000, currency: "GBP", url: "https://lemsshoes.com/products/x",
+                            product: catalog_product }])
+  end
+
+  it "passes the catalog's product wire hash through, first image only" do
+    rich = catalog_product.merge("media" => [{ "type" => "image", "url" => "a" }, { "type" => "image", "url" => "b" }])
+    stub_catalog([rich])
+
+    offer = described_class.new.offers("hiking boots").first
+
+    expect(offer[:product]).to eq(rich.merge("media" => [{ "type" => "image", "url" => "a" }]))
   end
 
   it "drops a product with no variant url to buy from" do
@@ -287,5 +297,17 @@ RSpec.describe Portage::Cli::OfferSources::AmazonCreators do
 
   it "an Amazon offer still routes to the existing Tier C hand-off path at buy time" do
     expect(Portage::Cli::HandoffOnly.amazon?("www.amazon.com")).to be true
+  end
+end
+
+RSpec.describe "retailer offer sources and the product field" do
+  it "leave it out, since they hold no UCP product" do
+    offer = Portage::Cli::OfferSources::BestBuyProducts.new(api_key: "k")
+    stub_request(:get, /api\.bestbuy\.com/).to_return(
+      body: { products: [{ sku: 1, name: "TV", salePrice: 9.99, url: "https://www.bestbuy.com/x" }] }.to_json,
+      headers: { "Content-Type" => "application/json" }
+    )
+
+    expect(offer.offers("tv").first).not_to have_key(:product)
   end
 end
