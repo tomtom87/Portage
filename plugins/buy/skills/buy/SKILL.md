@@ -1,7 +1,7 @@
 ---
 name: buy
 description: Find, compare and buy products from real online stores for the user through the `portage` CLI. Covers search across stores, price comparison, dry-run checkout, purchase with a tokenized payment method under spending caps, hand-off to the user's own browser to pay, and order tracking to the user's shipping address. Use whenever the user asks to buy, order, shop for, reorder, price-check or find where to get something, compare offers across stores, check whether a store supports automated checkout, set up shopping (shipping address, search keys, payment method, spending limits), or track an order Portage placed. Amazon and other hand-off-only retailers are never automated — the skill opens the page and the user buys.
-version: 0.8.0
+version: 0.9.0
 metadata:
   openclaw:
     homepage: https://portage.readthedocs.io/en/latest/
