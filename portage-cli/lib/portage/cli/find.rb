@@ -229,9 +229,11 @@ module Portage
         amount, currency = price_of(product)
         return nil if over_max_price?(amount)
 
-        { store: store[:origin], source: store[:source], checkout: store[:checkout],
-          product_id: field(product, "id"), title: field(product, "title"),
-          amount: amount, currency: currency, url: field(product, "url") }
+        OfferSources.with_product(
+          { store: store[:origin], source: store[:source], checkout: store[:checkout],
+            product_id: field(product, "id"), title: field(product, "title"),
+            amount: amount, currency: currency, url: field(product, "url") }, product
+        )
       end
 
       # An unpriced offer stays in: no price isn't the same as too dear.

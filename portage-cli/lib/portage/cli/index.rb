@@ -1,5 +1,6 @@
 require_relative "index/store"
 require_relative "index/product_store"
+require_relative "index/entry_product"
 require_relative "index/known_cache"
 require_relative "index/sources"
 require_relative "index/builder"

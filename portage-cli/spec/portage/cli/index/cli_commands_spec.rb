@@ -57,6 +57,32 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "index search cards" do
+    before do
+      products.upsert("title:brass-wall-light", origin: "https://yard.example", seen_at: 1, title: "Brass Wall Light",
+                                                brand: "Yard", category: "594", handle: "b", url: "https://yard.example/products/b",
+                                                image_url: "https://cdn.example/b.jpg", variant_ids: ["gid://v/1"])
+    end
+
+    it "marks results live: false and gives each a product wire hash with no price" do
+      result = JSON.parse(capture_stdout { described_class.run(%w[index search brass --json]) })
+
+      expect(result["live"]).to be(false)
+      expect(result["products"].first["product"]).to include(
+        "title" => "Brass Wall Light", "url" => "https://yard.example/products/b",
+        "media" => [{ "type" => "image", "url" => "https://cdn.example/b.jpg" }],
+        "variants" => [{ "id" => "gid://v/1" }]
+      )
+      expect(JSON.generate(result)).not_to match(/"(price|amount|currency|available)/)
+    end
+
+    it "says in text mode that the hit is not live" do
+      output = capture_stdout { described_class.run(%w[index search brass]) }
+
+      expect(output).to include("not live")
+    end
+  end
+
   describe "index show --products" do
     before { seed }
 

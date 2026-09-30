@@ -49,6 +49,19 @@ module Portage
 
       def self.retail_handoff_host?(host) = HandoffOnly.matches_any?(host, RETAIL_HANDOFF_HOSTS)
 
+      # Adds the UCP Product wire hash to an offer as `product` (docs/plans/
+      # local-catalogue.md Phase 3), as the store served it, with `media`
+      # cut to the first image. Shared by Find and ShopifyCatalog so both
+      # trim the same way. Anything that isn't a non-empty hash leaves the
+      # offer as it was: the field is left out, not faked.
+      def self.with_product(offer, product)
+        return offer unless product.is_a?(Hash) && !product.empty?
+
+        media = product["media"]
+        product = product.merge("media" => media.first(1)) if media.is_a?(Array) && media.length > 1
+        offer.merge(product: product)
+      end
+
       # Shared by every retailer source below: an offer's `store` is the
       # origin of the item URL the API itself returned, same idea as
       # ShopifyCatalog#origin_of — kept as one module method instead of
@@ -133,8 +146,10 @@ module Portage
           return nil unless origin
 
           amount, currency = price_of(product)
-          { store: origin, source: name, checkout: nil, product_id: variant["id"], title: product["title"],
-            amount: amount, currency: currency, url: variant["url"] }
+          OfferSources.with_product(
+            { store: origin, source: name, checkout: nil, product_id: variant["id"], title: product["title"],
+              amount: amount, currency: currency, url: variant["url"] }, product
+          )
         end
 
         def origin_of(url)

@@ -1503,23 +1503,27 @@ module Portage
     def self.index_search(query, opts)
       products = Index::ProductStore.new
       filters = opts.slice(:category, :store, :limit)
-      { query: query, engine: products.search_engine, filters: filters,
-        products: products.search(query, **filters) }
+      hits = products.search(query, **filters).map { |entry| entry.merge("product" => Index::EntryProduct.wire(entry)) }
+      { query: query, engine: products.search_engine, live: false, filters: filters, products: hits }
     end
     private_class_method :index_search
 
     def self.format_index_search(result)
       return "No index products match \"#{result[:query]}\"." if result[:products].empty?
 
-      lines = result[:products].map do |p|
-        hosts = Array(p["stores"]).filter_map { |s| URI.parse(s["origin"].to_s).host }.join(", ")
-        ["#{p['title']}#{" — #{p['brand']}" if p['brand']}", ("(#{hosts})" unless hosts.empty?), p["url"]]
-          .compact.join(" ")
-      end
+      lines = result[:products].map { |p| index_search_line(p) }
+      lines << "(From the local index, not live: check the price and stock with `portage find --store`.)"
       lines << "(FTS5 isn't available in this SQLite, so this was a plain text match.)" if result[:engine] == "like"
       lines.join("\n")
     end
     private_class_method :format_index_search
+
+    def self.index_search_line(product)
+      hosts = Array(product["stores"]).filter_map { |s| URI.parse(s["origin"].to_s).host }.join(", ")
+      ["#{product['title']}#{" — #{product['brand']}" if product['brand']}", ("(#{hosts})" unless hosts.empty?),
+       product["url"]].compact.join(" ")
+    end
+    private_class_method :index_search_line
 
     def self.run_index_add(argv)
       json = !argv.delete("--json").nil?
