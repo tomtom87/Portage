@@ -1,4 +1,6 @@
 require "yaml"
+require_relative "classifier/table"
+require_relative "classifier/ranking"
 
 module Portage
   module Cli
@@ -22,6 +24,12 @@ module Portage
       # `known-stores/categories.yml`, from `lib/portage/cli/classifier.rb`.
       KNOWN_PATH = File.expand_path("../../../known-stores/categories.yml", __dir__).freeze
 
+      # Words that are never evidence of a category (`known-stores/category-stoplist.yml`,
+      # `word: why`): merchandising and url words, and words that name a whole family of
+      # nodes. `script/categories` leaves them out of the keywords; `categories_for`
+      # drops them from its input, so the two sides agree.
+      STOPLIST_PATH = File.expand_path("../../../known-stores/category-stoplist.yml", __dir__).freeze
+
       # The user's own additions/overrides — same id overrides a shipped
       # node's keywords, a new id extends the taxonomy. Absent by default;
       # nothing here is required for the shipped file to work.
@@ -44,21 +52,22 @@ module Portage
       # @param known_path [String] override for KNOWN_PATH — specs redirect
       #   this the same way SearchBackends::Allowlist takes its own `path:`.
       # @param user_path [String] override for PATH.
-      # @return [Array<String>] category ids, most keyword hits first. Ties
-      #   keep the shipped file's own order. Empty when nothing matches.
-      def self.categories_for(text, known_path: KNOWN_PATH, user_path: PATH)
-        words = tokenize(text).to_h { |word| [word, true] }
-        return [] if words.empty?
+      # @param stoplist_path [String] override for STOPLIST_PATH.
+      # @return [Array<String>] up to MAX_CATEGORIES category ids, best score
+      #   first (ties: see .tie_breakers). Empty when nothing matches.
+      def self.categories_for(text, known_path: KNOWN_PATH, user_path: PATH, stoplist_path: STOPLIST_PATH)
+        stopped = Table.load_yaml(stoplist_path)
+        counts = Ranking.word_counts(tokenize(text).reject { |word| stopped.key?(word) })
+        return [] if counts.empty?
 
-        scored = nodes(known_path, user_path).filter_map { |id, node| rank(id, node, words) }
-        scored.sort_by { |(_id, score, order)| [-score, order] }.map(&:first)
+        Ranking.best(counts, Table.for(known_path, user_path), stopped)
       end
 
       # @return [Array<String>] the taxonomy names for `ids`, in order —
       #   `portage browser import` (Phase 3) shows a domain's guessed
       #   categories by name so the user can judge them before saving.
       def self.names_for(ids, known_path: KNOWN_PATH, user_path: PATH)
-        all = nodes(known_path, user_path)
+        all = Table.for(known_path, user_path).nodes
         Array(ids).filter_map { |id| all.dig(id.to_s, "name") }
       end
 
@@ -87,34 +96,6 @@ module Portage
         (slug_words + string.split(/[^\p{Alpha}]+/)).map(&:downcase)
                                                     .select { |word| word.length >= MIN_WORD_LENGTH }
       end
-
-      # --- Scoring one node against the tokenized input ---
-
-      # `words` is a Hash of word => true: each keyword checks its few #word_match? forms
-      # against it, rather than every word against every keyword — the
-      # same matches, but a long product-tag text (Index::Sources::
-      # StorefrontProducts, docs/plans/local-catalogue.md Phase 2) no
-      # longer costs words x keywords comparisons.
-      def self.rank(id, node, words)
-        keywords = Array(node["keywords"])
-        hits = keywords.count { |keyword| match_forms(keyword).any? { |form| words.key?(form) } }
-        return nil unless hits.positive?
-
-        [id, hits, node["order"].to_i]
-      end
-      private_class_method :rank
-
-      # Every word #word_match? accepts for `keyword`: itself, its "s"/"es"
-      # plurals, the singular it is a plural of, and the "y"/"ies" swap.
-      def self.match_forms(keyword)
-        forms = [keyword, "#{keyword}s", "#{keyword}es"]
-        forms << keyword.delete_suffix("s") if keyword.end_with?("s")
-        forms << keyword.delete_suffix("es") if keyword.end_with?("es")
-        forms << "#{keyword[0..-2]}ies" if keyword.end_with?("y")
-        forms << "#{keyword[0..-4]}y" if keyword.end_with?("ies")
-        forms
-      end
-      private_class_method :match_forms
 
       # Whole-word only, plus the plural forms a keyword list and a real
       # query/title actually differ by: an exact match, one plus a trailing
@@ -146,30 +127,6 @@ module Portage
           (keyword.end_with?("ies") && word == "#{keyword[0..-4]}y")
       end
       private_class_method :ies_y_match?
-
-      # --- Loading and merging the two files ---
-
-      # Re-read on every call rather than cached process-wide: `find` calls
-      # this once or twice per invocation, not in a hot loop, and a cached
-      # copy would miss an edit to ~/.portage/categories.yml until the next
-      # process start.
-      def self.nodes(known_path, user_path)
-        ordered = {}
-        load_yaml(known_path).each_with_index { |(id, node), i| ordered[id] = node.merge("order" => i) }
-        load_yaml(user_path).each_with_index { |(id, node), i| ordered[id] = node.merge("order" => ordered.size + i) }
-        ordered
-      end
-      private_class_method :nodes
-
-      def self.load_yaml(path)
-        return {} unless path && File.readable?(path)
-
-        data = YAML.safe_load_file(path)
-        data.is_a?(Hash) ? data : {}
-      rescue StandardError
-        {}
-      end
-      private_class_method :load_yaml
     end
   end
 end
