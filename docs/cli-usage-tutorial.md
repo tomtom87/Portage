@@ -227,9 +227,11 @@ local list to route queries to instead, built from sources you can read:
 portage index sources                     # what each source fetches, and its file path
 portage index build                       # every default source (Shopify's open catalog, your stores.yml)
 portage index show --stores --json
+portage index add https://thelightyard.co.uk --crawl   # read one store's catalogue too
+portage index search "bathroom pendant"                # search it locally, no request
 ```
 
-Stored at `~/.portage/index/{stores,products}.json`, never in git, and
+Stored in `~/.portage/index/index.sqlite3`, never in git, and
 never carrying a price or stock field — those stay live. `find` also
 merges in the repo's own published known-stores list automatically (over
 jsdelivr, cached and refreshed periodically) even before you run `index

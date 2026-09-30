@@ -155,8 +155,9 @@ portage policy set [--per-transaction-cap N --currency CUR]
 portage orders reconcile [--checkout ID] [--json]
 portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
 portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
-portage index show [--stores|--products] [--json]
-portage index add <url> [--json]
+portage index show [--stores|--products [--page N] [--per-page N]] [--json]
+portage index search QUERY [--category ID] [--store HOST] [--limit N] [--json]
+portage index add <url> [--crawl] [--json]
 portage index remove <host> [--json]
 portage index sources [--json]
 portage browser import [--browser chrome|edge|brave|arc|firefox|safari] [--profile-root DIR]
@@ -478,13 +479,16 @@ portage index build --sources shopify_catalog,stores_file
 portage index build --queries queries.txt    # one query per line, instead of the built-in taxonomy sweep
 portage index refresh                        # re-verify entries older than 7 days, add new ones
 portage index show --stores --json
-portage index show --products --json
+portage index show --products --page 2 --json   # 50 a page; --per-page N
+portage index search "wall light" --store some-shop.example --json
 portage index add https://some-shop.example
+portage index add https://some-shop.example --crawl   # also read its /products.json catalogue
+portage index build --sources storefront_products     # crawl the catalogues of stores already indexed
 portage index remove some-shop.example
 portage index sources                        # name, what each fetches, source file path
 ```
 
-Stored at `~/.portage/index/{stores,products}.json`, **never in git** and
+Stored in `~/.portage/index/index.sqlite3` (mode 0600), **never in git** and
 **never containing a price or stock field** — those are always fetched live.
 Each new origin gets exactly one `/.well-known/ucp` probe (capped at 500 new
 probes per run), throttled, with progress output. Sources:
@@ -496,6 +500,18 @@ probes per run), throttled, with progress output. Sources:
 | `browser` | Whatever `portage browser import` (below) already saved — this source itself never reads a browser | on, but yields nothing unless you've run `browser import` |
 | `wikidata` | Retailers'/brands' official sites via a public SPARQL query | opt-in (`--sources wikidata`) |
 | `webmcp_sweep` | Which WebMCP preset an origin matches, when a bridge is attached | opt-in, needs a bridge |
+| `storefront_products` | Each indexed Shopify store's own `/products.json`: title, brand, handle, URL, first image, options and variant ids, mapped through the UCP `Product` shape with price and availability dropped | opt-in (`--sources storefront_products`, or `index add URL --crawl`) |
+
+**Catalogue crawls are polite and opt-in.** `storefront_products` never runs
+from `find` or `buy` (`portage check` only prints the `index add ... --crawl`
+command). It crawls at most 20 pages of 250 products a store and 25 stores a
+run, least recently crawled first, 1s apart. It waits out one 429's
+`Retry-After` (capped at 60s) and stops that store on a second. It obeys
+`robots.txt` for every page URL, never contacts a hand-off-only host, and
+skips a store that answers 404, a redirect or anything but products JSON (a
+bot wall). What happened is kept on the store entry as `crawl`.
+`portage index search` then searches those products locally (SQLite FTS5,
+or a plain text match if FTS5 is missing), with no request.
 
 **The index is untrusted data, on the same footing as any other `find`
 candidate.** It never feeds `Policy#merchant_allowlist` and never counts as
