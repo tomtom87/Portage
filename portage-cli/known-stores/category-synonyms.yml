@@ -1,0 +1,15 @@
+# Words the Google taxonomy has no node for, added to a node's keywords by script/categories.
+# `id:` then `word: why`; the why names the golden case (spec/fixtures/classifier_golden.yml)
+# that needs it, by its text. Add a word here only for a case the golden set proves, never
+# in bulk.
+'594':
+  pendant: pendant light
+  sconce: wall sconce
+  bollard: Bollard light Bollard Lights British Hand-Made Driveway Lights Path Lights
+    Patio Lights Wooden Lights £250-£500
+'604':
+  whitegoods: WHITEGOODS Brand:Beko LimitedStock
+'262':
+  telco: TELCO SERVICES Brand:Samsung InStock
+'187':
+  boots: leather boots

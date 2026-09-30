@@ -495,6 +495,7 @@
   name: Apparel & Accessories > Shoes
   keywords:
   - shoes
+  - boots
   parent_keywords:
   - apparel
 '8':
@@ -2112,6 +2113,7 @@
   - telephone
   - video
   - conferencing
+  - telco
   parent_keywords:
   - electronics
 '1801':
@@ -5008,6 +5010,7 @@
   - vacuums
   - wallpaper
   - water
+  - whitegoods
   parent_keywords:
   - home
   - garden
@@ -5830,6 +5833,9 @@
   - oil
   - track
   - rails
+  - pendant
+  - sconce
+  - bollard
   parent_keywords:
   - home
   - garden
