@@ -1,6 +1,6 @@
 # Local Catalogue: SQLite Index, Storefront Crawl, Product Cards, Packaging
 
-**Status:** done (Phases 1-4). MIT-0 accepted (2026-09-30). Release cut and ClawHub publish are the user's, see "Next".
+**Status:** done (Phases 1-5). MIT-0 accepted (2026-09-30). Release cut and ClawHub publish are the user's, see "Next".
 **Branch:** `local-catalogue` (off `main`)
 **Driver:** a Grok thread proposing a full local product catalogue, card-shaped output for agents, and Omarchy/OpenClaw packaging. Other ideas from that thread (merchant promo config, localhost shopping UI, beacon registry) are **out of scope** here and come back as their own plans.
 
@@ -216,6 +216,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 | 2026-09-30 | 3 | **Done** (commits `Carry the UCP product on find offers and index search hits`, `Document product cards in the buy skill and CLI reference`; unpushed). portage-cli rspec 1201 -> 1211 examples, 0 failures; rubocop clean, no new disables. `find` and `shopify_catalog` offers carry `product`; `index search` is `live: false` with a price-free `product` per hit. `claude plugin validate .` passes. Headless `/buy` run **skipped** (claude -p: "OAuth session expired"), replaced by a manual render check on real `find --json`. See "Phase 3 results".
 | 2026-09-30 | 4 | **Done** (commits `Add OpenClaw metadata to the buy skill and check it against the plugin`, `Document installing the buy skill on OpenClaw and Omarchy`; unpushed). portage-cli rspec 1211 -> 1218 examples, 0 failures; rubocop clean. `claude plugin validate .` passes. Arch container: `mise use -g gem:portage-cli` gives a working `portage --version`/`doctor --json` (needs a compiler). **Skipped:** ClawHub dry run/scan (blocked, nothing published), OpenClaw runtime gating, Omarchy skill path (unverifiable). See "Phase 4 results".
 | 2026-09-30 | Omarchy | **Validated** against Omarchy `8b4eae6` (2026-09-29) and an Omarchy-like Arch container. `omarchy-mise-install gem:portage-cli portage` fails on the stock base packages (`make` is missing) and works once `make` is added. Skill paths confirmed from Omarchy's source. README fix and taxonomy pass added as Phase 5. See "Omarchy validation". |
+| 2026-09-30 | 5 | **Done** (commits `Fix the Omarchy install steps in the README`, `Add a golden set for the category classifier`, `Rank category matches by repetition and rarity and keep only the strongest`, `Generate the category keywords from Google's taxonomy with a stoplist`, `Add the category synonyms the golden set proves are missing`, `Replace a duplicate golden case`, plus the docs commit; unpushed). portage-cli rspec 1218 -> 1271 examples, 0 failures, 0 pending; rubocop clean (227 files), no new disables; each commit green on its own. Golden top-1 accuracy 12/100 -> 70/100. Light Yard `--category 594`: 1 of 164 -> 160 of 164 after a re-crawl. `categories.yml` 20,778 -> 101,155 bytes. No existing spec expectation changed. See "Phase 5 results". |
 
 ### Phase 1 results (2026-09-30)
 
@@ -388,28 +389,86 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 
 **So:** a stock Omarchy needs `sudo pacman -S --needed make` (or `base-devel`) before installing. README's current "needs `base-devel`" is right but heavier than necessary, and it doesn't mention `omarchy-mise-install`. Phase 5 step 0 fixes the bullet. **Not verified:** a real Omarchy install (VM or ISO); OpenClaw hiding the skill when `portage` is missing.
 
+### Phase 5 results (2026-09-30)
+
+**Built:**
+- **Step 0, README.** The Omarchy bullet now says `omarchy-mise-install gem:portage-cli portage` (plain `mise use -g gem:portage-cli` and brew stay as alternatives), `sudo pacman -S --needed make` for a stock Omarchy (the `base-devel` line is gone), and the skill directories `~/.agents/skills` (OpenClaw, dotagents), `~/.claude/skills` (plugin route preferred) and `~/.codex/skills`. "Could not verify" is dropped. The docs site includes this README block (`docs/skills/buy.md` uses include-markdown), so nothing else needed editing. Root CHANGELOG entry.
+- **`script/categories`** (stdlib only: net/http, yaml, optparse). `--from FILE` or fetch from Google, `--out PATH`. It pins the edition (2021-09-21, read from the file's first line) in the header and is deterministic: the fetched file and the local copy gave byte-identical output. `CategoriesGenerator` is a module in the script so a spec can load it.
+- **Data.** `known-stores/categories.yml` keeps all 213 ids, in the same order and with the same names. A level-2 node's `keywords` are its own name plus every descendant's (levels 3+), plus synonyms. Its parent's words go in `parent_keywords`. Level-1 nodes keep their own name only. `category-stoplist.yml` (32 words, each with its reason) and `category-synonyms.yml` (5 nodes, 6 words: `pendant`, `sconce`, `bollard` on Lighting; `whitegoods` on Household Appliances; `telco` on Communications; `boots` on Shoes) are shipped too, through the existing `known-stores/*.yml` gemspec glob.
+- **Classifier.** `categories_for` keeps its signature (plus an optional `stoplist_path:`) and return shape. It is now three files: `classifier.rb` (tokenizing, `word_match?`, `names_for`), `classifier/table.rb` (loading both YAML files, the keyword -> node indexes, a cache keyed on each file's mtime and size so an edit to `~/.portage/categories.yml` still shows up) and `classifier/ranking.rb` (scoring). The split also keeps `Metrics/ModuleLength` and the complexity cops satisfied without a disable.
+- **Specs.** `classifier_golden_spec.rb` (9), `categories_generator_spec.rb` (18, on `spec/fixtures/taxonomy_tiny.txt`), 37 new examples in `classifier_spec.rb`. The fixture `spec/fixtures/classifier_golden.yml` has 100 cases: 16 Light Yard storefront texts (product_type + tags, as `Mapper` builds them), 10 JB Hi-Fi storefront texts and 9 JB titles, 56 shopper queries (including the `find` spec queries `kettle`, `snowboard`, `kitchen knives`, `cold brew`, `boots` and the four Phase 2 failures), 9 browser-import style urls and page titles.
+
+**Validation** (all in scratch dirs under `tmp/validate/p5/`; the real `~/.portage` was never written. The real `known-*.json` caches were copied into a scratch `HOME`):
+1. **Golden-set top-1 accuracy** (100 cases, labels written from the products, not from the classifier):
+
+   | State | Accuracy |
+   |---|---|
+   | Baseline (old code, old data) | 12/100 |
+   | Generator + stoplist, old counting, list capped at 3 | 46/100 |
+   | New scoring only, on the old data | 22/100 |
+   | Generator + stoplist + new scoring, no synonyms (commit 3) | 56/100 |
+   | + synonyms (commit 4, final) | 70/100 |
+
+   The two middle rows are not commits: commit order was changed, see the judgement calls. The baseline is 12/100 with the final labels too (re-run against the old code and old data). `classifier_golden_spec.rb` holds the threshold at 0.70.
+2. **`categories.yml` diff review.** 20,778 -> 101,155 bytes (1,263 -> 8,086 lines, 28.7KB gzipped). 213 ids, same order, same names. Ten nodes spot-checked, `keywords` old -> new: Lighting 594 (3 -> 36: lighting, emergency, floating, lights, flood, spot, lamps, ..., plus pendant, sconce, bollard), Hardware > Tools 1167 (2 -> 232), Sofas 460 (2 -> 1, `sofas`; parent `furniture`), Personal Care 2915 (3 -> 290), Audio 223 (2 -> 79), Communications 262 (2 -> 40 + telco), Toll Collection Devices 4488 (4 -> 2: toll, devices, so `collection` is gone), Kitchen & Dining 638 (4 -> 410), Shoes 187 (2 -> 2 + boots), level-1 Animals & Pet Supplies 1 (unchanged). The largest node has 474 keywords and the file 7,043 in all.
+3. **Light Yard, `portage index search light --category 594`** on a copy of the Phase 2 index, then `index build --sources storefront_products` (a real re-crawl, 164 products): **1 of 164 before, 160 of 164 after.** The 4 misses are "Prestige LED Wall Light", "Black & Gold Bell Wall Light", "Eco Beacon Pillar Outdoor Wall Light" (Decor 696, through "wall") and "Orbital Industrial Floor Lamp" (Chairs 443). A plain re-crawl also fixed rows because `ProductStore` keeps the latest sighting's category.
+4. **`find` routing on 7 queries** (`SearchBackends::Index#search`, which is what `find` asks the index backend, against the real known-stores cache in a scratch `HOME`; no network; old code from a worktree at the Omarchy commit):
+
+   | Query | Before: categories -> routed stores | After: categories -> routed stores |
+   |---|---|---|
+   | bathroom pendant light | Bathroom Accessories -> pura.com, drift.co, kitsrepublic.com | Lighting, Bathroom Accessories, Jewelry -> the same 3 |
+   | electric kettle | none -> 0 | Kitchen & Dining -> homecourt.co |
+   | wireless headphones | none -> 0 | Audio -> 3 electronics stores |
+   | mens hiking boots | none -> 0 | Outdoor Recreation -> 3 sport stores |
+   | iphone 17 case | Handbags/Cases, Umbrella Cases, Train Cases -> 2 stores | Train Cases, Umbrella Cases, Handbags/Cases -> the same 2 (order swapped) |
+   | queen mattress | none -> 0 | Linens & Bedding, Outdoor Recreation, Beds -> 6 stores |
+   | samsung tv | none -> 1 (name match) | none -> 1 (same; "tv" is under the 3-letter minimum) |
+
+   Nothing routes worse. The first full version of this gave "electric kettle" five furniture and office stores (Chairs and Signage matched "electric"), which would have crowded the web results out of `find`'s 12 probes; that is why the cut exists (judgement calls).
+5. **Speed.** `categories_for` on a 40-word Light Yard tag text: 3.6ms before, 0.9ms now (a first version that rebuilt the keyword index per call took 21ms; the cache fixed that).
+
+**Misses left** (30 of 100, in `classifier_golden.yml`; the threshold must only go up):
+- Light Yard's odd texts: 3 "Wall Lights"/"Exterior Wall Lights" tag lists and 1 floor lamp ("wall", "floor" and room names pull Decor, Chairs or Power & Electrical above Lighting), plus the Light Yard product url.
+- Ambiguous taxonomy: "sunglasses" (Personal Care ties Clothing Accessories), "dog food" (Food Service ties Pet Supplies), "55 inch television" (Film & Television beats Video), "paper towels", "scented candles", "red wine", "cold brew coffee", "queen mattress", "external hard drive", "road bicycle", "table lamp", "cordless drill" ("cordless" names Communications as strongly as "drill" names Tools).
+- Brand and model strings with no product noun: the Corsair power supply, the X.One iPhone case, the LG "Vac", the Roborock, the Beko, the JBL headset (Chairs, through "gaming"), the Dyson page title, and "SMALL APPLIANCES" and "MUSIC" as bare product types.
+- `shop.example/collections/sofa-beds` (Outdoor Furniture beats Sofas), plus the two JB urls that repeat the title cases.
+
+**Judgement calls:**
+- **Commit order.** The plan's order (generator, then scoring) cannot be green per commit: with the roll-up data and the old "count the keywords" scoring, `importer_spec` "weights categories by visit count" fails (Kitchen Knives fills the domain tally's top five). So the scoring commit came first (fixture-based specs, old data), then the generator and data, then synonyms. The table above still has the measured "generator first" number (46).
+- **Scoring is more than 2/1, and the plan's IDF caveat applies.** 2/1 with distinct-word counting scored 39 on the golden set, so I went further, each step measured on the golden set and on the 164 real Light Yard products (top-1 is Lighting for how many):
+  - *Repetition* (1 + ln count, plural variants merged): a Shopify tag list says "Pendant Lights" once per room, which is its best signal. Worth about +4 on the golden set.
+  - *Tie-breaks*: the share of the node's own name covered ("Sofas" before "Sofa Accessories"), then a name with no stoplisted word, then fewer keywords, then file order. The plan said "ties unchanged". Worth roughly +10 together (39 to 52 before synonyms), because level-2 nodes tie constantly now. File order alone put "Sofa Accessories", "Pet Supplies" (for "treadmill") and "Handbag & Wallet Accessories" first.
+  - *IDF* (ln(1 + nodes / nodes the word matches)): **not used for ranking.** Full IDF scored 67 (not 70) on the golden set and 146 of 164 on Light Yard (not 160), because a lighting store's tags are full of rare room names ("Hallway", "Study") that IDF promotes over "light". It is used only for the cut (below).
+  - *The cut and the cap*: `categories_for` returns at most 3 ids, and after the first an id is dropped unless its rarity-weighted evidence is at least half the strongest. Without it, callers that treat every id as evidence (find routing, the browser-import tally) got 14 ids on average instead of 3 and "electric kettle" routed to furniture stores. The plan said the return shape stays; it does (still an Array of ids, most likely first), only shorter.
+- **Level-1 nodes do not roll up descendants.** They keep their own name, so "Home & Garden" cannot outweigh every specific node.
+- **Stoplist entries list both forms of a word** (`set`, `sets`) because it is matched exactly on both sides; the keyword match is what normalises plurals. `hand` (Light Yard tags 146 of 164 products "British Hand-Made", and it is 10 nodes' word) and `service`/`services` (JB "TELCO SERVICES") are on it because each flipped golden cases.
+- **Only synonyms that flipped a case stayed.** `vac` and `iphone` did nothing for their own cases, so they were dropped; `telco` only worked once `services` was stoplisted. A spec checks that every synonym's reason is the exact text of a golden case of that category containing the word.
+- **Two golden labels were corrected after the first commit** (external hard drive and the Corsair power supply are Electronics Accessories 2082, not Computers 278; `CAMERAS` is Cameras 142, not the level-1 parent 141). Both failed before and after, so the baseline of 12 is unchanged.
+- **Existing rows: re-crawl to re-classify.** `index refresh` does not re-classify, and I did not add a command. `ProductStore#upsert` already keeps the latest sighting's `category`, so `portage index build --sources storefront_products` (or `index add URL --crawl`) re-tags a store's products, as the Light Yard run shows. It is documented under `index search` in `docs/api/cli-json.md` and in the portage-cli CHANGELOG. One caveat: a product that now classifies to nothing keeps its old category (`new || old`).
+- **`Table` cache.** Keyed on each file's mtime and size rather than process-wide forever, because the file that used to be re-read on every call is now 100KB.
+- **No existing spec expectation changed.** Every existing find, search_backends, index, importer and classifier spec passes as written. `importer_spec` "weights categories by visit count" is the one that depends on list length: it passes because the list is capped (3 ids, so the 10-visit title and the 1-visit title both fit in the tally's top five), and the order of equal weights in that tally comes from `sort_by`, which is deterministic here but not stable by contract. Worth a stable sort in `Categorize.domain` some day.
+
+**Bugs caught (by specs and by measuring):**
+- `importer_spec` failed as soon as the roll-up landed (list length), which drove the cap.
+- A relative cut using `round(6)` dropped an id at exactly half the best score (2.197224 against 2.197225); the "keeps an id scoring exactly half" spec caught it, and the old `boot shoe apparel` spec needs the same inclusive rule.
+- The shipped stoplist applies to my own specs: `hand` and `set` silently removed words from spec inputs. Specs now use other words.
+- The keyword-index rewrite was checked against `word_match?` over 14,314 variants of every shipped keyword (0 mismatches), and a spec keeps that equivalence.
+- IDF in the ranking looked fine on short queries and made Light Yard worse (146 of 164 instead of 160); only measuring on the real products showed it.
+- One JB Hi-Fi case (`WHITEGOODS Brand:Beko LimitedStock`) was in the golden set twice. It is replaced by a JB url case (`yaber-l1-pro-full-hd-projector` -> Video), in its own commit; it changed no number.
+
+**Not done, deliberately:**
+- `StorefrontProducts::Mapper` still classifies `product_type` + tags, not the title. JB Hi-Fi's product types are mostly noise ("MOVIES" for a puzzle), so its storefront categories stay weak. Adding the title is a separate one-line change with its own routing consequences.
+- No re-classify command, no per-store refresh of categories.
+- No title or description in `index search` FTS (unchanged).
+- Tokens under 3 letters are still dropped, so "tv" and "pc" never match (as before).
+- IDF in the ranking, and any bulk synonym list.
+- The generator does not check the shipped `categories.yml` against a fresh run in a spec (the Google file is not in the repo). Re-run `script/categories` after editing the stoplist or synonyms.
+
 ## Next (for the user)
 
 1. ~~Decide MIT-0~~ Accepted 2026-09-30 (open decision 3).
 2. ClawHub dry run passed (clawhub 0.23.3): `portage-buy@0.8.0`, 4 files, slug free. The CLI ignores the frontmatter `version`, so pass it: `npx clawhub@latest skill publish plugins/buy/skills/buy --slug portage-buy --version 0.8.0 --name "Portage Buy"` from the personal account. The server-side scan only runs on a real publish. Nothing has been published.
-3. Cut the release when you want it (open decision 4): bump `plugins/buy/.claude-plugin/plugin.json` **and** SKILL.md `version` together, CHANGELOG, `rake publish_all`, `rake homebrew:update`.
-4. Category keywords: now Phase 5. Still open: re-running the headless `/buy` card check on an authenticated session (Phase 3).
-
-## Restart prompt (Phase 5)
-
-```text
-Read docs/plans/local-catalogue.md in full, then implement Phase 5 only (taxonomy pass and Omarchy doc fix).
-
-Setup: git checkout local-catalogue && git status (must be clean apart from tmp/). Stay on this branch.
-
-Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 5" and the branch. The main thread briefs and reviews only.
-
-Rules: KISS, DRY, TDD. Write the golden-set spec first and record the baseline accuracy before changing any data or scoring. Keep Classifier.categories_for's signature and return shape, categories.yml's ids and shape, and ~/.portage/categories.yml overrides working. No LLM and no runtime network. The generator is stdlib-only. Every existing find/search_backends/index spec stays green, and each changed expectation is named in the log. rake spec (rspec + rubocop) green, no new cop disables.
-
-Order: step 0 (the README Omarchy bullet, from "Omarchy validation") as its own commit, then golden set, then the generator plus stoplist, then scoring, then synonyms (only for failing golden cases).
-
-Before writing code: re-read classifier.rb, search_backends.rb (both categories_for callers), index/builder.rb, index/sources/storefront_products*, browser_import/categorize.rb and their specs.
-
-Finish: run every Phase 5 validation item and record before/after numbers. Add a progress-log row plus a "Phase 5 results" section (judgement calls, bugs caught). Commit on local-catalogue without pushing. Replace this restart prompt with a "Next (for the user)" update.
-```
-
+3. Cut the release when you want it (open decision 4): bump `plugins/buy/.claude-plugin/plugin.json` **and** SKILL.md `version` together, CHANGELOG, `rake publish_all`, `rake homebrew:update`. The release carries the taxonomy pass: the gem ships the new `categories.yml`, the stoplist and the synonyms.
+4. Still open: re-running the headless `/buy` card check on an authenticated session (Phase 3): `claude -p --setting-sources local --plugin-dir plugins/buy`, `portage` wrapper on PATH with a scratch HOME, `portage buy` disallowed.
+5. Phase 5 leftovers, if you want them: classify the title as well as `product_type` and tags in `StorefrontProducts::Mapper` (JB Hi-Fi's categories stay weak without it); a stable sort in `BrowserImport::Categorize.domain`; and raise `classifier_golden_spec`'s threshold whenever a miss listed under "Phase 5 results" gets fixed.
+6. Not verified, as before: a real Omarchy install (VM or ISO), and OpenClaw hiding the skill when `portage` is missing.
