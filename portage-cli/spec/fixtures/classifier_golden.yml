@@ -1,0 +1,320 @@
+# Golden set for Portage::Cli::Classifier (docs/plans/local-catalogue.md, Phase 5).
+#
+# Each case: `text` (what a caller hands Classifier.categories_for), `expect`
+# (the Google taxonomy id a person would call the right top-1 category, from
+# the top two levels that categories.yml keys on; "none" means no category),
+# `source` (where the text came from) and an optional `must_not_include` (ids
+# that must not appear anywhere in the result).
+#
+# Labels were written from the products, not from the classifier's output.
+# Storefront cases use the text StorefrontProducts::Mapper classifies:
+# product_type followed by the tags, joined by spaces. Light Yard and JB Hi-Fi
+# texts are real products.json data (2026-09-30).
+- text: Pendant Light Bathroom Pendant Lights British Hand-Made Industrial Bathroom Lights New Collection £500-£750
+  expect: '594'
+  source: lightyard storefront (birdcage industrial bathroom pendant light ip44)
+  must_not_include:
+  - '4488'
+- text: Pendant Light British Hand-Made Dining Room Pendant Lights Hallway Pendant Lights Hanging Lights Industrial Lighting Kitchen Pendant Lights Living Room Pendant Lights Pendant Lights Study Pendant Lights £500-£750
+  expect: '594'
+  source: lightyard storefront (birdcage industrial style hanging indoor light)
+- text: Floor Lamp British Hand-Made Floor Lamps Industrial Lighting £500-£750 £750+
+  expect: '594'
+  source: lightyard storefront (zeppelin industrial style outdoor floor lamp)
+- text: Pendant Light Bedroom Pendant Lights British Hand-Made Dining Room Pendant Lights Hallway Pendant Lights Hanging Lights Kitchen Pendant Lights Living Room Pendant Lights Pendant Lights Study Pendant Lights £250-£500
+  expect: '594'
+  source: lightyard storefront (signature small clear glass pendant light)
+- text: Interior Wall Light Bathroom Wall Lights British Hand-Made £250-£500
+  expect: '594'
+  source: lightyard storefront (signature small gold leaf bathroom wall light ip44)
+- text: Interior Wall Light Bathroom Wall Lights British Hand-Made New Collection £250-£500
+  expect: '594'
+  source: lightyard storefront (signature large ribbed glass bathroom wall light ip44)
+  must_not_include:
+  - '4488'
+- text: Pendant Light Bathroom Pendant Lights British Hand-Made £250-£500
+  expect: '594'
+  source: lightyard storefront (signature small moroccan gold bathroom pendant light ip44)
+- text: Interior Wall Light Bedroom Wall Lights British Hand-Made Dining Room Wall Lights Hallway Wall Lights Indoor Wall Lights Kitchen Wall Lights Living Room Wall Lights Wall Lights £0-£250
+  expect: '594'
+  source: lightyard storefront (monty industrial wall light)
+- text: Bollard light Bollard Lights British Hand-Made Deck Lights Driveway Lights Path Lights Patio Lights Wooden Lights £250-£500
+  expect: '594'
+  source: lightyard storefront (eco city slot 350 led path light)
+- text: Interior Wall Light Bedroom Wall Lights Glass Wall Lights Hallway Wall Lights Indoor Wall Lights Kitchen Wall Lights Living Room Wall Lights Study Wall Lights Wall Lights £0-£250 £250-£500
+  expect: '594'
+  source: lightyard storefront (black & gold bell wall light)
+- text: Exterior Wall Lights British Hand-Made Glass Wall Lights Pergola Lights Pillar Lights Porch Lights Stainless Steel Lights Wall Lights £250-£500
+  expect: '594'
+  source: lightyard storefront (prestige led wall light)
+- text: Bollard light Bollard Lights British Hand-Made Driveway Lights Path Lights Patio Lights Wooden Lights £250-£500
+  expect: '594'
+  source: lightyard storefront (eco prestige led bollard light)
+- text: Floor Lamp British Hand-Made Industrial Floor Lamps £500-£750
+  expect: '594'
+  source: lightyard storefront (orbital industrial floor lamp)
+- text: Pendant Light British Hand-Made Dining Room Pendant Lights Industrial Pendant Lights Kitchen Pendant Lights New Collection £500-£750
+  expect: '594'
+  source: lightyard storefront (orbital industrial pendant light)
+  must_not_include:
+  - '4488'
+- text: Exterior Wall Lights British Hand-Made Glass Wall Lights Pergola Lights Pillar Lights Porch Lights Wall Lights Wooden Lights £250-£500
+  expect: '594'
+  source: lightyard storefront (eco beacon pillar outdoor wall light)
+- text: Bollard light Bollard Lights British Hand-Made Deck Lights Designer Glass Lights Driveway Lights Path Lights Patio Lights £250-£500
+  expect: '594'
+  source: lightyard storefront (azure led deck & patio light)
+- text: WHITEGOODS Brand:Beko LimitedStock
+  expect: '604'
+  source: jbhifi storefront (Beko BWDB9540W 9kg/5kg Front Load Ultrafast Washer Dryer Combo)
+- text: SMALL APPLIANCES Brand:Roborock InStock
+  expect: '604'
+  source: jbhifi storefront (Roborock Qrevo Edge 2 Flow Robot Vacuum)
+- text: WHITEGOODS Brand:Beko LimitedStock
+  expect: '604'
+  source: jbhifi storefront (Beko BWDB9540W 9kg/5kg Front Load Ultrafast Washer Dryer Combo)
+- text: AUDIO Brand:Celestion InStock
+  expect: '223'
+  source: 'jbhifi storefront (Celestion T5916: 1" 12W HF Driver 8 Ohm)'
+- text: CAMERAS Brand:Freewell InStock
+  expect: '141'
+  source: jbhifi storefront (Freewell ND8 Filter for Insta360 Luna Ultra)
+- text: COMPUTERS Brand:Apple InStock
+  expect: '278'
+  source: 'jbhifi storefront (Apple iPad 8th Gen 32GB Wi-Fi (Space Gray) [~Refurbished: As New])'
+- text: GAMES SOFTWARE Brand:Gta Vi ComingSoon
+  expect: '1279'
+  source: 'jbhifi storefront (Grand Theft Auto VI: The Goodtime State – Vice City Collection)'
+- text: TELCO SERVICES Brand:Samsung InStock
+  expect: '262'
+  source: 'jbhifi storefront (Samsung Galaxy A53 128GB (Awesome Black) [~Refurbished: Excellent])'
+- text: COMMUNICATIONS Brand:Google LimitedStock
+  expect: '262'
+  source: jbhifi storefront (Google Pixel 9 5G 128GB (Wintergreen))
+- text: HEALTH & BEAUTY Brand:Andis InStock
+  expect: '469'
+  source: jbhifi storefront (Andis reVITE Stainless Steel Replacement Fade Blade Set Precision Blades)
+- text: MUSIC Brand:Uma Ger InStock
+  expect: '855'
+  source: jbhifi storefront (The Black Sessions Revealed (Vinyl) (Import))
+- text: Corsair 1500W HX1500i 80+ Platinum Fully Modular ATX 3.1 PCIe 5.1 Power Supply (CP-9020308-AU)
+  expect: '278'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: JBL Quantum 100M2 Over-Ear Gaming Headset (Purple)
+  expect: '223'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: Beko BWDB9540W 9kg/5kg Front Load Ultrafast Washer Dryer Combo
+  expect: '604'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: Roborock Qrevo Edge 2 Flow Robot Vacuum
+  expect: '604'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: LG CordZero A9-Swift Handstick Vac with Multi-Purpose Head
+  expect: '604'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: Yaber L1 Pro Full HD Projector
+  expect: '386'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: Gibsons 1000pc Bee Hall Puzzle
+  expect: '3867'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: Lifespan Fitness Viper M4 Treadmill
+  expect: '990'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: X.One [Mgsafe] Dropguard 2S / 2.0 Impact Protection Kickstand Case iPhone 17 Air - Frosted Matte
+  expect: '262'
+  source: jbhifi title (as a non-storefront source would classify it)
+- text: Pendant Light Kitchen Pendant Lights
+  expect: '594'
+  source: lightyard tag 'Kitchen' (Phase 2 failure)
+- text: pendant light
+  expect: '594'
+  source: 'Phase 2 failure: classified to nothing'
+- text: chandelier
+  expect: '594'
+  source: shopper query
+- text: wall sconce
+  expect: '594'
+  source: shopper query
+- text: table lamp
+  expect: '594'
+  source: shopper query
+- text: led light bulb
+  expect: '594'
+  source: shopper query
+- text: New Collection
+  expect: none
+  source: 'Phase 2 failure: hit 4488 Toll Collection Devices'
+  must_not_include:
+  - '4488'
+- text: Gift Set Sale
+  expect: none
+  source: merchandising words only
+- text: corner sofa
+  expect: '460'
+  source: shopper query
+- text: dining table
+  expect: '6392'
+  source: shopper query
+- text: queen mattress
+  expect: '6433'
+  source: shopper query
+- text: electric kettle
+  expect: '638'
+  source: find spec query (kettle)
+- text: kitchen knives
+  expect: '638'
+  source: search_backends spec query
+- text: toaster
+  expect: '638'
+  source: shopper query
+- text: robot vacuum cleaner
+  expect: '604'
+  source: shopper query
+- text: lawn mower
+  expect: '689'
+  source: shopper query
+- text: garden hose
+  expect: '689'
+  source: shopper query
+- text: cordless drill
+  expect: '1167'
+  source: shopper query
+- text: laptop
+  expect: '278'
+  source: shopper query
+- text: external hard drive
+  expect: '278'
+  source: shopper query
+- text: wireless headphones
+  expect: '223'
+  source: shopper query
+- text: 55 inch television
+  expect: '386'
+  source: shopper query
+- text: projector
+  expect: '386'
+  source: shopper query
+- text: mobile phone case
+  expect: '262'
+  source: shopper query
+- text: video game console
+  expect: '1294'
+  source: shopper query
+- text: printer ink cartridge
+  expect: '345'
+  source: shopper query
+- text: snowboard
+  expect: '1011'
+  source: search_backends spec query
+- text: camping tent
+  expect: '1011'
+  source: shopper query
+- text: road bicycle
+  expect: '1011'
+  source: shopper query
+- text: treadmill
+  expect: '990'
+  source: shopper query
+- text: yoga mat
+  expect: '990'
+  source: shopper query
+- text: baby stroller
+  expect: '2764'
+  source: shopper query
+- text: dog food
+  expect: '2'
+  source: shopper query
+- text: cat litter
+  expect: '2'
+  source: shopper query
+- text: dog bed
+  expect: '2'
+  source: "'bed' must not pull Furniture"
+- text: sunglasses
+  expect: '167'
+  source: shopper query
+- text: leather backpack
+  expect: '100'
+  source: shopper query
+- text: running shoes
+  expect: '187'
+  source: shopper query
+- text: leather boots
+  expect: '187'
+  source: find spec theme (boots)
+- text: cotton shirt
+  expect: '1604'
+  source: shopper query
+- text: engagement ring
+  expect: '188'
+  source: shopper query
+- text: handbag
+  expect: '6551'
+  source: shopper query
+- text: vitamin c supplements
+  expect: '491'
+  source: shopper query
+- text: toothpaste
+  expect: '2915'
+  source: shopper query
+- text: shampoo and conditioner
+  expect: '2915'
+  source: shopper query
+- text: board game
+  expect: '3793'
+  source: shopper query
+- text: jigsaw puzzle
+  expect: '3867'
+  source: shopper query
+- text: acoustic guitar
+  expect: '5710'
+  source: shopper query
+- text: cold brew coffee
+  expect: '413'
+  source: find spec query (Cold Brew)
+- text: red wine
+  expect: '413'
+  source: "'wine' must not pull winemaking supplies"
+- text: paper towels
+  expect: '630'
+  source: shopper query
+- text: bed sheets
+  expect: '4171'
+  source: "'bed' must not pull Furniture"
+- text: bath towels
+  expect: '4171'
+  source: shopper query
+- text: wall clock
+  expect: '696'
+  source: shopper query
+- text: scented candles
+  expect: '696'
+  source: shopper query
+- text: picture frame
+  expect: '696'
+  source: shopper query
+- text: https://thelightyard.co.uk/products/bell-large-ribbed-glass-pendant-light
+  expect: '594'
+  source: browser import style (url or page title)
+- text: https://www.jbhifi.com.au/products/jbl-quantum-100m2-over-ear-gaming-headset-purple
+  expect: '223'
+  source: browser import style (url or page title)
+- text: https://www.jbhifi.com.au/products/beko-bwdb9540w-9kg-5kg-front-load-ultrafast-washer-dryer-combo
+  expect: '604'
+  source: browser import style (url or page title)
+- text: https://www.allbirds.com/collections/mens-shoes
+  expect: '187'
+  source: browser import style (url or page title)
+- text: https://shop.example/collections/sofa-beds
+  expect: '460'
+  source: browser import style (url or page title)
+- text: https://www.ikea.com/category/sofas
+  expect: '460'
+  source: browser import style (url or page title)
+- text: Cordless Drills - Power Tools | Hardware | Shop
+  expect: '1167'
+  source: browser import style (url or page title)
+- text: Dyson V15 Detect Cordless Vacuum Cleaner | Bunnings
+  expect: '604'
+  source: browser import style (url or page title)
