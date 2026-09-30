@@ -1,6 +1,6 @@
 # Local Catalogue: SQLite Index, Storefront Crawl, Product Cards, Packaging
 
-**Status:** Phases 1-2 done, Phase 3 next
+**Status:** Phases 1-3 done, Phase 4 next
 **Branch:** `local-catalogue` (off `main`)
 **Driver:** a Grok thread proposing a full local product catalogue, card-shaped output for agents, and Omarchy/OpenClaw packaging. Other ideas from that thread (merchant promo config, localhost shopping UI, beacon registry) are **out of scope** here and come back as their own plans.
 
@@ -159,6 +159,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 | 2026-09-30 | plan | Drafted and validated against the code, live `products.json`, the `sqlite3` gem platforms, ClawHub skill-format docs and `mise ls-remote gem:portage-cli`. |
 | 2026-09-30 | 1 | **Done** (commits `Store the local index in SQLite`, `Report the index database in portage doctor`; unpushed). `rake`-equivalent for portage-cli: rspec 1103 -> 1131 examples, 0 failures; rubocop clean, no new disables. Existing `store_spec`/`product_store_spec` pass unchanged. See "Phase 1 results" below the table. |
 | 2026-09-30 | 2 | **Done** (commits `Classify long texts without comparing every word to every keyword`, `Crawl a Shopify store's products.json into the local index`, `Add portage index search and page index show --products`, `Document the catalogue crawl and index search`; unpushed). portage-cli rspec 1131 -> 1201 examples, 0 failures; rubocop clean, no new disables; each commit green on its own. `index add` crawls only with `--crawl`. Live: thelightyard.co.uk 164 products in 3.5s, JB Hi-Fi 5,000 (page cap) in 36s, re-crawls upsert with no duplicates. See "Phase 2 results".
+| 2026-09-30 | 3 | **Done** (commits `Carry the UCP product on find offers and index search hits`, `Document product cards in the buy skill and CLI reference`; unpushed). portage-cli rspec 1201 -> 1211 examples, 0 failures; rubocop clean, no new disables. `find` and `shopify_catalog` offers carry `product`; `index search` is `live: false` with a price-free `product` per hit. `claude plugin validate .` passes. Headless `/buy` run **skipped** (claude -p: "OAuth session expired"), replaced by a manual render check on real `find --json`. See "Phase 3 results".
 
 ### Phase 1 results (2026-09-30)
 
@@ -252,29 +253,54 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 - No WooCommerce endpoint yet (the seam is there).
 - Brand+title key collisions within one store merge. The later sighting's url, handle and variant_ids win, as for any other field.
 
-## Restart prompt (Phase 3)
+### Phase 3 results (2026-09-30)
+
+**Built:**
+- `OfferSources.with_product(offer, product)`: adds the UCP Product wire hash as `product` (media cut to the first image) and leaves the offer untouched if there is no non-empty hash. `Find#offer` and `ShopifyCatalog#offer` use it; the retailer APIs (Walmart, eBay, Best Buy, Etsy, Amazon) hold no UCP product and are unchanged.
+- `Index::EntryProduct.wire(entry)`: an index entry as the persisted subset of a UCP Product wire hash (`title`, `handle`, `url`, `media` [first image], `options`, `variants` [ids only], `categories`), built through `Ucp::Media`/`Ucp::Category`. Fields the entry lacks are left out.
+- `index search` result gains `live: false` and `product` on every hit (entry fields kept beside it). Text output ends with a "not live" line.
+- Skill section "Showing offers as product cards" plus the index-hit rule (never show an index price as current); `docs/api/cli-json.md`, `docs/agentic-flow.md`, portage-cli and root CHANGELOG `[Unreleased]` entries.
+
+**Validation** (scratch `HOME` at `tmp/validate/p3v/home` via a `portage` wrapper on PATH; the real `~/.portage` was untouched, no sqlite file in it):
+1. **`claude plugin validate .`: pass.**
+2. **Live `find --query "bathroom pendant light" --json`: pass.** 5 `shopify_catalog` offers, all with `product` (1 image, 1 variant, `price_range`, options), 2-3.5KB each; flat fields as before.
+3. **Live `index search` after `index add https://thelightyard.co.uk --crawl` (164 products): pass.** `live: false`, `engine: fts5`, `product` with first image and variant ids; no `price`/`amount`/`currency`/`available` key anywhere in the JSON.
+4. **Headless `/buy` rendering cards: SKIPPED.** `claude -p` (with and without `--setting-sources local`) fails with "Failed to authenticate: OAuth session expired and could not be refreshed" in this environment. Substitute: rendered cards (image, title, price and range, store, options) by script from the real `find --json`, which checks the fields exist but not that a model follows the skill. Re-run when a session is authenticated (`claude -p --setting-sources local --plugin-dir plugins/buy`, `portage` wrapper on PATH with a scratch HOME, `portage buy` disallowed).
+
+**Judgement calls:**
+- **Offers only get `product` if it exists**, no empty key and no faked one. In `find`, offers from a probed store or from `shopify_catalog` have it; retailer-API offers do not.
+- **Media cut only on the product's own `media`** (variants keep theirs, as the store returned them). `price_range` in the passthrough is the store's live price; the flat `amount` stays the ranking value.
+- **Index `product` has no `id`.** The entry stores variant ids but not the product gid, so none is invented. It is a subset of UCP Product (not schema-complete: `description`, `price_range` and `id` are required by the spec).
+- **`live: false` is always false** (a constant, not computed), as the plan asks; a future live-verified search would flip it.
+- **`history` does not save `product`.** `History#saved_offers` already whitelists fields; a spec pins it so the history file does not grow by 2-3KB an offer.
+- `compare` inherits `Find#offer`, so its offers carry `product` too, with no extra change.
+- `SearchBackends::Index` and the index `category` are unchanged (see Phase 2).
+
+**Bugs caught by specs:** the existing "uses the merchant's variant url/id" spec (`eq` on the whole offer) failed when `product` was added; it now includes the product. A first version used `.compact` on the offer, which would have dropped `amount: nil`; the spec showed the flat shape had to be kept, so `with_product` merges instead.
+
+**Not done, deliberately:** no price range or currency in index cards (the index has no price); no image beyond the first; no new card object.
+
+## Restart prompt (Phase 4)
 
 ```text
-Read docs/plans/local-catalogue.md in full, then implement Phase 3 only (card-ready output for agents). Phases 1 (SQLite index store) and 2 (storefront catalogue crawl and `index search`) are done on the local-catalogue branch; read their progress-log rows and the "Phase 1 results" and "Phase 2 results" sections first.
+Read docs/plans/local-catalogue.md in full, then implement Phase 4 only (packaging for OpenClaw and Omarchy). Phases 1-3 (SQLite index store, storefront catalogue crawl and `index search`, card-ready output) are done on the local-catalogue branch; read their progress-log rows and the "Phase 1 results", "Phase 2 results" and "Phase 3 results" sections first.
 
-Setup: git checkout local-catalogue (Phases 1-2 are committed there and unpushed, so don't branch off main). Confirm `git log --oneline` shows the Phase 2 commits ("Crawl a Shopify store's products.json into the local index", "Add portage index search and page index show --products", "Log local catalogue Phase 2 results and validation") and that the baseline is green: `cd portage-cli && rtk proxy bundle exec rspec --format progress` (1201 examples, 0 failures) and `rtk proxy bundle exec rubocop` (clean). `rake` is not in the portage-cli bundle; rspec + rubocop is the "rake spec" equivalent. The `rtk proxy` prefix stops a hook from mangling output.
+Setup: git checkout local-catalogue (Phases 1-3 are committed there and unpushed, so don't branch off main). Confirm `git log --oneline` shows the Phase 3 commits ("Carry the UCP product on find offers and index search hits", "Document product cards in the buy skill and CLI reference", "Log local catalogue Phase 3 results and validation") and that the baseline is green: `cd portage-cli && rtk proxy bundle exec rspec --format progress` (1211 examples, 0 failures) and `rtk proxy bundle exec rubocop` (clean). `rake` is not in the portage-cli bundle; rspec + rubocop is the "rake spec" equivalent. The `rtk proxy` prefix stops a hook from mangling output.
 
-Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 3" and the branch. The main thread briefs and reviews only.
+Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 4" and the branch. The main thread briefs and reviews only.
 
-Rules: KISS, DRY, TDD (failing specs first, in the existing spec layout: find_spec / offer_sources specs / spec/portage/cli/index/**). The card is the UCP Product wire hash (Portage::Ucp::Product#to_wire_h) plus the offer's live price, with no new "card" object or vocabulary. Existing flat offer fields stay unchanged. Index results never carry a price and are marked live: false. WebMock fixtures, no live HTTP in specs. rspec + rubocop green, no new cop disables. Any new index table or column goes through a new forward-only migration in Index::Schema.
+Rules: KISS, DRY, TDD (failing specs or checks first). One skill, no fork: add OpenClaw metadata to plugins/buy/skills/buy/SKILL.md frontmatter. Nothing may publish anywhere: the ClawHub publish, and the MIT-0 licensing decision (open decision 3), are the user's call. Do not run `clawhub publish` without the user's explicit yes in chat, and if a throwaway-slug publish is needed to test the scan, do it only from the user's personal account (see project memory "Plugin submission: personal account"), after asking. Do not cut a release (open decision 4).
 
-Phase 2 facts to build on (verify in the code, they may have drifted):
-- Find#offer is at portage-cli/lib/portage/cli/find.rb:228 and still reduces a product to title/amount/currency/url. OfferSources live in portage-cli/lib/portage/cli/offer_sources.rb.
-- Index::Sources::StorefrontProducts::Mapper.product(raw, origin:) builds a full Portage::Ucp::Product from a products.json product: id gid://shopify/Product/N, handle, url origin/products/handle, media, options (Shopify's "Title: Default Title" placeholder dropped), tags, variants (id, sku, options, price with currency nil, availability), categories (google_product_category ids plus the product_type as a "merchant" category). Mapper.sighting is the persisted subset. Reuse Mapper.product rather than mapping products.json again.
-- A crawled index entry (ProductStore rows, JSON `data` column) has key, title, brand, gtin (always nil), category (first Google id), aliases, stores [{origin, last_seen}], sources, plus handle, url, image_url, options (ProductOption wire hashes) and variant_ids. It has no price, availability, media array or description. Build `index search`'s `product` field from these fields only, never inventing a price.
-- `portage index search --json` prints {query, engine ("fts5"|"like"), filters, products: [entries]} (cli.rb run_index_search / index_search; ProductStore#search; Index::Search). Phase 3 adds live: false and the `product` field there.
-- Store rows carry `crawl` {status, reason, pages, products, at} and `platform`.
-- SearchBackends::Index (find's routing) was deliberately not moved to FTS (two-way title matching, GTIN, the known-products JSON cache). About 160ms at 5k rows. Leave it unless Phase 3 needs it.
-- Category quality from Classifier on product_type and tags is weak for some stores (the taxonomy keywords are coarse). Don't depend on `category` for card rendering.
+Phase 3 facts to build on (verify in the code, they may have drifted):
+- The buy skill (plugins/buy/skills/buy/SKILL.md) has a new "Showing offers as product cards" section under step 2 and names `index search` and `live: false`. Its frontmatter today is name + description only; plugins/buy/.claude-plugin/plugin.json is at version 0.8.0 and is what the skill `version` must follow. Find what already checks plugin versions (Rakefile, script/, specs) before adding a drift check.
+- Every env var the skill names must appear under metadata.openclaw.envVars (all required: false), or ClawHub's scan blocks the publish. Grep the skill and its references (handoff-only.md, outcomes.md, raw-ucp.md) for PORTAGE_*, search keys, retailer keys, so the list matches.
+- portage-cli is 0.10.0 with the SQLite index (sqlite3 gem, precompiled for macOS/Linux; Homebrew builds the vendored SQLite from source, ~1 minute). The brew formula is script/homebrew-formula and the tap tomtom87/portage.
+- `claude plugin validate .` passes on the branch (Phase 3). Headless `claude -p` failed with an expired OAuth session in the Phase 3 environment, so check first whether it works; if not, record a skip instead of faking it.
+- Live validation dirs go under tmp/validate/ (untracked) with HOME pointed away from the real ~/.portage. Docker is available (Phase 1 used ruby:3.3); the Arch container check uses archlinux:latest with `mise use -g gem:portage-cli`. Note the published gem is 0.10.0-or-older on rubygems until a release, so `mise use -g gem:portage-cli` there installs the released gem, not the branch: say so in the log, and test the branch gem via `gem install` of the locally built .gem as well.
 
-Before writing code: re-read find.rb (offer and its callers), offer_sources.rb, the Ucp::Product/Variant/Media/PriceRange value objects and to_wire_h, index/product_store.rb, index/search.rb, cli.rb's run_index_search, plugins/buy/skills/buy/SKILL.md and its references, docs/api/cli-json.md and docs/agentic-flow.md, plus the relevant specs, since line refs in the plan may have drifted.
+Before writing code: re-read the plan's Phase 4 section, docs.openclaw.ai/clawhub/skill-format (fetch it again, formats drift), README.md's "Other agents" block, the docs site pages for the skill (docs/skills/buy.md, mkdocs.yml), and the existing plugin-version checks. Verify Omarchy's actual skill paths before writing them down; if you cannot verify, say so in the docs rather than guess.
 
-Live validation: never touch the real ~/.portage. Point HOME at copies or temp dirs under tmp/validate/ (tmp/ is untracked). Run `claude plugin validate .`, then run a headless `/buy` that renders cards from real `find --json` output, using the same method as the "clean-session /buy" row in docs/plans/buy-skill-and-local-browser.md. Record failures and skips honestly.
+Live validation: never touch the real ~/.portage. Record failures and skips honestly (an unverifiable Omarchy path, an OpenClaw runtime you cannot run, a ClawHub scan you may not publish to).
 
-Finish: record the validation results in the plan. Add a Phase 3 progress-log row and a "Phase 3 results" section (judgement calls, bugs caught by specs or review). Add a CHANGELOG [Unreleased] entry (portage-cli, and the buy plugin's if the skill changes). Commit on local-catalogue in logical commits, with normal-prose messages and no attribution lines, and don't push. Then replace this "Restart prompt" section with a Phase 4 restart prompt in the same format, including the Phase 3 facts Phase 4 should build on, and commit it.
+Finish: record the validation results in the plan. Add a Phase 4 progress-log row and a "Phase 4 results" section (judgement calls, bugs caught by specs or review), set the plan Status to done, and add a CHANGELOG [Unreleased] entry (root, and portage-cli if it changes). Commit on local-catalogue in logical commits, with normal-prose messages and no attribution lines, and don't push. Do not replace this section with another restart prompt: Phase 4 is the last phase, so leave a short "Next" note (release cut, MIT-0 decision, ClawHub publish) for the user.
 ```
