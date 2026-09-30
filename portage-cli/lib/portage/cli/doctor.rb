@@ -42,7 +42,8 @@ module Portage
       #   those four warnings were noise on every fresh install.
       def initialize(adapter_class: nil, proxy_settings: ProxySettings.new, install_doctor: InstallDoctor.new,
                      seller: true, dot_env_path: DotEnv.loaded_path, index_stores: Index::Store.new,
-                     index_products: Index::ProductStore.new, known_cache: Index::KnownCache.new)
+                     index_products: Index::ProductStore.new, known_cache: Index::KnownCache.new,
+                     index_database: Index::Database.new(path: Index::Database.path_for(Index::Store::PATH)))
         @adapter_class = adapter_class
         @proxy_settings = proxy_settings
         @install_doctor = install_doctor
@@ -51,6 +52,7 @@ module Portage
         @index_stores = index_stores
         @index_products = index_products
         @known_cache = known_cache
+        @index_database = index_database
       end
 
       # `portage setup` always offers its wizard on a TTY; a bare `portage
@@ -210,12 +212,20 @@ module Portage
       # leaves behind.
       def index_finding
         refresh_known_cache_if_stale
-        return Finding.new(check: "index", level: "info", message: "#{index_message}\n#{known_cache_message}") \
-          if @index_stores.exists?
+        first = @index_stores.exists? ? index_message : no_index_message
+        database = @index_database.info
+        Finding.new(check: "index", level: "info", details: { database: database },
+                    message: [first, database_message(database), known_cache_message].join("\n"))
+      end
 
-        Finding.new(check: "index", level: "info",
-                    message: "No local index yet — run `portage index build` to give `find` a list of " \
-                             "stores/products on top of stores.yml and web search.\n#{known_cache_message}")
+      def no_index_message
+        "No local index yet — run `portage index build` to give `find` a list of " \
+          "stores/products on top of stores.yml and web search."
+      end
+
+      def database_message(info)
+        "Index database: #{info[:path]} (#{info[:stores]} store row(s), #{info[:products]} product row(s), " \
+          "FTS5 #{info[:fts5] ? 'available' : 'not available'})."
       end
 
       def refresh_known_cache_if_stale
