@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **README: OpenClaw on ClawHub.** A static "OpenClaw skill" badge in the badge row links to the ClawHub listing (`tomtom87/portage-buy`; ClawHub has no official badge endpoint), and the OpenClaw bullet in "Other agents" now documents `openclaw skills install @tomtom87/portage-buy` and `clawhub install @tomtom87/portage-buy` alongside the manual copy route, replacing "planned but not published". The docs site picks it up through the existing include on `docs/skills/buy.md`. The listing goes live when `buy` 0.8.0 is published.
+
 - **README: Omarchy install steps.** The Omarchy bullet now installs with Omarchy's own helper
   (`omarchy-mise-install gem:portage-cli portage`), says a stock Omarchy needs `sudo pacman -S --needed
   make` first (`gcc` already arrives through `clang`; only `make` is missing), and lists the skill
