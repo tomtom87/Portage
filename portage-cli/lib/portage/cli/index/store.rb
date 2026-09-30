@@ -1,12 +1,13 @@
-require "json"
-require "fileutils"
 require "uri"
+require_relative "database"
 
 module Portage
   module Cli
     module Index
-      # `~/.portage/index/stores.json` — one entry per merchant origin
-      # `portage index build`/`refresh`/`add` has found and verified.
+      # The `stores` table of `~/.portage/index/index.sqlite3` (Index::Database;
+      # `stores.json` before docs/plans/local-catalogue.md Phase 1) — one
+      # entry per merchant origin `portage index build`/`refresh`/`add` has
+      # found and verified.
       #
       # This is untrusted, user-owned data, same posture as `stores.yml`
       # before it's tagged: never checked into git (docs/plans/
@@ -19,7 +20,7 @@ module Portage
       # search result (see search_backends_spec.rb/cli_spec.rb for the
       # specs proving both).
       #
-      # Entry shape (string keys, JSON on disk): origin, platform,
+      # Entry shape (string keys, a JSON object per row): origin, platform,
       # ucp_version, capabilities (array of "catalog"/"cart"/"checkout"),
       # webmcp_preset, categories (category id => weight, top 5),
       # sources (array of source names that found it), last_verified
@@ -27,45 +28,49 @@ module Portage
       class Store
         PATH = File.join(Dir.home, ".portage", "index", "stores.json").freeze
 
+        # @param path [String] where the legacy stores.json lives (or would
+        #   live) — the database sits beside it, and a stores.json found
+        #   there is imported on first open.
         def initialize(path: PATH)
-          @path = path
+          @db = Database.new(path: Database.path_for(path))
         end
 
-        def all = entries.values
+        def all = @db.entries("stores").values
 
-        def find(origin) = entries[origin]
+        def find(origin) = @db.get("stores", origin)
 
         # Merges `fields` onto whatever's already there for `origin` (or
         # starts a fresh entry) — so a second source finding the same store
         # adds to its `sources`/`categories` rather than clobbering the
         # first source's findings.
         def upsert(origin, **fields)
-          existing = entries[origin] || { "origin" => origin }
-          entries[origin] = existing.merge(fields.transform_keys(&:to_s))
-          write
-          entries[origin]
+          @db.transaction do
+            existing = @db.get("stores", origin) || { "origin" => origin }
+            existing.merge(fields.transform_keys(&:to_s)).tap { |merged| @db.put("stores", origin, merged) }
+          end
         end
 
         # @return [Integer] how many entries (0 or 1 — origins are unique)
         #   this host's removal actually dropped.
         def remove(host)
-          before = entries.length
-          entries.reject! { |origin, _| host_of(origin) == host }
-          write
-          before - entries.length
+          @db.transaction do
+            doomed = @db.entries("stores").keys.select { |origin| host_of(origin) == host }
+            doomed.each { |origin| @db.delete("stores", origin) }
+            doomed.length
+          end
         end
 
         # @return [Integer, nil] seconds since the oldest entry was
         #   verified — nil when the index is empty. `doctor` and `index
         #   show` use this to say how stale the local index is.
         def oldest_verified_age(now: Time.now)
-          timestamps = entries.values.filter_map { |e| e["last_verified"] }
+          timestamps = all.filter_map { |e| e["last_verified"] }
           return nil if timestamps.empty?
 
           now.to_i - timestamps.min
         end
 
-        def exists? = File.exist?(@path)
+        def exists? = @db.exists?
 
         private
 
@@ -73,35 +78,6 @@ module Portage
           URI.parse(origin).host.to_s
         rescue URI::InvalidURIError
           ""
-        end
-
-        def entries
-          @entries ||= read
-        end
-
-        def read
-          return {} unless File.readable?(@path)
-
-          # A business name/title can carry non-ASCII bytes (curly quotes,
-          # ®, accents); reading with the process's default external
-          # encoding (US-ASCII on a bare-minimal LANG, confirmed live in a
-          # sandbox with no locale set) would otherwise raise on the very
-          # first non-ASCII byte and get silently swallowed below, quietly
-          # dropping the whole file's worth of entries — this was caught by
-          # this phase's own live index-build check.
-          parsed = JSON.parse(File.read(@path, encoding: "UTF-8"))
-          parsed.is_a?(Hash) ? parsed : {}
-        rescue StandardError
-          {}
-        end
-
-        # An index that can't be written just means this run's findings
-        # aren't saved — never a failed build.
-        def write
-          FileUtils.mkdir_p(File.dirname(@path))
-          File.write(@path, JSON.generate(@entries))
-        rescue StandardError
-          nil
         end
       end
     end

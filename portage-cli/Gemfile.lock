@@ -43,6 +43,7 @@ PATH
       portage-ucp (~> 0.11)
       portage-ucp-client (~> 0.6, >= 0.6.3)
       portage-ucp-journal (~> 0.1)
+      sqlite3 (~> 2.9)
 
 GEM
   remote: https://rubygems.org/
@@ -138,6 +139,7 @@ GEM
       prism (~> 1.7)
     ruby-progressbar (1.13.0)
     simpleidn (0.2.3)
+    sqlite3 (2.9.6-arm64-darwin)
     tsort (0.2.0)
     unicode-display_width (3.2.0)
       unicode-emoji (~> 4.1)
@@ -151,7 +153,6 @@ GEM
 
 PLATFORMS
   arm64-darwin-23
-  ruby
 
 DEPENDENCIES
   portage-cli!

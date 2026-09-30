@@ -1,10 +1,10 @@
-require "json"
-require "fileutils"
+require_relative "database"
 
 module Portage
   module Cli
     module Index
-      # `~/.portage/index/products.json` — product identities the index has
+      # The `products` table of `~/.portage/index/index.sqlite3` (Index::Database;
+      # `products.json` before docs/plans/local-catalogue.md Phase 1) — product identities the index has
       # seen, one entry per GTIN/MPN (when a source gives one) or per
       # title+brand otherwise. **No prices or stock** — those are always
       # live, read straight from the store's own catalog at buy time
@@ -19,32 +19,55 @@ module Portage
       class ProductStore
         PATH = File.join(Dir.home, ".portage", "index", "products.json").freeze
 
+        # @param path [String] where the legacy products.json lives (or
+        #   would live) — the database sits beside it, and a products.json
+        #   found there is imported on first open.
         def initialize(path: PATH)
-          @path = path
+          @db = Database.new(path: Database.path_for(path))
         end
 
-        def all = entries.values
+        def all = @db.entries("products").values
 
-        def find(key) = entries[key]
+        def find(key) = @db.get("products", key)
 
         # @param key [String] a stable key for this product — the source's
         #   GTIN/MPN when it has one, else a normalized title+brand.
         # @param origin [String] the store this sighting came from.
         # @param seen_at [Integer] unix seconds.
         def upsert(key, origin:, seen_at:, **fields)
-          existing = entries[key] || { "key" => key, "aliases" => [], "stores" => [] }
+          @db.transaction { merge_and_write(key, origin, seen_at, fields) }
+        end
+
+        # A batch of sightings in one transaction — all of them land or,
+        # if any raises, none do. Each row is a Hash: `key:`, `origin:`,
+        # `seen_at:` plus the same fields #upsert takes. Rows merge in
+        # order, so a key repeated in one batch accumulates like two
+        # #upsert calls would.
+        # @return [Array<Hash>] the merged entries, in row order.
+        def upsert_many(rows)
+          return [] if rows.empty?
+
+          @db.transaction do
+            rows.map do |row|
+              fields = row.except(:key, :origin, :seen_at)
+              merge_and_write(row.fetch(:key), row.fetch(:origin), row.fetch(:seen_at), fields)
+            end
+          end
+        end
+
+        def exists? = @db.exists?
+
+        private
+
+        def merge_and_write(key, origin, seen_at, fields)
+          existing = @db.get("products", key) || { "key" => key, "aliases" => [], "stores" => [] }
           aliases = merge_aliases(existing, fields[:title])
           merged = existing.merge(fields.transform_keys(&:to_s)) { |field, old, new| merge_field(field, old, new) }
           merged["aliases"] = aliases
           merged["stores"] = merge_stores(merged["stores"], origin, seen_at)
-          entries[key] = merged
-          write
+          @db.put("products", key, merged)
           merged
         end
-
-        def exists? = File.exist?(@path)
-
-        private
 
         # `aliases`/`stores` accumulate across upserts (merged separately
         # below), `sources` is the union of every sighting's; every other
@@ -71,29 +94,6 @@ module Portage
         def merge_stores(stores, origin, seen_at)
           kept = Array(stores).reject { |s| s["origin"] == origin }
           (kept + [{ "origin" => origin, "last_seen" => seen_at }]).sort_by { |s| s["origin"] }
-        end
-
-        def entries
-          @entries ||= read
-        end
-
-        def read
-          return {} unless File.readable?(@path)
-
-          # See Index::Store#read's comment — a product title routinely
-          # carries non-ASCII bytes, so this has to read as UTF-8 rather
-          # than whatever the process's default external encoding is.
-          parsed = JSON.parse(File.read(@path, encoding: "UTF-8"))
-          parsed.is_a?(Hash) ? parsed : {}
-        rescue StandardError
-          {}
-        end
-
-        def write
-          FileUtils.mkdir_p(File.dirname(@path))
-          File.write(@path, JSON.generate(@entries))
-        rescue StandardError
-          nil
         end
       end
     end
