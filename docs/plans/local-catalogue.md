@@ -145,12 +145,66 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 - **Specs and checks first:** the frontmatter version-sync check, and a YAML-parse check of the frontmatter.
 - **Validation:** a fresh `mise use -g gem:portage-cli` in a clean Arch container (`archlinux:latest`) gives a working `portage --version` and `portage doctor --json`. OpenClaw loads the skill and gates it when `portage` is missing.
 
+### Phase 5: Taxonomy pass and Omarchy doc fix
+
+**Why:** Phase 2 found the keywords too coarse for real catalogues:
+- "Pendant Light" classifies to nothing.
+- The tag "New Collection" hits `4488` Electronics > Toll Collection Devices.
+- "Kitchen" tags pull a lighting store into Kitchen & Dining.
+- `--category 594` (Lighting) returned 1 of 164 Light Yard products.
+
+**Causes** (checked in [classifier.rb](../../portage-cli/lib/portage/cli/classifier.rb) and `known-stores/categories.yml`):
+- **Keywords come from node and parent names only** (two levels, 213 nodes). Google's deeper nodes, which carry the specific words ("Chandeliers", "Ceiling Light Fixtures", …), are never used.
+- **Every keyword scores 1.** A generic parent word ("electronics", "home", "kitchen") or a merchandising word ("collection", "new", "sale") counts as much as a specific one.
+- **No generator in the repo.** The file header points at "the script that built" it, but that script isn't in `script/`, so the data can't be regenerated or reviewed.
+
+**Callers** (all go through `Classifier.categories_for`, so nothing else changes):
+- `SearchBackends` (`find` routing, [search_backends.rb:138](../../portage-cli/lib/portage/cli/search_backends.rb#L138), [:282](../../portage-cli/lib/portage/cli/search_backends.rb#L282))
+- `Index::Builder`
+- the `StorefrontProducts` source and mapper
+- `BrowserImport::Categorize`
+
+**Step 0, Omarchy doc fix.** Validated 2026-09-30, see "Omarchy validation" below. Rewrite README's Omarchy bullet:
+- Install with Omarchy's own helper: `omarchy-mise-install gem:portage-cli portage`, which writes the `~/.local/bin/portage` wrapper the same way Omarchy installs `claude`, `codex` and `gh`. Keep `mise use -g gem:portage-cli` as the plain-mise alternative.
+- State that a stock Omarchy needs `sudo pacman -S --needed make` first. Replace the "`base-devel`" line: `gcc` is already there through `clang`, and only `make` is missing.
+- Skill paths: `~/.agents/skills` (OpenClaw, and the dotagents route), `~/.claude/skills` (Claude Code; the plugin route is preferred), and `~/.codex/skills`. These are the same directories Omarchy's own `omarchy-provision-user` links into. Drop "could not verify".
+
+**Taxonomy pass (KISS: data and scoring only; no new classifier, no LLM, no network at runtime):**
+1. **A committed, reproducible generator.** Add `script/categories`, stdlib-only like `script/homebrew-formula`.
+   - Reads Google's taxonomy file: fetch it, or pass `--from FILE`. Pin the edition in the header.
+   - Emits `known-stores/categories.yml` with the **same ids and shape**, still the top two levels as keys, so `~/.portage/categories.yml` overrides keep working.
+   - Level-2 nodes gain `keywords` from **their own descendants' names** (levels 3+), rolled up.
+   - Parent words are kept, but in a separate `parent_keywords` list.
+2. **A shipped stoplist** of merchandising and non-product words: new, collection, sale, gift, set, accessories, supplies, other, general, …. It's a short YAML list the generator applies and the Classifier also applies to input tokens. Every word on it gets a spec-backed reason.
+3. **A small curated synonyms layer** under a `synonyms` key per node, applied by the generator. It's only for real gaps the golden set proves (e.g. pendant, sconce, chandelier → Lighting). Each synonym is justified by a golden case. No bulk hand-curation.
+4. **Scoring.** Own and descendant keywords count 2, `parent_keywords` count 1, ties unchanged. This is the only change to `Classifier`. `categories_for`'s signature and return shape stay the same. Only reach for IDF-style weighting if the golden set shows 2/1 isn't enough, and log why.
+5. **Golden set:** `portage-cli/spec/fixtures/classifier_golden.yml`, 60–100 labelled cases.
+   - Taken from real data: Light Yard products (from the Phase 2 crawl), JB Hi-Fi products, existing `find` spec queries, and a few browser-import-style URLs.
+   - Each case has an expected top-1 category id, plus an optional "must not include" list.
+   - It's written **before** any data or scoring change, and the baseline accuracy is recorded.
+
+**Constraints:**
+- `find` routing must not regress. Every existing `search_backends`, `find` and `index` spec passes unchanged. Where an old spec asserted a wrong category, fix the expectation and name it in the log.
+- `categories.yml` stays shipped in the gem. Only grow its size if it stays reasonable (log before and after).
+- `index search --category` must work on data that's already indexed without a re-crawl. Either re-classify existing rows on `index refresh`, or document "re-crawl to re-classify". Pick the simpler one and log it.
+
+**Specs first:**
+- **Golden-set spec:** the top-1 accuracy threshold is set from the baseline and raised to the target. It asserts the specific Phase 2 failures: "Pendant Light" → Lighting, "New Collection" never → 4488, a lighting product tagged "Kitchen" ranks Lighting first.
+- **Generator specs** on a tiny taxonomy fixture: ids and shape preserved, descendants rolled up, stoplist applied, synonyms merged, output deterministic.
+- **Classifier specs:** 2/1 weighting, stoplisted input tokens ignored, user overrides still win.
+
+**Validation:**
+- Regenerate `categories.yml` and diff-review it (spot-check 10 nodes).
+- Re-classify or re-crawl thelightyard.co.uk. `portage index search --category 594` should return most of the lighting products; record the before/after counts.
+- `portage find` on 5 real queries routes as before or better. Record each query.
+- Golden-set accuracy before and after, in the log row.
+
 ## Open decisions
 
-1. Vendored SQLite vs `depends_on "sqlite"` in Homebrew. Phase 1 validation decides.
+1. Vendored SQLite vs `depends_on "sqlite"` in Homebrew. **Decided in Phase 1: vendored** (see "Phase 1 results").
 2. `index add` crawls by default or only with `--crawl`. **Decided in Phase 2: only with `--crawl`** (see "Phase 2 results").
 3. MIT-0 on ClawHub. **Decided 2026-09-30: accepted.** The repo stays MIT; ClawHub republishes the skill as MIT-0.
-4. Release cut (versions, CHANGELOG, `rake publish_all`, `rake homebrew:update`) after Phase 4, as its own step, only when asked.
+4. Release cut (versions, CHANGELOG, `rake publish_all`, `rake homebrew:update`) after Phase 5, as its own step, only when asked.
 
 ## Progress log
 
@@ -161,6 +215,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 | 2026-09-30 | 2 | **Done** (commits `Classify long texts without comparing every word to every keyword`, `Crawl a Shopify store's products.json into the local index`, `Add portage index search and page index show --products`, `Document the catalogue crawl and index search`; unpushed). portage-cli rspec 1131 -> 1201 examples, 0 failures; rubocop clean, no new disables; each commit green on its own. `index add` crawls only with `--crawl`. Live: thelightyard.co.uk 164 products in 3.5s, JB Hi-Fi 5,000 (page cap) in 36s, re-crawls upsert with no duplicates. See "Phase 2 results".
 | 2026-09-30 | 3 | **Done** (commits `Carry the UCP product on find offers and index search hits`, `Document product cards in the buy skill and CLI reference`; unpushed). portage-cli rspec 1201 -> 1211 examples, 0 failures; rubocop clean, no new disables. `find` and `shopify_catalog` offers carry `product`; `index search` is `live: false` with a price-free `product` per hit. `claude plugin validate .` passes. Headless `/buy` run **skipped** (claude -p: "OAuth session expired"), replaced by a manual render check on real `find --json`. See "Phase 3 results".
 | 2026-09-30 | 4 | **Done** (commits `Add OpenClaw metadata to the buy skill and check it against the plugin`, `Document installing the buy skill on OpenClaw and Omarchy`; unpushed). portage-cli rspec 1211 -> 1218 examples, 0 failures; rubocop clean. `claude plugin validate .` passes. Arch container: `mise use -g gem:portage-cli` gives a working `portage --version`/`doctor --json` (needs a compiler). **Skipped:** ClawHub dry run/scan (blocked, nothing published), OpenClaw runtime gating, Omarchy skill path (unverifiable). See "Phase 4 results".
+| 2026-09-30 | Omarchy | **Validated** against Omarchy `8b4eae6` (2026-09-29) and an Omarchy-like Arch container. `omarchy-mise-install gem:portage-cli portage` fails on the stock base packages (`make` is missing) and works once `make` is added. Skill paths confirmed from Omarchy's source. README fix and taxonomy pass added as Phase 5. See "Omarchy validation". |
 
 ### Phase 1 results (2026-09-30)
 
@@ -313,10 +368,48 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 
 **Bugs caught:** the first frontmatter draft failed YAML parsing (unquoted `: ` inside env var descriptions), which the parse spec caught before anything was validated elsewhere. A spec read the skill as US-ASCII in this shell locale (`invalid byte sequence`), fixed by reading as UTF-8.
 
+### Omarchy validation (2026-09-30)
+
+**Sources:** a clone of `github.com/basecamp/omarchy` at `8b4eae6` (2026-09-29), and a `linux/amd64` `archlinux:latest` container with Omarchy's own `bin/omarchy-mise-install` copied in, run as a non-root user.
+
+**Omarchy's source:**
+- **Base packages** (`install/omarchy-base.packages`) include `ruby` (3.4), `mise-bin`, `clang`, `llvm`, `git` and `yay`.
+- **`base-devel` is only in `install/omarchy-other.packages`,** which the file describes as "installed outside of install/packages.sh or optional packages". Neither `gcc` nor `make` is listed. `gcc` still arrives, because `clang` depends on it (`/usr/sbin/gcc` was present in the container). `make` doesn't: nothing in the base list depends on it, and `yay`'s own dependencies are `pacman` and `git`.
+- **CLI install.** Omarchy installs agent CLIs through `omarchy-mise-install <pkg> [command]` (`install/user/mise.sh`: `codex`, `claude`, `gh`, …). That writes a `~/.local/bin/<command>` wrapper which runs `mise use -g <pkg>` and then `mise x`. For Portage that is `omarchy-mise-install gem:portage-cli portage`.
+- **Skill directories.** `bin/omarchy-provision-user` (and `docs/file-layout.md`) symlinks Omarchy's own skills into `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`, `~/.pi/agent/skills`, `~/.gemini/config/skills` and `~/.hermes/skills`. So those are the directories the agents on Omarchy read.
+- **OpenClaw** installs as the `openclaw` pacman package (`bin/omarchy-install-openclaw-cli`), not through mise.
+
+**Container runs:**
+
+| Setup | Result |
+|---|---|
+| Omarchy base (`ruby mise clang llvm git`) via `omarchy-mise-install gem:portage-cli portage` | **Fails**: `mise ERROR Failed to install gem:portage-cli@latest: gem exited with non-zero status`. The same packages with a plain `gem install` show the cause: `make failed No such file or directory - make`, building a native extension. |
+| Base + `make` via `omarchy-mise-install gem:portage-cli portage` | **Pass**: `portage --version` gives `0.10.0`, and `portage doctor --json` parses (10 findings). |
+
+**So:** a stock Omarchy needs `sudo pacman -S --needed make` (or `base-devel`) before installing. README's current "needs `base-devel`" is right but heavier than necessary, and it doesn't mention `omarchy-mise-install`. Phase 5 step 0 fixes the bullet. **Not verified:** a real Omarchy install (VM or ISO); OpenClaw hiding the skill when `portage` is missing.
+
 ## Next (for the user)
 
 1. ~~Decide MIT-0~~ Accepted 2026-09-30 (open decision 3).
 2. ClawHub dry run passed (clawhub 0.23.3): `portage-buy@0.8.0`, 4 files, slug free. The CLI ignores the frontmatter `version`, so pass it: `npx clawhub@latest skill publish plugins/buy/skills/buy --slug portage-buy --version 0.8.0 --name "Portage Buy"` from the personal account. The server-side scan only runs on a real publish. Nothing has been published.
 3. Cut the release when you want it (open decision 4): bump `plugins/buy/.claude-plugin/plugin.json` **and** SKILL.md `version` together, CHANGELOG, `rake publish_all`, `rake homebrew:update`.
-4. Unrelated leftovers: category keywords in `known-stores/categories.yml` (Phase 2), and re-running the headless `/buy` card check on an authenticated session (Phase 3).
+4. Category keywords: now Phase 5. Still open: re-running the headless `/buy` card check on an authenticated session (Phase 3).
+
+## Restart prompt (Phase 5)
+
+```text
+Read docs/plans/local-catalogue.md in full, then implement Phase 5 only (taxonomy pass and Omarchy doc fix).
+
+Setup: git checkout local-catalogue && git status (must be clean apart from tmp/). Stay on this branch.
+
+Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 5" and the branch. The main thread briefs and reviews only.
+
+Rules: KISS, DRY, TDD. Write the golden-set spec first and record the baseline accuracy before changing any data or scoring. Keep Classifier.categories_for's signature and return shape, categories.yml's ids and shape, and ~/.portage/categories.yml overrides working. No LLM and no runtime network. The generator is stdlib-only. Every existing find/search_backends/index spec stays green, and each changed expectation is named in the log. rake spec (rspec + rubocop) green, no new cop disables.
+
+Order: step 0 (the README Omarchy bullet, from "Omarchy validation") as its own commit, then golden set, then the generator plus stoplist, then scoring, then synonyms (only for failing golden cases).
+
+Before writing code: re-read classifier.rb, search_backends.rb (both categories_for callers), index/builder.rb, index/sources/storefront_products*, browser_import/categorize.rb and their specs.
+
+Finish: run every Phase 5 validation item and record before/after numbers. Add a progress-log row plus a "Phase 5 results" section (judgement calls, bugs caught). Commit on local-catalogue without pushing. Replace this restart prompt with a "Next (for the user)" update.
+```
 
