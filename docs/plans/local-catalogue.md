@@ -1,6 +1,6 @@
 # Local Catalogue: SQLite Index, Storefront Crawl, Product Cards, Packaging
 
-**Status:** planned, not started
+**Status:** Phase 1 done, Phase 2 next
 **Branch:** `local-catalogue` (off `main`)
 **Driver:** a Grok thread proposing a full local product catalogue, card-shaped output for agents, and Omarchy/OpenClaw packaging. Other ideas from that thread (merchant promo config, localhost shopping UI, beacon registry) are **out of scope** here and come back as their own plans.
 
@@ -157,19 +157,53 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 | Date | Phase | Result |
 |---|---|---|
 | 2026-09-30 | plan | Drafted and validated against the code, live `products.json`, the `sqlite3` gem platforms, ClawHub skill-format docs and `mise ls-remote gem:portage-cli`. |
+| 2026-09-30 | 1 | **Done** (commits `Store the local index in SQLite`, `Report the index database in portage doctor`; unpushed). `rake`-equivalent for portage-cli: rspec 1103 -> 1131 examples, 0 failures; rubocop clean, no new disables. Existing `store_spec`/`product_store_spec` pass unchanged. See "Phase 1 results" below the table. |
 
-## Restart prompt (Phase 1)
+### Phase 1 results (2026-09-30)
+
+**Built:** `Index::Database` (open/0600/WAL/busy timeout, reentrant `transaction`, `entries/get/put/delete/count/execute/info`), `Index::Schema` (forward-only `MIGRATIONS`, `fts5_available?`), `Index::LegacyImport`. `Store`/`ProductStore` keep their public APIs and now sit on it; `ProductStore#upsert_many` added. `portage doctor` index finding gains the DB path, row counts and FTS5 status (`details.database`). CHANGELOG `[Unreleased]` entry added. `sqlite3 ~> 2.9` added to the gemspec (resolved 2.9.6).
+
+**Validation:**
+
+1. **FTS5: pass.** `PRAGMA compile_options` has `ENABLE_FTS5` (SQLite 3.53.2) on macOS arm64 (gem 2.9.6 arm64-darwin), Docker `ruby:3.3` linux aarch64 (`aarch64-linux-gnu`), and `ruby:3.3-slim` under `--platform linux/amd64` (`x86_64-linux`, emulated). Not tested: musl/Alpine (gem ships precompiled, but I did not run it).
+2. **`gem install` with no compiler: pass.** Built `portage-cli-0.10.0.gem` from the working tree, installed it in `ruby:3.3-slim` (no gcc/cc/make; checked with `which`) on arm64 and amd64. Both pulled the precompiled `sqlite3-2.9.6-<platform>-gnu`, `portage --version` gave 0.10.0, `portage doctor` printed the new index-database line with FTS5 available.
+3. **Homebrew: pass, vendored SQLite chosen.** `script/homebrew-formula --out tmp/portage.rb` needs no change: it already resolves `sqlite3` 2.9.6 and `mini_portile2` from the gemspec as ordinary `resource` blocks (ruby-platform sha256 matched). A real `brew install --build-from-source` of a renamed, keg-only copy (class `PortageValidate` in a throwaway tap `local/portage-validate`, `url` pointed at the locally built gem, so the keg ran the new code; the real `tomtom87/portage` install was untouched, and the copy was uninstalled and untapped afterwards) took about 56s in total and built sqlite3 from the gem's bundled amalgamation with no network fetch. The keg's Ruby reported SQLite 3.53.2 with `ENABLE_FTS5`, and `portage doctor --json` showed the database block with `fts5: true`. **Why vendored, not `depends_on "sqlite"` + `--enable-system-libraries`:** (a) `sqlite` is keg-only on macOS, so system-libraries needs extra pkg-config/`--with-sqlite3-*` wiring; (b) the formula installs every resource in one loop, so one resource would need special-casing in `script/templates/portage.rb.erb`; (c) FTS5 and JSON1 then depend on whichever SQLite the machine has, whereas vendored gives the same 3.53.2 build as the precompiled `gem install` path; (d) the only cost is a C compiler at build time, which a source build needs anyway. Revisit only if a Homebrew reviewer objects to bundled SQLite.
+4. **`index build` then `index show` on a real `~/.portage` copy: pass, with a live-data caveat.** All runs used `HOME` pointed at copies under `tmp/validate/` (real `~/.portage` untouched, no sqlite file appeared in it). The real dir has no `stores.json`/`products.json` (only the known-* caches), so:
+   - Old code (worktree at the plan commit) built a JSON-era index on a copy (163 stores). New code's `index show --json` on that same copy migrated it: output **byte-identical**, files renamed to `*.json.migrated`, DB mode 0600.
+   - Same again with `products.json` seeded from the real known-products.json (396 products): `index show --json` and plain `index show` both **byte-identical** old vs new.
+   - Two full `index build` runs from identical copies, old JSON code vs new SQLite code (both live): 235 vs 234 stores, 230 in common, 406 vs 407 products, and the only differences in shared stores were `categories` weights (6 stores, live catalog sampling). Entry key sets are identical. The first old-code run (163 stores) was an outlier, most likely from network flakiness, so I re-ran it rather than trust it. New build took about 4 min. No regression seen, but exact equality is only claimable for the migration path.
+
+**Judgement calls:**
+- The DB sits **beside the path the store is given** (`Database.path_for(json_path)` = `dirname/index.sqlite3`), so `Store.new(path: ".../stores.json")` and the spec-helper redirects work unchanged and both stores share one file. The `stores.json` path is now only the location of the legacy file to import.
+- **Import happens only on the open that creates the database** (not "whenever a table is empty"), inside the same transaction as the schema migration, so it is exactly once and a failed import leaves the DB unstamped and is retried. A spec proves "exactly once" after the tables are emptied again. Non-object entries and unparseable files are skipped (file left untouched).
+- `products` has `id INTEGER PRIMARY KEY` plus `key TEXT UNIQUE`, not `key` as the primary key as the plan sketched, so `products_fts` can share a rowid that survives VACUUM. `product_stores` and `products_fts` are maintained by SQL triggers (JSON1 `json_extract`/`json_each`), so the legacy import and future bulk writes need no extra Ruby indexing code.
+- The FTS migration is a no-op (version still advances) on a SQLite without FTS5; `doctor` reports it. Phase 2's `index search` must handle that.
+- `Store#exists?` now means "the database file exists, or a legacy json is waiting to be imported", so `doctor` doesn't say "no index" before the first migration. Reads never create the file.
+- Store#upsert/remove and ProductStore#upsert run in `BEGIN IMMEDIATE`, so read-modify-write is safe across processes. Failed writes raise (`Errno::EACCES` for an unwritable dir, `SQLite3::Exception` otherwise); the Builder's `rescue StandardError` blocks only wrap source fetches, not store writes, so a write failure now surfaces from `index build`/`add`.
+- The `Index::Database.new` default is redirected to a tmpdir in `spec_helper.rb`, like the other index paths.
+- Not done, deliberately: no price/stock stripping in `ProductStore` (behaviour unchanged; Phase 2's mapper drops them), `Builder` still calls `upsert` per sighting, `KnownCache`/`Exporter` untouched.
+
+**Bugs caught while building (by the specs):** `fts5_available?` returned the DB object, not a boolean (block form of `SQLite3::Database.new`); an "import if table empty" rule re-imported after `index remove` emptied a table, which the "imports exactly once" spec caught and led to the import-on-create rule; an empty `upsert_many` created the DB file.
+
+## Restart prompt (Phase 2)
 
 ```text
-Read docs/plans/local-catalogue.md in full, then implement Phase 1 only (SQLite index store).
+Read docs/plans/local-catalogue.md in full, then implement Phase 2 only (storefront catalogue crawl and `index search`). Phase 1 (SQLite index store) is done on the local-catalogue branch; read its progress-log row first.
 
-Setup: git checkout main && git pull --ff-only && git checkout -b local-catalogue. Commit the plan file first if it isn't committed yet.
+Setup: git checkout local-catalogue (Phase 1 is committed there and unpushed, so don't branch off main). Confirm `git log --oneline` shows the two Phase 1 commits ("Store the local index in SQLite", "Report the index database in portage doctor") and that `cd portage-cli && bundle exec rspec` is green before you start.
 
-Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 1" and the branch. The main thread briefs and reviews only.
+Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 2" and the branch. The main thread briefs and reviews only.
 
-Rules: KISS, DRY, TDD (failing specs first, in portage-cli/spec/portage/cli/index/). Keep Index::Store/ProductStore public APIs unchanged. No price or stock in the index. 0600 file, raising writes. Stay on the UCP spec shapes. rake spec (rspec + rubocop) green, no new cop disables.
+Rules: KISS, DRY, TDD (failing specs first, in portage-cli/spec/portage/cli/index/**). Map products.json into Portage::Ucp::Product, don't invent a parallel shape. Price and availability are dropped before persisting. Classifier for taxonomy, Support::Connection and UserAgent for HTTP, HandoffOnly checked before any request. WebMock fixtures, no live HTTP in specs. rake spec (rspec + rubocop) green, no new cop disables.
 
-Before writing code: re-read index/{store,product_store,builder,known_cache,exporter}.rb and their specs, since line refs in the plan may have drifted.
+Phase 1 facts to build on (verify in the code, they may have drifted):
+- Index::Database (index/database.rb) owns ~/.portage/index/index.sqlite3; Index::Schema (index/schema.rb) holds forward-only MIGRATIONS (user_version). Add a migration there for any new table or column, never edit an existing one.
+- ProductStore#upsert_many(rows) takes hashes with key:, origin:, seen_at: plus the same fields as #upsert, in one transaction. Use one call per page of the crawl. Builder still calls #upsert per sighting; move it to upsert_many only if it is a trivial swap.
+- products_fts (FTS5: title, brand, category, aliases; rowid = products.id) and product_stores are kept in step by SQL triggers on the products table, so new entry fields are stored in the JSON `data` column with no extra indexing code. Adding a field to FTS means a new migration that drops and recreates the fts table and triggers. FTS5 can be missing on a system-libraries SQLite build (Schema.fts5_available?), so `index search` must degrade to a clear error or LIKE fallback, not crash.
+- Database#execute(sql, binds) is the escape hatch for search queries. Database#transaction is reentrant.
+- Legacy stores.json/products.json import happens only on the open that creates the database.
 
-Finish: run every Phase 1 validation item and record the results. Add a progress-log row to the plan (including judgement calls and any bugs a review caught). Commit on local-catalogue without pushing. Then write the Phase 2 restart prompt into the plan's "Restart prompt" section, replacing this one.
+Before writing code: re-read index/{database,schema,store,product_store,builder}.rb, index/sources.rb, index/sources/*.rb, the Ucp::Product/Variant value objects, Classifier and the SearchBackends::Index backend, plus their specs, since line refs in the plan may have drifted.
+
+Finish: run every Phase 2 validation item (live crawl of thelightyard.co.uk and one large Shopify store, with timings and counts; `index search` sanity) and record the results, including failures and skips. Add a progress-log row to the plan (judgement calls, bugs a review caught, the `--crawl` decision). Commit on local-catalogue without pushing. Then write the Phase 3 restart prompt into the plan's "Restart prompt" section, replacing this one.
 ```
