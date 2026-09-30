@@ -37,6 +37,9 @@ module Portage
         THROTTLE = 0.1
         STALE_AFTER = 7 * 24 * 60 * 60
         TOP_CATEGORIES = 5
+        # Product sightings per ProductStore#upsert_many transaction — one
+        # products.json page's worth (docs/plans/local-catalogue.md Phase 2).
+        WRITE_BATCH = 250
 
         # Public so BrowserImport::Importer (Phase 3) labels a probed
         # origin's capabilities exactly the way an index build does.
@@ -94,13 +97,19 @@ module Portage
         # HandoffOnly) is recorded without ever probing it — the user
         # explicitly named it, but that's still not a request this process
         # sends.
-        def add(url)
+        #
+        # `crawl: true` (`index add URL --crawl`) then reads the store's own
+        # catalogue through Sources::StorefrontProducts into the index.
+        # Opt-in: a crawl is up to 21 more requests and 20s of pauses, where
+        # a plain add is one probe.
+        def add(url, crawl: false)
           origin = origin_of(url)
           return { added: false, message: "Not a valid http(s) URL: #{url}" } unless origin
           return store_manual_handoff_only(origin) if handoff_only_origin?(origin)
 
           session = probe(origin)
-          store_manual(origin, session)
+          result = store_manual(origin, session)
+          crawl ? crawl_added(origin, result) : result
         end
 
         # `portage index remove HOST`
@@ -184,10 +193,29 @@ module Portage
           { added: true, origin: origin, message: "Added #{origin} — hand-off only, never probed." }
         end
 
+        # `store_fields:` on a sighting (StorefrontProducts' crawl note and
+        # platform) lands on the store row as-is.
         def update_existing(origin, group)
           existing = @stores.find(origin)
+          fields = group.filter_map { |g| g[:store_fields] }.reduce({}, :merge)
           @stores.upsert(origin, sources: merged_sources(existing, group),
-                                 categories: merge_categories(existing["categories"], group))
+                                 categories: merge_categories(existing["categories"], group), **fields)
+        end
+
+        def crawl_added(origin, result)
+          sightings = Sources::StorefrontProducts.new(stores: @stores, handoff_only: @handoff_only)
+                                                 .crawl(origin, platform: @stores.find(origin)&.dig("platform"))
+          tagged = sightings.map { |s| s.merge(source: "storefront_products") }
+          apply(tagged, dry_run: false)
+          note = tagged.last.dig(:store_fields, :crawl)
+          result.merge(crawl: note, message: "#{result[:message]} #{crawl_message(note)}")
+        end
+
+        def crawl_message(note)
+          return "Catalogue not crawled (#{note['reason']})." if note["status"] == "skipped"
+
+          "Crawled #{note['products']} product(s) from #{note['pages']} page(s)" \
+            "#{" (stopped: #{note['reason']})" if note['reason']}."
         end
 
         def store_new(origin, session, group)
@@ -220,7 +248,7 @@ module Portage
           group.each do |sighting|
             next unless sighting[:title]
 
-            Classifier.categories_for(sighting[:title]).each { |id| tally[id] += 1 }
+            categories_of(sighting).each { |id| tally[id] += 1 }
           end
           tally.sort_by { |_id, weight| -weight }.first(TOP_CATEGORIES).to_h
         end
@@ -232,17 +260,26 @@ module Portage
         def capabilities_of(session) = self.class.capabilities_of(session)
 
         def store_products(sightings)
-          eligible = sightings.select { |s| s[:title] && @stores.find(s[:origin]) }
-          eligible.each { |sighting| store_product(sighting) }
+          known = Hash.new { |memo, origin| memo[origin] = !@stores.find(origin).nil? }
+          eligible = sightings.select { |s| s[:title] && known[s[:origin]] }
+          eligible.each_slice(WRITE_BATCH) { |batch| @products.upsert_many(batch.map { |s| product_row(s) }) }
           eligible.length
         end
 
-        def store_product(sighting)
-          key = product_key(sighting)
-          category = Classifier.categories_for(sighting[:title]).first
-          @products.upsert(key, origin: sighting[:origin], seen_at: @now.to_i, title: sighting[:title],
-                                brand: sighting[:brand], gtin: sighting[:gtin], category: category,
-                                sources: [sighting[:source]].compact)
+        # `product:` on a sighting (StorefrontProducts' handle, url,
+        # image_url, options, variant_ids) is stored alongside the usual
+        # fields.
+        def product_row(sighting)
+          { key: product_key(sighting), origin: sighting[:origin], seen_at: @now.to_i, title: sighting[:title],
+            brand: sighting[:brand], gtin: sighting[:gtin], category: categories_of(sighting).first,
+            sources: [sighting[:source]].compact, **sighting.fetch(:product, {}) }
+        end
+
+        # A source that already classified its sighting (StorefrontProducts,
+        # on product_type and tags) says so in `categories:`; otherwise the
+        # title is classified here.
+        def categories_of(sighting)
+          sighting[:categories] || Classifier.categories_for(sighting[:title])
         end
 
         # GTIN when a source has one (none do yet); otherwise a normalized

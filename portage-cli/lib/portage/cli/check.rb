@@ -57,10 +57,20 @@ module Portage
         report = report.merge(adapter: adapter_for(report))
         report = report.merge(webmcp: webmcp_for(report))
         verdict = verdict_for(report)
-        report.merge(verdict: verdict, next_step: CheckNextStep.call(verdict, report))
+        with_index_hint(report.merge(verdict: verdict, next_step: CheckNextStep.call(verdict, report)))
       end
 
       private
+
+      # docs/plans/local-catalogue.md Phase 2: a Shopify (or native UCP)
+      # store's catalogue can be crawled into the local index. Check only
+      # names the command; it never crawls.
+      def with_index_hint(report)
+        return report unless report[:native_ucp] || report[:platform] == "Shopify"
+
+        port = @uri.port == @uri.default_port ? "" : ":#{@uri.port}"
+        report.merge(index_hint: "portage index add #{@uri.scheme}://#{@uri.host}#{port} --crawl")
+      end
 
       def handoff_only_report
         { url: @uri.to_s, native_ucp: nil, platform: nil, recommended_gem: nil, handoff_only: true, adapter: nil,

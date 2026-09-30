@@ -1,0 +1,199 @@
+{
+  "products": [
+    {
+      "id": 15555763994999,
+      "title": "BIRDCAGE INDUSTRIAL BATHROOM PENDANT LIGHT IP44",
+      "handle": "birdcage-industrial-bathroom-pendant-light-ip44",
+      "body_html": "<p>Hand-cut glass and solid brass, made in Derbyshire.</p>",
+      "published_at": "2026-09-15T17:48:50+01:00",
+      "created_at": "2026-09-15T17:38:25+01:00",
+      "updated_at": "2026-09-30T15:16:32+01:00",
+      "vendor": "The Alchemist Collection By Gwyn Carless At The Light Yard",
+      "product_type": "Pendant Light",
+      "tags": [
+        "Bathroom Pendant Lights",
+        "British Hand-Made",
+        "Industrial Bathroom Lights",
+        "New Collection",
+        "£500-£750"
+      ],
+      "variants": [
+        {
+          "id": 57458065080695,
+          "title": "Default Title",
+          "option1": "Default Title",
+          "option2": null,
+          "option3": null,
+          "sku": "A/IP/PEN/BIRD/PAT",
+          "requires_shipping": true,
+          "taxable": true,
+          "featured_image": null,
+          "available": true,
+          "price": "725.00",
+          "grams": 6000,
+          "compare_at_price": null,
+          "position": 1,
+          "product_id": 15555763994999,
+          "created_at": "2026-09-15T17:38:25+01:00",
+          "updated_at": "2026-09-30T15:16:32+01:00"
+        }
+      ],
+      "images": [
+        {
+          "id": 86854721405303,
+          "created_at": "2026-09-15T17:42:53+01:00",
+          "position": 1,
+          "updated_at": "2026-09-15T17:42:56+01:00",
+          "product_id": 15555763994999,
+          "variant_ids": [],
+          "src": "https://cdn.shopify.com/s/files/1/0258/7827/files/IP44-BATHROOM-PENDANT-LIGHT-INDUSTRIAL-STATEMENT-LIGHTING-HIGH-RES-2_dafb31ec-42f7-40d9-9239-933cf8b926a4.webp?v=1789490576",
+          "width": 3648,
+          "height": 5472
+        },
+        {
+          "id": 86854721438071,
+          "created_at": "2026-09-15T17:42:53+01:00",
+          "position": 2,
+          "updated_at": "2026-09-15T17:42:57+01:00",
+          "product_id": 15555763994999,
+          "variant_ids": [],
+          "src": "https://cdn.shopify.com/s/files/1/0258/7827/files/IP44-BATHROOM-PENDANT-LIGHT-INDUSTRIAL-STATEMENT-LIGHTING-HIGH-RES-3_10f8d511-ed0e-4109-9195-110279e89e7d.webp?v=1789490577",
+          "width": 3648,
+          "height": 5472
+        }
+      ],
+      "options": [
+        {
+          "name": "Title",
+          "position": 1,
+          "values": [
+            "Default Title"
+          ]
+        }
+      ]
+    },
+    {
+      "id": 15423451562359,
+      "title": "SIGNATURE MOROCCAN GOLD LEAF PENDANT LIGHT",
+      "handle": "signature-moroccan-gold-leaf-pendant-light",
+      "body_html": "<p>Hand-cut glass and solid brass, made in Derbyshire.</p>",
+      "published_at": "2026-03-20T22:06:45+00:00",
+      "created_at": "2026-03-20T21:58:07+00:00",
+      "updated_at": "2026-09-30T15:16:32+01:00",
+      "vendor": "The Alchemist Collection By Gwyn Carless At The Light Yard",
+      "product_type": "Pendant Light",
+      "tags": [
+        "Bedroom Pendant Lights",
+        "British Hand-Made",
+        "Dining Room Pendant Lights",
+        "Hallway Pendant Lights",
+        "Hanging Lights",
+        "Kitchen Pendant Lights",
+        "Living Room Pendant Lights",
+        "Pendant Lights",
+        "Study Pendant Lights",
+        "£250-£500"
+      ],
+      "variants": [
+        {
+          "id": 56914542821751,
+          "title": "ANTIQUE BRONZE",
+          "option1": "ANTIQUE BRONZE",
+          "option2": null,
+          "option3": null,
+          "sku": "A/PEN/SIG/G-MOR/S/ANT",
+          "requires_shipping": true,
+          "taxable": true,
+          "featured_image": {
+            "id": 85056176030071,
+            "product_id": 15423451562359,
+            "position": 4,
+            "created_at": "2026-03-20T22:01:31+00:00",
+            "updated_at": "2026-03-20T22:04:46+00:00",
+            "alt": "Elegant, rectangular Moroccan style gold pendant light, bronze lamp holder and red background",
+            "width": 700,
+            "height": 1000,
+            "src": "https://cdn.shopify.com/s/files/1/0258/7827/files/BEDROOM-KITCHEN-DINING-SIGNATURE-MOROCCAN-GOLD-LEAF-DESIGNER-PENDANT-LIGHT-BRONZE-LOW-RES.webp?v=1774044286",
+            "variant_ids": [
+              56914542821751
+            ]
+          },
+          "available": true,
+          "price": "430.00",
+          "grams": 1000,
+          "compare_at_price": null,
+          "position": 1,
+          "product_id": 15423451562359,
+          "created_at": "2026-03-20T21:58:07+00:00",
+          "updated_at": "2026-09-30T15:16:32+01:00"
+        },
+        {
+          "id": 56914542854519,
+          "title": "BRUSHED BRASS",
+          "option1": "BRUSHED BRASS",
+          "option2": null,
+          "option3": null,
+          "sku": "A/PEN/SIG/G-MOR/S/BB",
+          "requires_shipping": true,
+          "taxable": true,
+          "featured_image": {
+            "id": 85056175997303,
+            "product_id": 15423451562359,
+            "position": 5,
+            "created_at": "2026-03-20T22:01:31+00:00",
+            "updated_at": "2026-03-20T22:04:46+00:00",
+            "alt": "Elegant, rectangular Moroccan style gold pendant light, brass lamp holder and red background",
+            "width": 700,
+            "height": 1000,
+            "src": "https://cdn.shopify.com/s/files/1/0258/7827/files/BEDROOM-KITCHEN-DINING-SIGNATURE-MOROCCAN-GOLD-LEAF-DESIGNER-PENDANT-LIGHT-BRASS-LOW-RES.webp?v=1774044286",
+            "variant_ids": [
+              56914542854519
+            ]
+          },
+          "available": true,
+          "price": "430.00",
+          "grams": 1000,
+          "compare_at_price": null,
+          "position": 2,
+          "product_id": 15423451562359,
+          "created_at": "2026-03-20T21:58:07+00:00",
+          "updated_at": "2026-09-30T15:16:32+01:00"
+        }
+      ],
+      "images": [
+        {
+          "id": 85056176095607,
+          "created_at": "2026-03-20T22:01:31+00:00",
+          "position": 1,
+          "updated_at": "2026-03-20T22:04:46+00:00",
+          "product_id": 15423451562359,
+          "variant_ids": [],
+          "src": "https://cdn.shopify.com/s/files/1/0258/7827/files/BEDROOM-KITCHEN-DINING-SIGNATURE-MOROCCAN-GOLD-LEAF-DESIGNER-PENDANT-LIGHT-HERO2-LOW-RES.webp?v=1774044286",
+          "width": 700,
+          "height": 1000
+        },
+        {
+          "id": 85056176062839,
+          "created_at": "2026-03-20T22:01:31+00:00",
+          "position": 2,
+          "updated_at": "2026-03-20T22:04:46+00:00",
+          "product_id": 15423451562359,
+          "variant_ids": [],
+          "src": "https://cdn.shopify.com/s/files/1/0258/7827/files/BEDROOM-KITCHEN-DINING-SIGNATURE-MOROCCAN-GOLD-LEAF-DESIGNER-PENDANT-LIGHT-HERO1-LOW-RES.webp?v=1774044286",
+          "width": 700,
+          "height": 1000
+        }
+      ],
+      "options": [
+        {
+          "name": "Select Your Ceiling Kit (Bulb Included)",
+          "position": 1,
+          "values": [
+            "ANTIQUE BRONZE",
+            "BRUSHED BRASS"
+          ]
+        }
+      ]
+    }
+  ]
+}

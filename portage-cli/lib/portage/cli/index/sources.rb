@@ -3,6 +3,7 @@ require_relative "sources/stores_file"
 require_relative "sources/browser"
 require_relative "sources/wikidata"
 require_relative "sources/webmcp_sweep"
+require_relative "sources/storefront_products"
 
 module Portage
   module Cli
@@ -16,7 +17,8 @@ module Portage
           "stores_file" => -> { StoresFile.new },
           "browser" => -> { Browser.new },
           "wikidata" => -> { Wikidata.new },
-          "webmcp_sweep" => -> { WebmcpSweep.new }
+          "webmcp_sweep" => -> { WebmcpSweep.new },
+          "storefront_products" => -> { StorefrontProducts.new }
         }.freeze
 
         # Runs with no extra opt-in: no bridge required, and no low-yield
@@ -24,7 +26,8 @@ module Portage
         # show up in `portage index sources`, just not run unless named in
         # `--sources`. `browser` is listed but never a default — it yields
         # nothing; `portage browser import` writes those entries itself
-        # (see Sources::Browser).
+        # (see Sources::Browser). `storefront_products` sends up to 21
+        # requests a store, so it runs only when named.
         DEFAULT_NAMES = %w[shopify_catalog stores_file].freeze
 
         def self.all = ALL.values.map(&:call)

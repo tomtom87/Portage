@@ -80,7 +80,7 @@ module Portage
              portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
              portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
              portage index show [--stores|--products] [--json]
-             portage index add <url> [--json]
+             portage index add <url> [--crawl] [--json]
              portage index remove <host> [--json]
              portage index sources [--json]
              portage browser import [--browser chrome|edge|brave|arc|firefox|safari] [--profile-root DIR]
@@ -252,6 +252,7 @@ module Portage
       lines << "  platform: #{report[:platform]}" if report[:platform]
       lines << "  webmcp: #{report[:webmcp][:status]}#{" (#{report[:webmcp][:reason]})" if report[:webmcp][:reason]}"
       lines << "  next: #{report[:next_step]}"
+      lines << "  index: `#{report[:index_hint]}` adds its catalogue to your local index" if report[:index_hint]
       lines.join("\n")
     end
     private_class_method :format_check
@@ -1446,14 +1447,15 @@ module Portage
     private_class_method :format_index_show
 
     def self.run_index_add(argv)
-      json = argv.delete("--json") ? true : false
+      json = !argv.delete("--json").nil?
+      crawl = !argv.delete("--crawl").nil?
       url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
       unless url
         warn USAGE
         return 1
       end
 
-      result = Index::Builder.new.add(url)
+      result = Index::Builder.new.add(url, crawl: crawl)
       puts json ? JSON.pretty_generate(result) : result[:message]
       result[:added] ? 0 : 1
     end
