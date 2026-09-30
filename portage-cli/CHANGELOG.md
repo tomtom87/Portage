@@ -14,6 +14,21 @@ pre-1.0, so APIs may still shift between minor versions.
   transaction. Index write failures now raise instead of being dropped. `portage doctor` reports the
   database path, row counts and whether FTS5 is available. The known-stores cache and `index export`
   output stay JSON.
+- **Storefront catalogue crawl and `portage index search`.** A new opt-in index source,
+  `storefront_products`, reads a Shopify store's public `/products.json` into the local index. Run it
+  with `portage index add URL --crawl` for one store, or `portage index build --sources
+  storefront_products` for stores already indexed (25 a run, least recently crawled first). Each
+  product is mapped through the UCP `Product` shape and stored with its handle, URL, first image,
+  options and variant ids. Price and availability are dropped before anything is written. A crawl
+  reads at most 20 pages of 250 a store, 1s apart. It waits out one 429's `Retry-After` (capped at 60s)
+  and stops on a second, and it obeys `robots.txt` for every page URL. It never contacts a hand-off-only
+  host, and it skips a 404, a redirect or a non-JSON answer (a bot wall). What happened is kept on the
+  store entry as `crawl`. `portage index search QUERY [--category ID] [--store HOST] [--limit N]
+  [--json]` searches the index locally with SQLite FTS5, ranked by bm25, and sends no request. Without
+  FTS5 it falls back to an unranked text match and reports `engine: "like"`. `index show --products` now
+  pages (`--page N`, `--per-page N`, default 50). `portage check` suggests the `index add ... --crawl`
+  command for a Shopify or native-UCP store (`index_hint`) but never runs it. `find` and `buy` never
+  crawl.
 
 ## [0.10.0] - 2026-09-29
 

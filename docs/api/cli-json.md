@@ -457,6 +457,7 @@ Reports whether Portage can buy from a store and how. The scheme defaults to `ht
 | `webmcp` | object | `status` (`available`, `none`, `skipped`, `error`), `tools` (names) and `reason`. |
 | `verdict` | string | `automated`, `webmcp`, `handoff` or `unsupported`. |
 | `next_step` | string | What to do, in plain English. |
+| `index_hint` | string | Present only for a Shopify or native-UCP store: the `portage index add ORIGIN --crawl` command that would add its catalogue to your local index. `check` never runs it. |
 
 Verdicts follow the order `buy` uses: hand-off-only, then native UCP, then WebMCP, then a usable adapter. Source: `cli/check.rb`, `cli/check_next_step.rb`
 
@@ -730,11 +731,27 @@ The seller checks (`authenticator`, `rate_limiter`, `signing_keys`, `payment_han
 { "stores": [], "products": [] }
 ```
 
-Source: `cli.rb` (`run_index_show`), `cli/index/store.rb`
+`--products` pages: `--page N` (default 1) and `--per-page N` (default 50), and the output adds `page`, `per_page` and `products_total`. Plain `index show` and `--stores` still print everything.
 
-Store entries are the records in `~/.portage/index/stores.json`. Each has an `origin`, plus fields such as `sources`, `last_verified`, `capabilities`, `categories` and `handoff_only`. Product entries are the records in `~/.portage/index/products.json`. Treat any field beyond `origin` and `title` as optional.
+Source: `cli.rb` (`run_index_show`), `cli/index/store.rb`, `cli/index/product_store.rb`
 
-`index add` and `index remove` with `--json` print `{ "added": bool, "origin": ..., "message": ... }` and `{ "removed": bool, "message": ... }`. They exit `0` on success and `1` otherwise.
+Store entries are the `stores` rows of `~/.portage/index/index.sqlite3`. Each has an `origin`, plus fields such as `sources`, `last_verified`, `capabilities`, `categories`, `handoff_only`, `platform` and `crawl`. `crawl` is the last catalogue crawl's note: `status` (`ok`, `partial`, `skipped`), `reason` (`null`, or e.g. `page_cap`, `rate_limited`, `robots`, `robots_unreachable`, `not_found`, `not_json`, `empty`, `redirect`, `handoff_only`, `http_403`), `pages`, `products` and `at` (unix seconds). Product entries are the `products` rows. A crawled product also has `handle`, `url`, `image_url`, `options` (UCP `ProductOption` wire hashes) and `variant_ids`. No entry carries a price or stock. Treat any field beyond `origin` and `title` as optional.
+
+`index add` and `index remove` with `--json` print `{ "added": bool, "origin": ..., "message": ... }` and `{ "removed": bool, "message": ... }`. They exit `0` on success and `1` otherwise. `index add URL --crawl` also crawls the store's `/products.json` into the index and adds `crawl` (the note above).
+
+## index search
+
+`portage index search QUERY [--category ID] [--store HOST] [--limit N] --json` searches the local index only. It sends no request. Every word of `QUERY` has to match a product's title, brand, category id or a former title (as a prefix, with a plural ending dropped), best match first.
+
+```json
+{ "query": "wall light", "engine": "fts5",
+  "filters": { "category": null, "store": "thelightyard.co.uk", "limit": 20 },
+  "products": [ { "key": "title:...", "title": "...", "url": "https://.../products/...", "stores": [] } ] }
+```
+
+`engine` is `fts5`, or `like` when the SQLite in use has no FTS5 (the same filters, as an unranked text match). `products` are index entries, the same shape as `index show --products`. Exits `0` with hits and `1` with none, or with no query (usage on stderr). The results are seeds: re-check the price and stock live (`find --store`, `buy --dry-run`) before quoting either.
+
+Source: `cli.rb` (`run_index_search`), `cli/index/product_store.rb`, `cli/index/search.rb`
 
 ## browser import
 
