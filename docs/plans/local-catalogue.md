@@ -1,6 +1,6 @@
 # Local Catalogue: SQLite Index, Storefront Crawl, Product Cards, Packaging
 
-**Status:** Phase 1 done, Phase 2 next
+**Status:** Phases 1-2 done, Phase 3 next
 **Branch:** `local-catalogue` (off `main`)
 **Driver:** a Grok thread proposing a full local product catalogue, card-shaped output for agents, and Omarchy/OpenClaw packaging. Other ideas from that thread (merchant promo config, localhost shopping UI, beacon registry) are **out of scope** here and come back as their own plans.
 
@@ -148,7 +148,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 ## Open decisions
 
 1. Vendored SQLite vs `depends_on "sqlite"` in Homebrew. Phase 1 validation decides.
-2. `index add` crawls by default or only with `--crawl`. Decided in Phase 2.
+2. `index add` crawls by default or only with `--crawl`. **Decided in Phase 2: only with `--crawl`** (see "Phase 2 results").
 3. MIT-0 on ClawHub. The user decides before the Phase 4 publish.
 4. Release cut (versions, CHANGELOG, `rake publish_all`, `rake homebrew:update`) after Phase 4, as its own step, only when asked.
 
@@ -158,6 +158,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 |---|---|---|
 | 2026-09-30 | plan | Drafted and validated against the code, live `products.json`, the `sqlite3` gem platforms, ClawHub skill-format docs and `mise ls-remote gem:portage-cli`. |
 | 2026-09-30 | 1 | **Done** (commits `Store the local index in SQLite`, `Report the index database in portage doctor`; unpushed). `rake`-equivalent for portage-cli: rspec 1103 -> 1131 examples, 0 failures; rubocop clean, no new disables. Existing `store_spec`/`product_store_spec` pass unchanged. See "Phase 1 results" below the table. |
+| 2026-09-30 | 2 | **Done** (commits `Classify long texts without comparing every word to every keyword`, `Crawl a Shopify store's products.json into the local index`, `Add portage index search and page index show --products`, `Document the catalogue crawl and index search`; unpushed). portage-cli rspec 1131 -> 1201 examples, 0 failures; rubocop clean, no new disables; each commit green on its own. `index add` crawls only with `--crawl`. Live: thelightyard.co.uk 164 products in 3.5s, JB Hi-Fi 5,000 (page cap) in 36s, re-crawls upsert with no duplicates. See "Phase 2 results".
 
 ### Phase 1 results (2026-09-30)
 
@@ -184,6 +185,72 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 - Not done, deliberately: no price/stock stripping in `ProductStore` (behaviour unchanged; Phase 2's mapper drops them), `Builder` still calls `upsert` per sighting, `KnownCache`/`Exporter` untouched.
 
 **Bugs caught while building (by the specs):** `fts5_available?` returned the DB object, not a boolean (block form of `SQLite3::Database.new`); an "import if table empty" rule re-imported after `index remove` emptied a table, which the "imports exactly once" spec caught and led to the import-on-create rule; an empty `upsert_many` created the DB file.
+
+### Phase 2 results (2026-09-30)
+
+**Built:**
+- `Index::Sources::StorefrontProducts` (`index/sources/storefront_products.rb`, registered as `storefront_products`, not in `DEFAULT_NAMES`). It has three small helpers beside it:
+  - `Mapper`: products.json product -> `Portage::Ucp::Product`, then the index sighting taken from that Product.
+  - `Pages`: HTTP, paging, 429 handling, and the page-body checks.
+  - `Robots`: just enough RFC 9309 to answer "may this agent GET this path".
+- `endpoint_for(origin, platform)` is the one platform seam (Shopify or unknown platform -> `/products.json`, else nil).
+- `Builder` changes:
+  - Takes `store_fields:` (crawl note, platform) from a sighting onto the store row.
+  - Takes `product:` (handle, url, image_url, options, variant_ids) onto the product entry.
+  - Uses a source's own `categories:` when it gives them.
+  - Writes product sightings through `upsert_many`, 250 per transaction.
+  - `add(url, crawl:)` backs `index add URL --crawl`.
+- `Index::Search` holds the SQL. `ProductStore` gains `#search`, `#search_engine`, `#page` and `#count`.
+- CLI: `index search`, and `index show --products --page N --per-page N` (default 50, reports `products_total`).
+- `check` adds `index_hint` (the `index add ORIGIN --crawl` command) for a Shopify or native-UCP store and never crawls.
+- Docs: usage banners, `docs/api/cli-json.md`, the tutorial, the portage-cli README source table. portage-cli CHANGELOG `[Unreleased]` entry.
+- No schema migration was needed: the new entry fields live in the JSON `data` column, and FTS stays over title, brand, category and aliases.
+
+**Validation** (all with `HOME` pointed at temp dirs under `tmp/validate/p2v/`, seeded only with copies of the `known-*.json` caches; the real `~/.portage` was untouched, and no sqlite file appeared in it):
+1. **thelightyard.co.uk: pass.**
+   - `index add https://thelightyard.co.uk --crawl --json`: verified UCP, `crawl: {status: ok, pages: 1, products: 164}`, 3.5s wall in total (probe + robots + one page). That gave 164 product rows, DB mode 0600.
+   - A second crawl via `index build --sources storefront_products` took 1.8s and left 164 rows (upsert, no duplicates).
+   - `data LIKE '%"price%' OR '%"available%'` matched 0 rows.
+2. **Large Shopify store (JB Hi-Fi, www.jbhifi.com.au): pass.**
+   - `index add ... --crawl` took 36.2s wall (19s of it is the 1s pauses) for 20 pages / 5,000 products, stopping at `partial`/`page_cap` as designed. That gave 4,961 rows: 39 sightings shared a brand+title key with another product and merged, as the existing key rule does. DB about 8.4MB.
+   - Re-crawl: 34.4s, still 4,961 rows. No price or availability in any row.
+3. **Other live outcomes, recorded as seen:**
+   - allbirds.com: 692 products / 3 pages, 7.9s.
+   - gymshark.com: `skipped`/`http_403` on robots.txt or products.json (bot wall), no products written.
+   - fashionnova.com: `skipped`/`not_found` (its `/products.json` answers 404; confirmed with curl).
+4. **`index search` sanity: pass, with a category caveat.**
+   - Queries tried: lightyard "bathroom pendant", "wall lights", "birdcage", "gold leaf" and "outdoor bollard"; JB "airpods", "iphone 17 case", "samsung tv" and "headphones". All returned the obvious products first, about 0.43s wall per call, which is mostly Ruby start-up.
+   - `--store thelightyard.co.uk` kept hits, and `--store other.example` gave none (exit 1). `--json` has `engine: "fts5"` and no price or availability keys.
+   - "brass" finds nothing on lightyard, because that word appears only in tags and descriptions, which are not in FTS (as planned).
+   - **Categories are weak for this store.** The shipped taxonomy keywords are coarse: "Pendant Light" classifies to nothing, the tag "New Collection" hits "Toll Collection Devices", and "Kitchen" tags hit "Kitchen & Dining". As a result, `--category 594` (Lighting) returned 1 lightyard product. This is a Classifier data limit (the keywords come from `known-stores/categories.yml`), not a crawl bug. It is left for a taxonomy pass, because changing keywords also changes `find` routing.
+5. **`find`'s index backend on a 5k-product index:** `SearchBackends::Index#search` took 163ms / 112ms on the JB DB, versus 25ms / 14ms on lightyard. That is acceptable, so it is not swapped to FTS (see below).
+
+**Judgement calls:**
+- **`--crawl` is opt-in.** A plain `index add` stays one probe. A crawl is up to 22 requests (robots.txt + 20 pages + one 429 retry) and about 20s of pauses, which is too heavy to be a side effect of adding a store. `check` prints the command instead.
+- **The mapper is ours, not portage-ucp-shopify's.** That Mapper reads Storefront GraphQL nodes (camelCase, gids, MoneyV2 with currency), not the REST products.json shape, and portage-cli doesn't depend on that gem.
+  - `Mapper.product` builds the full UCP Product, including the store's price (no currency, because products.json has none) and availability.
+  - `Mapper.sighting` takes only identity fields from it. That is where price and availability are dropped.
+  - Shopify's placeholder `Title: Default Title` option is removed.
+  - Categories: the top three Google ids from Classifier on `product_type` + tags, plus the store's `product_type` as a `merchant` category on the Product. The index keeps the first Google id as `category`, as before.
+- **Robots:**
+  - A 4xx robots.txt means no rules. A 5xx, a redirect or no answer means stay out (RFC 9309).
+  - Rules are checked against every page URL.
+  - Page 1 is requested as the bare `?limit=250`, so a rule aimed at duplicate `?page=1` URLs doesn't read as a ban on the whole catalogue.
+- **The stored `handoff_only: true` doesn't block a crawl. Only the live HandoffOnly list does**, the same rule as Builder's re-verify. `index add` stores that flag for any store without `/.well-known/ucp`, which is not the same as Tier C.
+- **`SearchBackends::Index` is not swapped to FTS.** Its match is two-way: the query's words in a title, or a whole title named inside a longer query. It also covers GTIN, and it runs over the known-products JSON cache, which isn't in SQLite. A prefix MATCH would change routing semantics, and at 5k rows the current scan is still about 160ms.
+- **Search words:** only letters and digits reach MATCH (no FTS syntax injection). Each word is a prefix after dropping a trailing `s`/`es`/`ies` (only for words longer than 3 letters). All words are required, ranked by bm25 with weights title 10, aliases 5, brand 3, category 1. The LIKE fallback applies the same filters, unranked.
+- **Classifier speed-up** (its own commit): each keyword's accepted forms are looked up in a hash of input words. A script checked every taxonomy keyword against its plural and singular variants and random words: 0 mismatches against `word_match?`.
+- Store cap: 25 a run, least recently crawled first (`crawl.at`), so repeated `index build --sources storefront_products` runs rotate through the index.
+
+**How this phase ran, and bugs caught:** the session started with most of the Phase 2 code and specs already in the working tree, uncommitted, from an earlier interrupted run, along with its scratch validation output under `tmp/validate/p2/`. That work was reviewed line by line against the plan and re-validated from scratch (the numbers above are from this session's own runs), not trusted as-is.
+- **Found in review:** robots.txt was fetched with `Accept: application/json` (shared GET helper). It is now `text/plain`, with a failing spec first.
+- **Found in review:** the Classifier refactor was checked for exact equivalence (script above) before it was committed, since `find` routing depends on it.
+- **Visible in the earlier run's leftovers, not seen first-hand:** that run's fashionnova.com crawl was `skipped`/`robots`, while this session's was `not_found`. The spec "requests page 1 without page=" pins the fix that most likely explains the difference: a bare page-1 URL, so a duplicate-URL rule doesn't block the catalogue.
+
+**Not done, deliberately:**
+- Tags and description are not in FTS (a new migration can add them if Phase 3 wants it).
+- No WooCommerce endpoint yet (the seam is there).
+- Brand+title key collisions within one store merge. The later sighting's url, handle and variant_ids win, as for any other field.
 
 ## Restart prompt (Phase 2)
 
