@@ -21,7 +21,8 @@ module Portage
         PRODUCT_PATH = %r{/products?/[^/?#]+}
 
         # @param rows [Array<Hash>] Readers rows, all for one domain.
-        # @return [Hash{String => Integer}] category id => weight, top 5.
+        # @return [Hash{String => Integer}] category id => weight, top 5 (equal
+        #   weights in the order first seen).
         def self.domain(rows)
           texts = Hash.new(0)
           rows.each { |row| texts[text_of(row)] += row[:visits] }
@@ -29,7 +30,9 @@ module Portage
           texts.each do |text, visits|
             Classifier.categories_for(text).each { |id| tally[id] += visits } unless text.empty?
           end
-          tally.sort_by { |_id, weight| -weight }.first(TOP_CATEGORIES).to_h
+          # `sort_by` isn't stable, so the position breaks ties: first seen wins.
+          tally.each_with_index.sort_by { |(_id, weight), seen| [-weight, seen] }.first(TOP_CATEGORIES)
+               .to_h { |pair, _seen| pair }
         end
 
         # @param kept [Array<Hash>] Importer's kept entries, rows included.
