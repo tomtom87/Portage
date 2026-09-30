@@ -10,9 +10,10 @@ RSpec.describe "Classifier golden set" do
   cases = YAML.safe_load_file(File.expand_path("../../fixtures/classifier_golden.yml", __dir__), permitted_classes: [])
   taxonomy = YAML.safe_load_file(Portage::Cli::Classifier::KNOWN_PATH, permitted_classes: [])
 
-  # Top-1 accuracy the golden set must reach. It was 0.12 (12 of 100) on the
-  # Phase 2 data, before the taxonomy pass, and is raised as the pass lands.
-  minimum_accuracy = 0.12
+  # Top-1 accuracy the golden set must reach. It was 0.12 (12 of 100) before the
+  # taxonomy pass (docs/plans/local-catalogue.md, "Phase 5 results") and is raised
+  # as the pass lands, never lowered to make a change pass.
+  minimum_accuracy = 0.22
 
   def classify(text) = Portage::Cli::Classifier.categories_for(text)
 
@@ -37,12 +38,11 @@ RSpec.describe "Classifier golden set" do
     expect(accuracy).to be >= minimum_accuracy, "accuracy #{accuracy.round(3)}; first misses: #{detail.inspect}"
   end
 
-  # The four Phase 2 failures, pending until the taxonomy pass fixes each.
-  # `pending` flips to a failure once the example passes, so it cannot be
-  # forgotten.
+  # The Phase 2 failures that started the taxonomy pass. `pending` flips to a
+  # failure once an example passes, so none can be forgotten.
   describe "the Phase 2 failures" do
     it "classifies 'Pendant Light' as Lighting" do
-      pending "the shipped keywords have no word for pendant"
+      pending "the taxonomy has no word for pendant"
       expect(classify("Pendant Light").first).to eq("594")
     end
 
@@ -52,12 +52,12 @@ RSpec.describe "Classifier golden set" do
     end
 
     it "ranks Lighting first for a lighting product tagged Kitchen" do
-      pending "'kitchen' and 'pendant' are not weighed"
+      pending "the taxonomy has no word for pendant"
       expect(classify("Pendant Light Kitchen Pendant Lights Hanging Lights").first).to eq("594")
     end
 
     it "gives a Light Yard storefront text Lighting as its top category" do
-      pending "the shipped keywords have no word for pendant"
+      pending "the taxonomy has no word for pendant"
       text = "Pendant Light Bedroom Pendant Lights British Hand-Made Kitchen Pendant Lights Hanging Lights £250-£500"
       expect(classify(text).first).to eq("594")
     end
