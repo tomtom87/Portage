@@ -252,25 +252,29 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 - No WooCommerce endpoint yet (the seam is there).
 - Brand+title key collisions within one store merge. The later sighting's url, handle and variant_ids win, as for any other field.
 
-## Restart prompt (Phase 2)
+## Restart prompt (Phase 3)
 
 ```text
-Read docs/plans/local-catalogue.md in full, then implement Phase 2 only (storefront catalogue crawl and `index search`). Phase 1 (SQLite index store) is done on the local-catalogue branch; read its progress-log row first.
+Read docs/plans/local-catalogue.md in full, then implement Phase 3 only (card-ready output for agents). Phases 1 (SQLite index store) and 2 (storefront catalogue crawl and `index search`) are done on the local-catalogue branch; read their progress-log rows and the "Phase 1 results" and "Phase 2 results" sections first.
 
-Setup: git checkout local-catalogue (Phase 1 is committed there and unpushed, so don't branch off main). Confirm `git log --oneline` shows the two Phase 1 commits ("Store the local index in SQLite", "Report the index database in portage doctor") and that `cd portage-cli && bundle exec rspec` is green before you start.
+Setup: git checkout local-catalogue (Phases 1-2 are committed there and unpushed, so don't branch off main). Confirm `git log --oneline` shows the Phase 2 commits ("Crawl a Shopify store's products.json into the local index", "Add portage index search and page index show --products", "Log local catalogue Phase 2 results and validation") and that the baseline is green: `cd portage-cli && rtk proxy bundle exec rspec --format progress` (1201 examples, 0 failures) and `rtk proxy bundle exec rubocop` (clean). `rake` is not in the portage-cli bundle; rspec + rubocop is the "rake spec" equivalent. The `rtk proxy` prefix stops a hook from mangling output.
 
-Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 2" and the branch. The main thread briefs and reviews only.
+Work per the project memory: delegate the phase to a Sonnet subagent (Agent tool, model: sonnet, foreground). Pass it the plan path, "Phase 3" and the branch. The main thread briefs and reviews only.
 
-Rules: KISS, DRY, TDD (failing specs first, in portage-cli/spec/portage/cli/index/**). Map products.json into Portage::Ucp::Product, don't invent a parallel shape. Price and availability are dropped before persisting. Classifier for taxonomy, Support::Connection and UserAgent for HTTP, HandoffOnly checked before any request. WebMock fixtures, no live HTTP in specs. rake spec (rspec + rubocop) green, no new cop disables.
+Rules: KISS, DRY, TDD (failing specs first, in the existing spec layout: find_spec / offer_sources specs / spec/portage/cli/index/**). The card is the UCP Product wire hash (Portage::Ucp::Product#to_wire_h) plus the offer's live price, with no new "card" object or vocabulary. Existing flat offer fields stay unchanged. Index results never carry a price and are marked live: false. WebMock fixtures, no live HTTP in specs. rspec + rubocop green, no new cop disables. Any new index table or column goes through a new forward-only migration in Index::Schema.
 
-Phase 1 facts to build on (verify in the code, they may have drifted):
-- Index::Database (index/database.rb) owns ~/.portage/index/index.sqlite3; Index::Schema (index/schema.rb) holds forward-only MIGRATIONS (user_version). Add a migration there for any new table or column, never edit an existing one.
-- ProductStore#upsert_many(rows) takes hashes with key:, origin:, seen_at: plus the same fields as #upsert, in one transaction. Use one call per page of the crawl. Builder still calls #upsert per sighting; move it to upsert_many only if it is a trivial swap.
-- products_fts (FTS5: title, brand, category, aliases; rowid = products.id) and product_stores are kept in step by SQL triggers on the products table, so new entry fields are stored in the JSON `data` column with no extra indexing code. Adding a field to FTS means a new migration that drops and recreates the fts table and triggers. FTS5 can be missing on a system-libraries SQLite build (Schema.fts5_available?), so `index search` must degrade to a clear error or LIKE fallback, not crash.
-- Database#execute(sql, binds) is the escape hatch for search queries. Database#transaction is reentrant.
-- Legacy stores.json/products.json import happens only on the open that creates the database.
+Phase 2 facts to build on (verify in the code, they may have drifted):
+- Find#offer is at portage-cli/lib/portage/cli/find.rb:228 and still reduces a product to title/amount/currency/url. OfferSources live in portage-cli/lib/portage/cli/offer_sources.rb.
+- Index::Sources::StorefrontProducts::Mapper.product(raw, origin:) builds a full Portage::Ucp::Product from a products.json product: id gid://shopify/Product/N, handle, url origin/products/handle, media, options (Shopify's "Title: Default Title" placeholder dropped), tags, variants (id, sku, options, price with currency nil, availability), categories (google_product_category ids plus the product_type as a "merchant" category). Mapper.sighting is the persisted subset. Reuse Mapper.product rather than mapping products.json again.
+- A crawled index entry (ProductStore rows, JSON `data` column) has key, title, brand, gtin (always nil), category (first Google id), aliases, stores [{origin, last_seen}], sources, plus handle, url, image_url, options (ProductOption wire hashes) and variant_ids. It has no price, availability, media array or description. Build `index search`'s `product` field from these fields only, never inventing a price.
+- `portage index search --json` prints {query, engine ("fts5"|"like"), filters, products: [entries]} (cli.rb run_index_search / index_search; ProductStore#search; Index::Search). Phase 3 adds live: false and the `product` field there.
+- Store rows carry `crawl` {status, reason, pages, products, at} and `platform`.
+- SearchBackends::Index (find's routing) was deliberately not moved to FTS (two-way title matching, GTIN, the known-products JSON cache). About 160ms at 5k rows. Leave it unless Phase 3 needs it.
+- Category quality from Classifier on product_type and tags is weak for some stores (the taxonomy keywords are coarse). Don't depend on `category` for card rendering.
 
-Before writing code: re-read index/{database,schema,store,product_store,builder}.rb, index/sources.rb, index/sources/*.rb, the Ucp::Product/Variant value objects, Classifier and the SearchBackends::Index backend, plus their specs, since line refs in the plan may have drifted.
+Before writing code: re-read find.rb (offer and its callers), offer_sources.rb, the Ucp::Product/Variant/Media/PriceRange value objects and to_wire_h, index/product_store.rb, index/search.rb, cli.rb's run_index_search, plugins/buy/skills/buy/SKILL.md and its references, docs/api/cli-json.md and docs/agentic-flow.md, plus the relevant specs, since line refs in the plan may have drifted.
 
-Finish: run every Phase 2 validation item (live crawl of thelightyard.co.uk and one large Shopify store, with timings and counts; `index search` sanity) and record the results, including failures and skips. Add a progress-log row to the plan (judgement calls, bugs a review caught, the `--crawl` decision). Commit on local-catalogue without pushing. Then write the Phase 3 restart prompt into the plan's "Restart prompt" section, replacing this one.
+Live validation: never touch the real ~/.portage. Point HOME at copies or temp dirs under tmp/validate/ (tmp/ is untracked). Run `claude plugin validate .`, then run a headless `/buy` that renders cards from real `find --json` output, using the same method as the "clean-session /buy" row in docs/plans/buy-skill-and-local-browser.md. Record failures and skips honestly.
+
+Finish: record the validation results in the plan. Add a Phase 3 progress-log row and a "Phase 3 results" section (judgement calls, bugs caught by specs or review). Add a CHANGELOG [Unreleased] entry (portage-cli, and the buy plugin's if the skill changes). Commit on local-catalogue in logical commits, with normal-prose messages and no attribution lines, and don't push. Then replace this "Restart prompt" section with a Phase 4 restart prompt in the same format, including the Phase 3 facts Phase 4 should build on, and commit it.
 ```
