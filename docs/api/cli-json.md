@@ -744,6 +744,8 @@ Store entries are the `stores` rows of `~/.portage/index/index.sqlite3`. Each ha
 
 `portage index search QUERY [--category ID] [--store HOST] [--limit N] --json` searches the local index only. It sends no request. Every word of `QUERY` has to match a product's title, brand, category id or a former title (as a prefix, with a plural ending dropped), best match first.
 
+`--category ID` filters on the Google taxonomy id a product was given when it was crawled. A product keeps that id until its store is crawled again, so after a taxonomy change run `portage index build --sources storefront_products` to re-classify what is already indexed.
+
 ```json
 { "query": "wall light", "engine": "fts5", "live": false,
   "filters": { "category": null, "store": "thelightyard.co.uk", "limit": 20 },

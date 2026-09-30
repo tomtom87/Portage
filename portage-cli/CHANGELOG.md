@@ -6,6 +6,25 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Category classification uses the whole taxonomy.** `known-stores/categories.yml` is now generated
+  by `script/categories` (stdlib only) from Google's product taxonomy, edition 2021-09-21, instead of
+  coming from a script that was never committed. It keeps the same ids and the same top-two-level keys
+  (so `~/.portage/categories.yml` overrides still work), but a level-2 node's `keywords` now include
+  its descendants' names ("Chandeliers" counts for Lighting), and its parent's words sit in a separate
+  `parent_keywords` list. The file grows from 20KB to 101KB. A shipped stoplist
+  (`known-stores/category-stoplist.yml`, every word with its reason) removes merchandising and url words
+  ("new", "collection", "sale", "gift", "accessories", "products", ...) from both the data and the input,
+  and a small synonyms file (`category-synonyms.yml`, each word tied to a golden case) adds the few
+  words the taxonomy lacks ("pendant", "sconce"). `Classifier.categories_for` keeps its signature (plus
+  an optional `stoplist_path:`) and returns at most three ids, best first. Scoring: a keyword counts
+  2 and a `parent_keyword` 1, times how often the input repeats the word (1 + ln count) and, for the
+  cut, how rare it is. A word counts once per node, and an id scoring under half the strongest is
+  dropped. Ties go to the node whose own name the input covers most, then to one whose name has no
+  stoplisted word, then to the smaller node. On a 100-case golden set (Light Yard, JB Hi-Fi, shopper
+  queries, browser-import titles and urls) top-1 accuracy goes from 12% to 70%. "Pendant Light" is
+  Lighting, "New Collection" is no longer Toll Collection Devices, and 160 of Light Yard's 164 products
+  classify as Lighting (1 before). Products already in the index keep the category they were crawled
+  with: crawl the store again (`portage index build --sources storefront_products`) to re-classify them.
 - **The local index is now a SQLite file.** `~/.portage/index/index.sqlite3` (mode 0600, WAL)
   replaces `stores.json` and `products.json`, through the new `sqlite3` gem dependency (`~> 2.9`,
   precompiled for macOS and Linux). An existing `stores.json`/`products.json` is imported once on
