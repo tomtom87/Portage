@@ -6,6 +6,15 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **The local index is now a SQLite file.** `~/.portage/index/index.sqlite3` (mode 0600, WAL)
+  replaces `stores.json` and `products.json`, through the new `sqlite3` gem dependency (`~> 2.9`,
+  precompiled for macOS and Linux). An existing `stores.json`/`products.json` is imported once on
+  first use and renamed to `*.json.migrated`; it is never deleted. `Index::Store` and
+  `Index::ProductStore` keep their APIs, and `ProductStore#upsert_many` writes a batch in one
+  transaction. Index write failures now raise instead of being dropped. `portage doctor` reports the
+  database path, row counts and whether FTS5 is available. The known-stores cache and `index export`
+  output stay JSON.
+
 ## [0.10.0] - 2026-09-29
 
 - **`portage check <url> [--json]`.** Reports whether Portage can buy from a store and

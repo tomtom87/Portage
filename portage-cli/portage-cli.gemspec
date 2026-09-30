@@ -34,6 +34,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "portage-ucp", "~> 0.11"
   spec.add_dependency "portage-ucp-client", "~> 0.6", ">= 0.6.3"
   spec.add_dependency "portage-ucp-journal", "~> 0.1"
+  spec.add_dependency "sqlite3", "~> 2.9"
 
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.88"
