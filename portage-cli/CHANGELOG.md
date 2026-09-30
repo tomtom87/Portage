@@ -29,6 +29,13 @@ pre-1.0, so APIs may still shift between minor versions.
   pages (`--page N`, `--per-page N`, default 50). `portage check` suggests the `index add ... --crawl`
   command for a Shopify or native-UCP store (`index_hint`) but never runs it. `find` and `buy` never
   crawl.
+- **Product cards for agents.** `find` offers (and `shopify_catalog` offers) gain a `product` field:
+  the store's UCP `Product` wire hash as served, with `media` cut to the first image, so an agent or
+  UI can draw a card without another request. The flat fields (`title`, `amount`, `currency`, `url`,
+  `product_id`, `store`) are unchanged, the retailer API sources leave `product` out, and `history`
+  does not save it. `portage index search` results are marked `live: false` and each hit gains
+  `product`, built from the fields the index keeps (title, handle, URL, first image, options, variant
+  ids, category), never a price. Text output says the hits are not live.
 
 ## [0.10.0] - 2026-09-29
 

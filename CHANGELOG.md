@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **`buy` skill: product cards.** A new section on showing offers as product cards from the offer's `product` field (image, title, price or range, store, key options, link), host-agnostic, and on treating `index search` hits (`live: false`, no price) as seeds to re-fetch live. Documented in `docs/api/cli-json.md` and `docs/agentic-flow.md`. Code is in `portage-cli`'s changelog.
+
 ## [0.13.0] - 2026-09-29
 
 - **Release set:** `portage-cli` 0.10.0 (`portage check URL [--json]`: can Portage buy from this store, and how), `portage-ucp` 0.11.0 (`Ucp::Check` follows a homepage `<link rel="ucp">` manifest pointer, as `buy` does, and reports `manifest_url`), and `buy` plugin 0.8.0 (a "Can Portage buy from this store?" step using `portage check`, gated on `portage --help` listing it). `portage-cli` now requires `portage-ucp` `~> 0.11`. The docs-only notes in `portage-ucp-client` and `portage-ucp-webmcp` stay unreleased.
