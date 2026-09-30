@@ -985,7 +985,7 @@ RSpec.describe Portage::Cli do
 
     it "adds a URL to the index" do
       builder = instance_double(Portage::Cli::Index::Builder)
-      allow(builder).to receive(:add).with("https://shop.example")
+      allow(builder).to receive(:add).with("https://shop.example", crawl: false)
                                      .and_return({ added: true, origin: "https://shop.example", message: "Added." })
       allow(Portage::Cli::Index::Builder).to receive(:new).and_return(builder)
 

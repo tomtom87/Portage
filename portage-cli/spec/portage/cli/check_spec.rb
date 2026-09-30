@@ -40,6 +40,7 @@ RSpec.describe Portage::Cli::Check do
 
     expect(report).to include(url: store, native_ucp: manifest, verdict: "automated", handoff_only: false)
     expect(report[:next_step]).to match(/speaks UCP natively/)
+    expect(report[:index_hint]).to eq("portage index add #{store} --crawl")
     expect(report[:webmcp][:status]).to eq("skipped")
   end
 
@@ -74,10 +75,30 @@ RSpec.describe Portage::Cli::Check do
     expect(report[:adapter]).to have_key(:installed)
   end
 
+  # docs/plans/local-catalogue.md Phase 2: check never crawls, it only
+  # names the command that would.
+  it "suggests crawling a Shopify or native-UCP store into the local index, and never does it itself" do
+    stub_manifest
+    stub_homepage('<script src="https://cdn.shopify.com/s/x.js"></script>')
+
+    report = clean_env { described_class.call(store) }
+
+    expect(report[:index_hint]).to eq("portage index add #{store} --crawl")
+    expect(a_request(:get, %r{/products\.json})).not_to have_been_made
+  end
+
+  it "gives no index hint for a store it can't crawl" do
+    stub_manifest
+    stub_homepage('<link href="/wp-content/plugins/woocommerce/x.css">')
+
+    expect(clean_env { described_class.call(store) }).not_to have_key(:index_hint)
+  end
+
   it "makes no HTTP request for a hand-off-only host" do
     report = described_class.call("https://www.amazon.com/dp/B000")
 
     expect(report).to include(handoff_only: true, verdict: "handoff", adapter: nil, native_ucp: nil)
+    expect(report).not_to have_key(:index_hint)
     expect(report[:webmcp][:status]).to eq("skipped")
     expect(a_request(:any, /.*/)).not_to have_been_made
   end

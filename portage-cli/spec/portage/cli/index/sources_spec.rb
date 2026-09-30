@@ -3,7 +3,7 @@ require "spec_helper"
 RSpec.describe Portage::Cli::Index::Sources do
   it "lists every registered source, whether or not it runs by default" do
     expect(described_class.all.map(&:name)).to contain_exactly(
-      "shopify_catalog", "stores_file", "browser", "wikidata", "webmcp_sweep"
+      "shopify_catalog", "stores_file", "browser", "wikidata", "webmcp_sweep", "storefront_products"
     )
   end
 
