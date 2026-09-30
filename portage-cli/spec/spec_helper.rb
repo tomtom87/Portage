@@ -1,7 +1,19 @@
+require "tmpdir"
+require "fileutils"
+
+# Every default path in portage-cli and portage-ucp is `File.join(Dir.home,
+# ".portage", ...)`, frozen into a constant when the library loads. Point HOME
+# at a throwaway dir *before* requiring it, so whatever a spec builds without
+# its own `path:` (History, DotEnv, PaymentMethods, the journal, ...) lands
+# there, never in the developer's real ~/.portage. The per-example redirects
+# below stay: they give each example a fresh, empty dir.
+SUITE_HOME = Dir.mktmpdir("portage-home")
+ENV["HOME"] = SUITE_HOME
+at_exit { FileUtils.remove_entry(SUITE_HOME) }
+
 require "portage/cli"
 require "portage/ucp"
 require "portage/ucp/decision"
-require "tmpdir"
 require "stringio"
 require "webmock/rspec"
 
