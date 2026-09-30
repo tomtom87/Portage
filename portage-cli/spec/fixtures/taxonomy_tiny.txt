@@ -1,0 +1,15 @@
+# Google_Product_Taxonomy_Version: 2099-01-01
+1 - Home & Garden
+2 - Home & Garden > Lighting
+3 - Home & Garden > Lighting > Lighting Fixtures
+4 - Home & Garden > Lighting > Lighting Fixtures > Chandeliers
+5 - Home & Garden > Lighting > Light Bulbs
+6 - Home & Garden > Kitchen & Dining
+12 - Home & Garden > Kitchen & Dining > Kitchen Appliances
+7 - Home & Garden > Kitchen & Dining > Kitchen Appliances > Toasters
+8 - Home & Garden > Lighting Accessories
+13 - Home & Garden > Garden Tools
+9 - Apparel & Accessories
+10 - Apparel & Accessories > Clothing
+14 - Apparel & Accessories > Clothing > Shirts & Tops
+11 - Apparel & Accessories > Clothing > Shirts & Tops > Gift Sets

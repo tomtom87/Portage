@@ -1,0 +1,40 @@
+# Words Classifier never uses as evidence of a category, on either side: script/categories
+# leaves them out of categories.yml, and Classifier.categories_for drops them from its
+# input. Each entry is `word: why`. Both forms of a word are listed, because the stoplist is
+# matched exactly (the keyword match is what normalizes plurals).
+#
+# Two kinds of word belong here: words that describe how something is sold or filed rather
+# than what it is, and words that label a whole family of nodes ("accessories" names 76 of
+# the 192 level-2 nodes). A specific word that is merely ambiguous does not belong here.
+and: function word; appears in taxonomy names ("Hardware & Tools")
+for: function word; appears in taxonomy names ("Filters for ...")
+the: function word
+with: function word ("Vac with Multi-Purpose Head")
+from: function word
+new: merchandising flag; Light Yard tags products "New Collection"
+sale: merchandising flag; a sale tag says nothing about the product
+gift: merchandising flag; "Gift Set" is a way to sell, not a product type
+gifts: merchandising flag; plural of gift
+set: bundle word; "Gift Set" and "Furniture Set" say how it is packaged
+sets: bundle word; plural of set
+kit: bundle word; "drill kit" is the drill
+kits: bundle word; plural of kit
+collection: storefront and url word; matched "Toll Collection Devices" (4488) for every "New Collection" tag
+collections: url and storefront word; the /collections/ path segment of every Shopify collection url
+products: url word; the /products/ path segment of every Shopify product url
+product: url and page-title word
+category: url word; the /category/ path segment
+shop: page-title word ("Cordless Drills | Hardware | Shop")
+accessories: names 76 of the 192 level-2 nodes, so it cannot tell them apart
+accessory: singular of accessories
+supplies: names 25 level-2 nodes ("Pet Supplies", "Office Supplies"), so it cannot tell them apart
+supply: singular of supplies
+equipment: names 21 level-2 nodes, so it cannot tell them apart
+parts: names 21 level-2 nodes ("Vehicle Parts"), so it cannot tell them apart
+replacement: a spare, not a product type; "Replacement Fade Blade Set"
+general: filler word ("General Office Supplies")
+other: filler word; the catch-all name in many taxonomies
+miscellaneous: catch-all product type; JB Hi-Fi files 237 of its first 1,250 products under "MISCELLANEOUS"
+service: generic product-type word; JB Hi-Fi's "TELCO SERVICES" type matched Food Service (135)
+services: plural of service; JB Hi-Fi files 279 of its first 1,250 products under "TELCO SERVICES"
+hand: craft marker; Light Yard tags 146 of its 164 products "British Hand-Made", and "hand" also names 10 level-2 nodes ("Hand Tools")
