@@ -13,7 +13,7 @@ RSpec.describe "Classifier golden set" do
   # Top-1 accuracy the golden set must reach. It was 0.12 (12 of 100) before the
   # taxonomy pass (docs/plans/local-catalogue.md, "Phase 5 results") and is raised
   # as the pass lands, never lowered to make a change pass.
-  minimum_accuracy = 0.22
+  minimum_accuracy = 0.55
 
   def classify(text) = Portage::Cli::Classifier.categories_for(text)
 
@@ -47,7 +47,6 @@ RSpec.describe "Classifier golden set" do
     end
 
     it "never classifies 'New Collection' as Toll Collection Devices" do
-      pending "'collection' is a keyword of 4488"
       expect(classify("New Collection")).not_to include("4488")
     end
 

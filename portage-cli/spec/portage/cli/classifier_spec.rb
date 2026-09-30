@@ -443,6 +443,15 @@ RSpec.describe Portage::Cli::Classifier do
       expect(classify("boot", stoplist_path: "/nonexistent/stoplist.yml")).to eq(["187"])
     end
 
+    it "uses the shipped known-stores/category-stoplist.yml by default" do
+      Tempfile.create(["merch", ".yml"]) do |known|
+        known.write("'1':\n  name: Toll\n  keywords:\n  - collection\n  - sale\n  - gift\n")
+        known.flush
+        expect(described_class.categories_for("New Collection Sale", known_path: known.path,
+                                                                     user_path: "/nonexistent")).to eq([])
+      end
+    end
+
     it "leaves Classifier.tokenize alone, because the index search shares it" do
       expect(described_class.tokenize("New Collection")).to eq(%w[new collection])
     end
