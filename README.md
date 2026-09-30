@@ -92,6 +92,10 @@ The `buy` skill is a plain [`SKILL.md`](https://github.com/tomtom87/Portage/blob
     path = "plugins/buy/skills/buy"
     ```
 
+- **OpenClaw.** The skill's frontmatter carries OpenClaw's `metadata.openclaw` block (needs the `portage` binary, names every env var it reads, brew install spec), so OpenClaw gates the skill until `portage` is installed. OpenClaw reads personal skills from `~/.agents/skills` and managed ones from `~/.openclaw/skills` ([OpenClaw skills docs](https://docs.openclaw.ai/tools/skills)), so the plain-skill route above works: copy or symlink `plugins/buy/skills/buy/` (with `references/`) into either directory. A ClawHub listing (`clawhub install <slug>`) is planned but not published yet.
+
+- **Omarchy** (Arch Linux). Install the CLI with [mise](https://mise.jdx.dev/) (`mise use -g gem:portage-cli`) or with Homebrew on Linux (`brew install tomtom87/portage/portage`), then run `portage setup`. The gem build needs a C compiler (`base-devel`) because Ruby 3.4 builds `bigdecimal` natively. For the skill, use whichever agent you run on Omarchy and its own skills directory as above (dotagents puts it in `~/.agents/skills`). We could not verify an Omarchy-specific skills path, so none is documented here.
+
 - **Chat apps in a browser** (ChatGPT, Grok and similar) can't run `portage` on your machine, so they can't use the skill. Use the vendor's coding agent or CLI instead, if it loads skills.
 <!-- other-agents-end -->
 
