@@ -1,6 +1,6 @@
 # Local Catalogue: SQLite Index, Storefront Crawl, Product Cards, Packaging
 
-**Status:** done (Phases 1-4). Release cut, MIT-0 decision and ClawHub publish are the user's, see "Next".
+**Status:** done (Phases 1-4). MIT-0 accepted (2026-09-30). Release cut and ClawHub publish are the user's, see "Next".
 **Branch:** `local-catalogue` (off `main`)
 **Driver:** a Grok thread proposing a full local product catalogue, card-shaped output for agents, and Omarchy/OpenClaw packaging. Other ideas from that thread (merchant promo config, localhost shopping UI, beacon registry) are **out of scope** here and come back as their own plans.
 
@@ -149,7 +149,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 
 1. Vendored SQLite vs `depends_on "sqlite"` in Homebrew. Phase 1 validation decides.
 2. `index add` crawls by default or only with `--crawl`. **Decided in Phase 2: only with `--crawl`** (see "Phase 2 results").
-3. MIT-0 on ClawHub. The user decides before the Phase 4 publish.
+3. MIT-0 on ClawHub. **Decided 2026-09-30: accepted.** The repo stays MIT; ClawHub republishes the skill as MIT-0.
 4. Release cut (versions, CHANGELOG, `rake publish_all`, `rake homebrew:update`) after Phase 4, as its own step, only when asked.
 
 ## Progress log
@@ -315,8 +315,8 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
 
 ## Next (for the user)
 
-1. Decide MIT-0: ClawHub republishes every skill as MIT-0, the repo is MIT (open decision 3).
-2. Run the ClawHub dry run yourself (see "Skipped"), then publish when ready. Nothing has been published.
+1. ~~Decide MIT-0~~ Accepted 2026-09-30 (open decision 3).
+2. ClawHub dry run passed (clawhub 0.23.3): `portage-buy@0.8.0`, 4 files, slug free. The CLI ignores the frontmatter `version`, so pass it: `npx clawhub@latest skill publish plugins/buy/skills/buy --slug portage-buy --version 0.8.0 --name "Portage Buy"` from the personal account. The server-side scan only runs on a real publish. Nothing has been published.
 3. Cut the release when you want it (open decision 4): bump `plugins/buy/.claude-plugin/plugin.json` **and** SKILL.md `version` together, CHANGELOG, `rake publish_all`, `rake homebrew:update`.
 4. Unrelated leftovers: category keywords in `known-stores/categories.yml` (Phase 2), and re-running the headless `/buy` card check on an authenticated session (Phase 3).
 
