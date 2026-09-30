@@ -12,6 +12,7 @@
   <a href="#install-the-buy-plugin"><img src="https://img.shields.io/badge/claude%20code-plugin-D97757?logo=claude&logoColor=white" alt="Claude Code plugin"></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-supported-black?logo=modelcontextprotocol" alt="MCP"></a>
   <a href="https://ucp.dev"><img src="https://img.shields.io/badge/UCP-supported-4B32C3" alt="UCP"></a>
+  <a href="https://clawhub.ai/tomtom87/portage-buy"><img src="https://img.shields.io/badge/openclaw-skill-14B8A6" alt="OpenClaw skill"></a>
 </p>
 
 <p align="center">
@@ -92,7 +93,7 @@ The `buy` skill is a plain [`SKILL.md`](https://github.com/tomtom87/Portage/blob
     path = "plugins/buy/skills/buy"
     ```
 
-- **OpenClaw.** The skill's frontmatter carries OpenClaw's `metadata.openclaw` block (needs the `portage` binary, names every env var it reads, brew install spec), so OpenClaw gates the skill until `portage` is installed. OpenClaw reads personal skills from `~/.agents/skills` and managed ones from `~/.openclaw/skills` ([OpenClaw skills docs](https://docs.openclaw.ai/tools/skills)), so the plain-skill route above works: copy or symlink `plugins/buy/skills/buy/` (with `references/`) into either directory. A ClawHub listing (`clawhub install <slug>`) is planned but not published yet.
+- **OpenClaw.** Install the CLI first (above), then the skill from [ClawHub](https://clawhub.ai/tomtom87/portage-buy): `openclaw skills install @tomtom87/portage-buy` puts it in your active OpenClaw workspace, and `clawhub install @tomtom87/portage-buy` puts it in `./skills` under the current directory ([ClawHub docs](https://docs.openclaw.ai/clawhub)). Then run `portage setup`. The skill's frontmatter carries OpenClaw's `metadata.openclaw` block (needs the `portage` binary, names every env var it reads as optional, brew install spec), so OpenClaw gates the skill until `portage` is installed. To skip ClawHub, use the plain-skill route above: OpenClaw reads personal skills from `~/.agents/skills` and managed ones from `~/.openclaw/skills` ([OpenClaw skills docs](https://docs.openclaw.ai/tools/skills)), so copy or symlink `plugins/buy/skills/buy/` (with `references/`) into either. ClawHub republishes skills under MIT-0; this repo stays MIT.
 
 - **Omarchy** (Arch Linux). Install the CLI with Omarchy's own helper, `omarchy-mise-install gem:portage-cli portage`, which writes a `~/.local/bin/portage` wrapper the way Omarchy installs `claude`, `codex` and `gh`. Plain [mise](https://mise.jdx.dev/) (`mise use -g gem:portage-cli`) or Homebrew on Linux (`brew install tomtom87/portage/portage`) also work. Then run `portage setup`. A stock Omarchy needs `sudo pacman -S --needed make` first: Ruby 3.4 builds `bigdecimal` natively, `gcc` is already there through `clang`, and only `make` is missing. For the skill, link `plugins/buy/skills/buy/` (with `references/`) into the skills directory of the agent you run. Omarchy's own provisioning links into `~/.agents/skills` (OpenClaw, and the dotagents route), `~/.claude/skills` (Claude Code; the plugin route above is preferred) and `~/.codex/skills`.
 
