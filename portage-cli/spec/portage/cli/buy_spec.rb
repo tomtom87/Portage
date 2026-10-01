@@ -1357,6 +1357,55 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).to have_received(:create_checkout)
     end
 
+    # The non-preset hand-off runs the opt-in confidence check too, as the
+    # preset one does, and a hold points at the cart page, not the checkout.
+    context "with a decision backend enabled and no preset" do
+      def run_with(check, **options)
+        stub_no_native_manifest
+        session = webmcp_session
+        allow(Portage::Ucp::WebMcp).to receive(:connect).with(bridge: bridge, preset: nil).and_return(session)
+        allow(bridge).to receive(:navigate)
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: bridge,
+                                     confidence_check: check, **options).call
+        [report, bridge]
+      end
+
+      it "holds with low_confidence at the cart page and navigates nowhere" do
+        report, page = run_with(confidence_check(noul: 0.2))
+
+        expect(report[:outcome]).to eq("low_confidence")
+        expect(report[:checkout_url]).to eq("https://shop.example/cart")
+        expect(report[:message]).to include("below the 0.8 threshold", "Checkout wasn't opened")
+        expect(report[:decisions][:confidence]).to include(proceed: false, reason: "below_threshold")
+        expect(page).not_to have_received(:navigate).with("https://shop.example/cart/c/chk_1")
+      end
+
+      it "holds the same way when the backend can't answer" do
+        error = Portage::Ucp::Decision::BackendError.new("Jev request failed: 503")
+        report, = run_with(confidence_check(error: error))
+
+        expect(report[:outcome]).to eq("low_confidence")
+        expect(report[:decisions][:confidence]).to include(reason: "backend_error")
+      end
+
+      it "hands off as usual once the check clears" do
+        report, = run_with(confidence_check(noul: 0.95))
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(report[:checkout_url]).to eq("https://shop.example/cart/c/chk_1")
+        expect(report[:decisions][:confidence]).to include(proceed: true)
+      end
+
+      it "hands off unchanged with no backend named, asking nothing" do
+        check = Portage::Cli::ConfidenceCheck.new
+        allow(check).to receive(:call).and_call_original
+        report, = run_with(check)
+
+        expect(report[:outcome]).to eq("express_stop")
+        expect(check).not_to have_received(:call)
+      end
+    end
+
     # Regression: a real WebMcp.connect used to build a Session with nil
     # capabilities, so the cart/checkout gate never passed against a page and
     # the stubbed Sessions above hid it. This one goes through the real

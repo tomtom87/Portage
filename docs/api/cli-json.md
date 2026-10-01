@@ -239,7 +239,7 @@ Only `purchased` means the order was placed.
 | `no_payment_token` | No `--payment-token` and no default payment method. | yes |
 | `permission_denied` | The store does not let this agent complete payment. | yes |
 | `policy_blocked` | Your spend policy denied it. `decisions.policy.reason` says why. | yes |
-| `low_confidence` | The confidence gate held it. On a WebMCP preset that hands off through its own tool, the hold comes before that tool and before autofill, and `checkout_url` is the store's `/cart` page. | yes |
+| `low_confidence` | The confidence gate held it. On a WebMCP hand-off (a preset that opens checkout through its own tool, or a page whose tools build a checkout), the hold comes before that hand-off and before autofill, and `checkout_url` is the store's `/cart` page. | yes |
 | `handoff_only` | Hand-off-only retailer (Amazon by default, plus Walmart, eBay, Best Buy, Etsy for buyers). No automation was attempted. | yes (built, never fetched) |
 | `store_refused` | The store refused a cart or checkout call (for example sold out). | when the store gave one |
 | `browse_only` | Catalog only, no UCP checkout. | when an adapter gives a link |
@@ -260,7 +260,7 @@ Before any of the gates below, a real `--yes` run without an approved `--quote` 
 
 The gates run in this order, and only on a real `--yes` run: escalation, then policy, then confidence. A `--dry-run` or a run without `--yes` only runs the escalation check, so `policy_blocked` and `low_confidence` cannot appear there.
 
-The exception is a WebMCP preset that hands off through its own tool (Shopify's `proceed_to_checkout`). It never completes a payment, so it has no policy gate, but before that tool runs it applies the quote cap, then the mismatch check, then the confidence check, `--yes` or not.
+The exception is a WebMCP hand-off: a preset that hands off through its own tool (Shopify's `proceed_to_checkout`), or a page whose tools build a checkout, which ends in `express_stop`. It never completes a payment, so it has no policy gate, but before it hands anything off it applies the quote cap, then the mismatch check, then the confidence check (when a decision backend is enabled), `--yes` or not. A `--dry-run` hands nothing off and asks no backend.
 
 The confidence check is additive only: it runs on a checkout the earlier gates let through, so it can hold a purchase but never let through one they stop.
 

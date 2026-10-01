@@ -845,6 +845,12 @@ from the confidence check reports `low_confidence` with the `/cart` page as
 `checkout_url`; again the tab isn't sent to checkout and nothing is
 autofilled.
 
+A page whose WebMCP tools build a checkout (no preset) gets the same confidence
+check before its `express_stop` hand-off, after the quote cap and the mismatch
+stop. A hold reports `low_confidence` with the `/cart` page as `checkout_url`
+and no navigation to the checkout, so a `profile` hand-off target is never sent
+there. With no decision backend enabled, nothing changes.
+
 Once the flow hands off to the store's own checkout page, the shopper can
 opt into having it pre-filled: `--autofill`, or
 `PORTAGE_WEBMCP_AUTOFILL=approve` / config.json's `"webmcp_autofill":
@@ -890,7 +896,7 @@ with the same value, as `[outcome]`.
 | `checkout_mismatch` | Checkout differs from the request (item, quantity, unit price, currency, or a priced line nobody asked for); stopped before payment. | yes |
 | `no_payment_token` | No `--payment-token` and no default payment method. | yes |
 | `policy_blocked` | Your spend policy denied it; `decisions.policy.reason` says why. | yes |
-| `low_confidence` | The confidence gate held it (before a `--yes` completion, or before a WebMCP preset hand-off to checkout). | yes |
+| `low_confidence` | The confidence gate held it (before a `--yes` completion, or before a WebMCP hand-off to checkout, preset or not). | yes |
 | `permission_denied` | The store doesn't let this agent complete checkout. | yes |
 | `handoff_only` | Tier C: Amazon or another hand-off-only host. `legal_notice` explains why; see "Hand-off targets and hand-off-only hosts". | yes (built, never fetched) |
 | `store_refused` | The store refused a cart/checkout call (e.g. sold out). | when the store gave one |
