@@ -45,7 +45,7 @@ and [Security](security.md).
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.9.0 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only product-lookup skill | [buy skill](skills/buy.md), [product-lookup skill](skills/product-lookup.md) |
+| `buy` plugin | 0.9.0 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only shop-research skill | [buy skill](skills/buy.md), [shop-research skill](skills/shop-research.md) |
 | `portage-cli` | 0.11.0 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
 | `shop-via-ucp` skill | – | Agent builders | Buy through a store's UCP endpoint, with or without `portage` | [skill](skills/shop-via-ucp.md) |
 | `browse-via-ucp` skill | – | Agent builders | Read-only: a store's manifest, catalog and whether it supports automated buying | [skill](skills/browse-via-ucp.md) |

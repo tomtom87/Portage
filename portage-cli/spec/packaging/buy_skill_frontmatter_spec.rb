@@ -15,7 +15,7 @@ plugin_json = File.join(plugin_dir, ".claude-plugin", "plugin.json")
 placeholders = %w[QUOTE_ID SEARCH_ID]
 env_prefixes = /\A(PORTAGE|BRAVE|GOOGLE|ETSY|WALMART|EBAY|BESTBUY|AMAZON)_/
 
-%w[buy product-lookup].each do |skill_name|
+%w[buy shop-research].each do |skill_name|
   RSpec.describe "#{skill_name} skill frontmatter" do
     skill_dir = File.join(plugin_dir, "skills", skill_name)
     skill_path = File.join(skill_dir, "SKILL.md")
@@ -98,10 +98,10 @@ RSpec.describe "buy skill frontmatter, shipping" do
   end
 end
 
-# The lookup skill is the read-only half of the split ClawHub's scan asked
+# The shop-research skill is the read-only half of the split ClawHub's scan asked
 # for: it must hand purchases to `buy`, and its description must say so.
-RSpec.describe "product-lookup skill scope" do
-  skill_path = File.join(plugin_dir, "skills", "product-lookup", "SKILL.md")
+RSpec.describe "shop-research skill scope" do
+  skill_path = File.join(plugin_dir, "skills", "shop-research", "SKILL.md")
 
   before { skip "not running inside the Portage monorepo" unless File.exist?(skill_path) }
 
