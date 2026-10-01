@@ -1,6 +1,6 @@
 {
   "name": "@tomtom87/portage",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "OpenClaw plugin exposing the Portage agentic-commerce CLI as typed tools.",
   "type": "module",
   "license": "MIT",
