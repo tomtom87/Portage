@@ -207,7 +207,7 @@ Checkout reports (those that created a checkout) add:
 | `decisions` | object | See [decisions](#decisions). |
 | `legal_notice` | string | Only on `handoff_only`. |
 | `autofill` | object | Only on `express_stop` when WebMCP autofill ran: `outcome`, and when it filled, `filled`, `unmatched`, `rate`. |
-| `would` | object | Only on a WebMCP `dry_run` against a preset that hands off through its own tool: `line_items`, `handoff_checkout`, `autofill`. |
+| `would` | object | Only on a WebMCP `dry_run` against a preset that hands off through its own tool: `line_items`, `handoff_checkout`, `autofill`. That dry run builds no cart, so it never carries `checkout_mismatch: true`; the real run checks the cart. |
 | `tool_names_proposal` | object | Only on `webmcp_mapping_unconfirmed`. Maps a slot to `{tool_name, confidence, reason}`. |
 | `reconcile` | object | Only with `--wait`. See [buy --wait](#buy-wait-ndjson-stream). |
 | `checkout_mismatch` | boolean | Only on `dry_run`, and only `true`: `warnings` holds a mismatch, so a real run of this checkout stops with `checkout_mismatch`. |
@@ -231,7 +231,7 @@ Only `purchased` means the order was placed.
 | `quote_used` | The quote was already bought or handed off. | no |
 | `express_stop` | WebMCP cart and checkout built. The store's own express-pay button finishes it. | yes |
 | `requires_escalation` | The store needs a human step (verification, terms, 3-D Secure). | yes |
-| `checkout_mismatch` | Checkout does not match the request: item, quantity, unit price or currency. Stopped before payment on every run but `--dry-run`. Nothing was bought. | yes |
+| `checkout_mismatch` | Checkout does not match the request: item, quantity, unit price or currency. Stopped before payment on every run but `--dry-run`. Nothing was bought. On a WebMCP preset that hands off through its own tool (Shopify's `proceed_to_checkout`), the cart is checked instead: the run stops before that tool and before autofill, and `checkout_url` is the store's `/cart` page. | yes |
 | `no_payment_token` | No `--payment-token` and no default payment method. | yes |
 | `permission_denied` | The store does not let this agent complete payment. | yes |
 | `policy_blocked` | Your spend policy denied it. `decisions.policy.reason` says why. | yes |

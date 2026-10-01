@@ -28,10 +28,10 @@ A `dry_run` report carries a `quote_id`. That's what `portage approve` and `buy 
 | `permission_denied` | The store doesn't let this agent complete payment. `--yes` runs only | Give `checkout_url`. Normal for most stores. |
 | `policy_blocked` | Over a spending cap, velocity limit, or not on the merchant allowlist. `--yes` runs only | Explain which (`decisions.policy.reason`). Only change policy if the user explicitly asks. |
 | `low_confidence` | The product match or checkout looked off. `--yes` runs only | Show `decisions` and `warnings`. Let the user check at `checkout_url`. |
-| `checkout_mismatch` | The checkout doesn't match what was asked for (item, qty, unit price or currency). Any mismatch stops a real run before payment, always. Nothing was bought and the quote is spent | Show `warnings`. Don't proceed: dry-run again for a new quote and ask the user again. |
+| `checkout_mismatch` | The checkout doesn't match what was asked for (item, qty, unit price or currency). Any mismatch stops a real run before payment, always. Nothing was bought and the quote is spent. On a WebMCP store whose own tool opens checkout (Shopify), the cart was built but checkout was never opened and nothing was autofilled; `checkout_url` is the store's cart page | Show `warnings`. Don't proceed: dry-run again for a new quote and ask the user again. |
 | `store_refused` | The store rejected the request | Give `checkout_url` if one is present. |
 
-Always read `warnings`, whatever the outcome. On a `dry_run`, a mismatch stays in `warnings` and the report also carries `checkout_mismatch: true`: a real run of that checkout will stop with `checkout_mismatch`. Tell the user before they approve. No setting turns that stop off.
+Always read `warnings`, whatever the outcome. On a `dry_run`, a mismatch stays in `warnings` and the report also carries `checkout_mismatch: true`: a real run of that checkout will stop with `checkout_mismatch`. Tell the user before they approve. No setting turns that stop off. A WebMCP dry run against such a store builds no cart, so it can't flag a mismatch; the real run checks the cart and stops there.
 
 ## Can't buy here
 
