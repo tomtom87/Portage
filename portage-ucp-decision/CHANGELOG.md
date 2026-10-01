@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- `ConfidenceGate.via_backend` now raises `BackendError` for a noul answer
+  that isn't a probability: below 0, above 1, NaN or Infinity. Before, a
+  backend answering 1.5 (or Infinity) cleared any threshold, so a
+  malformed reply could let a purchase through. Callers that fail closed on
+  `Decision::Error`, as `portage buy`'s confidence check does, now hold
+  instead.
+
 ## [0.1.1] - 2026-09-24
 
 - The Jev backend's Faraday connection now sends its own User-Agent,
