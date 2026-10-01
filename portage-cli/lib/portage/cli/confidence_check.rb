@@ -8,7 +8,9 @@ module Portage
     # § Responsibilities 3) as `portage buy` uses it: one yes/no question put
     # to a Decision::ModelBackends backend right before an unattended
     # (`--yes`) completion — "is this checkout what the shopper asked for,
-    # and safe to complete without a person looking at it?"
+    # and safe to complete without a person looking at it?" Also asked
+    # before the WebMCP preset flow sends the browser to the store's
+    # checkout and autofills it (Buy#webmcp_cart_held_report).
     #
     # Default off. Nothing asks a model anything unless a backend is named,
     # via `--decision-backend NAME` or PORTAGE_DECISION_BACKEND (`jev` or
