@@ -1,7 +1,7 @@
 ---
 name: portage-openclaw
 description: How to drive Portage through the `portage_*` tools in OpenClaw. Maps each step of the buy and shop-research flows to its tool, and says which tools need the user's approval or have to be enabled first. Use alongside the `buy` and `shop-research` skills whenever the user asks you to shop, compare, buy or track an order.
-version: 0.1.0
+version: 0.1.1
 metadata:
   openclaw:
     homepage: https://portage.readthedocs.io/en/latest/
@@ -14,6 +14,7 @@ The `buy` and `shop-research` skills describe the flow and the judgement calls, 
 ## Rules
 
 - **Use the tools, not a shell.** Prefer `portage_*` over running `portage` yourself. Use a shell only for something no tool covers (for example `portage --version`), and never to get round a limit: no `--yes` on an offer or URL, no `--payment-token`, no `policy set`, no `payment enroll|remove|revoke|freeze|set-default`, no `history clear`, and never read `~/.portage/.env`, `policy.json` or `quotes/`.
+- **No direct checkout.** Never call a store's UCP or MCP endpoint, cart, checkout or payment API yourself, with a shell, a web fetch or a browser. Every price, cart and payment goes through `portage_*`, so Portage's spending policy, approval and checkout-mismatch checks always apply. If `portage` is missing or too old, tell the user to install or upgrade it and stop.
 - **A missing tool is the user's call.** Everything marked "optional" below is off until the user enables it in OpenClaw. If one isn't available, say which tool to enable and wait. Do not shell out around it.
 - **Ids are passed verbatim.** Quote ids look like `qt_0123456789ab`, offer refs like `of_1a2b3c`, search ids like `se_...`. Copy them from the last result. Never invent or guess one.
 - **Branch on `outcome`**, never on `message`. Only `purchased` means money moved.
