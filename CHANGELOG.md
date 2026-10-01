@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **The `buy` and `shop-research` skills re-check an index hit with `portage find --store URL --query ...`.** That command now exists (see `portage-cli`'s changelog), so the live re-check searches only the store the hit came from instead of re-running a cross-store `find`. `shop-research` lists it as a read-only command, and both skills fall back to `find --query` when `portage find --help` doesn't list `--store`. The CLI JSON reference, README and local-catalogue plan name the same command.
+
 - **Security: the `buy` skill describes the hardened decision check.** Follows `portage-cli`'s
   and `portage-ucp-decision`'s changes (see their changelogs): an extra priced line is now a
   checkout mismatch, the opt-in confidence check sends an allowlisted checkout summary and
