@@ -104,6 +104,70 @@ def build_and_verify_gem(gem_dir)
   end
 end
 
+OPENCLAW_DIR = "openclaw-plugin".freeze
+BUY_PLUGIN_JSON = "plugins/buy/.claude-plugin/plugin.json".freeze
+
+# The OpenClaw plugin ships the buy plugin's skills, so its version follows
+# the buy plugin's (the same rule portage-cli's packaging spec holds each
+# skill's `version` to). Compared as strings, exactly, like that spec.
+def openclaw_version_mismatch
+  require "json"
+
+  buy = JSON.parse(File.read(BUY_PLUGIN_JSON)).fetch("version")
+  openclaw = JSON.parse(File.read(File.join(OPENCLAW_DIR, "package.json"))).fetch("version")
+  openclaw == buy ? nil : "#{OPENCLAW_DIR}/package.json is #{openclaw} but #{BUY_PLUGIN_JSON} is #{buy}"
+end
+
+# Paths `npm pack` must include, as seen in `npm pack --dry-run --json`'s file
+# list: compiled output, the manifest, and all three skills (the first two are
+# copied in by the build, so a package from a tree that never built lacks them).
+OPENCLAW_PACK_REQUIRED = {
+  "dist/" => %r{\Adist/.+},
+  "openclaw.plugin.json" => /\Aopenclaw\.plugin\.json\z/,
+  "skills/buy/SKILL.md" => %r{\Askills/buy/SKILL\.md\z},
+  "skills/shop-research/SKILL.md" => %r{\Askills/shop-research/SKILL\.md\z},
+  "skills/portage-openclaw/SKILL.md" => %r{\Askills/portage-openclaw/SKILL\.md\z}
+}.freeze
+
+def openclaw_pack_missing(paths)
+  OPENCLAW_PACK_REQUIRED.reject { |_name, pattern| paths.any? { |path| path.match?(pattern) } }.keys
+end
+
+namespace :openclaw do
+  desc "Fail if openclaw-plugin/package.json's version isn't the buy plugin's"
+  task :version_check do
+    mismatch = openclaw_version_mismatch
+    abort "OpenClaw plugin version drift: #{mismatch}" if mismatch
+
+    puts "openclaw-plugin version matches the buy plugin."
+  end
+
+  desc "Build openclaw-plugin, then fail unless `npm pack --dry-run` would ship dist/, the manifest and all " \
+       "three skills. Offline: a dry run packs nothing and publishes nothing."
+  task :pack_check do
+    require "json"
+    require "open3"
+
+    Dir.chdir(OPENCLAW_DIR) do
+      sh "npm run build" do |ok, _res|
+        abort "openclaw-plugin: npm run build failed" unless ok
+      end
+
+      output, error, status = Open3.capture3("npm", "pack", "--dry-run", "--json")
+      abort "openclaw-plugin: npm pack --dry-run failed:\n#{error}" unless status.success?
+
+      paths = JSON.parse(output).flat_map { |pack| pack.fetch("files") }.map { |file| file.fetch("path") }
+      missing = openclaw_pack_missing(paths)
+      abort "openclaw-plugin: npm pack would not ship: #{missing.join(', ')}" unless missing.empty?
+
+      puts "openclaw-plugin pack lists #{paths.size} files, including dist/, openclaw.plugin.json and all three skills."
+    end
+  end
+
+  desc "Version and pack checks for the OpenClaw plugin"
+  task release_check: %i[version_check pack_check]
+end
+
 desc "Build a gem from its own directory and smoke-test that the built " \
      "package installs and requires cleanly"
 task :release_check, [:gem_dir] do |_t, args|
@@ -112,6 +176,7 @@ task :release_check, [:gem_dir] do |_t, args|
   abort "no such gem dir: #{gem_dir}" unless GEMS.include?(gem_dir)
 
   build_and_verify_gem(gem_dir) { |_gem_path| }
+  Rake::Task["openclaw:release_check"].invoke
 end
 
 # Uncommitted or untracked changes under a gem's own directory. `gem build`
@@ -161,6 +226,10 @@ desc "Build, smoke-test, and push every gem whose gemspec version isn't on " \
      "build_and_verify_gem check as release_check. rubygems MFA requires a " \
      "fresh OTP per push, so this pauses for input at each `gem push`."
 task :publish_all do
+  # Before any push: a drifted or incomplete OpenClaw package shouldn't be
+  # found out after the gems are already on rubygems.org.
+  Rake::Task["openclaw:release_check"].invoke
+
   to_publish = GEMS.reject do |gem_dir|
     version = gemspec_version(gem_dir)
     already_published = published_versions(gem_dir).include?(version)

@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { httpUrl, opt, optStr, oneOf, posInt, posNum, str } from "../validate.js";
-import { checkOutput, compareOutput, doctorOutput, findOutput } from "./outputs.js";
+import { checkOutput, compareOutput, doctorOutput, findOutput, historyOutput } from "./outputs.js";
 import { UNTRUSTED, type ToolSpec } from "./types.js";
 
 const URL_DESC = "Store URL (http or https).";
@@ -129,6 +129,7 @@ export const readonlyTools: ToolSpec[] = [
       kind: Type.Optional(Type.Union([Type.Literal("purchases"), Type.Literal("searches")])),
       limit: Type.Optional(Type.Integer({ minimum: 1 })),
     }),
+    outputSchema: historyOutput,
     buildArgs(p) {
       const kind = oneOf("kind", p.kind, ["purchases", "searches"] as const);
       const a = ["history", "list"];

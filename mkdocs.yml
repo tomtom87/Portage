@@ -118,6 +118,7 @@ plugins:
         Skills:
           - skills/buy.md
           - skills/shop-research.md
+          - skills/openclaw-plugin.md
           - skills/references/outcomes.md
           - skills/references/handoff-only.md
           - skills/references/raw-ucp.md
@@ -180,6 +181,7 @@ nav:
   - Skills:
       - buy (plugin): skills/buy.md
       - shop-research (plugin): skills/shop-research.md
+      - OpenClaw plugin: skills/openclaw-plugin.md
       - "buy: outcomes": skills/references/outcomes.md
       - "buy: hand-off-only retailers": skills/references/handoff-only.md
       - "buy: raw UCP fallback": skills/references/raw-ucp.md

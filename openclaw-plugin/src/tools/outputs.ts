@@ -26,6 +26,7 @@ const common = {
 const offer = Type.Object(
   {
     offer_ref: Type.Optional(Type.Unknown()),
+    match: Type.Optional(Type.Unknown()),
     store: Type.Optional(Type.Unknown()),
     product_id: Type.Optional(Type.Unknown()),
     title: Type.Optional(Type.Unknown()),
@@ -47,18 +48,82 @@ export const findOutput = loose({
 
 export const checkOutput = loose({
   ...common,
+  url: str(),
   verdict: str("automated, webmcp, handoff or unsupported."),
-  next_step: Type.Unknown(),
+  next_step: str("What Portage will do for this store, in words."),
   native_ucp: Type.Unknown(),
   platform: Type.Unknown(),
+  recommended_gem: Type.Unknown(),
   handoff_only: Type.Unknown(),
   adapter: obj(),
   webmcp: obj(),
+  live_probe: obj(),
+  index_hint: str("A `portage index add` command, only for a Shopify or native UCP store."),
 });
 
-export const compareOutput = loose({ ...common, offers: Type.Array(offer), results: anyList(), products: anyList() });
+/** `compare`: `find`'s report with each offer scored (`match`: confirmed, likely or unconfirmed). */
+export const compareOutput = loose({
+  ...common,
+  query: str(),
+  search_id: str("Names this compare for portage_pick."),
+  candidates: anyList(),
+  stores: objs(),
+  offers: Type.Array(offer),
+});
 
-export const doctorOutput = loose({ ...common, checks: Type.Unknown(), ok: bool(), status: str() });
+const finding = Type.Object(
+  {
+    check: Type.Optional(Type.String()),
+    message: Type.Optional(Type.String()),
+    level: Type.Optional(Type.String({ description: "warning or info." })),
+    details: Type.Optional(Type.Unknown()),
+  },
+  { additionalProperties: true },
+);
+
+/**
+ * `doctor --json` prints a bare array of findings, not an object, so unlike the others this one
+ * is a union: the array, or the loose object that carries the plugin's `{ error }`.
+ */
+export const doctorOutput = Type.Union([Type.Array(finding), loose(common)]);
+
+/** `history list --json`: both lists are always present, the one not asked for is empty. */
+export const historyOutput = loose({
+  ...common,
+  purchases: Type.Array(
+    Type.Object(
+      {
+        url: Type.Optional(Type.Unknown()),
+        query: Type.Optional(Type.Unknown()),
+        outcome: Type.Optional(Type.Unknown()),
+        source: Type.Optional(Type.Unknown()),
+        checkout_id: Type.Optional(Type.Unknown()),
+        checkout_status: Type.Optional(Type.Unknown()),
+        checkout_url: Type.Optional(Type.Unknown()),
+        total: Type.Optional(Type.Unknown()),
+        currency: Type.Optional(Type.Unknown()),
+        items: Type.Optional(Type.Unknown()),
+        message: Type.Optional(Type.Unknown()),
+        at: Type.Optional(Type.Unknown()),
+      },
+      { additionalProperties: true },
+    ),
+  ),
+  searches: Type.Array(
+    Type.Object(
+      {
+        search_id: Type.Optional(Type.Unknown()),
+        query: Type.Optional(Type.Unknown()),
+        url: Type.Optional(Type.Unknown()),
+        offer_count: Type.Optional(Type.Unknown()),
+        message: Type.Optional(Type.Unknown()),
+        offers: Type.Optional(Type.Unknown()),
+        at: Type.Optional(Type.Unknown()),
+      },
+      { additionalProperties: true },
+    ),
+  ),
+});
 
 /** Pick, approve, dry-run, buy and hand-off all report an `outcome`; the fields below are the common ones. */
 const outcomeProps = {
