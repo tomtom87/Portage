@@ -9,6 +9,7 @@ require_relative "payment_methods"
 require_relative "setting"
 require_relative "decisions"
 require_relative "confidence_check"
+require_relative "confidence_state"
 require_relative "checkout_handoff"
 require_relative "money"
 require_relative "notifier"
@@ -122,14 +123,18 @@ module Portage
       #   hand off the real checkout first checks its total against this
       #   (with `quote_currency:`) and reports `quote_changed` instead if it
       #   is higher, in another currency, or missing. See #finish_checkout.
-      # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- all keywords; one per flag, plus
+      # @param quote_store [String, nil] the approved quote's store, and
+      # @param quote_title [String, nil] its title — set by `buy --quote`
+      #   alongside quote_total:. Only the confidence check reads them: they
+      #   go into its `approved_quote` (see #confidence_quote).
+      # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize -- all keywords; one per flag, plus
       # injectable collaborators, each assigned to its own ivar
       def initialize(url:, query:, qty: 1, payment_token: nil, yes: false, dry_run: false, product_id: nil,
                      auto_open: nil, notify_webhook: nil, handoff_target: nil, confidence_check: nil,
                      transaction_log: nil, max_price: nil, webmcp_bridge: nil, webmcp_mappings: nil,
                      webmcp_mapping_confirm: nil, autofill: nil, webmcp_autofill_confirm: nil, json: false,
-                     quote_total: nil, quote_currency: nil)
-        # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
+                     quote_total: nil, quote_currency: nil, quote_store: nil, quote_title: nil)
+        # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize
         raw = url.to_s.strip
         @uri = URI.parse(raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}")
         @query = query
@@ -151,6 +156,8 @@ module Portage
         @json = json
         @quote_total = quote_total
         @quote_currency = quote_currency
+        @quote_store = quote_store
+        @quote_title = quote_title
         @webmcp_bridge = webmcp_bridge
         @decisions = {}
       end
@@ -796,6 +803,7 @@ module Portage
                               message: no_match_message)
         end
 
+        @product = product
         checkout = session.create_checkout(line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
                                            fulfillment: requested_fulfillment(fulfillment_adapter),
                                            context: buyer_context, meta: agent_meta)
@@ -1208,16 +1216,47 @@ module Portage
         Portage::Ucp::Support::Totals.amount(checkout["totals"])
       end
 
-      # Never includes the payment token: the state goes to a model backend,
-      # which may be a hosted API (Jev).
+      # Runs only on a checkout that already passed #reconcile_checkout, the
+      # quote cap and the spend policy, so it can hold a purchase but never
+      # let through one those would stop. The state is ConfidenceState's
+      # allowlisted summary — never the payment token, the address or the
+      # buyer's contact details — because it goes to a model backend that
+      # may be a hosted third-party API (Jev).
       def decide_confidence(checkout, warnings)
-        verdict = confidence_check.call(
-          query: @query, merchant: @uri.host, quantity: @qty, warnings: warnings,
-          checkout: checkout.slice("id", "status", "currency", "line_items", "totals")
-        )
+        return nil unless confidence_check.enabled?
+
+        verdict = confidence_check.call(confidence_state(checkout, warnings))
         @decisions[:confidence] = verdict if verdict
         verdict
       end
+
+      def confidence_state(checkout, warnings)
+        item_id = @product && line_item_id_of(@product)
+        ConfidenceState.build(
+          request: { query: @query, merchant: @uri.host, quantity: @qty, item_id: item_id,
+                     item_title: picked_title(item_id) },
+          checkout: checkout, warnings: warnings, quote: confidence_quote
+        )
+      end
+
+      # The picked product's title from the store's own search, plus its
+      # variant's when the checked-out variant has one ("Tee — Large").
+      def picked_title(item_id)
+        return nil unless @product
+
+        [@product["title"], variant_matching(@product, item_id)&.dig("title")].compact.uniq.join(" — ")
+      end
+
+      # What `buy --quote` pinned, as the person approved it. nil on a run
+      # with no quote.
+      def confidence_quote
+        return nil unless quote_run?
+
+        { store: @quote_store, product_id: @product_id, title: @quote_title, quantity: @qty,
+          total: @quote_total, currency: @quote_currency }
+      end
+
+      def quote_run? = !(@quote_store || @quote_total || @quote_currency).nil?
 
       def confidence_check
         @confidence_check ||= ConfidenceCheck.new

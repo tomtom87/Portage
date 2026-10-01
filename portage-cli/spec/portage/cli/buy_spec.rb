@@ -692,9 +692,10 @@ RSpec.describe Portage::Cli::Buy do
 
     # Stands in for a Decision::ModelBackends backend: answers the one noul
     # question ConfidenceCheck asks with a fixed yes-probability.
-    def confidence_check(noul: nil, error: nil, threshold: 0.8)
+    def confidence_check(noul: nil, error: nil, threshold: 0.8, sent: [])
       backend = Object.new
-      backend.define_singleton_method(:ask) do |questions:, **|
+      backend.define_singleton_method(:ask) do |questions:, state:|
+        sent << state
         raise error if error
 
         questions.transform_values do
@@ -791,6 +792,140 @@ RSpec.describe Portage::Cli::Buy do
       buy(checkout: priced_checkout, dry_run: true, confidence_check: check)
 
       expect(check).not_to have_received(:call)
+    end
+
+    describe "what the confidence check sends to the backend" do
+      let(:variant_product) do
+        { "id" => "p1", "title" => "Cold Brew",
+          "variants" => [{ "id" => "v1", "title" => "1L", "price" => { "amount" => 2000, "currency" => "USD" } }] }
+      end
+
+      # Everything a store might put on a checkout that must never leave
+      # this process: a buyer block, a shipping address on the fulfillment
+      # destination, payment handlers and instruments, links.
+      let(:loaded_checkout) do
+        { "id" => "chk_secret_id", "status" => "ready_for_complete", "currency" => "USD",
+          "continue_url" => "https://shop.example/checkouts/chk_secret_id?key=ck_secret",
+          "links" => [{ "type" => "terms_of_service", "url" => "https://shop.example/tos" }],
+          "line_items" => [{ "id" => "li_1", "quantity" => 1,
+                             "item" => { "id" => "v1", "title" => "Cold Brew 1L", "price" => 2000,
+                                         "image_url" => "https://cdn.example/img.png" },
+                             "totals" => [{ "type" => "subtotal", "amount" => 2000 },
+                                          { "type" => "total", "amount" => 2000 }] }],
+          "totals" => [{ "type" => "subtotal", "amount" => 2000 }, { "type" => "fulfillment", "amount" => 500 },
+                       { "type" => "tax", "amount" => 200, "display_text" => "VAT for Jane Doe" },
+                       { "type" => "total", "amount" => 2700 }],
+          "discounts" => { "codes" => ["STAFF-ONLY-CODE"], "applied" => [{ "title" => "Welcome", "amount" => 0 }] },
+          "buyer" => { "first_name" => "Jane", "last_name" => "Doe", "email" => "jane@example.com",
+                       "phone_number" => "+15555550100" },
+          "payment" => { "handlers" => [{ "id" => "shop_pay" }],
+                         "instruments" => [{ "credential" => { "token" => "tok_live_secret" } }] },
+          "fulfillment" => { "methods" => [{
+            "id" => "m1", "type" => "shipping", "line_item_ids" => ["li_1"],
+            "destinations" => [{ "id" => "d1", "street_address" => "1 Secret Lane", "address_locality" => "Erie",
+                                 "postal_code" => "16501", "first_name" => "Jane", "last_name" => "Doe",
+                                 "phone_number" => "+15555550100" }],
+            "groups" => [{ "id" => "g1", "line_item_ids" => ["li_1"], "selected_option_id" => "o2",
+                           "options" => [{ "id" => "o1", "title" => "Express",
+                                           "totals" => [{ "type" => "total", "amount" => 1500 }] },
+                                         { "id" => "o2", "title" => "Standard", "carrier" => "USPS",
+                                           "totals" => [{ "type" => "total", "amount" => 500 }] }] }]
+          }] } }
+      end
+
+      def buy_sending(checkout, sent, **options)
+        session = instance_double(Portage::Ucp::Client::Session, advertises?: true,
+                                                                 search_catalog: { "products" => [variant_product] },
+                                                                 create_checkout: checkout,
+                                                                 complete_checkout: completed_checkout)
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+        described_class.new(url: "shop.example", query: "cold brew", yes: true, payment_token: "tok_live_secret",
+                            confidence_check: confidence_check(noul: 0.95, sent: sent), **options).call
+      end
+
+      it "never sends the payment token, address, buyer details, links, ids or codes" do
+        sent = []
+        with_env("PORTAGE_SHIP_STREET" => "1 Secret Lane", "PORTAGE_SHIP_EMAIL" => "jane@example.com") do
+          buy_sending(loaded_checkout, sent)
+        end
+
+        expect(sent.length).to eq(1)
+        ["tok_live_secret", "Secret Lane", "16501", "Erie", "Jane", "Doe", "jane@example.com", "+15555550100",
+         "chk_secret_id", "ck_secret", "shop.example/checkouts", "shop.example/tos", "cdn.example",
+         "STAFF-ONLY-CODE", "shop_pay", "USPS", "VAT for"].each do |secret|
+          expect(sent.first).not_to include(secret)
+        end
+        expect(JSON.parse(sent.first).keys).to eq(%w[request checkout warnings])
+      end
+
+      it "sends the request, the picked item and a summary of what the store will charge" do
+        sent = []
+        buy_sending(loaded_checkout, sent)
+
+        expect(JSON.parse(sent.first)).to eq(
+          "request" => { "query" => "cold brew", "merchant" => "shop.example", "quantity" => 1, "item_id" => "v1",
+                         "item_title" => "Cold Brew — 1L" },
+          "checkout" => {
+            "status" => "ready_for_complete", "currency" => "USD",
+            "line_items" => [{ "item_id" => "v1", "title" => "Cold Brew 1L", "unit_price" => 2000, "quantity" => 1,
+                               "totals" => [{ "type" => "subtotal", "amount" => 2000 },
+                                            { "type" => "total", "amount" => 2000 }],
+                               "requested" => true }],
+            "totals" => [{ "type" => "subtotal", "amount" => 2000 }, { "type" => "fulfillment", "amount" => 500 },
+                         { "type" => "tax", "amount" => 200 }, { "type" => "total", "amount" => 2700 }],
+            "discounts" => [{ "title" => "Welcome", "amount" => 0 }],
+            "shipping" => [{ "title" => "Standard", "amount" => 500 }]
+          },
+          "warnings" => []
+        )
+      end
+
+      it "marks a free extra line as unrequested, for the model to judge" do
+        sent = []
+        gift = { "item" => { "id" => "gift", "title" => "Free tote", "price" => 0 }, "quantity" => 1 }
+        buy_sending(loaded_checkout.merge("line_items" => loaded_checkout["line_items"] + [gift]), sent)
+
+        lines = JSON.parse(sent.first).dig("checkout", "line_items")
+        expect(lines.map { |line| [line["item_id"], line["requested"]] }).to eq([["v1", true], ["gift", false]])
+      end
+
+      it "sends the approved quote's pinned fields on a --quote run" do
+        sent = []
+        buy_sending(loaded_checkout, sent, product_id: "v1", quote_total: 2700, quote_currency: "USD",
+                                           quote_store: "https://shop.example", quote_title: "Cold Brew 1L")
+
+        expect(JSON.parse(sent.first)["approved_quote"]).to eq(
+          "store" => "https://shop.example", "product_id" => "v1", "title" => "Cold Brew 1L", "quantity" => 1,
+          "total" => 2700, "currency" => "USD"
+        )
+      end
+
+      it "asks nothing about a checkout the deterministic check already stopped" do
+        sent = []
+        mismatched = loaded_checkout.merge("line_items" => [])
+        report = buy_sending(mismatched, sent)
+
+        expect(report[:outcome]).to eq("checkout_mismatch")
+        expect(sent).to be_empty
+      end
+
+      it "asks nothing about a --quote run whose total went over the quote" do
+        sent = []
+        report = buy_sending(loaded_checkout, sent, quote_total: 2000, quote_currency: "USD",
+                                                    quote_store: "https://shop.example")
+
+        expect(report[:outcome]).to eq("quote_changed")
+        expect(sent).to be_empty
+      end
+
+      it "asks nothing about a checkout the spend policy blocks" do
+        policy("per_transaction_cap" => { "amount" => 1000, "currency" => "USD" })
+        sent = []
+        report = buy_sending(loaded_checkout, sent)
+
+        expect(report[:outcome]).to eq("policy_blocked")
+        expect(sent).to be_empty
+      end
     end
 
     # PolicyGuard's rolling cap and velocity limit count the transaction

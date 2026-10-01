@@ -500,8 +500,8 @@ RSpec.describe Portage::Cli do
         expect(calls).to be_empty
       end
 
-      it "hands Buy the quoted total and currency as its cap, and reports what it buys" do
-        quote = saved_quote
+      it "hands Buy the quoted total and currency as its cap, plus the quote's store and title" do
+        quote = saved_quote(title: "Cold Brew")
         calls = stub_buys(purchased)
 
         out = json_of { described_class.run(["buy", "--quote", quote["quote_id"], "--yes", "--json"]) }
@@ -509,7 +509,8 @@ RSpec.describe Portage::Cli do
         expect(out[:outcome]).to eq("purchased")
         expect(calls.length).to eq(1)
         expect(calls.first).to include(url: "https://shop.example", product_id: "p1", query: "cold", qty: 2,
-                                       yes: true, quote_total: 2400, quote_currency: "USD")
+                                       yes: true, quote_total: 2400, quote_currency: "USD",
+                                       quote_store: "https://shop.example", quote_title: "Cold Brew")
       end
 
       it "reports Buy's quote_changed refusal with the quote_id, and leaves the quote unspent" do

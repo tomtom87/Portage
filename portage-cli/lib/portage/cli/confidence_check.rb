@@ -22,6 +22,16 @@ module Portage
     # purchase and hands the checkout to the shopper. It never
     # auto-approves anything `--yes` wouldn't already have allowed.
     #
+    # Additive only. Buy runs it after #reconcile_checkout's deterministic
+    # mismatch check, the quote cap and the spend policy, and only on a
+    # checkout all three let through, so a "yes" here can never let
+    # through a purchase one of those would stop. A "no" can only hold it.
+    #
+    # What it sends is ConfidenceState's allowlisted summary, never the
+    # raw checkout: no payment token, no address, no buyer contact
+    # details. #call JSON-encodes whatever state it is given, so a caller
+    # outside Buy has to build its state the same way.
+    #
     # Fails closed. An unknown backend name, a backend that isn't configured
     # (no JEV_API_KEY, no Laya bridge), or a backend call that fails all hold
     # the purchase, the same as a low score does. So does naming a backend
@@ -35,11 +45,18 @@ module Portage
       QUESTION = "safe_to_complete".freeze
       # Phrased so "yes" means "proceed": a noul answer's value is the
       # probability of yes, and that is what ConfidenceGate thresholds.
-      INSTRUCTIONS = "The state is a checkout an agent built on a shopper's behalf: the shopper's search " \
-                     "query, the merchant, the requested quantity, the checkout's line items and totals, and " \
-                     "any warnings about where the checkout differs from the request. Answer yes only if the " \
-                     "checkout clearly matches what the shopper asked for and is safe to complete without a " \
-                     "person reviewing it first.".freeze
+      INSTRUCTIONS = "The state is a summary of a checkout an agent built on a shopper's behalf. `request` " \
+                     "is what the shopper asked for: the search query, the store, the quantity, and the item " \
+                     "picked from the store's search results. `approved_quote`, when present, is the exact " \
+                     "purchase the shopper approved beforehand: store, product, title, quantity, total and " \
+                     "currency. `checkout` is what the store is about to charge for: its line items (`requested` " \
+                     "marks the line that was asked for), totals including any shipping, tax and fees, " \
+                     "discounts and the selected shipping option. `warnings` lists differences an automatic " \
+                     "check already found. Answer yes only if the checkout clearly matches the request and, " \
+                     "when there is one, the approved quote: the same product (not a different model, size, " \
+                     "bundle or subscription), the same quantity, no extra items, and a total with no " \
+                     "surprising shipping, fees or other charges. Answer no if anything is unclear, missing " \
+                     "or doesn't fit, or if the checkout would need a person to review it before paying.".freeze
 
       # @param backend [String, nil] a ModelBackends::REGISTRY key; nil
       #   defers to PORTAGE_DECISION_BACKEND.
@@ -64,7 +81,8 @@ module Portage
 
       def enabled? = !@backend_name.nil?
 
-      # @param state [Hash] JSON-serializable. Never pass it a payment token.
+      # @param state [Hash] JSON-serializable — ConfidenceState.build's
+      #   output. Never a payment token, address or contact detail.
       # @return [Hash, nil] nil when disabled. Otherwise `proceed:`,
       #   `reason:`, `confidence:`, `threshold:`, `backend:` and `error:`.
       #   `reason` is nil when it proceeds, else why it held:

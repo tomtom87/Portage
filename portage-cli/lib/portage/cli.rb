@@ -414,7 +414,8 @@ module Portage
       parsed[:quote_record] = quote
       buy = parsed[:buy]
       buy.merge!(qty: quote["qty"], product_id: quote["product_id"], query: quote["query"].to_s)
-      buy.merge!(quote_total: quote["total"], quote_currency: quote["currency"])
+      buy.merge!(quote_total: quote["total"], quote_currency: quote["currency"], quote_store: quote["store"],
+                 quote_title: quote["title"])
       execute_buy(parsed, quote["store"])
     end
     private_class_method :buy_from_quote
