@@ -2,7 +2,9 @@
   "id": "portage",
   "name": "Portage",
   "description": "Search, compare and buy from online stores through the Portage CLI, with spending policy and per-payment approval enforced by Portage itself.",
-  "categories": ["other"],
+  "categories": [
+    "other"
+  ],
   "contracts": {
     "tools": [
       "portage_doctor",
@@ -17,10 +19,54 @@
       "portage_orders_reconcile",
       "portage_policy_show",
       "portage_payment_list",
-      "portage_browser_profile_status"
+      "portage_browser_profile_status",
+      "portage_pick",
+      "portage_dry_run",
+      "portage_approve",
+      "portage_buy_quote",
+      "portage_handoff",
+      "portage_index_add",
+      "portage_index_remove",
+      "portage_index_build",
+      "portage_index_refresh",
+      "portage_browser_import"
     ]
   },
-  "activation": { "onStartup": true },
+  "toolMetadata": {
+    "portage_pick": {
+      "optional": true
+    },
+    "portage_dry_run": {
+      "optional": true
+    },
+    "portage_approve": {
+      "optional": true
+    },
+    "portage_buy_quote": {
+      "optional": true
+    },
+    "portage_handoff": {
+      "optional": true
+    },
+    "portage_index_add": {
+      "optional": true
+    },
+    "portage_index_remove": {
+      "optional": true
+    },
+    "portage_index_build": {
+      "optional": true
+    },
+    "portage_index_refresh": {
+      "optional": true
+    },
+    "portage_browser_import": {
+      "optional": true
+    }
+  },
+  "activation": {
+    "onStartup": true
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
