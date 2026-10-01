@@ -39,7 +39,9 @@ Install it and ask for what you want:
 /buy a burton snowboard under $600
 ```
 
-For Codex, Cursor, OpenCode and other skills-aware agents, see
+The plugin's read-only [`product-lookup`](skills/product-lookup.md) skill answers price,
+stock, store and order questions without buying, and hands over to `buy` to buy. For
+Codex, Cursor, OpenCode and other skills-aware agents, see
 [Other agents](skills/buy.md#other-agents). If that's all you need, stop here. Read on to
 build the same thing into your own agent.
 

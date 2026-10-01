@@ -117,6 +117,7 @@ plugins:
           - core-gems/portage-ucp-journal.md
         Skills:
           - skills/buy.md
+          - skills/product-lookup.md
           - skills/references/outcomes.md
           - skills/references/handoff-only.md
           - skills/references/raw-ucp.md
@@ -177,6 +178,7 @@ nav:
       - portage-ucp-journal: core-gems/portage-ucp-journal.md
   - Skills:
       - buy (plugin): skills/buy.md
+      - product-lookup (plugin): skills/product-lookup.md
       - "buy: outcomes": skills/references/outcomes.md
       - "buy: hand-off-only retailers": skills/references/handoff-only.md
       - "buy: raw UCP fallback": skills/references/raw-ucp.md

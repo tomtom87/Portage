@@ -74,7 +74,7 @@ A listing in the Claude plugin directory is coming. Until then, this marketplace
 ### Other agents: Codex, Cursor, OpenCode and more
 
 <!-- other-agents-start -->
-The `buy` skill is a plain [`SKILL.md`](https://github.com/tomtom87/Portage/blob/main/plugins/buy/skills/buy/SKILL.md) file, so any agent that loads skills and can run commands on your machine can use it. Install the CLI and run `portage setup` first, as above.
+The `buy` skill is a plain [`SKILL.md`](https://github.com/tomtom87/Portage/blob/main/plugins/buy/skills/buy/SKILL.md) file, so any agent that loads skills and can run commands on your machine can use it. Install the CLI and run `portage setup` first, as above. The plugin carries a second skill, [`product-lookup`](https://github.com/tomtom87/Portage/blob/main/plugins/buy/skills/product-lookup/SKILL.md): read-only, for price, stock, store and order questions with no purchase in mind, and it hands over to `buy` to buy. Install it next to `buy` the same way.
 
 - **With [dotagents](https://github.com/getsentry/dotagents)** (Codex, Cursor, OpenCode): one command installs the plugin into `~/.agents/` and generates each agent's plugin or skill files.
 
@@ -84,18 +84,23 @@ The `buy` skill is a plain [`SKILL.md`](https://github.com/tomtom87/Portage/blob
 
     Refresh it with `npx @sentry/dotagents install`. Remove it with `npx @sentry/dotagents remove buy`. If your `agents.toml` only allows trusted sources, run `npx @sentry/dotagents trust add tomtom87/Portage` first.
 
-- **As a plain skill** (VS Code, or any agent without plugin support): copy the [`plugins/buy/skills/buy/`](https://github.com/tomtom87/Portage/tree/main/plugins/buy/skills/buy) folder, `references/` included, into the agent's skills directory. With dotagents, declare it in `~/.agents/agents.toml` and run `npx @sentry/dotagents install` to get it in `~/.agents/skills/buy`:
+- **As a plain skill** (VS Code, or any agent without plugin support): copy the [`plugins/buy/skills/buy/`](https://github.com/tomtom87/Portage/tree/main/plugins/buy/skills/buy) folder, `references/` included, into the agent's skills directory, and [`plugins/buy/skills/product-lookup/`](https://github.com/tomtom87/Portage/tree/main/plugins/buy/skills/product-lookup) next to it. With dotagents, declare them in `~/.agents/agents.toml` and run `npx @sentry/dotagents install` to get them in `~/.agents/skills/buy` and `~/.agents/skills/product-lookup`:
 
     ```toml
     [[skills]]
     name = "buy"
     source = "tomtom87/Portage"
     path = "plugins/buy/skills/buy"
+
+    [[skills]]
+    name = "product-lookup"
+    source = "tomtom87/Portage"
+    path = "plugins/buy/skills/product-lookup"
     ```
 
-- **OpenClaw.** Install the CLI first (above), then the skill from [ClawHub](https://clawhub.ai/tomtom87/portage-buy): `openclaw skills install @tomtom87/portage-buy` puts it in your active OpenClaw workspace, and `clawhub install @tomtom87/portage-buy` puts it in `./skills` under the current directory ([ClawHub docs](https://docs.openclaw.ai/clawhub)). Then run `portage setup`. The skill's frontmatter carries OpenClaw's `metadata.openclaw` block (needs the `portage` binary, names every env var it reads as optional, brew install spec), so OpenClaw gates the skill until `portage` is installed. To skip ClawHub, use the plain-skill route above: OpenClaw reads personal skills from `~/.agents/skills` and managed ones from `~/.openclaw/skills` ([OpenClaw skills docs](https://docs.openclaw.ai/tools/skills)), so copy or symlink `plugins/buy/skills/buy/` (with `references/`) into either. ClawHub republishes skills under MIT-0; this repo stays MIT.
+- **OpenClaw.** Install the CLI first (above), then the skill from [ClawHub](https://clawhub.ai/tomtom87/portage-buy): `openclaw skills install @tomtom87/portage-buy` puts it in your active OpenClaw workspace, and `clawhub install @tomtom87/portage-buy` puts it in `./skills` under the current directory ([ClawHub docs](https://docs.openclaw.ai/clawhub)). Then run `portage setup`. The skill's frontmatter carries OpenClaw's `metadata.openclaw` block (needs the `portage` binary, names every env var it reads as optional, brew install spec), so OpenClaw gates the skill until `portage` is installed. To skip ClawHub, use the plain-skill route above: OpenClaw reads personal skills from `~/.agents/skills` and managed ones from `~/.openclaw/skills` ([OpenClaw skills docs](https://docs.openclaw.ai/tools/skills)), so copy or symlink `plugins/buy/skills/buy/` (with `references/`) into either. `product-lookup` isn't on ClawHub yet: copy or symlink `plugins/buy/skills/product-lookup/` the same way. Its frontmatter has the same `metadata.openclaw` shape, with only the search and retailer keys it names. ClawHub republishes skills under MIT-0; this repo stays MIT.
 
-- **Omarchy** (Arch Linux). Install the CLI with Omarchy's own helper, `omarchy-mise-install gem:portage-cli portage`, which writes a `~/.local/bin/portage` wrapper the way Omarchy installs `claude`, `codex` and `gh`. Plain [mise](https://mise.jdx.dev/) (`mise use -g gem:portage-cli`) or Homebrew on Linux (`brew install tomtom87/portage/portage`) also work. Then run `portage setup`. A stock Omarchy needs `sudo pacman -S --needed make` first: Ruby 3.4 builds `bigdecimal` natively, `gcc` is already there through `clang`, and only `make` is missing. For the skill, link `plugins/buy/skills/buy/` (with `references/`) into the skills directory of the agent you run. Omarchy's own provisioning links into `~/.agents/skills` (OpenClaw, and the dotagents route), `~/.claude/skills` (Claude Code; the plugin route above is preferred) and `~/.codex/skills`.
+- **Omarchy** (Arch Linux). Install the CLI with Omarchy's own helper, `omarchy-mise-install gem:portage-cli portage`, which writes a `~/.local/bin/portage` wrapper the way Omarchy installs `claude`, `codex` and `gh`. Plain [mise](https://mise.jdx.dev/) (`mise use -g gem:portage-cli`) or Homebrew on Linux (`brew install tomtom87/portage/portage`) also work. Then run `portage setup`. A stock Omarchy needs `sudo pacman -S --needed make` first: Ruby 3.4 builds `bigdecimal` natively, `gcc` is already there through `clang`, and only `make` is missing. For the skills, link `plugins/buy/skills/buy/` (with `references/`) and `plugins/buy/skills/product-lookup/` into the skills directory of the agent you run. Omarchy's own provisioning links into `~/.agents/skills` (OpenClaw, and the dotagents route), `~/.claude/skills` (Claude Code; the plugin route above is preferred) and `~/.codex/skills`.
 
 - **Chat apps in a browser** (ChatGPT, Grok and similar) can't run `portage` on your machine, so they can't use the skill. Use the vendor's coding agent or CLI instead, if it loads skills.
 <!-- other-agents-end -->
@@ -211,7 +216,7 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.9.0 | Shoppers | Claude Code plugin that shops through `portage` | [buy skill](docs/skills/buy.md) |
+| `buy` plugin | 0.9.0 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only product-lookup skill | [buy skill](docs/skills/buy.md), [product-lookup skill](docs/skills/product-lookup.md) |
 | [`portage-cli`](portage-cli/) | 0.11.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
 | [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Shop through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
 | [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
