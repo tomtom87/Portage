@@ -114,7 +114,7 @@ One phase per session, delegated to a Sonnet subagent. Each phase ends with `rak
   - Existing flat offer fields (`title`, `amount`, `currency`, `url`, `product_id`, `store`) stay, so nothing downstream breaks.
   - No new "card" object: the card *is* the UCP product plus the offer's live price.
 - `Find#offer` passes the product through instead of reducing it. Cap `media` at the first image and `variants` at what the store returned. Offer sources (`OfferSources::ShopifyCatalog`, etc.) add the same `product` field where they already hold a UCP product; where they don't, they leave it out rather than faking it.
-- **`index search` results are marked `live: false`.** The skill must re-fetch live (`find --store`, or `buy --dry-run`) before quoting a price or claiming stock.
+- **`index search` results are marked `live: false`.** The skill must re-fetch live (`find --store URL --query ...`, or `buy --dry-run`) before quoting a price or claiming stock.
 - **Skill (`plugins/buy/skills/buy/SKILL.md` and references):** a short section on rendering offers as product cards (image, title, price range, store, key options, link). Use a host UI if one is available, otherwise a compact markdown list. Never show an index price as current. Keep it host-agnostic, with no host-specific UI code.
 - Docs: document the `product` field in the CLI reference and `docs/agentic-flow.md`.
 - **Specs first:**
