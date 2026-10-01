@@ -259,7 +259,7 @@ Most stores don't let a third party complete payment, so most runs end in a hand
 | Price moved | `quote_changed` | Nothing was bought. Show both totals, dry-run again for a new quote and ask again. |
 | Hand-off | `requires_escalation`, `permission_denied`, `no_payment_token`, `express_stop`, `low_confidence` | "Your cart is ready at <store>. Open <checkout_url> to review and pay." Don't retry. |
 | Hand-off only | `handoff_only` | Give `checkout_url` and the legal notice. Never automate the site. |
-| Blocked | `policy_blocked`, `checkout_mismatch` (only when `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is set; otherwise mismatches show up in `warnings`) | Explain why, using `decisions`. Don't work around it. |
+| Blocked | `policy_blocked`, `checkout_mismatch` (any mismatch stops a real run before payment; a `dry_run` flags one with `checkout_mismatch: true`) | Explain why, using `decisions` and `warnings`. Don't work around it. After a mismatch, dry-run again for a new quote and ask again. |
 | Can't buy here | `browse_only`, `no_match`, `dead_end` | Say so, suggest another store. Never scrape. |
 
 The full table, including setup problems, is in the [CLI JSON reference](api/cli-json.md).

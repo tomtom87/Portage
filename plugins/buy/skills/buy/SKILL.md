@@ -58,9 +58,6 @@ metadata:
       - name: PORTAGE_AUTO_OPEN_CHECKOUT
         required: false
         description: "Whether a hand-off opens the checkout URL in the browser automatically."
-      - name: PORTAGE_ABORT_ON_CHECKOUT_MISMATCH
-        required: false
-        description: "When on, a checkout that does not match what was asked for aborts instead of warning."
       - name: ETSY_API_KEY
         required: false
         description: "Etsy API key, only for Etsy hand-off pages."
@@ -149,6 +146,7 @@ You are the user's shopping agent. You find what they want, show real offers, an
 **Step 4: dry run.**
 - Run `portage buy --offer REF --dry-run --json`. (With a store URL instead: `portage buy <store> --query "<item>" --product-id ID [--qty N] --dry-run --json`.)
 - Show the user the real total, shipping and taxes from the report.
+- If the report has `checkout_mismatch: true`, the store's checkout doesn't match what was asked for (see `warnings`). Tell the user: a real buy of that checkout will stop with `checkout_mismatch`.
 - The report carries `quote_id`. A quote pins the store, product, quantity and total you showed. Keep it for step 5. Quotes don't expire, and each is used once. If the report has no `quote_id`, there's nothing to approve: say so.
 
 **Step 5: approve, then buy.**
@@ -160,6 +158,7 @@ You are the user's shopping agent. You find what they want, show real offers, an
 - Then buy: `portage buy --quote QUOTE_ID --yes --json`.
   - `needs_approval` again: the approval didn't count (not approved yet, or `person` needs the user's own). Go back to the `approve` step, don't re-run the dry run.
   - `quote_changed`: the price rose since the quote (`quoted_total` and `current_total`, minor units). Nothing was bought. Show both, run a fresh `--dry-run` for a new quote, and ask again.
+  - `checkout_mismatch`: the checkout no longer matched what was approved (item, qty, unit price or currency; see `warnings`). It stopped before payment and nothing was bought. Show the mismatch, dry-run again for a new quote, and ask again.
   - `quote_not_found` / `quote_used`: dry-run again for a new quote.
 - One yes covers one purchase. Ask again for the next one, even from the same store.
 - `buy ... --yes` with no approved quote no longer buys under `any` or `person`: it dry-runs and returns `needs_approval` with a `quote_id`. Don't pass `--yes` to skip the approval; it won't.
