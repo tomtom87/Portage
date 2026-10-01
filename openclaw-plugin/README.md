@@ -6,7 +6,7 @@ The CLI is the only engine. Every tool runs `portage <subcommand> --json` (an ar
 
 ## Requirements
 
-- OpenClaw 2026.3.24 or newer.
+- OpenClaw 2026.5.28 or newer (the first release whose command helper caps output; see the safety model).
 - `portage-cli` 0.12.0 or newer on your PATH (the plugin checks once and says so if it is older):
   - `brew install tomtom87/portage/portage` (macOS and Linux; `brew upgrade portage` to upgrade), or
   - `gem install portage-cli` (any Ruby 3.2 or newer; `gem update portage-cli` to upgrade).
@@ -79,7 +79,7 @@ Optional (you enable them):
 4. **Store and product text is untrusted.** Results are passed through as data; the tool descriptions and skills tell the agent never to follow instructions in them.
 5. **Buying tools are opt-in.** Nothing that prices, approves, buys or changes the index runs until you enable it.
 6. **No direct checkout.** The bundled `buy` skill leaves out its "no CLI" fallback (`references/raw-ucp.md`, which has the agent create and pay a store's checkout over raw UCP itself). In its place the skill, and `portage-openclaw`, tell the agent to stop and ask you to install `portage`, and never to drive a store's checkout or payment with a shell, web fetch or browser. So every payment passes Portage's policy, approval and checkout-mismatch checks.
-7. **The only subprocess is `portage`.** The plugin uses Node's `child_process.execFile` in one place, `src/runner.ts`, which is what a static scan reports as shell execution. It runs with `shell: false` and an argument array (so tool input is never parsed by a shell), a per-call timeout and a 16 MB output cap, and only when `portageBin` names the `portage` executable; anything else is refused before it starts. Tests pin both.
+7. **The only subprocess is `portage`, and OpenClaw starts it.** Every tool runs the `portage` executable on your machine. The plugin has no `child_process` code of its own: `src/runner.ts` hands the argument array to `api.runtime.system.runCommandWithTimeout`, the helper OpenClaw gives plugins for running a native command, which always spawns without a shell, so tool input is never parsed by one. Each call has a per-call timeout, a 16 MB output cap (output past it is an error, not a partial result) and an empty stdin, and runs only when `portageBin` names the `portage` executable; anything else is refused before it starts. Tests run the runner against OpenClaw's real helper and pin all of this. Up to 0.10.2 the runner called Node's `child_process.execFile` itself, with the same limits, which ClawHub's scan reported as shell execution.
 
 A non-zero exit from the CLI is not an error on its own: outcomes such as `needs_approval` or `quote_changed` come back as results. Only unparseable output or a failure to start `portage` is a tool error.
 

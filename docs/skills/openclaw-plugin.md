@@ -6,7 +6,7 @@ The plugin's own [README](https://github.com/tomtom87/Portage/blob/main/openclaw
 
 ## Install
 
-You need OpenClaw 2026.3.24 or newer and `portage-cli` 0.12.0 or newer on your `PATH`. The plugin checks the CLI version once and says so if it is older.
+You need OpenClaw 2026.5.28 or newer and `portage-cli` 0.12.0 or newer on your `PATH`. The plugin checks the CLI version once and says so if it is older.
 
 ```bash
 brew install tomtom87/portage/portage   # macOS and Linux; brew upgrade portage to upgrade
@@ -45,6 +45,7 @@ The guardrails are the CLI's, and the plugin can't loosen them:
 - `portage_approve` only relays a yes (`relayed_yes: true`) after you approved that exact total in chat.
 - Spending policy, payment enrolment, history clearing and setup are not exposed at all, and the plugin never reads `~/.portage/.env`, `policy.json` or `quotes/`.
 - Store and product text is passed through as untrusted data.
+- The only program the plugin runs is `portage`, and OpenClaw's own command helper starts it: an argument array, never a shell, with a timeout and an output cap.
 
 See [You pick the store and approve the total](buy.md#you-pick-the-store-and-approve-the-total) for the flow, and the [security model](https://github.com/tomtom87/Portage/blob/main/openclaw-plugin/README.md#safety-model) in the plugin README for the pinned guardrails.
 
