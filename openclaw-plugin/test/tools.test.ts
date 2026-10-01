@@ -7,15 +7,20 @@ const tool = (n: string) => allTools.find((t) => t.name === n)!;
 const args = (n: string, p: Record<string, unknown> = {}) => tool(n).buildArgs(p);
 
 describe("argument building", () => {
-  it("covers exactly the phase 1 tools, none optional", () => {
-    expect(allTools.map((t) => t.name).sort()).toEqual(
-      [
-        "portage_doctor", "portage_find", "portage_find_store", "portage_check", "portage_compare",
-        "portage_index_search", "portage_index_show", "portage_index_sources", "portage_history",
-        "portage_orders_reconcile", "portage_policy_show", "portage_payment_list", "portage_browser_profile_status",
-      ].sort(),
-    );
-    expect(allTools.every((t) => !t.optional)).toBe(true);
+  it("covers exactly the 13 read-only tools (on by default) and the 10 optional ones", () => {
+    const readonly = [
+      "portage_doctor", "portage_find", "portage_find_store", "portage_check", "portage_compare",
+      "portage_index_search", "portage_index_show", "portage_index_sources", "portage_history",
+      "portage_orders_reconcile", "portage_policy_show", "portage_payment_list", "portage_browser_profile_status",
+    ];
+    const optional = [
+      "portage_pick", "portage_dry_run", "portage_approve", "portage_buy_quote", "portage_handoff",
+      "portage_index_add", "portage_index_remove", "portage_index_build", "portage_index_refresh",
+      "portage_browser_import",
+    ];
+    expect(allTools).toHaveLength(23);
+    expect(allTools.filter((t) => !t.optional).map((t) => t.name).sort()).toEqual([...readonly].sort());
+    expect(allTools.filter((t) => t.optional).map((t) => t.name).sort()).toEqual([...optional].sort());
   });
 
   it("builds each command", () => {
@@ -108,7 +113,7 @@ describe("flag injection", () => {
 
   it("no tool can emit buying or credential flags for benign input", () => {
     const forbidden = ["--yes", "--relayed-yes", "--payment-token", "--via", "--decision-backend", "--min-confidence", "--proxy"];
-    for (const t of allTools) {
+    for (const t of allTools.filter((t) => !t.optional)) {
       const a = t.buildArgs(base[t.name] ?? {});
       for (const f of forbidden) expect(a).not.toContain(f);
       expect(["policy", "payment", "history", "browser", "index", "orders", "doctor", "find", "check", "compare"]).toContain(a[0]);
