@@ -225,17 +225,17 @@ Only `purchased` means the order was placed.
 | `dry_run` | Checkout priced, `--dry-run` stopped it. Nothing charged. | no |
 | `needs_confirmation` | Checkout ready, `--yes` was not passed. | no |
 | `needs_approval` | A real `--yes` run had no quote approved enough for [`require_approval`](#policy-set-require-approval). Nothing was bought or handed off. See [needs_approval](#needs_approval). | no |
-| `quote_changed` | `--quote` run: the real checkout costs more than the quote (or is in another currency, or has no total). Nothing was bought or handed off, and the quote stays usable. | no |
+| `quote_changed` | `--quote` run: the real checkout costs more than the quote (or is in another currency, or has no total, or the quote itself has none). Nothing was bought or handed off, and the quote stays usable. | no |
 | `offer_not_found` | `--offer REF` isn't a saved offer. | no |
 | `quote_not_found` | `--quote` names no saved quote. | no |
 | `quote_used` | The quote was already bought or handed off. | no |
 | `express_stop` | WebMCP cart and checkout built. The store's own express-pay button finishes it. | yes |
 | `requires_escalation` | The store needs a human step (verification, terms, 3-D Secure). | yes |
-| `checkout_mismatch` | Checkout does not match the request: item, quantity, unit price or currency. Stopped before payment on every run but `--dry-run`. Nothing was bought. On a WebMCP preset that hands off through its own tool (Shopify's `proceed_to_checkout`), the cart is checked instead: the run stops before that tool and before autofill, and `checkout_url` is the store's `/cart` page. | yes |
+| `checkout_mismatch` | Checkout does not match the request: item, quantity, unit price, currency, or a priced line the request didn't include (a free extra line is allowed). Stopped before payment on every run but `--dry-run`. Nothing was bought. On a WebMCP preset that hands off through its own tool (Shopify's `proceed_to_checkout`), the cart is checked instead: the run stops before that tool and before autofill, and `checkout_url` is the store's `/cart` page. | yes |
 | `no_payment_token` | No `--payment-token` and no default payment method. | yes |
 | `permission_denied` | The store does not let this agent complete payment. | yes |
 | `policy_blocked` | Your spend policy denied it. `decisions.policy.reason` says why. | yes |
-| `low_confidence` | The confidence gate held it. | yes |
+| `low_confidence` | The confidence gate held it. On a WebMCP preset that hands off through its own tool, the hold comes before that tool and before autofill, and `checkout_url` is the store's `/cart` page. | yes |
 | `handoff_only` | Hand-off-only retailer (Amazon by default, plus Walmart, eBay, Best Buy, Etsy for buyers). No automation was attempted. | yes (built, never fetched) |
 | `store_refused` | The store refused a cart or checkout call (for example sold out). | when the store gave one |
 | `browse_only` | Catalog only, no UCP checkout. | when an adapter gives a link |
@@ -255,6 +255,10 @@ Only `purchased` means the order was placed.
 Before any of the gates below, a real `--yes` run without an approved `--quote` is turned into a dry run and reported as `needs_approval` (unless `require_approval` is `off`). The quote's total is also a cap: `quote_changed` comes before every gate below.
 
 The gates run in this order, and only on a real `--yes` run: escalation, then policy, then confidence. A `--dry-run` or a run without `--yes` only runs the escalation check, so `policy_blocked` and `low_confidence` cannot appear there.
+
+The exception is a WebMCP preset that hands off through its own tool (Shopify's `proceed_to_checkout`). It never completes a payment, so it has no policy gate, but before that tool runs it applies the quote cap, then the mismatch check, then the confidence check, `--yes` or not.
+
+The confidence check is additive only: it runs on a checkout the earlier gates let through, so it can hold a purchase but never let through one they stop.
 
 ### decisions
 
@@ -277,9 +281,20 @@ The gates run in this order, and only on a real `--yes` run: escalation, then po
 
 `total_unknown` means a spend cap exists and the checkout had no total. The policy check applies to native-UCP stores, WebMCP and adapter checkouts alike.
 
-The `confidence` verdict also holds the purchase when the backend cannot answer (`not_installed`, `backend_error`). The default threshold is `0.8`.
+The `confidence` verdict also holds the purchase when the backend cannot answer, or answers with something that isn't a probability between 0 and 1 (`not_installed`, `backend_error`). The default threshold is `0.8`.
 
-Source: `cli/decisions.rb`, `cli/confidence_check.rb`, `portage-ucp/lib/portage/ucp/policy_guard.rb`, `portage-ucp/lib/portage/ucp/support/escalation.rb`
+What the backend is sent (`cli/confidence_state.rb`, an allowlist; nothing else on the checkout is read):
+
+| Key | Fields |
+|---|---|
+| `request` | `query`, `merchant` (the store's host), `quantity`, `item_id`, `item_title` (the picked product's title, plus its variant's). |
+| `approved_quote` | `--quote` runs only: `store`, `product_id`, `title`, `quantity`, `total`, `currency`. |
+| `checkout` | `status`, `currency`; `line_items[]` with `item_id`, `title`, `unit_price`, `quantity`, `totals[]` (`type`, `amount`) and `requested` (bool); `totals[]` (`type`, `amount`); `discounts[]` (`title`, `amount`); `shipping[]` (the selected option's `title` and `amount`). |
+| `warnings` | The mismatch check's warnings. |
+
+Never sent: the payment token, the shipping address, the buyer's name, phone or email, checkout ids, links and URLs, discount codes, or environment values. Store-supplied strings are cut to 200 characters, and nested objects where a scalar belongs are dropped.
+
+Source: `cli/decisions.rb`, `cli/confidence_check.rb`, `cli/confidence_state.rb`, `portage-ucp/lib/portage/ucp/policy_guard.rb`, `portage-ucp/lib/portage/ucp/support/escalation.rb`
 
 ### handoff object
 
@@ -397,7 +412,7 @@ Returned by `buy` when a real run (`--yes`, no `--dry-run`) isn't approved enoug
 
 ### quotes
 
-A `--dry-run` that priced a checkout saves a quote to `~/.portage/quotes/QUOTE_ID.json` and reports its `quote_id` (`qt_` and 12 hex digits). `buy --quote QUOTE_ID --yes` buys exactly it: the real run is capped at the quoted total and currency, and refuses with `quote_changed` if the checkout costs more. Quotes never expire. Each is used once: it is spent by a `purchased` outcome or any hand-off. A `quote_changed`, `needs_approval` or error leaves it usable.
+A `--dry-run` that priced a checkout saves a quote to `~/.portage/quotes/QUOTE_ID.json` and reports its `quote_id` (`qt_` and 12 hex digits). `buy --quote QUOTE_ID --yes` buys exactly it: the real run is capped at the quoted total and currency, and refuses with `quote_changed` if the checkout costs more. A quote saved without a total (a WebMCP preset dry run has none) caps nothing, so its run always refuses with `quote_changed`. Quotes never expire. Each is used once: it is spent by a `purchased` outcome or any hand-off. A `quote_changed`, `needs_approval` or error leaves it usable.
 
 The file's fields (the format is private and may change): `quote_id`, `offer_ref`, `store`, `product_id`, `query`, `qty`, `total`, `currency`, `title`, `url`, `created_at`, `approved` (boolean), and, once approved, `approved_by` (`person` or `agent_relayed`) and `approved_at`; and `used_at` once spent. A relayed yes never downgrades a quote the person already approved.
 

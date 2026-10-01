@@ -15,8 +15,10 @@ rules live in `portage-ucp` core (`Support::OfferRanking`,
 the CLI answers the same way with or without the gem. Only the confidence
 gate needs the gem. `Find#rank` ranks through core. `Buy` decides escalation
 through core, checks the buyer's policy with `PolicyGuard` before every
-`--yes` completion, and runs `ConfidenceGate` in front of that completion
-when a backend is named (`Cli::ConfidenceCheck`). Every checkout report
+`--yes` completion, and runs `ConfidenceGate` in front of that completion,
+and in front of a WebMCP preset hand-off to checkout, when a backend is
+named (`Cli::ConfidenceCheck`, sent `Cli::ConfidenceState`'s allowlisted
+summary). Every checkout report
 carries the verdicts under `decisions:`. The agent loop's instructions (`skills/shop-via-ucp/SKILL.md`) call the same four decisions for raw
 `portage-ucp-client` sessions and branch on `decisions:` when they shell out
 to `portage buy --json`. `Buy` still owns the delivery side (`CheckoutHandoff`,
@@ -131,6 +133,20 @@ shape.
   `Confirmer` is unchanged. A "confirm only when confidence is low" mode
   stays out of scope, because it would turn the gate into an auto-approve
   path (`docs/plans/agentic-payments.md` open decision 3).
+- ~~What the gate compares against, what it sends, and where else it
+  runs~~ **Resolved (ClawHub security audit follow-up):** the deterministic
+  `reconcile_checkout` mismatch check stays authoritative and runs first
+  (it now also stops on any priced line the request didn't include); the
+  model gate is additive and only sees a checkout that check, the quote cap
+  and the spend policy let through. On a `buy --quote` run its state
+  carries the approved quote (store, product id, title, quantity, total,
+  currency) and the question asks whether the checkout matches that as
+  well as the request. The state is an allowlisted summary
+  (`Cli::ConfidenceState`): never the payment token, the address or the
+  buyer's contact details. The gate also runs in the WebMCP preset
+  hand-off flow, before the browser is sent to checkout and before
+  autofill. `ConfidenceGate.via_backend` rejects a noul value outside 0..1
+  as a `BackendError`, so a malformed reply holds instead of passing.
 - The policy check in `portage buy` closes a real gap: `Dispatcher`'s
   `PolicyGuard` runs only in-process, so a remote native-UCP store never
   saw the buyer's policy at all. The rolling cap and velocity limit read
