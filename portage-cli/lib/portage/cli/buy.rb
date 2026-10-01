@@ -1088,11 +1088,15 @@ module Portage
       # quote and open a checkout the person never approved. #complete is
       # the only place this file charges, and it is reached only through
       # #finish_checkout.
+      #
+      # A quote with no total (its dry run had none to show, as a WebMCP
+      # preset dry run never does) caps nothing, so it refuses too, rather
+      # than buying at whatever the store now asks.
       def quote_exceeded?(checkout)
-        return false unless @quote_total
+        return false unless quote_run?
 
         total = checkout_total(checkout)
-        total.nil? || total > @quote_total || checkout["currency"] != @quote_currency
+        @quote_total.nil? || total.nil? || total > @quote_total || checkout["currency"] != @quote_currency
       end
 
       def quote_changed_report(source, products, checkout, warnings)
@@ -1104,6 +1108,11 @@ module Portage
       end
 
       def quote_changed_message(total, currency)
+        if @quote_total.nil?
+          return "The quote has no total to hold this checkout (now #{quoted_amount(total, currency)}) to — " \
+                 "nothing was bought. Dry-run again for a priced quote."
+        end
+
         "The price changed since the quote (was #{quoted_amount(@quote_total, @quote_currency)}, " \
           "now #{quoted_amount(total, currency)}) — nothing was bought."
       end
