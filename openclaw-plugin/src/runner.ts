@@ -57,7 +57,7 @@ function describeFailure(bin: string, o: ExecOutcome, timeoutMs: number): string
     return `portage timed out after ${Math.round(timeoutMs / 1000)}s`;
   }
   if (typeof e.code === "string") {
-    if (e.code === "ENOENT") return `could not run "${bin}": not found. Install portage-cli (gem install portage-cli) or set portageBin in the plugin config.`;
+    if (e.code === "ENOENT") return `could not run "${bin}": not found. Install portage-cli (brew install tomtom87/portage/portage, or gem install portage-cli) or set portageBin in the plugin config.`;
     if (e.code === "EACCES") return `could not run "${bin}": permission denied`;
     return `could not run "${bin}": ${e.code}`;
   }
@@ -75,7 +75,7 @@ export function createRunner(config: { portageBin: string; timeoutSeconds: numbe
     const v = parseVersion(o.stdout);
     if (!v) return `could not read the portage version from "${bin} --version"; need portage-cli ${MIN_CLI_VERSION} or newer`;
     if (!versionAtLeast(v, MIN_CLI_VERSION)) {
-      return `portage-cli ${v.join(".")} is too old; this plugin needs ${MIN_CLI_VERSION} or newer. Upgrade with: gem update portage-cli`;
+      return `portage-cli ${v.join(".")} is too old; this plugin needs ${MIN_CLI_VERSION} or newer. Upgrade with: brew upgrade portage (or gem update portage-cli)`;
     }
     return null;
   }
