@@ -517,8 +517,9 @@ module Portage
       # call it against. Builds a cart, reads it back through the (already
       # cart/checkout-capable, per the gate in #webmcp_flow) session so
       # #reconcile_checkout has a `get_cart`-shaped document to check against
-      # (there's no checkout document either), stops there on any mismatch
-      # (#webmcp_cart_mismatch_report), and only then calls the preset's
+      # (there's no checkout document either), stops there if the quote cap,
+      # the mismatch check or the opt-in confidence check holds it
+      # (#webmcp_cart_held_report), and only then calls the preset's
       # `handoff_checkout` tool directly on the bridge — after the cart
       # read-back, not before, so any post-mutation "page not ready" gap
       # (see Transport's own retry) has already been waited out by then.
@@ -544,14 +545,43 @@ module Portage
         end
         return webmcp_handoff_dry_run_report(products, product, preset) if @dry_run
 
+        @product = product
         cart = webmcp_build_cart(session, product)
-        warnings = reconcile_checkout(product, cart)
-        return webmcp_cart_mismatch_report(products, cart, warnings) if warnings.any?
+        held = webmcp_cart_held_report(products, product, cart)
+        return held if held
 
         result = @webmcp_bridge.execute_tool(preset.handoff_checkout, {})
         autofill = attempt_webmcp_autofill(preset)
-        webmcp_handoff_report("webmcp", products, cart.merge("continue_url" => url_from_handoff(result)), warnings,
+        webmcp_handoff_report("webmcp", products, cart.merge("continue_url" => url_from_handoff(result)), [],
                               autofill: autofill)
+      end
+
+      # The same gates #finish_checkout runs before anything leaves this
+      # process, in the same order, all before the hand-off tool sends the
+      # tab to checkout and before anything is autofilled: the quote cap,
+      # then the deterministic mismatch stop, then (only when a decision
+      # backend is enabled) the confidence check. The confidence check only
+      # sees a cart the first two let through, so it can hold this hand-off
+      # but never let through one they stop.
+      # @return [Hash, nil] the report for the first gate that held, or nil.
+      def webmcp_cart_held_report(products, product, cart)
+        warnings = reconcile_checkout(product, cart)
+        return quote_changed_report("webmcp", products, cart, warnings) if quote_exceeded?(cart)
+        return webmcp_cart_mismatch_report(products, cart, warnings) if warnings.any?
+
+        webmcp_low_confidence_report(products, cart)
+      end
+
+      # A hold here points at the store's cart page, like the mismatch stop:
+      # checkout was never opened, so there's nothing at a checkout URL yet.
+      def webmcp_low_confidence_report(products, cart)
+        verdict = decide_confidence(cart, [])
+        return nil if verdict.nil? || verdict[:proceed]
+
+        handoff_report("webmcp", products, cart.merge("continue_url" => webmcp_cart_page_url), [],
+                       outcome: "low_confidence",
+                       message: "#{low_confidence_message(verdict)} Checkout wasn't opened, and nothing was " \
+                                "autofilled.")
       end
 
       # Adds the line to the store's cart, then reads the cart back.

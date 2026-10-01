@@ -34,6 +34,21 @@ RSpec.describe Portage::Cli::Buy do
     )
   end
 
+  # Stands in for a Decision::ModelBackends backend: answers the one noul
+  # question ConfidenceCheck asks with a fixed yes-probability.
+  def confidence_check(noul: nil, error: nil, threshold: 0.8, sent: [])
+    backend = Object.new
+    backend.define_singleton_method(:ask) do |questions:, state:|
+      sent << state
+      raise error if error
+
+      questions.transform_values do
+        Portage::Ucp::Decision::ModelBackends::Answer.new(type: "noul", confidence: nil, value: noul)
+      end
+    end
+    Portage::Cli::ConfidenceCheck.new(backend: "fake", threshold: threshold, resolver: ->(_name) { backend })
+  end
+
   describe "which URL a dead-end checkout hands the shopper" do
     def report_for(checkout)
       session = instance_double(
@@ -688,21 +703,6 @@ RSpec.describe Portage::Cli::Buy do
 
     def policy(data)
       allow(Portage::Ucp::Policy).to receive(:load).and_return(Portage::Ucp::Policy.new(data: data))
-    end
-
-    # Stands in for a Decision::ModelBackends backend: answers the one noul
-    # question ConfidenceCheck asks with a fixed yes-probability.
-    def confidence_check(noul: nil, error: nil, threshold: 0.8, sent: [])
-      backend = Object.new
-      backend.define_singleton_method(:ask) do |questions:, state:|
-        sent << state
-        raise error if error
-
-        questions.transform_values do
-          Portage::Ucp::Decision::ModelBackends::Answer.new(type: "noul", confidence: nil, value: noul)
-        end
-      end
-      Portage::Cli::ConfidenceCheck.new(backend: "fake", threshold: threshold, resolver: ->(_name) { backend })
     end
 
     it "records a passing escalation and policy verdict on a completed purchase" do
@@ -1481,6 +1481,79 @@ RSpec.describe Portage::Cli::Buy do
         end
       end
 
+      context "with a decision backend enabled" do
+        def run_with(check, cart: webmcp_cart, **options)
+          stub_no_native_manifest
+          page = shopify_shaped_page(cart: cart, handoff_result: { "url" => "https://shop.example/checkouts/c1" })
+          allow(page).to receive(:execute_tool).and_call_original
+          report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page,
+                                       confidence_check: check, **options).call
+          [report, page]
+        end
+
+        it "holds with low_confidence at the cart page, never calling the hand-off tool" do
+          report, page = run_with(confidence_check(noul: 0.2))
+
+          expect(report[:outcome]).to eq("low_confidence")
+          expect(report[:checkout_url]).to eq("https://shop.example/cart")
+          expect(report[:message]).to include("below the 0.8 threshold", "Checkout wasn't opened")
+          expect(report[:decisions][:confidence]).to include(proceed: false, reason: "below_threshold")
+          expect(page).not_to have_received(:execute_tool).with("proceed_to_checkout", anything)
+        end
+
+        it "holds the same way when the backend can't answer" do
+          error = Portage::Ucp::Decision::BackendError.new("Jev request failed: 503")
+          report, page = run_with(confidence_check(error: error))
+
+          expect(report[:outcome]).to eq("low_confidence")
+          expect(report[:decisions][:confidence]).to include(reason: "backend_error")
+          expect(page).not_to have_received(:execute_tool).with("proceed_to_checkout", anything)
+        end
+
+        it "hands off as usual once the check clears, having sent the cart summary" do
+          sent = []
+          report, page = run_with(confidence_check(noul: 0.95, sent: sent))
+
+          expect(report[:outcome]).to eq("express_stop")
+          expect(page).to have_received(:execute_tool).with("proceed_to_checkout", anything)
+          expect(JSON.parse(sent.first)["checkout"]["line_items"])
+            .to eq([{ "item_id" => "p1", "title" => nil, "unit_price" => 500, "quantity" => 1,
+                      "totals" => [], "requested" => true }])
+        end
+
+        it "never asks about a cart the deterministic check already stopped" do
+          sent = []
+          cart = webmcp_cart.merge("line_items" => [{ "item" => { "id" => "p1", "price" => 500 }, "quantity" => 3 }])
+          report, = run_with(confidence_check(noul: 0.99, sent: sent), cart: cart)
+
+          expect(report[:outcome]).to eq("checkout_mismatch")
+          expect(sent).to be_empty
+        end
+
+        it "asks nothing when no backend is named" do
+          check = Portage::Cli::ConfidenceCheck.new
+          allow(check).to receive(:call).and_call_original
+          report, = run_with(check)
+
+          expect(report[:outcome]).to eq("express_stop")
+          expect(check).not_to have_received(:call)
+        end
+      end
+
+      # The hand-off flow never ran the quote cap: a `buy --quote` against
+      # this page sent the tab to checkout whatever the cart now cost.
+      it "refuses a --quote run with quote_changed before checkout when the cart costs more than the quote" do
+        stub_no_native_manifest
+        page = shopify_shaped_page(cart: webmcp_cart, handoff_result: { "url" => "https://shop.example/checkouts/c1" })
+        allow(page).to receive(:execute_tool).and_call_original
+
+        report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, quote_total: 400,
+                                     quote_currency: "USD", quote_store: "https://shop.example").call
+
+        expect(report).to include(outcome: "quote_changed", handoff: nil)
+        expect(page).not_to have_received(:execute_tool).with("proceed_to_checkout", anything)
+      end
+
       it "never auto-opens or notifies on a dry run" do
         stub_no_native_manifest
         page = shopify_shaped_page(cart: webmcp_cart, handoff_result: {},
@@ -1767,6 +1840,41 @@ RSpec.describe Portage::Cli::Buy do
           expect(report).not_to have_key(:autofill)
           expect(report[:warnings]).to include("Store dropped the requested item (p1) from checkout.")
         end
+      end
+
+      it "never asks to autofill or types into the page when the confidence check holds the cart" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(headless: false, autofill_result: nil)
+        expect(page).not_to receive(:autofill)
+        confirm = instance_double(Portage::Cli::WebmcpAutofillConfirm)
+        expect(confirm).not_to receive(:call)
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: confirm, confidence_check: confidence_check(noul: 0.1)).call
+        end
+
+        expect(report[:outcome]).to eq("low_confidence")
+        expect(report).not_to have_key(:autofill)
+        expect(report[:message]).to include("nothing was autofilled")
+      end
+
+      it "never sends the autofill address or email to the decision backend" do
+        stub_no_native_manifest
+        page = shopify_shaped_page_with_autofill(
+          headless: false, autofill_result: { "blocked" => nil, "filled" => ["email"], "unmatched" => [], "rate" => [] }
+        )
+        sent = []
+
+        report = with_env(ship_env) do
+          described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                              webmcp_autofill_confirm: approving_confirm,
+                              confidence_check: confidence_check(noul: 0.95, sent: sent)).call
+        end
+
+        expect(report[:autofill][:outcome]).to eq("autofill_filled")
+        expect(sent.length).to eq(1)
+        expect(sent.first).not_to include("1 Main St", "Erie", "16501", "buyer@example.com")
       end
 
       it "never prompts or types into the page on a dry run, only reporting that autofill would run" do
