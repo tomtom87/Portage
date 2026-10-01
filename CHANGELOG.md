@@ -41,6 +41,20 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   `docs/skills/product-lookup.md`, the README's install routes, `docs/skills/buy.md`,
   `docs/agentic-flow.md` and the plugin and marketplace descriptions. Not on ClawHub yet.
 
+- **`shop-via-ucp` is for buying, and a new read-only `browse-via-ucp` is for looking.** ClawHub's
+  scan of `buy` flagged broad triggers, and `shop-via-ucp`'s ("find and/or buy something from an
+  online store") had the same problem. Its description now covers completing a purchase on the
+  user's behalf and points lookups to `browse-via-ucp`. It keeps its three guardrails and gains a
+  fourth: never pay for a checkout whose items, quantities, unit prices, currency or total differ
+  from what the user approved; stop and ask again with a fresh checkout. The new
+  `skills/browse-via-ucp/` reads a store's manifest, searches its catalog and says whether it
+  supports automated buying, calls only read-only tools, never creates, updates or completes a
+  cart or checkout, and hands over to `shop-via-ucp` to buy. The `buy` skill's
+  `references/raw-ucp.md` gets the same mismatch guardrail. New
+  `portage-cli/spec/packaging/ucp_skills_frontmatter_spec.rb` parses every `skills/*/SKILL.md`
+  frontmatter and checks the split. Listed in `mkdocs.yml`, a new `docs/skills/browse-via-ucp.md`,
+  `docs/ai-agents.md`, `docs/agentic-flow.md`, `docs/index.md`, the README and `CONTRIBUTING.md`.
+
 ## [0.14.0] - 2026-10-01
 
 - **Release set:** `portage-cli` 0.11.0 (the SQLite local index, `portage index build --sources storefront_products` to crawl a store's products, `portage index search`, the UCP `product` field on offers, and the whole-taxonomy category classifier) and `buy` plugin 0.9.0 (product cards, and the OpenClaw metadata with `version` in the skill frontmatter, kept equal to `plugin.json`). `portage-cli` gains a `sqlite3` `~> 2.9` dependency and keeps `portage-ucp` `~> 0.11`. The skill's minimum `portage-cli` stays 0.9.0, because it only uses `index` and the `product` field when they are there. No other gem changed, so the docs-only notes in `portage-ucp-client` and `portage-ucp-webmcp` stay unreleased. The ClawHub listing is published separately, at `buy` 0.9.0.
