@@ -423,4 +423,98 @@ RSpec.describe Portage::Cli::Find do
       expect(report[:stores].first[:handoff_only]).to be false
     end
   end
+
+  describe "store: (one store, live)" do
+    let(:other_product) { product.merge("id" => "p2", "title" => "Cold Brew Can") }
+
+    # Backends and offer sources that must never be consulted.
+    def forbidden_backend
+      double = Object.new
+      allow(double).to receive(:name).and_return("never")
+      expect(double).not_to receive(:search)
+      double
+    end
+
+    def forbidden_source
+      double = Object.new
+      expect(double).not_to receive(:offers)
+      double
+    end
+
+    def scoped(**overrides)
+      described_class.new(query: "cold brew", cache: cache, throttle: 0, backends: [forbidden_backend],
+                          offer_sources: [forbidden_source], store: "https://shop.example/products/x?y=1",
+                          **overrides)
+    end
+
+    it "searches only that store's catalogue, with the usual offer shape and offer_ref" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [product, other_product]))
+
+      report = scoped.call
+
+      expect(Portage::Ucp::Client).to have_received(:discover).with("https://shop.example", anything).once
+      expect(report[:candidates]).to eq([{ origin: "https://shop.example", source: "store", handoff_only: false }])
+      expect(report[:offers].map { |o| o[:store] }.uniq).to eq(["https://shop.example"])
+      expect(report[:offers].map { |o| o[:product_id] }).to eq(%w[p1 p2])
+      expect(report[:offers]).to all(include(offer_ref: match(/\Aof_[0-9a-f]{6}\z/), amount: 2400, checkout: true))
+      expect(report[:message]).to eq("Found 2 offer(s) at https://shop.example.")
+    end
+
+    it "accepts a bare host and applies --max-price" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: [product]))
+
+      report = scoped(store: "shop.example", max_price: 1000).call
+
+      expect(report[:offers]).to be_empty
+      expect(Portage::Ucp::Client).to have_received(:discover).with("https://shop.example", anything)
+    end
+
+    it "never fetches a hand-off-only store and says so" do
+      Portage::Cli::Config.load.set("handoff_only_hosts", ["amazon.co.uk"])
+      allow(Portage::Ucp::Client).to receive(:discover)
+
+      report = scoped(store: "https://www.amazon.co.uk/dp/B0").call
+
+      expect(Portage::Ucp::Client).not_to have_received(:discover)
+      expect(report[:offers]).to be_empty
+      expect(report[:stores]).to eq([{ origin: "https://www.amazon.co.uk", source: "store", checkout: false,
+                                       handoff_only: true }])
+      expect(report[:message]).to include("hand-off-only", "never fetches")
+    end
+
+    it "reports plainly that a store without UCP has no catalogue" do
+      allow(Portage::Ucp::Client).to receive(:discover)
+        .and_raise(Portage::Ucp::Client::DiscoveryError.new("nope"))
+
+      report = scoped.call
+
+      expect(report[:offers]).to be_empty
+      expect(report[:message]).to eq("https://shop.example doesn't speak UCP, so there is no catalogue to search.")
+    end
+
+    it "reports a UCP store with nothing matching" do
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session(products: []))
+
+      expect(scoped.call[:message]).to include("speaks UCP but has nothing matching")
+    end
+
+    it "treats an unusable store as no candidate rather than falling back to search" do
+      report = scoped(store: "ftp://shop.example").call
+
+      expect(report[:candidates]).to be_empty
+      expect(report[:message]).to include("isn't an http(s) store URL")
+    end
+
+    describe ".store_origin" do
+      it "collapses onto the origin and rejects other schemes" do
+        expect(described_class.store_origin("https://Shop.Example:8443/a?b")).to eq("https://shop.example:8443")
+        expect(described_class.store_origin("http://shop.example/")).to eq("http://shop.example")
+        expect(described_class.store_origin("shop.example")).to eq("https://shop.example")
+        expect(described_class.store_origin("ftp://shop.example")).to be_nil
+        expect(described_class.store_origin("file:///etc/passwd")).to be_nil
+        expect(described_class.store_origin("  ")).to be_nil
+        expect(described_class.store_origin("https://")).to be_nil
+      end
+    end
+  end
 end

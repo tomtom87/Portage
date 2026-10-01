@@ -266,6 +266,55 @@ RSpec.describe Portage::Cli do
 
       expect(captured.call).to include(query: "cold", max_price: 2450, limit: 3)
     end
+
+    it "passes --store through to Find" do
+      captured = stub_find(found)
+
+      capture_stdout { described_class.run(["find", "--store", "https://shop.example", "--query", "cold"]) }
+
+      expect(captured.call).to include(query: "cold", store: "https://shop.example")
+    end
+
+    it "leaves store out when --store isn't given" do
+      captured = stub_find(found)
+
+      capture_stdout { described_class.run(["find", "--query", "cold"]) }
+
+      expect(captured.call).not_to have_key(:store)
+    end
+
+    it "rejects a non-http(s) --store without searching" do
+      captured = stub_find(found)
+
+      expect { expect(described_class.run(["find", "--store", "ftp://shop.example", "--query", "cold"])).to eq(1) }
+        .to output(/--store needs an http\(s\) store URL/).to_stderr
+      expect(captured.call).to be_nil
+    end
+
+    it "still requires --query with --store" do
+      stub_find(found)
+
+      expect { expect(described_class.run(["find", "--store", "https://shop.example"])).to eq(1) }.to output.to_stderr
+    end
+
+    it "saves a store-scoped search whose offer refs resolve for pick and buy --offer" do
+      allow(Portage::Cli::History).to receive(:new).and_call_original
+      product = { "id" => "p1", "title" => "Cold Brew", "url" => "https://shop.example/p1",
+                  "price_range" => { "min" => { "amount" => 2400, "currency" => "USD" } } }
+      session = instance_double(Portage::Ucp::Client::Session, advertises?: true,
+                                                               search_catalog: { "ucp" => 1, "products" => [product] })
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      argv = %w[find --store https://shop.example/x --query cold --json]
+      out = JSON.parse(capture_stdout { described_class.run(argv) }, symbolize_names: true)
+
+      ref = out[:offers].first[:offer_ref]
+      expect(out[:search_id]).to match(/\Ase_/)
+      expect(Portage::Cli::History.new.offer(ref)).to include("store" => "https://shop.example", "product_id" => "p1")
+      picked = Portage::Cli::Pick.new(history: Portage::Cli::History.new, search: out[:search_id],
+                                      prompt: Portage::Cli::HumanPrompt.new(via: "agent")).call
+      expect(picked[:choices].first).to include(ref: ref, store: "https://shop.example")
+    end
   end
 
   describe "buy without a url" do

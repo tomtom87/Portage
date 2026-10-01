@@ -55,6 +55,7 @@ module Portage
              portage buy --quote QUOTE_ID --yes [--json] ...
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
+             portage find --store URL --query "..." [--max-price N] [--json]  (one store, live, read-only)
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                                     [--max-price N] [--json]
              portage check <url> [--json]
@@ -188,14 +189,27 @@ module Portage
         return nil
       end
 
-      opts
+      valid_find_store?(opts) ? opts : nil
     end
     private_class_method :parse_find_options
+
+    # `--store` must be an http(s) URL (a bare host is read as https); anything
+    # else is a usage error rather than a silent no-op search.
+    def self.valid_find_store?(opts)
+      return true unless opts.key?(:store)
+      return true if Find.store_origin(opts[:store])
+
+      warn "portage: --store needs an http(s) store URL, got #{opts[:store].inspect}."
+      warn USAGE
+      false
+    end
+    private_class_method :valid_find_store?
 
     def self.find_option_parser(opts)
       opts[:proxy] = {}
       OptionParser.new do |parser|
         parser.on("--query QUERY") { |v| opts[:query] = v }
+        parser.on("--store URL") { |v| opts[:store] = v }
         parser.on("--limit N", Integer) { |v| opts[:limit] = v }
         parser.on("--max-price N", Float) { |v| opts[:max_price] = to_minor_units(v) }
         parser.on("--json") { opts[:json] = true }
