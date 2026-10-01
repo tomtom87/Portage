@@ -9,6 +9,20 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Security: the `buy` skill no longer describes a fail-open checkout mismatch.** Follows
+  `portage-cli`'s change (see its changelog): any checkout mismatch now stops a real purchase
+  before payment, with no setting to turn that off. `references/outcomes.md`, the skill's
+  dry-run and buy steps, `docs/agentic-flow.md`, `docs/api/cli-json.md` and `portage-cli`'s README
+  say so, document the dry run's new `checkout_mismatch: true` flag, and mark
+  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` deprecated and ignored. The skill drops it from its OpenClaw
+  `envVars`. Found by ClawHub's security audit of `portage-buy`.
+
+- **`buy` skill: narrower triggers.** The skill's `description` is shorter and says it is for
+  shopping, buying, ordering or comparing offers on the user's behalf, not for general questions
+  about prices, products or orders not placed through Portage (ClawHub's scan flagged the old
+  trigger list as too broad). Each OpenClaw `envVars` description now says the user sets it in
+  `~/.portage/.env` and the agent never reads or prints its value.
+
 ## [0.14.0] - 2026-10-01
 
 - **Release set:** `portage-cli` 0.11.0 (the SQLite local index, `portage index build --sources storefront_products` to crawl a store's products, `portage index search`, the UCP `product` field on offers, and the whole-taxonomy category classifier) and `buy` plugin 0.9.0 (product cards, and the OpenClaw metadata with `version` in the skill frontmatter, kept equal to `plugin.json`). `portage-cli` gains a `sqlite3` `~> 2.9` dependency and keeps `portage-ucp` `~> 0.11`. The skill's minimum `portage-cli` stays 0.9.0, because it only uses `index` and the `product` field when they are there. No other gem changed, so the docs-only notes in `portage-ucp-client` and `portage-ucp-webmcp` stay unreleased. The ClawHub listing is published separately, at `buy` 0.9.0.
