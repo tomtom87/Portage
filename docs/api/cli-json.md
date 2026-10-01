@@ -192,7 +192,7 @@ Source: `cli/buy.rb` (`build_report`, `checkout_report`, `handoff_report`, `fina
 | `checkout` | boolean | A checkout path exists. |
 | `checkout_url` | string or null | Where the shopper finishes. Always give it to the user when present. |
 | `products` | array | Search results (catalog products as the store returned them). Not what is in the checkout. |
-| `warnings` | array of strings | Where the checkout differs from the request. |
+| `warnings` | array of strings | Where the checkout differs from the request. Any entry stops a real run with `checkout_mismatch`. |
 
 Checkout reports (those that created a checkout) add:
 
@@ -210,6 +210,7 @@ Checkout reports (those that created a checkout) add:
 | `would` | object | Only on a WebMCP `dry_run` against a preset that hands off through its own tool: `line_items`, `handoff_checkout`, `autofill`. |
 | `tool_names_proposal` | object | Only on `webmcp_mapping_unconfirmed`. Maps a slot to `{tool_name, confidence, reason}`. |
 | `reconcile` | object | Only with `--wait`. See [buy --wait](#buy-wait-ndjson-stream). |
+| `checkout_mismatch` | boolean | Only on `dry_run`, and only `true`: `warnings` holds a mismatch, so a real run of this checkout stops with `checkout_mismatch`. |
 | `quote_id` | string | On `dry_run` (and `needs_approval`, `quote_changed`): the saved [quote](#quotes). Omitted if it couldn't be saved. |
 | `quoted_total`, `quoted_currency`, `current_total`, `current_currency` | integer, string | Only on `quote_changed`. Totals in minor units. |
 | `summary` | object | Only on `needs_approval`. See [needs_approval](#needs_approval). |
@@ -230,7 +231,7 @@ Only `purchased` means the order was placed.
 | `quote_used` | The quote was already bought or handed off. | no |
 | `express_stop` | WebMCP cart and checkout built. The store's own express-pay button finishes it. | yes |
 | `requires_escalation` | The store needs a human step (verification, terms, 3-D Secure). | yes |
-| `checkout_mismatch` | Checkout does not match the request. Only when `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is on. Otherwise mismatches are only `warnings`. | yes |
+| `checkout_mismatch` | Checkout does not match the request: item, quantity, unit price or currency. Stopped before payment on every run but `--dry-run`. Nothing was bought. | yes |
 | `no_payment_token` | No `--payment-token` and no default payment method. | yes |
 | `permission_denied` | The store does not let this agent complete payment. | yes |
 | `policy_blocked` | Your spend policy denied it. `decisions.policy.reason` says why. | yes |
@@ -270,7 +271,7 @@ The gates run in this order, and only on a real `--yes` run: escalation, then po
 
 | Gate | Fields | `reason` values |
 |---|---|---|
-| `escalation` | `escalate` (bool), `reason` | `requires_escalation` (the store's status), `mismatch` (warnings present and `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` on). |
+| `escalation` | `escalate` (bool), `reason` | `requires_escalation` (the store's status), `mismatch` (warnings present, on any run but `--dry-run`). |
 | `policy` | `allowed` (bool), `reason` | `per_transaction_cap_exceeded`, `rolling_spend_cap_exceeded`, `velocity_exceeded`, `merchant_not_allowlisted`, `token_scope_merchant`, `token_scope_amount`, `currency_mismatch`, `total_unknown`. |
 | `confidence` | `proceed`, `reason`, `confidence`, `threshold`, `backend`, `error` | `below_threshold`, `not_installed`, `backend_error`. Present only when a decision backend is set (`--decision-backend` or `PORTAGE_DECISION_BACKEND`). |
 
@@ -361,6 +362,7 @@ Returned by `buy` when a real run (`--yes`, no `--dry-run`) isn't approved enoug
 
 | Field | Type | Meaning |
 |---|---|---|
+| `checkout_mismatch` | boolean | Only on `dry_run`, and only `true`: `warnings` holds a mismatch, so a real run of this checkout stops with `checkout_mismatch`. |
 | `quote_id` | string | The quote to approve, then buy. |
 | `title` | string or null | What the checkout holds. |
 | `store` | string | Store origin. |
@@ -894,7 +896,7 @@ Source: `portage-cli/exe/portage`, `cli/dot_env.rb`, `cli/setting.rb`
 | `PORTAGE_AGENT_PROFILE` | URL of your agent profile. Stores verify it before answering. Without it, `agent_profile_missing` or a fallback to the repo's published profile (see `doctor`). |
 | `PORTAGE_DECISION_BACKEND` | Names the confidence-gate backend. Overridden by `--decision-backend`. |
 | `PORTAGE_MIN_CONFIDENCE` | Gate threshold, `0.0` to `1.0`. Read only while a backend is set. Overridden by `--min-confidence`. |
-| `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` | When on, a mismatch becomes the `checkout_mismatch` outcome. |
+| `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` | Deprecated and ignored. A mismatch always becomes the `checkout_mismatch` outcome. |
 | `PORTAGE_HANDOFF_SPEND_MODE` | `block` (default), `warn` or `precheck`. |
 | `PORTAGE_HANDOFF_WAIT_TIMEOUT` | Default for `--wait-timeout`. |
 | `PORTAGE_RECONCILE_NOTIFY` | Channels for reconcile notifications. |

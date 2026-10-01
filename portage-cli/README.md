@@ -852,9 +852,9 @@ with the same value, as `[outcome]`.
 | --- | --- | --- |
 | `purchased` | Completed. | no |
 | `needs_confirmation` | Checkout ready; rerun with `--yes`. | no |
-| `dry_run` | Checkout created, `--dry-run` stopped it. | no |
+| `dry_run` | Checkout created, `--dry-run` stopped it. `checkout_mismatch: true` when a real run would stop on a mismatch. | no |
 | `requires_escalation` | The store wants the shopper to finish. | yes |
-| `checkout_mismatch` | Checkout differs from the request (`PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`). | yes |
+| `checkout_mismatch` | Checkout differs from the request (item, quantity, unit price or currency); stopped before payment. | yes |
 | `no_payment_token` | No `--payment-token` and no default payment method. | yes |
 | `policy_blocked` | Your spend policy denied it; `decisions.policy.reason` says why. | yes |
 | `low_confidence` | The confidence gate held it. | yes |
@@ -884,9 +884,11 @@ Every verdict has a `reason`: `null` when the gate let the purchase through,
 otherwise a string naming why it stopped it.
 
 - **escalation** — `Support::Escalation`. A `requires_escalation` checkout
-  always escalates (`reason: "requires_escalation"`). A checkout that doesn't
-  match the request escalates (`reason: "mismatch"`) only under
-  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`; otherwise it's reported as `warnings`.
+  always escalates (`reason: "requires_escalation"`). So does a checkout that
+  doesn't match the request (`reason: "mismatch"`), on every run but
+  `--dry-run`, where the mismatch is reported in `warnings` and flagged with
+  `checkout_mismatch: true` instead. Nothing turns this off:
+  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is deprecated and ignored.
 - **policy** — `PolicyGuard`, run on your policy file (see "Policy" above)
   before any `--yes` completion. `reason` is the guard's own
   (`per_transaction_cap_exceeded`, `rolling_spend_cap_exceeded`,
