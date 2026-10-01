@@ -814,16 +814,47 @@ module Portage
       # checks, and any warning it returns stops a real purchase before
       # payment (see #decide_escalation). The quoted total and currency are
       # #quote_exceeded?'s job, not this method's.
+      #
+      # This is the authoritative check, and it always runs first: the
+      # opt-in model check (#decide_confidence) only ever sees a checkout
+      # that already passed it, and can hold that checkout but never
+      # overrule a warning from here.
       def reconcile_checkout(product, checkout)
         item_id = line_item_id_of(product)
-        line = Array(checkout["line_items"]).find { |li| li.dig("item", "id") == item_id }
+        lines = Array(checkout["line_items"])
+        line = lines.find { |li| li.dig("item", "id") == item_id }
         return ["Store dropped the requested item (#{item_id}) from checkout."] unless line
 
         warnings = []
         if line["quantity"] != @qty
           warnings << "Store checked out quantity #{line['quantity']}, not the requested #{@qty}."
         end
-        warnings + price_mismatches(product, item_id, line, checkout["currency"])
+        warnings + price_mismatches(product, item_id, line, checkout["currency"]) +
+          unrequested_lines(lines.reject { |li| li.equal?(line) })
+      end
+
+      # Only one line is ever requested, so any other line is something the
+      # person never asked for: an upsell, a "shipping protection" add-on,
+      # or (on a WebMCP cart) whatever was already sitting in the store's
+      # cart. One that costs nothing is let through, so a store's free gift
+      # or $0 sample doesn't stop the purchase; one whose cost can't be read
+      # is treated as costing something, so it stops.
+      def unrequested_lines(extras)
+        extras.reject { |li| line_cost(li)&.zero? }.map do |li|
+          label = [li.dig("item", "id"), li.dig("item", "title")].compact.join(" ")
+          "Store added #{label.empty? ? 'a line' : label} to checkout, which wasn't requested."
+        end
+      end
+
+      # The line's own total, else its unit price times its quantity; nil
+      # when the line carries neither.
+      def line_cost(line)
+        total = Portage::Ucp::Support::Totals.amount(line["totals"])
+        return total if total.is_a?(Numeric)
+
+        price = line.dig("item", "price")
+        quantity = line["quantity"] || 1
+        price * quantity if price.is_a?(Numeric) && quantity.is_a?(Numeric)
       end
 
       # A unit price is only comparable in the catalog's own currency, so a
