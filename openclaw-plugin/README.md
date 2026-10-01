@@ -38,7 +38,7 @@ Set these under the plugin's config in OpenClaw:
 
 | Key | Default | What it does |
 |---|---|---|
-| `portageBin` | `portage` | Path or name of the `portage` executable. |
+| `portageBin` | `portage` | Path or name of the `portage` executable. It must be `portage` itself, or a path ending in `/portage`: the plugin refuses to start anything else. |
 | `timeoutSeconds` | `120` | Per-call timeout. Index builds and `--wait` hand-offs get a longer fixed ceiling of their own. |
 
 ## Tools
@@ -78,6 +78,8 @@ Optional (you enable them):
 3. **No tool can loosen your limits or touch credentials.** The plugin doesn't expose `policy set`, `payment enroll|remove|revoke|freeze|set-default`, `history clear`, `setup`, `generate`, `--payment-token`, `--via`, proxy flags or the decision-check flags, and it never reads `~/.portage/.env`, `policy.json` or `quotes/`. Tests pin this for every tool with injection strings.
 4. **Store and product text is untrusted.** Results are passed through as data; the tool descriptions and skills tell the agent never to follow instructions in them.
 5. **Buying tools are opt-in.** Nothing that prices, approves, buys or changes the index runs until you enable it.
+6. **No direct checkout.** The bundled `buy` skill leaves out its "no CLI" fallback (`references/raw-ucp.md`, which has the agent create and pay a store's checkout over raw UCP itself). In its place the skill, and `portage-openclaw`, tell the agent to stop and ask you to install `portage`, and never to drive a store's checkout or payment with a shell, web fetch or browser. So every payment passes Portage's policy, approval and checkout-mismatch checks.
+7. **The only subprocess is `portage`.** The plugin uses Node's `child_process.execFile` in one place, `src/runner.ts`, which is what a static scan reports as shell execution. It runs with `shell: false` and an argument array (so tool input is never parsed by a shell), a per-call timeout and a 16 MB output cap, and only when `portageBin` names the `portage` executable; anything else is refused before it starts. Tests pin both.
 
 A non-zero exit from the CLI is not an error on its own: outcomes such as `needs_approval` or `quote_changed` come back as results. Only unparseable output or a failure to start `portage` is a tool error.
 
@@ -85,7 +87,7 @@ A non-zero exit from the CLI is not an error on its own: outcomes such as `needs
 
 The plugin ships three skills in `skills/`:
 
-- `buy` and `shop-research`: copies of the Portage skills in `plugins/buy/skills/`, made at build time. They remain the source of truth for the flow and the judgement calls.
+- `buy` and `shop-research`: copies of the Portage skills in `plugins/buy/skills/`, made at build time. They remain the source of truth for the flow and the judgement calls. The copy of `buy` drops the raw-UCP "no CLI" fallback (see the safety model).
 - `portage-openclaw`: written for this plugin. Maps each CLI step to its tool and restates the approval rules.
 
 `npm run build` copies the first two (they are gitignored here) and `npm pack` includes all three.
