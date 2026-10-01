@@ -1,2 +1,5 @@
 node_modules/
 dist/
+# Build output: copied from plugins/buy/skills by scripts/copy-skills.mjs.
+skills/buy/
+skills/shop-research/

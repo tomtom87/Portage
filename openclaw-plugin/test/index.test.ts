@@ -34,6 +34,7 @@ describe("plugin entry", () => {
     const find = registered.find((r) => r.tool.name === "portage_find")!.tool;
     const res = await find.execute("call1", { query: "mug" });
     expect(res.details.ok).toBe(true);
+    expect(registered.find((r) => r.tool.name === "portage_find")!.tool.outputSchema).toBeDefined();
     expect(s.calls()).toEqual([["find", "--query", "mug", "--json"]]);
   });
 });
@@ -47,6 +48,23 @@ describe("manifest", () => {
       .map(([n]) => n);
     expect(flagged.sort()).toEqual(allTools.filter((t) => t.optional).map((t) => t.name).sort());
     expect(Object.keys(manifest.toolMetadata).sort()).toEqual(flagged.sort());
+  });
+
+  it("marks sideEffecting in the manifest exactly where the code does, and only on optional tools", () => {
+    const manifest = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "openclaw.plugin.json"), "utf8"));
+    const flagged = Object.entries(manifest.toolMetadata as Record<string, { sideEffecting?: boolean }>)
+      .filter(([, m]) => m.sideEffecting === true)
+      .map(([n]) => n);
+    expect(flagged.sort()).toEqual(allTools.filter((t) => t.sideEffecting).map((t) => t.name).sort());
+    expect(allTools.filter((t) => t.sideEffecting && !t.optional)).toEqual([]);
+    expect(flagged).toHaveLength(10);
+  });
+
+  it("declares the skills directory, which holds the bundled and hand-written skills", () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const manifest = JSON.parse(readFileSync(join(root, "openclaw.plugin.json"), "utf8"));
+    expect(manifest.skills).toEqual(["skills"]);
+    expect(readFileSync(join(root, "skills", "portage-openclaw", "SKILL.md"), "utf8")).toMatch(/^name: portage-openclaw$/m);
   });
 });
 

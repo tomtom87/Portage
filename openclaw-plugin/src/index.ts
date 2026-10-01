@@ -18,6 +18,7 @@ export default definePluginEntry({
           label: spec.name,
           description: spec.description,
           parameters: spec.parameters,
+          ...(spec.outputSchema ? { outputSchema: spec.outputSchema } : {}),
           async execute(_toolCallId: string, params: unknown) {
             return runTool(runner, spec, params);
           },

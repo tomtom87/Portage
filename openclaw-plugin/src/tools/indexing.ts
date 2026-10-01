@@ -33,7 +33,8 @@ export const indexTools: ToolSpec[] = [
   {
     name: "portage_index_add",
     optional: true,
-    description: `Add one store to the user's local store index (optionally crawling it for products). Changes the local index only. ${UNTRUSTED}`,
+    sideEffecting: true,
+    description: `Add one store to the user's local store index (param url; crawl also fetches its products). Use only when the user asks to add a store. Changes the local index only. ${UNTRUSTED}`,
     parameters: Type.Object({
       url: Type.String({ description: "Store URL (http or https)." }),
       crawl: Type.Optional(Type.Boolean({ description: "Also crawl the store's products." })),
@@ -47,13 +48,15 @@ export const indexTools: ToolSpec[] = [
   {
     name: "portage_index_remove",
     optional: true,
-    description: "Remove one store from the user's local store index. Changes the local index only.",
+    sideEffecting: true,
+    description: "Remove one store from the user's local store index (param host, e.g. shop.example). Use only when the user asks. Changes the local index only.",
     parameters: Type.Object({ host: Type.String({ description: "Store host, e.g. shop.example." }) }),
     buildArgs: (p) => ["index", "remove", hostName("host", p.host), "--json"],
   },
   {
     name: "portage_index_build",
     optional: true,
+    sideEffecting: true,
     description: `Build the local store and product index from the chosen sources. Slow the first time (minutes): warn the user before running it. Use dry_run first to preview. ${UNTRUSTED}`,
     parameters: rebuildParams,
     buildArgs: rebuildArgs("build"),
@@ -62,6 +65,7 @@ export const indexTools: ToolSpec[] = [
   {
     name: "portage_index_refresh",
     optional: true,
+    sideEffecting: true,
     description: `Re-verify old index entries and add new ones from the chosen sources. Can be slow: warn the user before running it. Use dry_run first to preview. ${UNTRUSTED}`,
     parameters: rebuildParams,
     buildArgs: rebuildArgs("refresh"),
@@ -70,6 +74,7 @@ export const indexTools: ToolSpec[] = [
   {
     name: "portage_browser_import",
     optional: true,
+    sideEffecting: true,
     description: `Find shop domains in the user's own browser bookmarks and history to seed the store index. Reads personal browsing data: run it only when the user asks for it, and say what it does first. By default it is a preview (dry run) that saves nothing and returns kept[] (domains and guessed categories only: show those, never the user's full history). Set confirm: true only after the user has seen the preview and approved saving it; exclude drops domains they turned down. Never work around a permission_denied or full_disk_access_required error: pass its message to the user. ${UNTRUSTED}`,
     parameters: Type.Object({
       browser: Type.Optional(Type.Union(BROWSERS.map((b) => Type.Literal(b)), { description: "Default: Portage picks." })),

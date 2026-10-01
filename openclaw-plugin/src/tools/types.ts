@@ -5,6 +5,10 @@ export interface ToolSpec {
   name: string;
   description: string;
   parameters: TSchema;
+  /** Permissive schema for the structured `details` value (see outputs.ts). */
+  outputSchema?: TSchema;
+  /** Mirrors `toolMetadata.<name>.sideEffecting` in the manifest: the tool can change durable or external state. */
+  sideEffecting?: boolean;
   /** Opt-in tools: the user enables them; the read-only set is on by default. */
   optional?: boolean;
   /** Overrides the configured timeout. */

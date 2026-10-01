@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 import { flag, httpUrl, ident, duration, opt, oneOf, posInt, str, InputError } from "../validate.js";
+import { approveOutput, buyQuoteOutput, dryRunOutput, handoffOutput, pickOutput } from "./outputs.js";
 import { LONG_TIMEOUT_SECONDS, UNTRUSTED, type ToolSpec } from "./types.js";
 
 const REF_DESC = "Offer ref from a find report (`offers[].offer_ref`, e.g. of_1a2b3c).";
@@ -45,7 +46,9 @@ export const buyingTools: ToolSpec[] = [
   {
     name: "portage_pick",
     optional: true,
-    description: `Let the user choose which store to buy from, after portage_find. With no arguments it returns the choices (outcome needs_pick) for you to show the user. Only pass choose with the ref the user themselves picked; never pick a store for them and never guess a ref. compare re-searches one offer across stores; view opens the product page in the user's browser and is never an answer. ${UNTRUSTED}`,
+    description: `Let the user choose which store to buy from, after portage_find. With no arguments it returns outcome needs_pick and choices[] (ref, label, url): show them with their urls and ask the user. Pass choose only with the ref (of_...) the user themselves picked, then it returns outcome picked with the offer_ref for portage_dry_run. Never pick a store for them and never guess a ref. compare re-searches one offer across stores; view opens the product page in the user's browser and is never an answer. search is a se_... id from find. ${UNTRUSTED}`,
+    outputSchema: pickOutput,
+    sideEffecting: true,
     parameters: Type.Object({
       search: Type.Optional(Type.String({ description: "Search id from the find report (default: the latest search)." })),
       choose: Type.Optional(Type.String({ description: "The ref the user picked." })),
@@ -64,14 +67,18 @@ export const buyingTools: ToolSpec[] = [
   {
     name: "portage_dry_run",
     optional: true,
-    description: `Price a purchase without buying: real total, shipping and taxes, and a quote_id to approve. Name the item by a picked offer, or by store with query and product_id. Nothing is bought or charged. Show the user the total. ${UNTRUSTED}`,
+    description: `Price a purchase without buying it. Name the item by a picked offer (offer, of_...), or by store URL with query and product_id; optional qty. Returns the real total, shipping and taxes and a quote_id (qt_...) to approve; it saves a quote on disk but charges nothing. Show the user the total, and read warnings and checkout_mismatch (a mismatch means a real buy will stop). No quote_id means there is nothing to approve. ${UNTRUSTED}`,
+    outputSchema: dryRunOutput,
+    sideEffecting: true,
     parameters: Type.Object(targetProps),
     buildArgs: (p) => [...buyTarget(p), "--dry-run", "--json"],
   },
   {
     name: "portage_approve",
     optional: true,
-    description: `Check or record the user's approval of a quote. Without relayed_yes it returns outcome needs_approval with a summary to show the user (or approved if they already approved it at a terminal). relayed_yes may ONLY be true after the user has explicitly said yes, in this chat, to that exact total for that exact quote; never set it on your own judgement, never to skip asking, and ask again for each new quote. view opens the product page in the user's browser and is never an approval. ${UNTRUSTED}`,
+    description: `Check or record the user's approval of a quote (quote_id, qt_... from portage_dry_run). By default it only reports: outcome needs_approval with a summary (title, store, qty, total_display, url) to show the user, or approved if they already approved at a terminal. relayed_yes may ONLY be true after the user has explicitly said yes, in this chat, to that exact total for that exact quote; never set it on your own judgement or to skip asking, and ask again for each new quote. Under require_approval person a relayed yes does not count: ask the user to run portage approve themselves. view opens the product page in the user's browser and is never an approval. ${UNTRUSTED}`,
+    outputSchema: approveOutput,
+    sideEffecting: true,
     parameters: Type.Object({
       quote_id: Type.String({ description: "Quote id from portage_dry_run (qt_...)." }),
       relayed_yes: Type.Optional(
@@ -96,7 +103,9 @@ export const buyingTools: ToolSpec[] = [
   {
     name: "portage_buy_quote",
     optional: true,
-    description: `Buy exactly what an approved quote priced. The only tool that can spend money. Run it only after portage_dry_run produced the quote and the user approved that exact total (portage_approve). Portage itself refuses unless the quote is approved under the user's policy, and stops with quote_changed, checkout_mismatch, policy_blocked or low_confidence rather than overspend; show those to the user and never retry blindly. Only outcome purchased means bought; check portage_history before retrying after an error. ${UNTRUSTED}`,
+    description: `Buy exactly what an approved quote priced (quote_id, qt_...). The only tool that can spend money. Run it only after portage_dry_run produced the quote and the user approved that exact total (portage_approve). Portage itself refuses unless the quote is approved under the user's policy (outcome needs_approval: go back to approve), and stops with quote_changed, checkout_mismatch, policy_blocked or low_confidence rather than overspend; show those to the user and never retry blindly. Only outcome purchased means bought; check portage_history before retrying after an error. Hand-off outcomes carry a checkout_url for the user. ${UNTRUSTED}`,
+    outputSchema: buyQuoteOutput,
+    sideEffecting: true,
     parameters: Type.Object({
       quote_id: Type.String({ description: "Approved quote id (qt_...)." }),
     }),
@@ -105,7 +114,9 @@ export const buyingTools: ToolSpec[] = [
   {
     name: "portage_handoff",
     optional: true,
-    description: `Build the cart and hand the checkout to the user, who reviews and pays in their own browser; nothing is charged by this tool. Name the item by a picked offer, or by store with query and product_id. target: default opens the checkout in the user's browser, print only reports the checkout_url, profile uses Portage's dedicated browser profile (the user must have opened it). Omit target to use their configured default. wait blocks until the user finishes or wait_timeout (like 30m, default 30m) passes. Always tell the user to open checkout_url to review and pay. ${UNTRUSTED}`,
+    description: `Build the cart and hand the checkout to the user, who reviews and pays in their own browser; nothing is charged by this tool. Use it for hand-off-only retailers and when the user wants to pay themselves. Name the item by a picked offer (offer, of_...), or by store URL with query and product_id; optional qty. Returns a checkout_url and a handoff object. target: default opens the checkout in the user's browser, print only reports the checkout_url, profile uses Portage's dedicated browser profile (the user must have opened it). Omit target to use their configured default. wait blocks until the user finishes or wait_timeout (like 30m, default 30m) passes. Always tell the user to open checkout_url to review and pay. ${UNTRUSTED}`,
+    outputSchema: handoffOutput,
+    sideEffecting: true,
     parameters: Type.Object({
       ...targetProps,
       target: Type.Optional(

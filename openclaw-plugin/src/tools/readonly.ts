@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 import { httpUrl, opt, optStr, oneOf, posInt, posNum, str } from "../validate.js";
+import { checkOutput, compareOutput, doctorOutput, findOutput } from "./outputs.js";
 import { UNTRUSTED, type ToolSpec } from "./types.js";
 
 const URL_DESC = "Store URL (http or https).";
@@ -9,18 +10,20 @@ export const readonlyTools: ToolSpec[] = [
   {
     name: "portage_doctor",
     description:
-      "Check the Portage setup (adapters, payment, policy, browser). Run first when something fails. Read-only.",
+      "Report the Portage setup: shipping address, search backends, agent profile, payment, proxy, browser. Run it first in a session, and again whenever a call fails or something looks unconfigured. Returns a read-only report; fixing gaps is up to the user (they run `portage setup` themselves).",
     parameters: empty,
+    outputSchema: doctorOutput,
     buildArgs: () => ["doctor", "--json"],
   },
   {
     name: "portage_find",
-    description: `Search across the indexed stores for products. Read-only. ${UNTRUSTED}`,
+    description: `Search for products across stores when the user has not named one. Params: query, optional max_price and limit. Returns offers[] (offer_ref like of_1a2b3c, store, product_id, title, amount in minor units, currency, url) and a search_id for portage_pick. Show offers with their urls; do not pick a store for the user. Read-only, buys nothing. ${UNTRUSTED}`,
     parameters: Type.Object({
       query: Type.String({ description: "What to search for." }),
       max_price: Type.Optional(Type.Number({ exclusiveMinimum: 0, description: "Maximum price." })),
       limit: Type.Optional(Type.Integer({ minimum: 1, description: "Maximum results." })),
     }),
+    outputSchema: findOutput,
     buildArgs(p) {
       const a = ["find", "--query", str("query", p.query)];
       opt(a, "--max-price", posNum("max_price", p.max_price));
@@ -30,12 +33,13 @@ export const readonlyTools: ToolSpec[] = [
   },
   {
     name: "portage_find_store",
-    description: `Search one store's live catalogue for products (read-only, no purchase). Use to re-check price or stock at a specific store. ${UNTRUSTED}`,
+    description: `Search one named store's live catalogue (params: store URL, query, optional max_price). Use it when the user names a store, or to re-check a live price or stock after an index hit; it never creates a cart. Returns offers[] like portage_find. Read-only. ${UNTRUSTED}`,
     parameters: Type.Object({
       store: Type.String({ description: URL_DESC }),
       query: Type.String({ description: "What to search for." }),
       max_price: Type.Optional(Type.Number({ exclusiveMinimum: 0, description: "Maximum price." })),
     }),
+    outputSchema: findOutput,
     buildArgs(p) {
       const a = ["find", "--store", httpUrl("store", p.store), "--query", str("query", p.query)];
       opt(a, "--max-price", posNum("max_price", p.max_price));
@@ -44,13 +48,14 @@ export const readonlyTools: ToolSpec[] = [
   },
   {
     name: "portage_check",
-    description: `Check whether a store supports Portage and which checkout path it offers. Read-only. ${UNTRUSTED}`,
+    description: `Check whether Portage can buy from a store (param: url). Returns verdict (automated, webmcp, handoff or unsupported) and next_step; tell the user plainly which it is. Makes plain GET requests only, never a cart. Read-only. ${UNTRUSTED}`,
     parameters: Type.Object({ url: Type.String({ description: URL_DESC }) }),
+    outputSchema: checkOutput,
     buildArgs: (p) => ["check", httpUrl("url", p.url), "--json"],
   },
   {
     name: "portage_compare",
-    description: `Compare a product at a store against other results. Read-only. ${UNTRUSTED}`,
+    description: `Compare one product at a store across other stores (params: url, product_id; optional extra ids, results, max_price). Returns comparable offers. Use it when the user wants the best price for a specific product. Read-only. ${UNTRUSTED}`,
     parameters: Type.Object({
       url: Type.String({ description: URL_DESC }),
       product_id: Type.String({ description: "Product id at that store." }),
@@ -58,6 +63,7 @@ export const readonlyTools: ToolSpec[] = [
       results: Type.Optional(Type.Integer({ minimum: 1, description: "Number of comparison results." })),
       max_price: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
     }),
+    outputSchema: compareOutput,
     buildArgs(p) {
       const a = ["compare", httpUrl("url", p.url), "--product-id", str("product_id", p.product_id)];
       if (p.ids !== undefined) {
@@ -71,7 +77,7 @@ export const readonlyTools: ToolSpec[] = [
   },
   {
     name: "portage_index_search",
-    description: `Search the local store/product index. Read-only. ${UNTRUSTED}`,
+    description: `Search the user's local store and product index (params: query; optional category, store host, limit). Hits come from the index, not live: never quote an index price as current or claim stock; re-check with portage_find_store first. Read-only. ${UNTRUSTED}`,
     parameters: Type.Object({
       query: Type.String(),
       category: Type.Optional(Type.String({ description: "Category id." })),
@@ -88,7 +94,7 @@ export const readonlyTools: ToolSpec[] = [
   },
   {
     name: "portage_index_show",
-    description: `Show the local index summary, or list its stores or products (paged). Read-only. ${UNTRUSTED}`,
+    description: `Show the local index summary, or with view list its stores or products (products can be paged with page and per_page). Read-only. ${UNTRUSTED}`,
     parameters: Type.Object({
       view: Type.Optional(
         Type.Union([Type.Literal("stores"), Type.Literal("products")], { description: "Omit for a summary." }),
@@ -112,13 +118,13 @@ export const readonlyTools: ToolSpec[] = [
   },
   {
     name: "portage_index_sources",
-    description: "List the index sources Portage can build from. Read-only.",
+    description: "List the sources Portage can build the store index from and what each fetches. Use before portage_index_build or portage_index_refresh. Read-only.",
     parameters: empty,
     buildArgs: () => ["index", "sources", "--json"],
   },
   {
     name: "portage_history",
-    description: `List past Portage purchases and searches. Read-only. ${UNTRUSTED}`,
+    description: `List past Portage purchases and searches (params: optional kind purchases or searches, limit). Check it before buying so nothing is bought twice, and after an error to see whether a purchase went through. Read-only. ${UNTRUSTED}`,
     parameters: Type.Object({
       kind: Type.Optional(Type.Union([Type.Literal("purchases"), Type.Literal("searches")])),
       limit: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -134,7 +140,7 @@ export const readonlyTools: ToolSpec[] = [
   {
     name: "portage_orders_reconcile",
     description:
-      "Reconcile pending checkouts with the merchant and report their final order status. Reads order state; does not buy anything.",
+      "Check hand-offs the user finished in their browser and report their order status (optional param: checkout id). Use it to track an order after a hand-off. Reads order state; does not buy anything.",
     parameters: Type.Object({
       checkout: Type.Optional(Type.String({ description: "Reconcile only this checkout id." })),
     }),
@@ -147,7 +153,7 @@ export const readonlyTools: ToolSpec[] = [
   {
     name: "portage_policy_show",
     description:
-      "Show the user's spending policy (caps, allowlist, approval requirement). Read-only; the policy can only be changed by the user in a terminal.",
+      "Show the user's spending policy: caps, merchant allowlist and require_approval (any, person or off). Read it to know how approval will work. Read-only; only the user can change the policy, in a terminal.",
     parameters: empty,
     buildArgs: () => ["policy", "show", "--json"],
   },
