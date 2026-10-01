@@ -209,7 +209,9 @@ module Portage
       opts[:proxy] = {}
       OptionParser.new do |parser|
         parser.on("--query QUERY") { |v| opts[:query] = v }
-        parser.on("--store URL") { |v| opts[:store] = v }
+        parser.on("--store URL", "Search only this store's catalogue, live and read-only (http/https)") do |v|
+          opts[:store] = v
+        end
         parser.on("--limit N", Integer) { |v| opts[:limit] = v }
         parser.on("--max-price N", Float) { |v| opts[:max_price] = to_minor_units(v) }
         parser.on("--json") { opts[:json] = true }
@@ -1527,7 +1529,8 @@ module Portage
       return "No index products match \"#{result[:query]}\"." if result[:products].empty?
 
       lines = result[:products].map { |p| index_search_line(p) }
-      lines << "(From the local index, not live: check the price and stock with `portage find --store`.)"
+      lines << "(From the local index, not live: check the price and stock with " \
+               "`portage find --store URL --query ...`.)"
       lines << "(FTS5 isn't available in this SQLite, so this was a plain text match.)" if result[:engine] == "like"
       lines.join("\n")
     end
