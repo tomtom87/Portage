@@ -484,6 +484,14 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).to have_received(:complete_checkout)
     end
 
+    it "refuses a quote that has no total, rather than buying uncapped" do
+      report, session = buy_against(priced(2400), quote_total: nil, quote_store: "https://shop.example")
+
+      expect(report).to include(outcome: "quote_changed", quoted_total: nil, current_total: 2400, handoff: nil)
+      expect(report[:message]).to include("no total to hold this checkout")
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
     it "sets no cap without a quote" do
       session = fake_session(advertises_checkout: true, checkout: priced(999_999), completed: completed_checkout)
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
