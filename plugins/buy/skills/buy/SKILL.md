@@ -1,7 +1,7 @@
 ---
 name: buy
 description: Shop for the user through the `portage` CLI. Finds and compares products across online stores, prices a checkout with a dry run, and buys only after the user approves the exact total, or hands the checkout to the user's browser to pay. Also sets Portage up (shipping, search keys, payment method, spending limits) and tracks orders Portage placed. Use when the user asks you to buy, order, reorder or shop for something on their behalf. For a price, stock, store or order question with no purchase in mind, use the `shop-research` skill instead.
-version: 0.10.2
+version: 0.10.3
 metadata:
   openclaw:
     homepage: https://portage.readthedocs.io/en/latest/
