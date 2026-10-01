@@ -16,7 +16,12 @@ RSpec.describe Portage::Cli::Buy do
   around { |example| with_env("PORTAGE_DECISION_BACKEND" => nil, "PORTAGE_MIN_CONFIDENCE" => nil) { example.run } }
 
   let(:product) { { "id" => "p1", "title" => "Cold Brew" } }
-  let(:incomplete_checkout) { { "id" => "chk_1", "status" => "ready_for_complete", "links" => [], "totals" => [] } }
+  # Holds exactly the requested line, so #reconcile_checkout finds no
+  # mismatch — any mismatch now stops a real purchase.
+  let(:incomplete_checkout) do
+    { "id" => "chk_1", "status" => "ready_for_complete", "links" => [], "totals" => [],
+      "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 1 }] }
+  end
   let(:completed_checkout) { { "id" => "chk_1", "status" => "completed", "links" => [], "totals" => [] } }
 
   def fake_session(advertises_checkout:, checkout: nil, completed: nil)
@@ -527,28 +532,80 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:warnings]).to eq([])
     end
 
-    it "aborts before completion when PORTAGE_ABORT_ON_CHECKOUT_MISMATCH is set" do
+    it "warns when the store checks out in another currency than its own catalog quoted" do
+      priced_product = { "id" => "p1", "title" => "Cold Brew",
+                         "variants" => [{ "id" => "p1", "price" => { "amount" => 500, "currency" => "USD" } }] }
+      checkout = incomplete_checkout.merge(
+        "line_items" => [{ "item" => { "id" => "p1", "price" => 500 }, "quantity" => 1 }], "currency" => "EUR"
+      )
+      session = instance_double(
+        Portage::Ucp::Client::Session, advertises?: true,
+                                       search_catalog: { "ucp" => 1, "products" => [priced_product] },
+                                       create_checkout: checkout
+      )
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", dry_run: true).call
+
+      expect(report[:warnings]).to eq(["Store checked out in EUR, not the catalog's USD."])
+    end
+
+    # Regression (ClawHub security audit): a mismatch only stopped the
+    # purchase under PORTAGE_ABORT_ON_CHECKOUT_MISMATCH, so by default a
+    # checkout that didn't match the request was paid for and reported
+    # `purchased`. The variable is now a no-op, whatever it's set to.
+    [nil, "1", "0", "false"].each do |value|
+      it "stops a mismatched checkout before payment with PORTAGE_ABORT_ON_CHECKOUT_MISMATCH=#{value.inspect}" do
+        checkout = incomplete_checkout.merge("line_items" => [])
+        session = fake_session(advertises_checkout: true, checkout: checkout, completed: completed_checkout)
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+        report = with_env("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" => value) do
+          described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+        end
+
+        expect(report[:outcome]).to eq("checkout_mismatch")
+        expect(report[:message]).to include("Aborted before purchase")
+        expect(session).not_to have_received(:complete_checkout)
+      end
+    end
+
+    it "stops a mismatched checkout on a --quote run even when it's within the quoted total" do
+      checkout = incomplete_checkout.merge(
+        "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 2 }], "currency" => "USD",
+        "totals" => [{ "type" => "total", "amount" => 1000 }]
+      )
+      session = fake_session(advertises_checkout: true, checkout: checkout, completed: completed_checkout)
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1",
+                                   quote_total: 2400, quote_currency: "USD").call
+
+      expect(report[:outcome]).to eq("checkout_mismatch")
+      expect(session).not_to have_received(:complete_checkout)
+    end
+
+    it "keeps a mismatched --dry-run a dry run, flagging that the real purchase would stop" do
       checkout = incomplete_checkout.merge("line_items" => [])
       session = fake_session(advertises_checkout: true, checkout: checkout)
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
 
-      report = with_env("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" => "1") do
-        described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
-      end
+      report = described_class.new(url: "shop.example", query: "cold", dry_run: true).call
 
-      expect(report[:message]).to include("Aborted before purchase")
+      expect(report).to include(outcome: "dry_run", checkout_mismatch: true)
+      expect(report[:message]).to include("a real purchase would stop with checkout_mismatch")
+      expect(report[:warnings].join).to include("dropped the requested item")
       expect(session).not_to have_received(:complete_checkout)
     end
 
-    it "only warns, without aborting, when PORTAGE_ABORT_ON_CHECKOUT_MISMATCH is unset" do
-      checkout = incomplete_checkout.merge("line_items" => [])
-      session = fake_session(advertises_checkout: true, checkout: checkout, completed: completed_checkout)
+    it "leaves the flag off a dry run whose checkout matches" do
+      session = fake_session(advertises_checkout: true, checkout: incomplete_checkout)
       allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
 
-      report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+      report = described_class.new(url: "shop.example", query: "cold", dry_run: true).call
 
-      expect(report[:message]).to eq("Purchased.")
-      expect(session).to have_received(:complete_checkout)
+      expect(report[:outcome]).to eq("dry_run")
+      expect(report).not_to have_key(:checkout_mismatch)
     end
   end
 
@@ -597,9 +654,9 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:decisions][:escalation]).to eq(escalate: true, reason: "requires_escalation")
     end
 
-    it "records a mismatch escalation under PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" do
+    it "records a mismatch as the escalation verdict" do
       checkout = incomplete_checkout.merge("line_items" => [])
-      report, session = with_env("PORTAGE_ABORT_ON_CHECKOUT_MISMATCH" => "1") { buy(checkout: checkout) }
+      report, session = buy(checkout: checkout)
 
       expect(report[:decisions][:escalation]).to eq(escalate: true, reason: "mismatch")
       expect(session).not_to have_received(:complete_checkout)
@@ -1052,6 +1109,7 @@ RSpec.describe Portage::Cli::Buy do
 
     let(:webmcp_checkout) do
       { "id" => "chk_1", "status" => "ready_for_complete", "totals" => [],
+        "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 1 }],
         "continue_url" => "https://shop.example/cart/c/chk_1" }
     end
 
@@ -1230,6 +1288,7 @@ RSpec.describe Portage::Cli::Buy do
 
       let(:matched_checkout) do
         { "id" => "chk_2", "status" => "ready_for_complete", "totals" => [],
+          "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 1 }],
           "continue_url" => "https://shop.example/cart/c/chk_2" }
       end
 

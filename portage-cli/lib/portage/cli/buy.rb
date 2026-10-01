@@ -779,8 +779,9 @@ module Portage
       # (if surprising) checkout response, not a transport error. Buying
       # blind against a mismatch this method could have caught defeats the
       # point of an agent shopping on the buyer's behalf, so this always
-      # checks and surfaces what it finds; PORTAGE_ABORT_ON_CHECKOUT_MISMATCH
-      # additionally refuses to proceed rather than merely warning.
+      # checks, and any warning it returns stops a real purchase before
+      # payment (see #decide_escalation). The quoted total and currency are
+      # #quote_exceeded?'s job, not this method's.
       def reconcile_checkout(product, checkout)
         item_id = line_item_id_of(product)
         line = Array(checkout["line_items"]).find { |li| li.dig("item", "id") == item_id }
@@ -790,23 +791,35 @@ module Portage
         if line["quantity"] != @qty
           warnings << "Store checked out quantity #{line['quantity']}, not the requested #{@qty}."
         end
+        warnings + price_mismatches(product, item_id, line, checkout["currency"])
+      end
+
+      # A unit price is only comparable in the catalog's own currency, so a
+      # checkout in another one is reported as that, not as a price change.
+      def price_mismatches(product, item_id, line, currency)
+        catalog_currency = expected_unit_currency(product, item_id)
+        if catalog_currency && currency && catalog_currency != currency
+          return ["Store checked out in #{currency}, not the catalog's #{catalog_currency}."]
+        end
 
         expected = expected_unit_price(product, item_id)
         actual = line.dig("item", "price")
-        if expected && actual && expected != actual
-          warnings << "Store priced the item at #{actual} #{checkout['currency']} minor units per unit, " \
-                      "not the catalog's #{expected}."
-        end
-        warnings
+        return [] unless expected && actual && expected != actual
+
+        ["Store priced the item at #{actual} #{currency} minor units per unit, not the catalog's #{expected}."]
       end
 
       def expected_unit_price(product, item_id)
-        variant = Array(product["variants"]).find { |v| v["id"] == item_id }
-        variant&.dig("price", "amount") || product.dig("price_range", "min", "amount")
+        expected_price_of(product, item_id)&.dig("amount")
       end
 
-      def abort_on_mismatch?
-        Setting.flag?(env: "PORTAGE_ABORT_ON_CHECKOUT_MISMATCH")
+      def expected_unit_currency(product, item_id)
+        expected_price_of(product, item_id)&.dig("currency")
+      end
+
+      def expected_price_of(product, item_id)
+        variant = Array(product["variants"]).find { |v| v["id"] == item_id }
+        variant&.dig("price") || product.dig("price_range", "min")
       end
 
       # Submits PORTAGE_SHIP_* (see Portage::Cli::ShippingProfile) as the
@@ -998,15 +1011,18 @@ module Portage
 
       # Hand off vs. keep going is Decisions.escalation's call
       # (docs/plans/system-one-decision-layer.md § Responsibilities 2): a
-      # literal `requires_escalation` status always escalates. A mismatch
-      # from #reconcile_checkout escalates only under
-      # PORTAGE_ABORT_ON_CHECKOUT_MISMATCH. By default the warnings are
-      # surfaced on the report, and the purchase is not stopped for them.
+      # literal `requires_escalation` status always escalates, and so does
+      # any mismatch from #reconcile_checkout, with no setting to turn that
+      # off. This used to only warn unless PORTAGE_ABORT_ON_CHECKOUT_MISMATCH
+      # was set, so by default a checkout that didn't match what the person
+      # approved was still paid for and reported `purchased`. That variable
+      # is now ignored. A --dry-run never pays, so there the mismatch stays
+      # in `warnings` and #dry_run_report flags it instead, since an agent
+      # needs the priced checkout to tell the person what went wrong.
       # The verdict lands on the report's `decisions:`, and the report's
       # `outcome:` names which gate (if any) stopped the purchase.
       def decide_escalation(checkout, warnings)
-        verdict = Decisions.escalation(checkout_status: checkout["status"],
-                                       warnings: abort_on_mismatch? ? warnings : [])
+        verdict = Decisions.escalation(checkout_status: checkout["status"], warnings: @dry_run ? [] : warnings)
         @decisions[:escalation] = verdict
         verdict
       end
@@ -1410,9 +1426,18 @@ module Portage
         @yes
       end
 
+      # `warnings` here are #reconcile_checkout's mismatches, which a real
+      # run of the same checkout stops on — so the report says so up front,
+      # before anyone approves a quote for it.
       def dry_run_report(source, products, checkout, warnings = [])
-        checkout_report(source, products, checkout, outcome: "dry_run", warnings: warnings,
-                                                    message: "Dry run — checkout created but not completed.")
+        message = "Dry run — checkout created but not completed."
+        extra = {}
+        if warnings.any?
+          message += " It doesn't match the request (#{warnings.join(' ')}), so a real purchase would stop " \
+                     "with checkout_mismatch."
+          extra[:checkout_mismatch] = true
+        end
+        checkout_report(source, products, checkout, outcome: "dry_run", warnings: warnings, message: message, **extra)
       end
 
       def confirmation_needed_report(source, products, checkout, warnings = [])
