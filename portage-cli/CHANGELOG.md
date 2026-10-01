@@ -6,6 +6,20 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Security: a checkout mismatch always stops the purchase.** `buy` used to stop on a checkout
+  that didn't match the request (the item dropped, another quantity, another unit price) only under
+  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`. Without it the mismatch was a `warnings` entry and the
+  purchase went ahead, so a real `--yes` run could pay for the wrong checkout and report
+  `purchased` (reported by ClawHub's security audit of the `portage-buy` skill). Now every
+  mismatch on a run that isn't `--dry-run` escalates (`decisions.escalation.reason: "mismatch"`)
+  and ends in `checkout_mismatch` before the payment token, policy and completion are reached. The
+  quote it ran under is spent, so the person dry-runs again for a new one. There is no opt-out:
+  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is deprecated and ignored, whatever its value. A
+  `--dry-run` keeps its `dry_run` outcome and `warnings`, and now adds `checkout_mismatch: true`
+  and says in `message` that a real run would stop. The check also compares currency: a checkout
+  in another currency than the catalog's price is a mismatch. The quoted total and currency are
+  still `--quote`'s `quote_changed` check, unchanged.
+
 ## [0.11.0] - 2026-10-01
 
 - **Category classification uses the whole taxonomy.** `known-stores/categories.yml` is now generated
