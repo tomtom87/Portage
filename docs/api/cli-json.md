@@ -106,7 +106,11 @@ Source: `cli/human_prompt.rb`
 
 `portage find --query "..." [--max-price N] [--limit N] --json`
 
+`portage find --store URL --query "..." [--max-price N] --json`
+
 Searches for stores that speak UCP, asks each what it stocks, and returns ranked offers. It never buys. It records a search in history.
+
+With `--store URL`, no search backend or retailer offer source runs. Only that one store's catalogue is searched, live and read-only (catalogue search only, never a cart or checkout), so it is the way to re-check an index hit's price and stock. The report has the same shape: `candidates` and `stores` hold that single origin (`source: "store"`), offers carry `offer_ref`, and `search_id` is saved, so `pick` and `buy --offer` work on them. `URL` must be http(s) (a bare host is read as https); anything else is a usage error (exit `1`, usage on stderr), as is a missing `--query`. A hand-off-only host is never fetched: it appears in `stores` with `handoff_only: true`, there are no offers, and `message` says so. A store that doesn't speak UCP gives no offers and a `message` saying so. Exit codes are unchanged: `0` with offers, `1` without.
 
 Source: `cli/find.rb` (`report`, `offer`, `store_summaries`), `cli.rb` (`run_find`)
 
@@ -774,7 +778,7 @@ Store entries are the `stores` rows of `~/.portage/index/index.sqlite3`. Each ha
 
 `live` is always `false`. Each hit keeps its index entry fields and adds `product`: the persisted part of a UCP `Product` wire hash (`title`, `handle`, `url`, `media` with the first image, `options`, `variants` with only their `id`, `categories`). It is built only from what the index keeps, so it has no `id`, `description`, `price_range` or availability, and a field the entry never had is left out. There is never a price.
 
-`engine` is `fts5`, or `like` when the SQLite in use has no FTS5 (the same filters, as an unranked text match). `products` are index entries, the same shape as `index show --products`. Exits `0` with hits and `1` with none, or with no query (usage on stderr). The results are seeds: re-check the price and stock live (`find --store`, `buy --dry-run`) before quoting either.
+`engine` is `fts5`, or `like` when the SQLite in use has no FTS5 (the same filters, as an unranked text match). `products` are index entries, the same shape as `index show --products`. Exits `0` with hits and `1` with none, or with no query (usage on stderr). The results are seeds: re-check the price and stock live (`find --store URL --query ...`, `buy --dry-run`) before quoting either.
 
 Source: `cli.rb` (`run_index_search`), `cli/index/product_store.rb`, `cli/index/search.rb`
 

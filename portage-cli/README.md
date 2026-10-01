@@ -29,6 +29,20 @@ portage find --query "burton snowboard" --max-price 400
 
 `portage buy` with no URL runs that search and then buys the offer you pick.
 
+Already know the store? `portage find --store URL --query "..."` skips the search
+backends and offer sources and searches only that store's catalogue, live and
+read-only (catalogue search only, never a cart or checkout). Use it to re-check
+an index hit or an earlier offer before quoting its price or stock. The report
+has the same shape as a normal find (`offer_ref`, `search_id`, a history entry),
+so `pick` and `buy --offer` work on its offers. A hand-off-only host is never
+fetched and is reported as such; a store that doesn't speak UCP is reported as
+having no catalogue, with exit code 1 (as for any find with no offers). `--store`
+must be an http(s) URL (a bare host is read as https).
+
+```bash
+portage find --store https://shop.example --query "cold brew" --json
+```
+
 Already have the item and want to know where else it's sold? `portage compare`
 resolves a product you name by URL + product id, then runs the same
 find pipeline against its title and ranks the results by how confident the
@@ -131,6 +145,7 @@ portage buy --offer REF [--qty N] [--yes] [--dry-run] ...
 portage buy --quote QUOTE_ID --yes [--json] ...
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
+portage find --store URL --query "..." [--max-price N] [--json]
 portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                        [--max-price N] [--json]
 portage check <url> [--json]
