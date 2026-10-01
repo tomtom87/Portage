@@ -1,8 +1,9 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createRunner, isPortageBin, parseVersion, versionAtLeast } from "../src/runner.js";
-import { setup } from "./helpers.js";
+import { runCommandWithTimeout, setup } from "./helpers.js";
 
 describe("runner", () => {
   it("passes the argv array through and parses JSON", async () => {
@@ -37,7 +38,7 @@ describe("runner", () => {
   });
 
   it("errors on spawn failure with a helpful message", async () => {
-    const runner = createRunner({ portageBin: "/nonexistent/portage", timeoutSeconds: 5 });
+    const runner = createRunner({ portageBin: "/nonexistent/portage", timeoutSeconds: 5 }, runCommandWithTimeout);
     const r = await runner.run(["doctor", "--json"]);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.message).toMatch(/not found/);
@@ -52,7 +53,7 @@ describe("runner", () => {
     }
     const s = setup();
     const marker = join(s.dir, "ran");
-    const runner = createRunner({ portageBin: "/bin/sh", timeoutSeconds: 5 });
+    const runner = createRunner({ portageBin: "/bin/sh", timeoutSeconds: 5 }, runCommandWithTimeout);
     const r = await runner.run(["-c", `touch ${marker}`]);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.message).toMatch(/refusing to run "\/bin\/sh"/);
@@ -64,6 +65,26 @@ describe("runner", () => {
     const r = await s.runner.run(["doctor", "--json"], { timeoutSeconds: 0.5 });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.message).toMatch(/timed out/);
+  });
+
+  it("fails, rather than parse a partial result, when output passes the 16 MB cap", async () => {
+    const s = setup({ FAKE_PORTAGE_MODE: "flood" });
+    const r = await s.runner.run(["find", "--query", "mug", "--json"]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toBe("portage output exceeded the 16 MB cap");
+  });
+
+  it("gives portage an empty stdin, never the gateway's", async () => {
+    const s = setup({ FAKE_PORTAGE_MODE: "stdin" });
+    const r = await s.runner.run(["doctor", "--json"], { timeoutSeconds: 5 });
+    expect(r).toMatchObject({ ok: true, data: { stdin: "", tty: false } });
+  });
+
+  it("starts portage only through OpenClaw's helper: no child_process anywhere in the plugin", () => {
+    const src = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+    const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
+    expect(files).toContain("runner.ts");
+    for (const f of files) expect(readFileSync(join(src, f), "utf8"), f).not.toMatch(/child_process/);
   });
 
   it("refuses an old CLI and runs nothing else", async () => {

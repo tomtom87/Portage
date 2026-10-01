@@ -10,7 +10,10 @@ export default definePluginEntry({
   description:
     "Search, compare and buy from online stores through the Portage CLI, with spending policy and per-payment approval enforced by Portage itself.",
   register(api) {
-    const runner = createRunner(resolveConfig(api.pluginConfig));
+    // api.runtime is read when a tool runs, not here: some registration modes don't provide it.
+    const runner = createRunner(resolveConfig(api.pluginConfig), (argv, options) =>
+      api.runtime.system.runCommandWithTimeout(argv, options),
+    );
     for (const spec of allTools) {
       api.registerTool(
         {

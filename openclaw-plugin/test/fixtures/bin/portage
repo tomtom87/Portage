@@ -20,6 +20,15 @@ switch (mode) {
   case "hang":
     setTimeout(() => {}, 60000);
     break;
+  case "flood":
+    process.stdout.write(Buffer.alloc(17 * 1024 * 1024, 0x20));
+    break;
+  case "stdin": {
+    const chunks = [];
+    process.stdin.on("data", (c) => chunks.push(c));
+    process.stdin.on("end", () => console.log(JSON.stringify({ stdin: Buffer.concat(chunks).toString(), tty: process.stdin.isTTY === true })));
+    break;
+  }
   default:
     console.log(JSON.stringify({ ok: true, argv }));
 }
