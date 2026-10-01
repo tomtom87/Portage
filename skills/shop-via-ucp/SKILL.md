@@ -1,13 +1,17 @@
 ---
 name: shop-via-ucp
-description: Act as a shopper's agent against a store's UCP/MCP commerce backend — discover its manifest, search the catalog, and complete a purchase with a tokenized payment credential. Use when asked to find and/or buy something from an online store, check whether a store supports automated buying, or complete a checkout via MCP tool calls. Enforces three guardrails — discover before assuming credentials, treat checkout's requires_escalation status as data not an error, and never pass a raw card number as payment_token.
+description: Complete a purchase for the user from an online store over its UCP/MCP commerce backend — build a checkout for what they asked for, confirm the exact total with them, and pay with a tokenized payment credential or hand the checkout to them. Use when the user asks you to buy, order or check out something from a store on their behalf. For finding products, searching a store's catalog or checking whether a store supports automated buying with no purchase in mind, use browse-via-ucp instead. Enforces four guardrails — discover before assuming credentials, treat checkout's requires_escalation status as data not an error, never pass a raw card number as payment_token, and never pay for a checkout that doesn't match what the user approved.
 ---
 
 # Shopping via UCP/MCP
 
-You are acting as a shopper's agent. The user wants something found and/or bought from an
-online store. Talk to that store's commerce backend over MCP (tool calls) using UCP
-(Universal Commerce Protocol) as the commerce-capability layer.
+You are acting as a shopper's agent. The user wants something bought from an online
+store. Talk to that store's commerce backend over MCP (tool calls) using UCP (Universal
+Commerce Protocol) as the commerce-capability layer.
+
+If the user only wants to know what a store sells, what something costs there, whether
+it's in stock or whether the store supports automated buying, with no purchase in mind,
+use the read-only `browse-via-ucp` skill instead. It never creates a cart or checkout.
 
 **If you're running inside Claude Code (or another host with the plugin system), prefer
 the [`buy` plugin](https://portage.readthedocs.io/en/latest/skills/buy/) instead of this skill.** It
@@ -29,6 +33,7 @@ report's `outcome` rather than its `message`: only `purchased` means bought.
 Every hand-off outcome (`requires_escalation`, `policy_blocked`,
 `low_confidence`, `no_payment_token`, `permission_denied`,
 `checkout_mismatch`) comes with a `checkout_url` for the human, and
+`checkout_mismatch` always means the CLI stopped before payment (guardrail 4), and
 `decisions:` says why a gate held it: each verdict's `reason` is a string
 naming the cause, or null when that gate passed. `portage history --json` lists past
 checkouts by the same `outcome`, so check it before buying something twice. With
@@ -68,6 +73,14 @@ exact fields first, and never touches anything payment-related.
    tool calls (not through `portage-ucp-client`, which enforces this via
    `PaymentTokenGuard`), check the string yourself before sending it — reject anything
    that's all digits, 12-19 characters, and Luhn-valid.
+4. **Never pay for a checkout that doesn't match what the user approved.** Before
+   `complete_checkout`, compare the checkout the store returned with what the user said
+   yes to: the same items (product or variant ids), the same quantity of each, the same
+   unit prices, the same currency and the same total. If anything differs, or the store
+   dropped or added a line, stop. Don't call `complete_checkout`, and don't adjust the
+   checkout to make it match. Show the user what differs, and if they still want it, build
+   a fresh checkout and ask them to approve its exact total again. There is no exception
+   for a small difference. `portage buy` enforces this in code (`checkout_mismatch`).
 
 ## Tool-call sequence (when making raw MCP calls)
 
@@ -76,10 +89,13 @@ exact fields first, and never touches anything payment-related.
 2. `tools/call search_catalog { "query": "...", "limit": 5 }` → pick the matching product.
 3. `tools/call get_product { "product_id": "..." }` → resolve variant-level detail if needed.
 4. `tools/call create_checkout { "line_items": [...], "idempotency_key": "<generate one>" }`
-   → check `status`; `requires_escalation` triggers guardrail 2. Confirm total with the
-   shopper before proceeding unless they've pre-authorized it.
+   → check `status`; `requires_escalation` triggers guardrail 2. Check the checkout against
+   the request (guardrail 4), then confirm the exact total with the shopper before
+   proceeding unless they've pre-authorized it.
 5. `tools/call complete_checkout { "checkout_id": "...", "payment_token": "...", "idempotency_key": "<fresh>" }`
-   → guardrail 3 applies here.
+   → guardrails 3 and 4 apply here. If the store can return the checkout again
+   (`get_checkout`), re-read it just before this call and stop on any difference from what
+   the user approved.
 6. `tools/call get_order { "order_id": "..." }` if an order id is available, to report
    back tracking/fulfillment info.
 
