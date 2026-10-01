@@ -6,6 +6,45 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Security: a priced line nobody asked for is a checkout mismatch.** `buy` requests exactly one
+  line, but only checked that line, so a store that added an upsell, a "shipping protection"
+  add-on or a second copy of the item (or, on a WebMCP cart, whatever was already in the store's
+  cart) still went through. Any other line now stops a real run with `checkout_mismatch` ("Store
+  added ... to checkout, which wasn't requested."), and a dry run flags it with
+  `checkout_mismatch: true`. An extra line that costs nothing (its own total, or its unit price
+  times quantity, is 0) is allowed, so a free gift or $0 sample doesn't block a purchase; one
+  whose cost can't be read counts as priced.
+
+- **Security: the confidence check sends an allowlisted summary, and compares against the
+  approved quote.** The state sent to the decision backend (`PORTAGE_DECISION_BACKEND`, e.g.
+  `jev`, TypeSafe's hosted API) used to be a slice of the raw checkout hash, so whatever a store
+  nested under `line_items` or `totals` went along with it. It is now built field by field by the
+  new `Portage::Cli::ConfidenceState`: the request (query, store host, quantity, picked item id
+  and title), on a `buy --quote` run the approved quote (store, product id, title, quantity,
+  total, currency), and the checkout's status, currency, per-line item id, title, unit price,
+  quantity, totals and whether it's the requested line, the totals (shipping, tax, fees included),
+  applied discounts' titles and amounts and the selected shipping option's title and price, plus
+  `warnings`. Never the payment token, the address, the buyer's name, phone or email, ids, links,
+  discount codes or environment values; store strings are cut to 200 characters. The question
+  now asks the model to say yes only when the checkout matches the request and the approved
+  quote. `Buy.new` takes `quote_store:` and `quote_title:`, which `buy --quote` passes from the
+  saved quote. The check stays additive: it only sees a checkout the mismatch check, the quote
+  cap and the spend policy let through, and can hold it but never let through one they stop.
+
+- **Security: the WebMCP hand-off flow runs the quote cap and the confidence check.** Against a
+  page whose preset opens checkout through its own tool (Shopify's `proceed_to_checkout`), `buy`
+  now checks, before that tool runs and before autofill: a `--quote` run's cap (`quote_changed`,
+  never handed off; this flow never checked the quote before), the mismatch check, then, when a
+  decision backend is enabled, the confidence check. A hold reports `low_confidence` with the
+  store's `/cart` page as `checkout_url`; checkout isn't opened and nothing is autofilled. A
+  backend error holds the same way.
+
+- **Security: a quote with no total refuses instead of buying uncapped.** `buy --quote` capped the
+  checkout at the quote's total only when the quote had one. A quote saved from a dry run with no
+  priced total (a WebMCP preset dry run never has one) set no cap at all, so its `--yes` run
+  bought at whatever the store asked. It now ends in `quote_changed`, saying the quote has no
+  total, and nothing is bought or handed off.
+
 - **Security: a checkout mismatch always stops the purchase.** `buy` used to stop on a checkout
   that didn't match the request (the item dropped, another quantity, another unit price) only under
   `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH`. Without it the mismatch was a `warnings` entry and the

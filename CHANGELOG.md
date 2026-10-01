@@ -9,6 +9,17 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Security: the `buy` skill describes the hardened decision check.** Follows `portage-cli`'s
+  and `portage-ucp-decision`'s changes (see their changelogs): an extra priced line is now a
+  checkout mismatch, the opt-in confidence check sends an allowlisted checkout summary and
+  compares against the approved quote, it also runs before a WebMCP preset hand-off, and a
+  malformed backend answer holds the purchase. The skill now suggests the check for unattended
+  buying, says it sends TypeSafe a minimal checkout summary and never the address or payment
+  token, and that the user sets `JEV_API_KEY` themselves; it declares `PORTAGE_DECISION_BACKEND`,
+  `PORTAGE_MIN_CONFIDENCE` and `JEV_API_KEY` in its OpenClaw `envVars`, and the packaging spec
+  now checks `JEV_`/`TYPESAFE_` names too. `references/outcomes.md`, `docs/api/cli-json.md`,
+  `docs/plans/system-one-decision-layer.md` and `portage-cli`'s README say so.
+
 - **Security: the `buy` skill no longer describes a fail-open checkout mismatch.** Follows
   `portage-cli`'s change (see its changelog): any checkout mismatch now stops a real purchase
   before payment, with no setting to turn that off. `references/outcomes.md`, the skill's
