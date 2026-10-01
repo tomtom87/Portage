@@ -65,11 +65,18 @@ means "safe to proceed":
 jev = Portage::Ucp::Decision::ModelBackends::Jev.new
 
 Portage::Ucp::Decision::ConfidenceGate.via_backend(
-  backend: jev, state: checkout.to_json, question: "safe_to_complete", threshold: 0.8,
+  backend: jev, state: summary.to_json, question: "safe_to_complete", threshold: 0.8,
   instructions: "Answer yes only if this checkout is safe to complete without a person reviewing it."
 )
 # => #<data Verdict proceed=false, confidence=0.37, threshold=0.8>
 ```
+
+`state` goes to the backend as is, and Jev is a hosted third-party API, so
+build it from an allowlist of the fields the question needs rather than
+serializing a whole checkout: never a payment token, an address, or a
+buyer's name, phone or email. `portage buy` does this with
+`Portage::Cli::ConfidenceState`. A noul value outside 0..1 (or NaN) raises
+`BackendError`, so treat any `Decision::Error` as "don't proceed".
 
 ## What this gem leaves out, and why
 

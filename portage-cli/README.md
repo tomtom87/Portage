@@ -816,11 +816,19 @@ Because it builds no cart, it can't check one, so it never carries
 
 A real run against that kind of page reads the cart back after adding to it
 and checks it the same way `buy` checks any checkout (item, quantity, unit
-price, currency). Any mismatch stops the run there, with outcome
+price, currency, extra lines). Any mismatch stops the run there, with outcome
 `checkout_mismatch` and `decisions.escalation.reason: "mismatch"`: the
 hand-off tool isn't called, so the tab never goes to checkout, and nothing is
 autofilled. The cart is already on the store, so `checkout_url` is the
-store's `/cart` page, for the shopper to look at.
+store's `/cart` page, for the shopper to look at. Items already sitting in
+the store's cart count as extra lines, so they stop the run too.
+
+The same run then applies the other gates a checkout gets before anything
+leaves the cart: a `--quote` run's cap (`quote_changed`), and, when a
+decision backend is enabled, the confidence check (see "Decisions"). A hold
+from the confidence check reports `low_confidence` with the `/cart` page as
+`checkout_url`; again the tab isn't sent to checkout and nothing is
+autofilled.
 
 Once the flow hands off to the store's own checkout page, the shopper can
 opt into having it pre-filled: `--autofill`, or
@@ -864,10 +872,10 @@ with the same value, as `[outcome]`.
 | `needs_confirmation` | Checkout ready; rerun with `--yes`. | no |
 | `dry_run` | Checkout created, `--dry-run` stopped it. `checkout_mismatch: true` when a real run would stop on a mismatch. | no |
 | `requires_escalation` | The store wants the shopper to finish. | yes |
-| `checkout_mismatch` | Checkout differs from the request (item, quantity, unit price or currency); stopped before payment. | yes |
+| `checkout_mismatch` | Checkout differs from the request (item, quantity, unit price, currency, or a priced line nobody asked for); stopped before payment. | yes |
 | `no_payment_token` | No `--payment-token` and no default payment method. | yes |
 | `policy_blocked` | Your spend policy denied it; `decisions.policy.reason` says why. | yes |
-| `low_confidence` | The confidence gate held it. | yes |
+| `low_confidence` | The confidence gate held it (before a `--yes` completion, or before a WebMCP preset hand-off to checkout). | yes |
 | `permission_denied` | The store doesn't let this agent complete checkout. | yes |
 | `handoff_only` | Tier C: Amazon or another hand-off-only host. `legal_notice` explains why; see "Hand-off targets and hand-off-only hosts". | yes (built, never fetched) |
 | `store_refused` | The store refused a cart/checkout call (e.g. sold out). | when the store gave one |
@@ -898,7 +906,11 @@ otherwise a string naming why it stopped it.
   doesn't match the request (`reason: "mismatch"`), on every run but
   `--dry-run`, where the mismatch is reported in `warnings` and flagged with
   `checkout_mismatch: true` instead. Nothing turns this off:
-  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is deprecated and ignored.
+  `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` is deprecated and ignored. A mismatch
+  is the requested line missing, a different quantity, a different unit
+  price or currency than the store's own catalog, or any extra line the
+  request didn't include. An extra line that costs nothing (a free gift, a
+  $0 sample) is allowed; one whose cost can't be read counts as priced.
 - **policy** — `PolicyGuard`, run on your policy file (see "Policy" above)
   before any `--yes` completion. `reason` is the guard's own
   (`per_transaction_cap_exceeded`, `rolling_spend_cap_exceeded`,
@@ -913,16 +925,39 @@ otherwise a string naming why it stopped it.
   when the store answers that it's purchased.
 - **confidence** — `ConfidenceGate`, off unless `--decision-backend` or
   `PORTAGE_DECISION_BACKEND` names a backend. Right before a `--yes`
-  completion it asks the backend whether the checkout matches the request
-  and is safe to complete unattended. It sends the query, merchant,
-  quantity, line items, totals and warnings, never the payment token. The
-  gate fails closed, so three things hold the purchase: a score below the
-  threshold (`reason: "below_threshold"`), a backend that can't answer
-  (`"backend_error"`), and naming a backend without `portage-ucp-decision`
-  installed (`"not_installed"`). For the last two, `error` says what went
-  wrong. `jev` needs `JEV_API_KEY`; `laya` needs `LAYA_BRIDGE_SCRIPT` (see
-  `portage-ucp-decision`'s README). `portage doctor` flags whichever of
-  these is missing for the selected backend.
+  completion, and before a WebMCP preset flow sends the browser to the
+  store's checkout (and autofills it), it asks the backend whether the
+  checkout matches the request, and the approved quote on a `--quote` run,
+  and is safe to complete unattended. It is additive only: it runs after
+  the mismatch check, the quote cap and the spend policy, on a checkout all
+  of them let through, so it can hold a purchase but never let through one
+  they would stop. The gate fails closed, so three things hold the
+  purchase: a score below the threshold (`reason: "below_threshold"`), a
+  backend that can't answer or answers with something that isn't a
+  probability (`"backend_error"`), and naming a backend without
+  `portage-ucp-decision` installed (`"not_installed"`). For the last two,
+  `error` says what went wrong. `jev` needs `JEV_API_KEY`; `laya` needs
+  `LAYA_BRIDGE_SCRIPT` (see `portage-ucp-decision`'s README). `portage
+  doctor` flags whichever of these is missing for the selected backend.
+
+  `jev` is TypeSafe's hosted API, so what it's sent is kept to a minimal,
+  allowlisted summary (`Portage::Cli::ConfidenceState`); nothing else on
+  the checkout is read:
+
+  - `request`: the search query, the store's host, the quantity, and the
+    picked item's id and title.
+  - `approved_quote` (`--quote` runs only): the quote's store, product id,
+    title, quantity, total and currency.
+  - `checkout`: status, currency; per line, item id, title, unit price,
+    quantity, line totals and whether it's the requested line; the totals
+    (subtotal, shipping, tax, fees, total — whatever the store lists);
+    applied discounts' titles and amounts; the selected shipping option's
+    title and price.
+  - `warnings`.
+
+  Never sent: the payment token, the shipping address, the buyer's name,
+  phone or email, checkout ids, links and URLs, discount codes, or anything
+  from your environment. Store-supplied strings are cut to 200 characters.
 - **policy** also denies a checkout with no `total` line as
   `total_unknown` whenever a spend cap is set, rather than skipping the cap.
 
