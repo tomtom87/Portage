@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createRunner, parseVersion, versionAtLeast } from "../src/runner.js";
+import { createRunner, isPortageBin, parseVersion, versionAtLeast } from "../src/runner.js";
 import { setup } from "./helpers.js";
 
 describe("runner", () => {
@@ -41,6 +41,22 @@ describe("runner", () => {
     const r = await runner.run(["doctor", "--json"]);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.message).toMatch(/not found/);
+  });
+
+  it("only ever starts the portage executable", async () => {
+    for (const ok of ["portage", "/opt/homebrew/bin/portage", "./bin/portage", "C:\\Ruby\\bin\\portage.exe"]) {
+      expect(isPortageBin(ok), ok).toBe(true);
+    }
+    for (const bad of ["sh", "/bin/sh", "node", "portage-evil", "xportage", "/tmp/portage/sh", "portage.sh", ""]) {
+      expect(isPortageBin(bad), bad).toBe(false);
+    }
+    const s = setup();
+    const marker = join(s.dir, "ran");
+    const runner = createRunner({ portageBin: "/bin/sh", timeoutSeconds: 5 });
+    const r = await runner.run(["-c", `touch ${marker}`]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toMatch(/refusing to run "\/bin\/sh"/);
+    expect(existsSync(marker)).toBe(false);
   });
 
   it("times out", async () => {
