@@ -34,34 +34,44 @@
   },
   "toolMetadata": {
     "portage_pick": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_dry_run": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_approve": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_buy_quote": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_handoff": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_index_add": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_index_remove": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_index_build": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_index_refresh": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     },
     "portage_browser_import": {
-      "optional": true
+      "optional": true,
+      "sideEffecting": true
     }
   },
   "activation": {
@@ -84,5 +94,8 @@
         "description": "Per-call timeout in seconds."
       }
     }
-  }
+  },
+  "skills": [
+    "skills"
+  ]
 }
