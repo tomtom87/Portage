@@ -391,8 +391,10 @@ Things to know about these tools:
 Once a WebMCP session hands off to the store's own checkout — a preset's
 `handoff_checkout` tool (Shopify's `proceed_to_checkout`) navigates the same
 bridge's browser there — the shopper can opt into having contact and
-shipping fields filled in for them before they take over to pay. This is
-off by default and gated behind two separate approvals, neither of which
+shipping fields filled in for them before they take over to pay. It never
+runs when `portage-cli` found the cart didn't match the request: that run
+stops with `checkout_mismatch` before the hand-off tool is called at all.
+This is off by default and gated behind two separate approvals, neither of which
 lives in this gem:
 
 - **The opt-in itself** is `portage-cli`'s: `portage buy --autofill`, or

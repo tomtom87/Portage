@@ -811,6 +811,16 @@ checkout tool (Shopify's `proceed_to_checkout`) stops after the read-only
 product search: nothing is added to the store's cart, the tab isn't sent to
 checkout and nothing is autofilled. The `dry_run` report carries a `would:`
 key with the line item, the hand-off tool and whether autofill would run.
+Because it builds no cart, it can't check one, so it never carries
+`checkout_mismatch: true`.
+
+A real run against that kind of page reads the cart back after adding to it
+and checks it the same way `buy` checks any checkout (item, quantity, unit
+price, currency). Any mismatch stops the run there, with outcome
+`checkout_mismatch` and `decisions.escalation.reason: "mismatch"`: the
+hand-off tool isn't called, so the tab never goes to checkout, and nothing is
+autofilled. The cart is already on the store, so `checkout_url` is the
+store's `/cart` page, for the shopper to look at.
 
 Once the flow hands off to the store's own checkout page, the shopper can
 opt into having it pre-filled: `--autofill`, or
