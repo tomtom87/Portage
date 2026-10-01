@@ -33,6 +33,14 @@ pre-1.0, so APIs may still shift between minor versions.
   saved quote. The check stays additive: it only sees a checkout the mismatch check, the quote
   cap and the spend policy let through, and can hold it but never let through one they stop.
 
+- **Security: the non-preset WebMCP hand-off runs the confidence check too.** A page whose WebMCP
+  tools build a checkout (no preset, so `buy` ends in `express_stop` through `finish_checkout`)
+  applied the quote cap and the mismatch stop but not the opt-in confidence check. With a decision
+  backend enabled it now runs before the hand-off, after those two. A hold reports `low_confidence`
+  with the store's `/cart` page as `checkout_url`, as the preset flow's does, and nothing is handed
+  to the checkout (a `profile` target is not navigated there). A backend error holds the same way.
+  No backend enabled: unchanged.
+
 - **Security: the WebMCP hand-off flow runs the quote cap and the confidence check.** Against a
   page whose preset opens checkout through its own tool (Shopify's `proceed_to_checkout`), `buy`
   now checks, before that tool runs and before autofill: a `--quote` run's cap (`quote_changed`,
