@@ -9,6 +9,10 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-01
+
+- **Release set:** `buy` plugin 0.10.2 and the OpenClaw plugin `@tomtom87/portage` 0.10.2. The OpenClaw plugin now declares the `integrations` category, so its ClawHub listing moves out of Other. The `buy` skills change only in their `version` (the OpenClaw plugin's version follows the `buy` plugin's). No gem changed.
+
 ## [0.16.0] - 2026-10-01
 
 - **Release set:** `buy` plugin 0.10.1 and the new OpenClaw plugin `@tomtom87/portage` 0.10.1, whose version follows the `buy` plugin's. The OpenClaw plugin carries the ClawHub security audit fixes below: no raw-UCP direct-checkout fallback in its bundled `buy` skill, and a runner that only starts `portage`. The `buy` plugin's skills change only in their `version` (kept equal to `plugin.json`). No gem changed. Both ClawHub listings are published separately, from the `tomtom87` account.
