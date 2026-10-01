@@ -358,7 +358,9 @@ A store's UCP manifest names its MCP endpoint, so any MCP-capable agent can call
 catalog, cart and checkout tools directly. Load the
 [`shop-via-ucp` skill](skills/shop-via-ucp.md) into that agent: it encodes the sequence
 and the guardrails (discover before sending credentials, handle `requires_escalation`,
-reject raw card numbers) so you don't have to re-derive them.
+reject raw card numbers, never pay for a checkout that doesn't match what the person
+approved) so you don't have to re-derive them. For lookups only, load the read-only
+[`browse-via-ucp` skill](skills/browse-via-ucp.md), which never creates a cart or checkout.
 
 ## Checklist
 

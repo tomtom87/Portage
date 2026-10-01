@@ -25,20 +25,24 @@ you point them at.
 
 ## `skills/`
 
-[`skills/shop-via-ucp`](skills/shop-via-ucp.md) and [`skills/serve-via-ucp`](skills/serve-via-ucp.md)
-are ready-to-drop-in agent skills (in the Claude "Skill" / `SKILL.md` shape) — the shopper
-side and the merchant side of using this project, respectively. If you're an agent being
-asked to buy something or to wire up a store's own UCP endpoint, prefer loading the
-matching skill over re-deriving the tool-call sequence and its guardrails from this
-documentation yourself; the skill encodes the guardrails (discover-before-credentials,
-`requires_escalation` handling, the raw-PAN rejection check) as instructions, not just
-prose to infer them from.
+[`skills/shop-via-ucp`](skills/shop-via-ucp.md), [`skills/browse-via-ucp`](skills/browse-via-ucp.md)
+and [`skills/serve-via-ucp`](skills/serve-via-ucp.md) are ready-to-drop-in agent skills (in
+the Claude "Skill" / `SKILL.md` shape). `shop-via-ucp` buys on the shopper's behalf,
+`browse-via-ucp` only looks (a store's manifest, its catalog, whether it supports automated
+buying) and never creates a cart or checkout, and `serve-via-ucp` is the merchant side. If
+you're an agent being asked to buy something, look something up in a store, or wire up a
+store's own UCP endpoint, prefer loading the matching skill over re-deriving the tool-call
+sequence and its guardrails from this documentation yourself; the skill encodes the
+guardrails (discover-before-credentials, `requires_escalation` handling, the raw-PAN
+rejection check, never paying for a checkout that doesn't match what the shopper approved)
+as instructions, not just prose to infer them from.
 
 ## The UCP manifest itself
 
 If you're the *shopper*'s agent, not a contributor to this project: you almost certainly
 don't need this documentation site at all. Fetch the *target store's*
-`/.well-known/ucp` manifest directly, follow the `shop-via-ucp` skill's guardrails, and
+`/.well-known/ucp` manifest directly, follow the `shop-via-ucp` skill's guardrails (or
+`browse-via-ucp`'s, if you're only looking), and
 make MCP tool calls against whatever it advertises — see [the walkthrough](walkthrough.md)
 for the full sequence and [UCP overview](concepts/ucp-overview.md) for how the pieces fit
 together. This documentation site is for people (or agents) *building or integrating*
