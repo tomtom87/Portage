@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Security: the OpenClaw plugin runs `portage` through OpenClaw's own command helper.** ClawHub's security audit of `@tomtom87/portage` 0.10.2 still reported the runner's `child_process.execFile` call as shell execution (`suspicious.dangerous_exec`). The runner now hands the argument array to `api.runtime.system.runCommandWithTimeout`, the helper OpenClaw gives plugins for running a native command, which always spawns without a shell, so the plugin has no `child_process` code of its own. It still only starts a `portageBin` named `portage`, with the per-call timeout, the 16 MB output cap and the same error messages; output past the cap is now a plain error, and `portage` gets an empty stdin. The helper caps output only from OpenClaw 2026.5.28, so that is the plugin's new minimum (was 2026.3.24). Tests run the runner against OpenClaw's real helper. The package README's safety model and the docs page say so.
+
 ## [0.16.1] - 2026-10-01
 
 - **Release set:** `buy` plugin 0.10.2 and the OpenClaw plugin `@tomtom87/portage` 0.10.2. The OpenClaw plugin now declares the `integrations` category, so its ClawHub listing moves out of Other. The `buy` skills change only in their `version` (the OpenClaw plugin's version follows the `buy` plugin's). No gem changed.
