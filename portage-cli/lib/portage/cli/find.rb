@@ -24,6 +24,12 @@ module Portage
     # search ranker and the purchase decision to `--yes` in one breath is how
     # you end up owning a counterfeit from a shop you've never heard of, so
     # picking a store stays an explicit act (see Cli.run_buy's `--store` gate).
+    #
+    # `store:` narrows the same pipeline to one store the caller already
+    # named — the live re-check of an index hit or an earlier offer. No
+    # search backend or OfferSource runs; the store is probed and its catalog
+    # searched, read-only, so its offers carry the same shape, `offer_ref`
+    # and history entry as any other find.
     class Find
       CART_CAP = "dev.ucp.shopping.cart".freeze
       CHECKOUT_CAP = "dev.ucp.shopping.checkout".freeze
@@ -43,8 +49,11 @@ module Portage
       #   candidate on it is never probed (see #call): it still surfaces as
       #   a candidate, marked `handoff_only: true`, so an agent can list it
       #   ("Amazon also sells this") without this process ever fetching it.
+      # @param store [String, nil] a store URL (see Find.store_origin): search
+      #   only that store, live, and skip every backend and OfferSource.
       def initialize(query:, limit: MAX_PROBES, max_price: nil, backends: nil, cache: nil, throttle: THROTTLE,
-                     offer_sources: nil, handoff_only: nil)
+                     offer_sources: nil, handoff_only: nil, store: nil)
+        @store = store
         @query = query.to_s
         @limit = [limit, MAX_PROBES].min
         @max_price = max_price
@@ -54,6 +63,27 @@ module Portage
         @offer_sources = offer_sources || OfferSources.default
         @handoff_only = handoff_only || HandoffOnly.new
       end
+
+      # The origin a `--store` value names: an http(s) URL (or a bare host,
+      # as `check` and `buy` accept) collapsed onto scheme://host[:port].
+      # @return [String, nil] nil for anything else, such as ftp:// or junk.
+      def self.store_origin(url)
+        text = url.to_s.strip
+        return nil if text.empty? || (text.include?("://") && !text.match?(%r{\Ahttps?://}i))
+
+        uri = URI.parse(text.include?("://") ? text : "https://#{text}")
+        origin_of_uri(uri)
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def self.origin_of_uri(uri)
+        return nil unless uri.is_a?(URI::HTTP) && !uri.host.to_s.empty?
+
+        port = uri.port == uri.default_port ? "" : ":#{uri.port}"
+        "#{uri.scheme}://#{uri.host.downcase}#{port}"
+      end
+      private_class_method :origin_of_uri
 
       def call
         return report(message: "Nothing to search for — pass --query.") if @query.strip.empty?
@@ -88,11 +118,22 @@ module Portage
       # --- Step 1: ask the backends who might sell this ---
 
       def candidate_origins
+        return store_candidate if @store
+
         seen = {}
         @backends.each do |backend|
           urls_from(backend).each { |url| add_candidate(seen, backend, url) }
         end
         seen.values.first(@limit)
+      end
+
+      # `--store`: the one candidate is the named store itself. A hand-off-only
+      # host stays a candidate, flagged, so #probe_candidates never fetches it.
+      def store_candidate
+        origin = self.class.store_origin(@store)
+        return [] unless origin
+
+        [{ origin: origin, source: "store", handoff_only: @handoff_only.host?(URI.parse(origin).host) }]
       end
 
       # Keyed by host rather than by full origin: backends routinely hand back
@@ -141,6 +182,8 @@ module Portage
       # #urls_from gives the URL backends. --max-price applies here exactly
       # as it does to a probed store's offers in #offer.
       def source_offers
+        return [] if @store
+
         offers = @offer_sources.flat_map do |source|
           source.offers(@query, limit: PER_STORE_RESULTS, context: BuyerContext.from_env)
         end
@@ -281,6 +324,8 @@ module Portage
       end
 
       def no_candidates_message
+        return "#{@store.inspect} isn't an http(s) store URL." if @store
+
         names = @backends.map(&:name)
         return no_backends_message if names.empty?
 
@@ -312,6 +357,8 @@ module Portage
       end
 
       def summary(candidates, stores, offers)
+        return store_summary(candidates.first, stores, offers) if @store
+
         # Counted from the offers, not `stores`: an OfferSource's offers
         # come from stores that were never probed.
         selling = offers.map { |o| o[:store] }.uniq.length
@@ -319,6 +366,22 @@ module Portage
         return "#{stores.length} store(s) speak UCP but none stock \"#{@query}\"." if stores.any?
 
         "Checked #{candidates.length} store(s); none of them speak UCP."
+      end
+
+      # The `--store` wording: say what happened to that one store, not "N
+      # stores".
+      def store_summary(candidate, stores, offers)
+        origin = candidate[:origin]
+        return "Found #{offers.length} offer(s) at #{origin}." if offers.any?
+        return handoff_only_message(origin) if candidate[:handoff_only]
+        return "#{origin} doesn't speak UCP, so there is no catalogue to search." if stores.empty?
+
+        "#{origin} speaks UCP but has nothing matching \"#{@query}\"."
+      end
+
+      def handoff_only_message(origin)
+        "#{origin} is a hand-off-only retailer: Portage never fetches it, so it wasn't searched. " \
+          "Open the site yourself."
       end
     end
   end
