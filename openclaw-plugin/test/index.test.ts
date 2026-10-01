@@ -8,7 +8,7 @@ vi.mock("openclaw/plugin-sdk/plugin-entry", () => ({ definePluginEntry: (e: unkn
 import { resolveConfig } from "../src/config.js";
 import plugin from "../src/index.js";
 import { allTools } from "../src/tools/index.js";
-import { FAKE, setup } from "./helpers.js";
+import { FAKE, runCommandWithTimeout, setup } from "./helpers.js";
 
 describe("plugin entry", () => {
   it("registers every tool with a schema, and runs through the configured binary", async () => {
@@ -17,6 +17,7 @@ describe("plugin entry", () => {
     (plugin as any).register({
       pluginConfig: { portageBin: FAKE, timeoutSeconds: 30 },
       registerTool: (tool: unknown, opts: unknown) => registered.push({ tool, opts }),
+      runtime: { system: { runCommandWithTimeout } },
     });
     expect(registered).toHaveLength(23);
     const optional = new Set([

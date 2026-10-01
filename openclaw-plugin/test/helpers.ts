@@ -2,7 +2,10 @@ import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runCommandWithTimeout } from "openclaw/plugin-sdk/process-runtime";
 import { createRunner } from "../src/runner.js";
+
+export { runCommandWithTimeout };
 
 export const FAKE = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "bin", "portage");
 
@@ -12,7 +15,7 @@ export function setup(env: Record<string, string> = {}, timeoutSeconds = 20) {
   process.env.FAKE_PORTAGE_LOG = log;
   for (const k of ["FAKE_PORTAGE_MODE", "FAKE_PORTAGE_VERSION"]) delete process.env[k];
   Object.assign(process.env, env);
-  const runner = createRunner({ portageBin: FAKE, timeoutSeconds });
+  const runner = createRunner({ portageBin: FAKE, timeoutSeconds }, runCommandWithTimeout);
   /** argv of every call except the cached --version probe. */
   const calls = () =>
     (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").filter(Boolean) : [])
