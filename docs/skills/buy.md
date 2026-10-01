@@ -9,7 +9,7 @@ hand-off-only retailers (Amazon and others) whose terms restrict automated purch
 agents. It ships as a [Claude Code plugin](https://docs.claude.com/en/docs/claude-code/plugins)
 from this repo's own marketplace (`.claude-plugin/marketplace.json`).
 
-The plugin also ships [`product-lookup`](product-lookup.md), a read-only skill for questions
+The plugin also ships [`shop-research`](shop-research.md), a read-only skill for questions
 with no purchase in mind (a price, stock, a store, a past order). It never runs `buy` and
 hands over to this skill when you want to buy.
 

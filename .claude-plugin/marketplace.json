@@ -11,7 +11,7 @@
     {
       "name": "buy",
       "source": "./plugins/buy",
-      "description": "Find and buy products from online stores through the portage CLI: search, compare, dry-run, checkout, hand-off to your own browser, order tracking, with spending caps and hard guardrails. Ships two skills: buy, and the read-only product-lookup for price, stock, store and order questions.",
+      "description": "Find and buy products from online stores through the portage CLI: search, compare, dry-run, checkout, hand-off to your own browser, order tracking, with spending caps and hard guardrails. Ships two skills: buy, and the read-only shop-research for price, stock, store and order questions.",
       "category": "commerce",
       "keywords": ["shopping", "buy", "checkout", "ucp", "mcp", "webmcp", "ecommerce"]
     }

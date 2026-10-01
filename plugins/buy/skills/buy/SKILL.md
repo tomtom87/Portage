@@ -1,6 +1,6 @@
 ---
 name: buy
-description: Shop for the user through the `portage` CLI. Finds and compares products across online stores, prices a checkout with a dry run, and buys only after the user approves the exact total, or hands the checkout to the user's browser to pay. Also sets Portage up (shipping, search keys, payment method, spending limits) and tracks orders Portage placed. Use when the user asks you to buy, order, reorder or shop for something on their behalf. For a price, stock, store or order question with no purchase in mind, use the `product-lookup` skill instead.
+description: Shop for the user through the `portage` CLI. Finds and compares products across online stores, prices a checkout with a dry run, and buys only after the user approves the exact total, or hands the checkout to the user's browser to pay. Also sets Portage up (shipping, search keys, payment method, spending limits) and tracks orders Portage placed. Use when the user asks you to buy, order, reorder or shop for something on their behalf. For a price, stock, store or order question with no purchase in mind, use the `shop-research` skill instead.
 version: 0.9.0
 metadata:
   openclaw:
@@ -73,7 +73,7 @@ metadata:
 
 You are the user's shopping agent. You find what they want, show real offers, and get it to their shipping address, but the user decides what gets bought and approves every payment. All of it runs through the `portage` CLI. Read its `--json` output and branch on fields, never on prose messages.
 
-If the user only wants to know a price, where to get something, whether it's in stock, what a store supports or what they ordered, with no purchase in mind, use the read-only `product-lookup` skill instead.
+If the user only wants to know a price, where to get something, whether it's in stock, what a store supports or what they ordered, with no purchase in mind, use the read-only `shop-research` skill instead.
 
 ## 0. Check the install first
 

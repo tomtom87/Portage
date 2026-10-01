@@ -26,9 +26,14 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   trigger list as too broad). Each OpenClaw `envVars` description now says the user sets it in
   `~/.portage/.env` and the agent never reads or prints its value.
 
-- **New `product-lookup` skill in the `buy` plugin, for questions with no purchase in mind.**
-  `plugins/buy/skills/product-lookup/` answers what something costs, where to get it, whether
+- **New `shop-research` skill in the `buy` plugin, for questions with no purchase in mind.**
+  `plugins/buy/skills/shop-research/` answers what something costs, where to get it, whether
   it's in stock, whether Portage can buy from a store, and what the user ordered through Portage.
+  Its "Store details" section adds what's known about any store a lookup touches, only from
+  fields the read-only commands return: the offer's `store`, `url` and `source`; `check`'s
+  `verdict`, `handoff_only`, `platform`, `webmcp.status` and the manifest's `capabilities` and
+  `business`; the index entry's `capabilities`, `sources` and `last_verified`. It never invents a
+  field and never vouches for a store.
   It runs only read-only commands (`portage find`, `index search`, `index show`, `check`,
   `pick --view`, `history`, `doctor`), each checked against `portage-cli`'s code, and names the
   mutating ones it must never run, including `orders reconcile`, which settles order records. Its
@@ -36,9 +41,9 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   "seen at", never a live price or stock), the untrusted-data rule and the hand-off-only "never
   fetch, scrape or drive" rule, so it stands alone on ClawHub. Its OpenClaw `envVars` are only the
   search and retailer keys it names. `buy`'s description now covers buying only and points to
-  `product-lookup` for lookups. `buy_skill_frontmatter_spec.rb` checks both skills' frontmatter,
-  and that `product-lookup`'s command table holds only read-only commands. Documented in a new
-  `docs/skills/product-lookup.md`, the README's install routes, `docs/skills/buy.md`,
+  `shop-research` for lookups. `buy_skill_frontmatter_spec.rb` checks both skills' frontmatter,
+  and that `shop-research`'s command table holds only read-only commands. Documented in a new
+  `docs/skills/shop-research.md`, the README's install routes, `docs/skills/buy.md`,
   `docs/agentic-flow.md` and the plugin and marketplace descriptions. Not on ClawHub yet.
 
 - **`shop-via-ucp` is for buying, and a new read-only `browse-via-ucp` is for looking.** ClawHub's
@@ -47,7 +52,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   user's behalf and points lookups to `browse-via-ucp`. It keeps its three guardrails and gains a
   fourth: never pay for a checkout whose items, quantities, unit prices, currency or total differ
   from what the user approved; stop and ask again with a fresh checkout. The new
-  `skills/browse-via-ucp/` reads a store's manifest, searches its catalog and says whether it
+  `skills/browse-via-ucp/` reads a store's manifest, searches its catalog, reports the store
+  details the manifest publishes (business name, capabilities, policy links) and says whether it
   supports automated buying, calls only read-only tools, never creates, updates or completes a
   cart or checkout, and hands over to `shop-via-ucp` to buy. The `buy` skill's
   `references/raw-ucp.md` gets the same mismatch guardrail. New
