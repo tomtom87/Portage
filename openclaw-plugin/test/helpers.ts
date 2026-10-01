@@ -4,7 +4,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRunner } from "../src/runner.js";
 
-export const FAKE = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-portage.mjs");
+export const FAKE = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "bin", "portage");
 
 export function setup(env: Record<string, string> = {}, timeoutSeconds = 20) {
   const dir = mkdtempSync(join(tmpdir(), "portage-fake-"));

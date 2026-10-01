@@ -1,7 +1,16 @@
 import { execFile } from "node:child_process";
+import { basename } from "node:path";
 
 /** Oldest portage-cli these tools are written against (`find --store` landed in 0.12.0). */
 export const MIN_CLI_VERSION = "0.12.0";
+
+/** The only executable names the runner will start, whatever directory portageBin points into. */
+const ALLOWED_BIN_NAMES = new Set(["portage", "portage.exe"]);
+
+/** True when portageBin names the portage executable (bare, or a path ending in it). */
+export function isPortageBin(bin: string): boolean {
+  return ALLOWED_BIN_NAMES.has(basename(bin.replace(/\\/g, "/")));
+}
 
 const MAX_BUFFER = 16 * 1024 * 1024;
 const STDERR_TAIL = 500;
@@ -22,7 +31,8 @@ interface ExecOutcome {
 
 function exec(bin: string, args: string[], timeoutMs: number): Promise<ExecOutcome> {
   return new Promise((resolve) => {
-    // execFile with an argument array: no shell, no interpolation.
+    // The plugin's only subprocess. execFile with an argument array: no shell, no interpolation;
+    // bin is always the portage CLI (see isPortageBin), bounded by a timeout and an output cap.
     execFile(
       bin,
       args,
@@ -82,6 +92,10 @@ export function createRunner(config: { portageBin: string; timeoutSeconds: numbe
 
   return {
     async run(args, opts) {
+      // The plugin's one subprocess is the portage CLI: never start anything else, even if configured to.
+      if (!isPortageBin(bin)) {
+        return { ok: false, message: `refusing to run "${bin}": portageBin must name the portage executable (portage, or a path ending in /portage)` };
+      }
       // Cache only a passing check, so installing/upgrading portage mid-session recovers.
       versionCheck ??= checkVersion();
       const problem = await versionCheck;

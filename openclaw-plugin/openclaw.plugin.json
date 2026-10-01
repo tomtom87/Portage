@@ -85,7 +85,8 @@
         "type": "string",
         "minLength": 1,
         "default": "portage",
-        "description": "Path or name of the portage executable (default: portage on PATH)."
+        "pattern": "(^|[/\\\\])portage(\\.exe)?$",
+        "description": "Path or name of the portage executable (default: portage on PATH). Must be portage itself, or a path ending in /portage: the plugin runs nothing else."
       },
       "timeoutSeconds": {
         "type": "number",
