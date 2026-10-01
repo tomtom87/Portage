@@ -585,6 +585,70 @@ RSpec.describe Portage::Cli::Buy do
       expect(session).not_to have_received(:complete_checkout)
     end
 
+    describe "lines the person never asked for" do
+      def checkout_with_extra(extra)
+        incomplete_checkout.merge(
+          "line_items" => [{ "item" => { "id" => "p1", "price" => 500 }, "quantity" => 1 }, extra]
+        )
+      end
+
+      def buy_with(checkout)
+        session = fake_session(advertises_checkout: true, checkout: checkout, completed: completed_checkout)
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+        report = described_class.new(url: "shop.example", query: "cold", yes: true, payment_token: "tok_1").call
+        [report, session]
+      end
+
+      it "stops a checkout carrying an extra, priced line before payment" do
+        extra = { "item" => { "id" => "prot_1", "title" => "Shipping protection", "price" => 295 }, "quantity" => 1 }
+        report, session = buy_with(checkout_with_extra(extra))
+
+        expect(report[:outcome]).to eq("checkout_mismatch")
+        expect(report[:warnings])
+          .to eq(["Store added prot_1 Shipping protection to checkout, which wasn't requested."])
+        expect(session).not_to have_received(:complete_checkout)
+      end
+
+      it "stops on an extra line whose cost it can't read" do
+        report, session = buy_with(checkout_with_extra({ "item" => { "id" => "mystery" }, "quantity" => 1 }))
+
+        expect(report[:outcome]).to eq("checkout_mismatch")
+        expect(session).not_to have_received(:complete_checkout)
+      end
+
+      it "stops on a second line for the requested item, which would double the order" do
+        duplicate = { "item" => { "id" => "p1", "price" => 500 }, "quantity" => 1 }
+        report, = buy_with(checkout_with_extra(duplicate))
+
+        expect(report[:outcome]).to eq("checkout_mismatch")
+        expect(report[:warnings].join).to include("Store added p1")
+      end
+
+      it "lets a free extra line through, by its own total or by its price" do
+        by_total = { "item" => { "id" => "gift", "title" => "Free sample", "price" => 300 }, "quantity" => 1,
+                     "totals" => [{ "type" => "total", "amount" => 0 }] }
+        by_price = { "item" => { "id" => "gift", "price" => 0 }, "quantity" => 2 }
+
+        [by_total, by_price].each do |extra|
+          report, session = buy_with(checkout_with_extra(extra))
+
+          expect(report[:outcome]).to eq("purchased")
+          expect(report[:warnings]).to eq([])
+          expect(session).to have_received(:complete_checkout)
+        end
+      end
+
+      it "flags an extra line on a dry run without stopping the preview" do
+        extra = { "item" => { "id" => "upsell", "price" => 900 }, "quantity" => 1 }
+        session = fake_session(advertises_checkout: true, checkout: checkout_with_extra(extra))
+        allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+        report = described_class.new(url: "shop.example", query: "cold", dry_run: true).call
+
+        expect(report).to include(outcome: "dry_run", checkout_mismatch: true)
+      end
+    end
+
     it "keeps a mismatched --dry-run a dry run, flagging that the real purchase would stop" do
       checkout = incomplete_checkout.merge("line_items" => [])
       session = fake_session(advertises_checkout: true, checkout: checkout)
