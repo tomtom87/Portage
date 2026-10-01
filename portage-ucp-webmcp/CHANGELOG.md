@@ -11,6 +11,11 @@ pre-1.0, so APIs may still shift between minor versions.
   `tool_names:`". No `portage buy` flag or `Buy` keyword takes it. The
   README now says to confirm it interactively or pass `tool_names:` to
   `WebMcp.connect` yourself.
+- Documentation only, no code change. "Approved autofill of the store's
+  checkout" now says autofill never runs when `portage-cli` finds the cart
+  doesn't match the request: since `portage-cli`'s fix for ClawHub's audit,
+  that run stops with `checkout_mismatch` before the preset's hand-off tool
+  is called.
 
 ## [0.2.0] - 2026-09-29
 

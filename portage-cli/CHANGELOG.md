@@ -20,6 +20,16 @@ pre-1.0, so APIs may still shift between minor versions.
   in another currency than the catalog's price is a mismatch. The quoted total and currency are
   still `--quote`'s `quote_changed` check, unchanged.
 
+- **Security: the WebMCP hand-off flow stops on a mismatched cart too.** Against a WebMCP page
+  whose preset opens checkout through its own tool (Shopify's `proceed_to_checkout`), `buy` read
+  the cart back and checked it, but only put a mismatch in `warnings`: it still called the hand-off
+  tool, sending the browser tab to the store's checkout, and ran autofill there when it was
+  approved. Now any mismatch stops the run before that tool, with outcome `checkout_mismatch` and
+  `decisions.escalation.reason: "mismatch"`. Nothing is autofilled, and `checkout_url` is the
+  store's `/cart` page, so the shopper can look at the cart that was built. A matching cart hands
+  off as `express_stop`, as before. The dry run of this flow builds no cart, so it can't check one
+  and never carries `checkout_mismatch: true`.
+
 ## [0.11.0] - 2026-10-01
 
 - **Category classification uses the whole taxonomy.** `known-stores/categories.yml` is now generated

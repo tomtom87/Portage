@@ -15,7 +15,10 @@ this project is pre-1.0, so APIs may still shift between minor versions.
   dry-run and buy steps, `docs/agentic-flow.md`, `docs/api/cli-json.md` and `portage-cli`'s README
   say so, document the dry run's new `checkout_mismatch: true` flag, and mark
   `PORTAGE_ABORT_ON_CHECKOUT_MISMATCH` deprecated and ignored. The skill drops it from its OpenClaw
-  `envVars`. Found by ClawHub's security audit of `portage-buy`.
+  `envVars`. Found by ClawHub's security audit of `portage-buy`. The same stop now covers
+  `portage-cli`'s WebMCP hand-off flow (a Shopify page's `proceed_to_checkout`): a mismatched cart
+  never reaches checkout or autofill. `references/outcomes.md`, `docs/api/cli-json.md`, and the
+  READMEs of `portage-cli` and `portage-ucp-webmcp` say so.
 
 - **`buy` skill: narrower triggers.** The skill's `description` is shorter and says it is for
   shopping, buying, ordering or comparing offers on the user's behalf, not for general questions
