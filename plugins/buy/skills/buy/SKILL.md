@@ -1,6 +1,6 @@
 ---
 name: buy
-description: Find, compare and buy products from real online stores for the user through the `portage` CLI. Covers search across stores, price comparison, dry-run checkout, purchase with a tokenized payment method under spending caps, hand-off to the user's own browser to pay, and order tracking to the user's shipping address. Use whenever the user asks to buy, order, shop for, reorder, price-check or find where to get something, compare offers across stores, check whether a store supports automated checkout, set up shopping (shipping address, search keys, payment method, spending limits), or track an order Portage placed. Amazon and other hand-off-only retailers are never automated — the skill opens the page and the user buys.
+description: Shop for the user through the `portage` CLI. Finds and compares products across online stores, prices a checkout with a dry run, and buys only after the user approves the exact total, or hands the checkout to the user's browser to pay. Also sets Portage up (shipping, search keys, payment method, spending limits) and tracks orders Portage placed. Use when the user asks you to buy, order or shop for something on their behalf, or to compare offers across stores. Not for general questions about prices, products or orders that weren't placed through Portage.
 version: 0.9.0
 metadata:
   openclaw:
@@ -18,55 +18,55 @@ metadata:
     envVars:
       - name: BRAVE_SEARCH_API_KEY
         required: false
-        description: "Brave Search API key for open-ended product queries. Set in ~/.portage/.env by the user, never pasted into chat."
+        description: "Brave Search API key for open-ended product queries. The user sets it in ~/.portage/.env themselves, never in chat; only portage reads it, and the agent never reads or prints its value."
       - name: GOOGLE_CSE_KEY
         required: false
-        description: "Google Programmable Search API key, used with GOOGLE_CSE_CX for open-ended product queries."
+        description: "Google Programmable Search API key, used with GOOGLE_CSE_CX for open-ended product queries. The user sets it in ~/.portage/.env themselves, never in chat; only portage reads it, and the agent never reads or prints its value."
       - name: GOOGLE_CSE_CX
         required: false
-        description: "Google Programmable Search engine id, used with GOOGLE_CSE_KEY."
+        description: "Google Programmable Search engine id, used with GOOGLE_CSE_KEY. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_STREET
         required: false
-        description: "Shipping address street line."
+        description: "Shipping address street line. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_CITY
         required: false
-        description: "Shipping address city."
+        description: "Shipping address city. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_REGION
         required: false
-        description: "Shipping address state or region."
+        description: "Shipping address state or region. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_POSTAL_CODE
         required: false
-        description: "Shipping address postal code."
+        description: "Shipping address postal code. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_COUNTRY
         required: false
-        description: "Shipping address country code."
+        description: "Shipping address country code. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_FIRST_NAME
         required: false
-        description: "Optional first name on the shipping address."
+        description: "Optional first name on the shipping address. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_LAST_NAME
         required: false
-        description: "Optional last name on the shipping address."
+        description: "Optional last name on the shipping address. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_SHIP_PHONE
         required: false
-        description: "Optional phone number on the shipping address."
+        description: "Optional phone number on the shipping address. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_AGENT_PROFILE
         required: false
-        description: "URL of the hosted UCP agent profile, which real UCP stores verify before answering."
+        description: "URL of the hosted UCP agent profile, which real UCP stores verify before answering. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_HANDOFF_TARGET
         required: false
-        description: "Where a hand-off opens the checkout: default, print, profile or agent:NAME."
+        description: "Where a hand-off opens the checkout: default, print, profile or agent:NAME. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: PORTAGE_AUTO_OPEN_CHECKOUT
         required: false
-        description: "Whether a hand-off opens the checkout URL in the browser automatically."
+        description: "Whether a hand-off opens the checkout URL in the browser automatically. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
       - name: ETSY_API_KEY
         required: false
-        description: "Etsy API key, only for Etsy hand-off pages."
+        description: "Etsy API key, only for Etsy hand-off pages. The user sets it in ~/.portage/.env themselves, never in chat; only portage reads it, and the agent never reads or prints its value."
       - name: ETSY_ACCESS_TOKEN
         required: false
-        description: "Etsy access token, only for Etsy hand-off pages."
+        description: "Etsy access token, only for Etsy hand-off pages. The user sets it in ~/.portage/.env themselves, never in chat; only portage reads it, and the agent never reads or prints its value."
       - name: ETSY_SHOP_ID
         required: false
-        description: "Etsy shop id, only for Etsy hand-off pages."
+        description: "Etsy shop id, only for Etsy hand-off pages. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
 ---
 
 # Buy
