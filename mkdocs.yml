@@ -122,6 +122,7 @@ plugins:
           - skills/references/handoff-only.md
           - skills/references/raw-ucp.md
           - skills/shop-via-ucp.md
+          - skills/browse-via-ucp.md
           - skills/serve-via-ucp.md
         Other:
           - security.md
@@ -183,6 +184,7 @@ nav:
       - "buy: hand-off-only retailers": skills/references/handoff-only.md
       - "buy: raw UCP fallback": skills/references/raw-ucp.md
       - shop-via-ucp: skills/shop-via-ucp.md
+      - browse-via-ucp: skills/browse-via-ucp.md
       - serve-via-ucp: skills/serve-via-ucp.md
   - Security: security.md
   - Contributing: contributing.md

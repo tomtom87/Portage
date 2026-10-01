@@ -107,7 +107,7 @@ Never commit `.env` — it holds live credentials. Copy `.env.example` and fill 
 | `portage-ucp-journal/` | Audit journal. |
 | `portage-ucp-{shopify,wix,woocommerce,bigcommerce,magento,etsy,instagram}/` | Platform adapters. `shopify` is the most complete reference. |
 | `docs/` | Design log, tutorials, investigations. |
-| `skills/` | Agent skills (`shop-via-ucp`, `serve-via-ucp`). |
+| `skills/` | Agent skills (`shop-via-ucp`, `browse-via-ucp`, `serve-via-ucp`). |
 
 ## Running the tests
 

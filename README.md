@@ -218,7 +218,8 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 |---|---|---|---|---|
 | `buy` plugin | 0.9.0 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only product-lookup skill | [buy skill](docs/skills/buy.md), [product-lookup skill](docs/skills/product-lookup.md) |
 | [`portage-cli`](portage-cli/) | 0.11.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
-| [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Shop through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
+| [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Buy through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
+| [`browse-via-ucp`](skills/browse-via-ucp/SKILL.md) skill | – | Agent builders | Read-only: a store's manifest, catalog and whether it supports automated buying | [skill page](docs/skills/browse-via-ucp.md) |
 | [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
 | [`portage-ucp-decision`](portage-ucp-decision/) | 0.1.1 | Agent builders | Offer ranking, escalation policy, confidence gate (Jev/Laya), `PolicyGuard` | – |
 | [`portage-ucp-journal`](portage-ucp-journal/) | 0.1.1 | Agent builders | Buyer-side purchase journal and its `Store` abstraction | – |
