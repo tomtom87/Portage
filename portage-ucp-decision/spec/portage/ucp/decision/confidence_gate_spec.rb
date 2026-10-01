@@ -64,6 +64,20 @@ RSpec.describe Portage::Ucp::Decision::ConfidenceGate do
       expect { gate }.to raise_error(Portage::Ucp::Decision::BackendError, /no probability/)
     end
 
+    [1.5, -0.1, Float::INFINITY, Float::NAN].each do |value|
+      it "raises BackendError for a noul value of #{value} rather than gating on it" do
+        answering(answer(type: "noul", confidence: nil, value: value))
+
+        expect { gate }.to raise_error(Portage::Ucp::Decision::BackendError, /not a probability/)
+      end
+    end
+
+    it "accepts the bounds 0 and 1" do
+      answering(answer(type: "noul", confidence: nil, value: 1))
+
+      expect(gate.proceed).to be(true)
+    end
+
     it "raises BackendError, not KeyError, when the backend leaves the question unanswered" do
       allow(backend).to receive(:ask).and_return({})
 

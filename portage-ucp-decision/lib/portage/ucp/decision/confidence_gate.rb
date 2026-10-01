@@ -48,6 +48,11 @@ module Portage
           unless answer.value.is_a?(Numeric)
             raise Portage::Ucp::Decision::BackendError, "noul answer carried no probability: #{answer.to_h}"
           end
+          # A probability outside 0..1 (or NaN/Infinity) isn't one: 1.5 or
+          # Infinity would otherwise clear any threshold.
+          unless answer.value.finite? && answer.value.between?(0, 1)
+            raise Portage::Ucp::Decision::BackendError, "noul answer is not a probability: #{answer.value.inspect}"
+          end
 
           call(confidence: answer.value, threshold: threshold)
         end
