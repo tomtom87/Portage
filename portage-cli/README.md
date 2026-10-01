@@ -881,7 +881,9 @@ gem install portage-ucp-decision   # only needed for the confidence gate
 ```
 
 The confidence gate is the one feature that needs the gem, because the
-model backends live there.
+model backends live there. Use `portage-ucp-decision` 0.1.2 or newer: it
+rejects a backend answer that isn't a probability between 0 and 1, where
+0.1.1 let an answer above 1 clear any threshold.
 
 Every `portage buy` report carries an `outcome`, so a script or agent loop
 can branch on data rather than on the message text. The text output leads

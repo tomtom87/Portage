@@ -1,7 +1,7 @@
 ---
 name: buy
 description: Shop for the user through the `portage` CLI. Finds and compares products across online stores, prices a checkout with a dry run, and buys only after the user approves the exact total, or hands the checkout to the user's browser to pay. Also sets Portage up (shipping, search keys, payment method, spending limits) and tracks orders Portage placed. Use when the user asks you to buy, order, reorder or shop for something on their behalf. For a price, stock, store or order question with no purchase in mind, use the `shop-research` skill instead.
-version: 0.9.0
+version: 0.10.0
 metadata:
   openclaw:
     homepage: https://portage.readthedocs.io/en/latest/
@@ -93,6 +93,8 @@ If the user only wants to know a price, where to get something, whether it's in 
 3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. The `check`, `index`, `browser` and `setup` subcommands, the `--handoff-target` flag and `find --store` ship in a recent-enough `portage`, not every install. If one isn't listed, fall back as described where it's mentioned. `find --store` needs this release: if `portage find --help` doesn't list `--store`, re-check an index hit with `portage find --query "<product title>" --json` instead, and use only offers from the store you meant.
 
 **Minimum version these references assume:** `portage-cli` `0.9.0` (with `portage-ucp-webmcp` `0.2.0` or newer for the Portage browser profile and WebMCP autofill). Older installs still work: step 3 above checks `portage --help` before using `index`, `browser`, `setup` or `--handoff-target` (and `portage find --help` before `find --store`), and `brew upgrade portage` or `gem update portage-cli` brings an install up to date.
+
+**What needs `portage-cli` `0.12.0`.** `find --store`, the checkout-mismatch stop on every path (a mismatched WebMCP cart included), and the hardened decision check (an allowlisted checkout summary, a comparison against the approved quote, and a hold on a malformed backend answer; the check also needs `portage-ucp-decision` `0.1.2`). Those installs still work with the fallbacks above, but an older `portage-cli` can complete or hand off a checkout that a `0.12.0` install would stop, so before unattended buying or relying on the decision check, tell the user to upgrade (`brew upgrade portage` or `gem update portage-cli portage-ucp-decision`).
 
 **`pick` and `approve`.** The buying flow in section 2 uses `portage pick`, `portage approve`, `buy --offer` and `buy --quote`, which first shipped in `portage-cli` `0.9.0`. If they aren't listed in `portage --help`, tell the user to upgrade rather than falling back to passing `--yes` yourself.
 

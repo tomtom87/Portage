@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-01
+
 - `ConfidenceGate.via_backend` now raises `BackendError` for a noul answer
   that isn't a probability: below 0, above 1, NaN or Infinity. Before, a
   backend answering 1.5 (or Infinity) cleared any threshold, so a
