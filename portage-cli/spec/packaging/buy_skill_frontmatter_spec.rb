@@ -13,7 +13,7 @@ plugin_json = File.join(plugin_dir, ".claude-plugin", "plugin.json")
 
 # Placeholders that look like env vars but are ids the agent substitutes.
 placeholders = %w[QUOTE_ID SEARCH_ID]
-env_prefixes = /\A(PORTAGE|BRAVE|GOOGLE|ETSY|WALMART|EBAY|BESTBUY|AMAZON)_/
+env_prefixes = /\A(PORTAGE|BRAVE|GOOGLE|ETSY|WALMART|EBAY|BESTBUY|AMAZON|JEV|TYPESAFE)_/
 
 %w[buy shop-research].each do |skill_name|
   RSpec.describe "#{skill_name} skill frontmatter" do

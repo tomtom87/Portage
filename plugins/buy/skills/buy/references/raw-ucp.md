@@ -8,7 +8,7 @@ Use this only when `portage` can't be installed. The CLI enforces all of this in
 2. **`requires_escalation` is data, not an error.** Give the user the `links` / `continue_url` and stop. Don't retry.
 3. **Never send a raw card number as `payment_token`.** Reject any string that's all digits, 12-19 characters and Luhn-valid.
 4. **Hand-off-only hosts (Amazon, etc.) are never called at all.** See [handoff-only.md](handoff-only.md).
-5. **Never pay for a checkout that doesn't match what the user approved.** Before `complete_checkout`, check the checkout's items, quantities, unit prices, currency and total against what the user said yes to. On any difference, stop: don't complete it and don't hand it off as if it matched. Show the user what differs, and build a fresh checkout for a new yes. The CLI does the same (`checkout_mismatch`).
+5. **Never pay for a checkout that doesn't match what the user approved.** Before `complete_checkout`, check the checkout's items (and that it has no extra lines), quantities, unit prices, currency and total against what the user said yes to. On any difference, stop: don't complete it and don't hand it off as if it matched. Show the user what differs, and build a fresh checkout for a new yes. The CLI does the same (`checkout_mismatch`).
 
 ## Sequence
 

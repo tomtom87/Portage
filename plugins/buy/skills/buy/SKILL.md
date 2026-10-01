@@ -58,6 +58,15 @@ metadata:
       - name: PORTAGE_AUTO_OPEN_CHECKOUT
         required: false
         description: "Whether a hand-off opens the checkout URL in the browser automatically. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
+      - name: PORTAGE_DECISION_BACKEND
+        required: false
+        description: "Turns on the opt-in decision check before an unattended purchase or WebMCP hand-off: jev (TypeSafe's hosted API) or laya. The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
+      - name: PORTAGE_MIN_CONFIDENCE
+        required: false
+        description: "The decision check's threshold, 0.0 to 1.0 (default 0.8). The user sets it in ~/.portage/.env; only portage reads it, and the agent never reads or prints its value."
+      - name: JEV_API_KEY
+        required: false
+        description: "TypeSafe API key for the jev decision check. The user sets it in ~/.portage/.env themselves, never in chat; only portage reads it, and the agent never reads or prints its value."
       - name: ETSY_API_KEY
         required: false
         description: "Etsy API key, only for Etsy hand-off pages. The user sets it in ~/.portage/.env themselves, never in chat; only portage reads it, and the agent never reads or prints its value."
@@ -105,6 +114,7 @@ If the user only wants to know a price, where to get something, whether it's in 
 - **Retailer offer sources** (if `portage setup` lists them). Optional, official buyer-side APIs for Walmart, eBay (Buy It Now only), Best Buy, Etsy and Amazon — each needs its own key from that retailer's developer program, set in `~/.portage/.env`. **The user types keys in themselves.** They add more real offers to `portage find`; they never let `portage buy` complete a purchase at any of these retailers — every offer from one of them still ends in hand-off, same as Amazon.
 - **Payment method.** Run `portage payment enroll <store-url>`. It stores a tokenized credential in the OS keychain, never a card number.
 - **Spending limits.** Suggest caps before the first real purchase: `portage policy set --per-transaction-cap N --currency CUR` and a `--rolling-cap`. `portage policy show --json` shows the current ones.
+- **Decision check for unattended buying** (optional, off by default). Before a `--yes` purchase completes, and before a WebMCP store's checkout is opened and autofilled, Portage can ask a decision model whether the checkout matches what the user asked for and the quote they approved. It only ever adds a stop (`low_confidence`); it never lets through anything the built-in checks would stop. Suggest it when the user wants purchases to run unattended. Tell them, before they turn it on, that it sends TypeSafe a minimal checkout summary (the search query, store, product titles and ids, quantities, prices and totals, and the approved quote) and never their address, name, phone, email or payment token. To turn it on, the user adds `PORTAGE_DECISION_BACKEND=jev` and their own `JEV_API_KEY` (from https://console.typesafe.ai) to `~/.portage/.env` themselves, never in chat, and can set `PORTAGE_MIN_CONFIDENCE` (default `0.8`). Then run `portage doctor --json` to confirm the key is found. Once it's on, a backend that can't answer holds the purchase too.
 - **Approval level.** `portage policy show --json` includes `require_approval`: `any` (the default), `person` or `off`. If the user runs you from a terminal, suggest `portage policy set --require-approval person`, which they run themselves. Under `person` only a yes the user types in their own terminal (`portage approve QUOTE_ID`) lets a purchase through, not one you relay. Raising it needs nothing. Lowering it asks for a yes at a terminal, so you can't do it. Never try to work around this by editing `~/.portage/policy.json` or the quote files under `~/.portage/quotes/`, or by opening a terminal of your own.
 
 ## 2. The buying flow
@@ -160,7 +170,8 @@ If the user only wants to know a price, where to get something, whether it's in 
 - Then buy: `portage buy --quote QUOTE_ID --yes --json`.
   - `needs_approval` again: the approval didn't count (not approved yet, or `person` needs the user's own). Go back to the `approve` step, don't re-run the dry run.
   - `quote_changed`: the price rose since the quote (`quoted_total` and `current_total`, minor units). Nothing was bought. Show both, run a fresh `--dry-run` for a new quote, and ask again.
-  - `checkout_mismatch`: the checkout no longer matched what was approved (item, qty, unit price or currency; see `warnings`). It stopped before payment and nothing was bought. Show the mismatch, dry-run again for a new quote, and ask again.
+  - `checkout_mismatch`: the checkout no longer matched what was approved (item, qty, unit price, currency, or an extra priced line such as an add-on or something already in the store's cart; see `warnings`). It stopped before payment and nothing was bought. Show the mismatch, dry-run again for a new quote, and ask again.
+  - `low_confidence`: the decision check held it (see `decisions.confidence`). Nothing was bought. Show the user the checkout at `checkout_url` and let them decide; don't retry to get a different answer. The hand-off spends the quote, so dry-run again if they want Portage to try once more.
   - `quote_not_found` / `quote_used`: dry-run again for a new quote.
 - One yes covers one purchase. Ask again for the next one, even from the same store.
 - `buy ... --yes` with no approved quote no longer buys under `any` or `person`: it dry-runs and returns `needs_approval` with a `quote_id`. Don't pass `--yes` to skip the approval; it won't.
