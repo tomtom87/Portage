@@ -1077,10 +1077,22 @@ module Portage
         escalation = decide_escalation(checkout, warnings)
         return escalated_report(source, products, checkout, warnings, escalation) if escalation[:escalate]
         return dry_run_report(source, products, checkout, warnings) if @dry_run
-        return webmcp_handoff_report(source, products, checkout, warnings) if force_handoff
+        return webmcp_handoff_checkout_report(source, products, checkout, warnings) if force_handoff
         return confirmation_needed_report(source, products, checkout, warnings) unless confirmed?
 
         complete(session, source, products, checkout, warnings)
+      end
+
+      # The non-preset WebMCP hand-off (`express_stop` through #full_buy). Same
+      # last gate as #webmcp_handoff_checkout_flow's: with a decision backend
+      # enabled, the confidence check runs before anything is handed off, on a
+      # checkout the quote cap and the mismatch stop already let through. A
+      # hold reports `low_confidence` pointing at the store's cart page, as the
+      # preset flow's does, so nothing is sent to a `profile` target's checkout.
+      # No backend named: straight to the hand-off, as before.
+      def webmcp_handoff_checkout_report(source, products, checkout, warnings)
+        webmcp_low_confidence_report(products, checkout) ||
+          webmcp_handoff_report(source, products, checkout, warnings)
       end
 
       # First in #finish_checkout, ahead of the escalation gates: a
