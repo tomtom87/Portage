@@ -1242,6 +1242,46 @@ RSpec.describe Portage::Cli::Buy do
         end
       end
 
+      # Regression (ClawHub security audit follow-up): this flow used to put
+      # a cart mismatch in `warnings` and still send the tab to checkout.
+      context "when the store's cart doesn't match the request" do
+        let(:mismatched_cart) do
+          { "id" => "cart_1", "currency" => "USD", "totals" => [{ "type" => "total", "amount" => 1000 }],
+            "line_items" => [{ "item" => { "id" => "p1", "price" => 500 }, "quantity" => 2 }] }
+        end
+
+        it "stops with checkout_mismatch before the hand-off tool, pointing at the cart page" do
+          stub_no_native_manifest
+          page = shopify_shaped_page(cart: mismatched_cart,
+                                     handoff_result: { "url" => "https://shop.example/checkouts/c1" })
+          allow(page).to receive(:execute_tool).and_call_original
+
+          report = described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page).call
+
+          expect(report[:source]).to eq("webmcp")
+          expect(report[:outcome]).to eq("checkout_mismatch")
+          expect(report[:decisions][:escalation]).to eq(escalate: true, reason: "mismatch")
+          expect(report[:warnings]).to include("Store checked out quantity 2, not the requested 1.")
+          expect(report[:checkout_url]).to eq("https://shop.example/cart")
+          expect(report[:message]).to include("Nothing was bought, and checkout wasn't opened")
+          expect(page).to have_received(:execute_tool).with("get_cart", anything)
+          expect(page).not_to have_received(:execute_tool).with("proceed_to_checkout", anything)
+        end
+
+        it "stops the same way on a --yes run" do
+          stub_no_native_manifest
+          page = shopify_shaped_page(cart: mismatched_cart, handoff_result: {},
+                                     location: "https://shop.example/checkouts/c1")
+          allow(page).to receive(:execute_tool).and_call_original
+
+          report = described_class.new(url: "shop.example", query: "cold", yes: true, webmcp_bridge: page).call
+
+          expect(report[:outcome]).to eq("checkout_mismatch")
+          expect(report[:checkout_url]).to eq("https://shop.example/cart")
+          expect(page).not_to have_received(:execute_tool).with("proceed_to_checkout", anything)
+        end
+      end
+
       it "never auto-opens or notifies on a dry run" do
         stub_no_native_manifest
         page = shopify_shaped_page(cart: webmcp_cart, handoff_result: {},
@@ -1504,6 +1544,30 @@ RSpec.describe Portage::Cli::Buy do
 
         expect(report[:outcome]).to eq("express_stop")
         expect(report[:checkout_url]).to eq("https://shop.example/checkouts/c1")
+      end
+
+      context "when the store's cart doesn't match the request" do
+        let(:webmcp_cart) do
+          { "id" => "cart_1", "currency" => "USD", "totals" => [{ "type" => "total", "amount" => 500 }],
+            "line_items" => [{ "item" => { "id" => "p2", "price" => 500 }, "quantity" => 1 }] }
+        end
+
+        it "never asks to autofill or types into the page, stopping with checkout_mismatch" do
+          stub_no_native_manifest
+          page = shopify_shaped_page_with_autofill(headless: false, autofill_result: nil)
+          expect(page).not_to receive(:autofill)
+          confirm = instance_double(Portage::Cli::WebmcpAutofillConfirm)
+          expect(confirm).not_to receive(:call)
+
+          report = with_env(ship_env) do
+            described_class.new(url: "shop.example", query: "cold", webmcp_bridge: page, autofill: true,
+                                webmcp_autofill_confirm: confirm).call
+          end
+
+          expect(report[:outcome]).to eq("checkout_mismatch")
+          expect(report).not_to have_key(:autofill)
+          expect(report[:warnings]).to include("Store dropped the requested item (p1) from checkout.")
+        end
       end
 
       it "never prompts or types into the page on a dry run, only reporting that autofill would run" do
