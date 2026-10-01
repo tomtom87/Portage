@@ -1,0 +1,42 @@
+{
+  "id": "portage",
+  "name": "Portage",
+  "description": "Search, compare and buy from online stores through the Portage CLI, with spending policy and per-payment approval enforced by Portage itself.",
+  "categories": ["other"],
+  "contracts": {
+    "tools": [
+      "portage_doctor",
+      "portage_find",
+      "portage_find_store",
+      "portage_check",
+      "portage_compare",
+      "portage_index_search",
+      "portage_index_show",
+      "portage_index_sources",
+      "portage_history",
+      "portage_orders_reconcile",
+      "portage_policy_show",
+      "portage_payment_list",
+      "portage_browser_profile_status"
+    ]
+  },
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "portageBin": {
+        "type": "string",
+        "minLength": 1,
+        "default": "portage",
+        "description": "Path or name of the portage executable (default: portage on PATH)."
+      },
+      "timeoutSeconds": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "default": 120,
+        "description": "Per-call timeout in seconds."
+      }
+    }
+  }
+}

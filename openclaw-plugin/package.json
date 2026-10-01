@@ -1,0 +1,31 @@
+{
+  "name": "@tomtom87/portage",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin exposing the Portage agentic-commerce CLI as typed tools.",
+  "type": "module",
+  "license": "MIT",
+  "files": ["dist", "openclaw.plugin.json"],
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "compat": { "pluginApi": ">=2026.3.24-beta.2", "minGatewayVersion": "2026.3.24-beta.2" },
+    "build": { "openclawVersion": "2026.9.7", "pluginSdkVersion": "2026.9.7" }
+  },
+  "dependencies": {
+    "typebox": "1.3.34"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.3.24-beta.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "openclaw": "2026.9.7",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
