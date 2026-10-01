@@ -510,7 +510,8 @@ module Portage
       # call it against. Builds a cart, reads it back through the (already
       # cart/checkout-capable, per the gate in #webmcp_flow) session so
       # #reconcile_checkout has a `get_cart`-shaped document to check against
-      # (there's no checkout document either), then calls the preset's
+      # (there's no checkout document either), stops there on any mismatch
+      # (#webmcp_cart_mismatch_report), and only then calls the preset's
       # `handoff_checkout` tool directly on the bridge — after the cart
       # read-back, not before, so any post-mutation "page not ready" gap
       # (see Transport's own retry) has already been waited out by then.
@@ -536,15 +537,43 @@ module Portage
         end
         return webmcp_handoff_dry_run_report(products, product, preset) if @dry_run
 
-        created = session.create_cart(line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
-                                      context: buyer_context, meta: agent_meta)
-        cart = session.get_cart(cart_id: created["id"], meta: agent_meta)
+        cart = webmcp_build_cart(session, product)
         warnings = reconcile_checkout(product, cart)
+        return webmcp_cart_mismatch_report(products, cart, warnings) if warnings.any?
 
         result = @webmcp_bridge.execute_tool(preset.handoff_checkout, {})
         autofill = attempt_webmcp_autofill(preset)
         webmcp_handoff_report("webmcp", products, cart.merge("continue_url" => url_from_handoff(result)), warnings,
                               autofill: autofill)
+      end
+
+      # Adds the line to the store's cart, then reads the cart back.
+      def webmcp_build_cart(session, product)
+        created = session.create_cart(line_items: [{ product_id: line_item_id_of(product), quantity: @qty }],
+                                      context: buyer_context, meta: agent_meta)
+        session.get_cart(cart_id: created["id"], meta: agent_meta)
+      end
+
+      # Same fail-closed rule as #full_buy (see #decide_escalation): a cart
+      # that doesn't match the request stops here, before the hand-off tool
+      # sends the tab to checkout and before anything is autofilled. This
+      # flow used to only add the mismatch to `warnings` and carry on to
+      # checkout. The cart already exists on the store, so the report points
+      # at the store's cart page for the person to inspect, not at checkout.
+      # Every preset with a `handoff_checkout` tool today is Shopify's, where
+      # that page is /cart. A cart has no checkout status, so the verdict is
+      # the mismatch alone: `decisions.escalation.reason` is "mismatch", as
+      # on #full_buy's own stop.
+      def webmcp_cart_mismatch_report(products, cart, warnings)
+        @decisions[:escalation] = Decisions.escalation(checkout_status: nil, warnings: warnings)
+        handoff_report("webmcp", products, cart.merge("continue_url" => webmcp_cart_page_url), warnings,
+                       outcome: "checkout_mismatch",
+                       message: "Stopped before checkout — the store's cart didn't match the request: " \
+                                "#{warnings.join(' ')} Nothing was bought, and checkout wasn't opened.")
+      end
+
+      def webmcp_cart_page_url
+        URI.join(@uri, "/cart").to_s
       end
 
       # Unlike #full_buy's dry run (which still creates a UCP checkout, since
@@ -553,7 +582,10 @@ module Portage
       # this process — a real cart on the store, the bridge's own tab
       # navigated to checkout, and (with autofill on) typing into that page.
       # None of that is safe to do on a preview run, so this only reports
-      # what the run would have done. No checkout_id either, so History
+      # what the run would have done. That also means there's no cart to
+      # reconcile, so unlike #dry_run_report this can never carry
+      # `checkout_mismatch: true`; the real run checks the cart and stops
+      # there instead. No checkout_id either, so History
       # records it as a search, not a purchase.
       def webmcp_handoff_dry_run_report(products, product, preset)
         build_report(
