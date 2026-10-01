@@ -1,7 +1,7 @@
 ---
 name: shop-research
 description: Research products and stores for the user through the `portage` CLI without buying anything. Looks up what something costs, where to get it, whether it's in stock, what Portage knows about a store (whether it can be bought from automatically, what it supports, the business details and policy links it publishes, when the local index last saw it), and what the user ordered through Portage. It is read-only. It searches, checks stores and reads order history, and never creates a cart, a checkout or a payment. Use when the user asks how much something is, where they can get it, whether it's in stock, what a store is like, whether a store ships to them or what its returns policy is, or what they ordered through Portage. It reports what the store itself publishes and never vouches for a store. When the user wants to buy, order or reorder, switch to the `buy` skill.
-version: 0.9.0
+version: 0.10.0
 metadata:
   openclaw:
     homepage: https://portage.readthedocs.io/en/latest/
@@ -61,6 +61,8 @@ You answer the user's questions about products, stores and their own Portage ord
    - `gem install portage-cli` (any Ruby >= 3.2)
 2. Run `portage doctor --json` and read it. It's read-only. If it says search keys are missing, open-ended searches will be thin (below). Tell the user what's missing. They fix it themselves, by editing `~/.portage/.env` or by running `portage setup` in their own terminal. Don't run `setup` yourself.
 3. Run `portage --help` **once per session** and note which commands exist. Only use a command from this skill if it appears there. `check` and `index` ship in a recent-enough `portage`, not every install. If one isn't listed, skip it and say so. `find --store` needs this release too: if `portage find --help` doesn't list `--store`, fall back to `portage find --query "<product title>" --json` and use only offers from the store you meant.
+
+**Minimum version.** `find --store` needs `portage-cli` `0.12.0`. Older installs still work with the fallbacks above; `brew upgrade portage` or `gem update portage-cli` brings one up to date.
 
 ## 1. The commands you may run
 

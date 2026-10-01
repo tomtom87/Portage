@@ -9,6 +9,10 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-01
+
+- **Release set:** `portage-cli` 0.12.0 (a checkout mismatch now stops every purchase and every WebMCP hand-off, the opt-in confidence check is hardened and runs before every WebMCP hand-off, and `find --store` searches one store live), `portage-ucp-decision` 0.1.2 (a backend answer that isn't a probability now raises `BackendError`, so the purchase is held) and `buy` plugin 0.10.0 (the hardened decision check, the `shop-research` skill, narrower triggers, and `find --store` re-checks; `plugin.json` and both skills' `version` kept equal). `portage-cli` keeps `portage-ucp` `~> 0.11` and its optional `portage-ucp-decision`. The skills' minimum `portage-cli` stays 0.9.0, with the new features gated on 0.12.0 and the older-install fallbacks kept. No other gem changed, so the docs-only notes in `portage-ucp-client` and `portage-ucp-webmcp` stay unreleased. The ClawHub listing is published separately, at `buy` 0.10.0.
+
 - **The `buy` and `shop-research` skills re-check an index hit with `portage find --store URL --query ...`.** That command now exists (see `portage-cli`'s changelog), so the live re-check searches only the store the hit came from instead of re-running a cross-store `find`. `shop-research` lists it as a read-only command, and both skills fall back to `find --query` when `portage find --help` doesn't list `--store`. The CLI JSON reference, README and local-catalogue plan name the same command.
 
 - **Security: the `buy` skill describes the hardened decision check.** Follows `portage-cli`'s

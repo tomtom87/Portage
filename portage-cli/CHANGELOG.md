@@ -6,6 +6,10 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-01
+
+- **Release note: the confidence check wants `portage-ucp-decision` 0.1.2.** `portage-ucp-decision` stays an optional install, not a dependency, but 0.1.2 is the version that rejects a malformed backend answer (see its changelog); the README says so.
+
 - **`find --store URL --query Q [--max-price N]` searches one store, live.** The index-search hint, the `buy` skill and the docs already told agents to re-check an index hit this way, but `find` had no `--store`. It now skips the search backends and retailer offer sources and probes and searches only that store's catalogue (read-only: never a cart or checkout), with offers, `offer_ref`, `search_id` and the history entry shaped like any find, so `pick` and `buy --offer` work on them. A hand-off-only host is never fetched and is reported as such; a store without UCP is reported as having no catalogue; a non-http(s) URL is a usage error. The index-search hint now reads `find --store URL --query ...`.
 
 - **Security: a priced line nobody asked for is a checkout mismatch.** `buy` requests exactly one
