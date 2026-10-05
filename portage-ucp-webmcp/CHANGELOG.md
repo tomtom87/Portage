@@ -17,6 +17,8 @@ pre-1.0, so APIs may still shift between minor versions.
   that run stops with `checkout_mismatch` before the preset's hand-off tool
   is called.
 
+- Internal: `ToolCatalog` turns Mcp::Server's input schemas into string-keyed hashes with the gem's own `Jsonable.call` instead of a private copy of the same walk. No behaviour change.
+
 ## [0.2.0] - 2026-09-29
 
 - **Fixed: `assets/autofill.js` didn't parse** (docs/design-log.md §51). A
