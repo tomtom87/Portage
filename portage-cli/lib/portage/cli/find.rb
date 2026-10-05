@@ -148,7 +148,8 @@ module Portage
         existing = seen[uri.host]
         return if existing && !upgradable?(existing, uri)
 
-        seen[uri.host] = { origin: origin_of(uri), source: existing ? existing[:source] : backend.name,
+        seen[uri.host] = { origin: OfferSources.origin_of(uri.to_s),
+                           source: existing ? existing[:source] : backend.name,
                            handoff_only: @handoff_only.host?(uri.host) }
       end
 
@@ -207,13 +208,6 @@ module Portage
         uri if uri.host && uri.scheme.to_s.start_with?("http")
       rescue URI::InvalidURIError
         nil
-      end
-
-      # Collapse every deep link a backend returns onto the origin, since
-      # that's the only thing `/.well-known/ucp` hangs off.
-      def origin_of(uri)
-        port = uri.port == uri.default_port ? "" : ":#{uri.port}"
-        "#{uri.scheme}://#{uri.host}#{port}"
       end
 
       # --- Step 2: keep the ones that actually speak UCP ---

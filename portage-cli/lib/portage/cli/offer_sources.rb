@@ -63,9 +63,8 @@ module Portage
       end
 
       # Shared by every retailer source below: an offer's `store` is the
-      # origin of the item URL the API itself returned, same idea as
-      # ShopifyCatalog#origin_of — kept as one module method instead of
-      # four copies.
+      # origin of the item URL the API itself returned. The index builder
+      # and its sources use it too, rather than keeping their own copies.
       def self.origin_of(url)
         uri = URI.parse(url.to_s)
         return nil unless uri.host && uri.scheme.to_s.start_with?("http")
@@ -142,7 +141,7 @@ module Portage
 
         def offer(product)
           variant = Array(product["variants"]).first
-          origin = variant && origin_of(variant["url"])
+          origin = variant && OfferSources.origin_of(variant["url"])
           return nil unless origin
 
           amount, currency = price_of(product)
@@ -150,16 +149,6 @@ module Portage
             { store: origin, source: name, checkout: nil, product_id: variant["id"], title: product["title"],
               amount: amount, currency: currency, url: variant["url"] }, product
           )
-        end
-
-        def origin_of(url)
-          uri = URI.parse(url.to_s)
-          return nil unless uri.host && uri.scheme.to_s.start_with?("http")
-
-          port = uri.port == uri.default_port ? "" : ":#{uri.port}"
-          "#{uri.scheme}://#{uri.host}#{port}"
-        rescue URI::InvalidURIError
-          nil
         end
 
         # Same wire shape as Find#price_of — a `price_range.min` Money

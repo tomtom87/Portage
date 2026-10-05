@@ -57,12 +57,13 @@ module Portage
         return report(message: "#{uri.host} is hand-off only — #{HandoffOnly::LEGAL_NOTICE}") \
           if @handoff_only.host?(uri.host)
 
-        session = discover(origin_of(uri))
-        return report(message: "#{origin_of(uri)} doesn't speak UCP.") unless session
+        origin = OfferSources.origin_of(uri.to_s)
+        session = discover(origin)
+        return report(message: "#{origin} doesn't speak UCP.") unless session
 
         wrapped = session.get_product(product_id: @origin_product_id)
         product = wrapped.is_a?(Hash) ? wrapped["product"] : nil
-        return report(message: "Product #{@origin_product_id.inspect} not found at #{origin_of(uri)}.") unless product
+        return report(message: "Product #{@origin_product_id.inspect} not found at #{origin}.") unless product
 
         { host: uri.host, title: field(product, "title"), product: product }
       end

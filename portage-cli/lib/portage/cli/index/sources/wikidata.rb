@@ -5,6 +5,7 @@ require "timeout"
 require "portage/ucp/support/connection"
 
 require_relative "../../user_agent"
+require_relative "../../offer_sources"
 
 module Portage
   module Cli
@@ -73,20 +74,10 @@ module Portage
 
           def sighting_for(row)
             url = row.dig("website", "value")
-            origin = origin_of(url)
+            origin = OfferSources.origin_of(url)
             return nil unless origin
 
             { origin: origin, url: url, title: nil, brand: row.dig("itemLabel", "value"), gtin: nil }
-          end
-
-          def origin_of(url)
-            uri = URI.parse(url.to_s)
-            return nil unless uri.host && uri.scheme.to_s.start_with?("http")
-
-            port = uri.port == uri.default_port ? "" : ":#{uri.port}"
-            "#{uri.scheme}://#{uri.host}#{port}"
-          rescue URI::InvalidURIError
-            nil
           end
         end
       end
