@@ -16,6 +16,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Breaking: `Security::Signature::CURVES`, `Security::Signature::EC_PUBLIC_KEY_OID`, `Ap2::MandateSignature::CURVES` and `Ap2::MandateSignature::EC_PUBLIC_KEY_OID` moved to the new `Security::EcJwk`.** Both verifiers carried identical copies of the curve table and the JWK-to-public-key and raw-to-DER helpers; they now share `Security::EcJwk`, which takes the error class each one raises, so verification and its errors are unchanged. The unread `openssl_name` curve field is gone. Nothing outside the two verifiers read the constants; anyone who did should use `Security::EcJwk::CURVES`. Minor-level change for a pre-1.0 gem.
 
+- **Security hardening: `Security::Signature` compares `Content-Digest` with `OpenSSL.fixed_length_secure_compare`** instead of a hand-rolled Ruby byte loop, keeping the length check first so a wrong-length digest is still a `DigestMismatchError`. No behaviour change otherwise. Patch-level.
+
 ## [0.11.0] - 2026-09-29
 
 - `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`

@@ -93,6 +93,12 @@ RSpec.describe Portage::Ucp::Security::Signature do
       .to raise_error(Portage::Ucp::Security::MalformedSignatureError, /base64url/)
   end
 
+  it "raises DigestMismatchError, not ArgumentError, when content-digest is the wrong length" do
+    headers = signed_headers(components: %w[@method @authority @path idempotency-key content-digest])
+    headers["content-digest"] = "sha-256=:#{Base64.strict_encode64('0' * 16)}:"
+    expect { verify(headers) }.to raise_error(Portage::Ucp::Security::DigestMismatchError, /doesn't match/)
+  end
+
   it "raises StaleSignatureError when the signature is older than max_age" do
     headers = signed_headers(created: Time.now.to_i - 3600)
     expect { verify(headers, max_age: 300) }.to raise_error(Portage::Ucp::Security::StaleSignatureError)

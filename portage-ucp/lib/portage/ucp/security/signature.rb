@@ -225,10 +225,11 @@ module Portage
           raise InvalidSignatureError, "signature verification failed: #{e.message}"
         end
 
+        # The length guard comes first: `expected` is from the sender's
+        # Content-Digest header, and fixed_length_secure_compare raises on
+        # a length mismatch.
         def digests_match?(expected, actual)
-          return false unless expected.bytesize == actual.bytesize
-
-          expected.bytes.zip(actual.bytes).reduce(0) { |acc, (byte_a, byte_b)| acc | (byte_a ^ byte_b) }.zero?
+          expected.bytesize == actual.bytesize && OpenSSL.fixed_length_secure_compare(expected, actual)
         end
       end
     end
