@@ -20,6 +20,7 @@ The capability/adapter contract is not settled, so things are likely to change. 
 - [Reporting a security issue](#reporting-a-security-issue)
 - [Development setup](#development-setup)
 - [Repository layout](#repository-layout)
+- [Exploring the codebase with graphify (optional)](#exploring-the-codebase-with-graphify-optional)
 - [Running the tests](#running-the-tests)
 - [Writing a new platform adapter](#writing-a-new-platform-adapter)
 - [Coding style](#coding-style)
@@ -108,6 +109,40 @@ Never commit `.env` — it holds live credentials. Copy `.env.example` and fill 
 | `portage-ucp-{shopify,wix,woocommerce,bigcommerce,magento,etsy,instagram}/` | Platform adapters. `shopify` is the most complete reference. |
 | `docs/` | Design log, tutorials, investigations. |
 | `skills/` | Agent skills (`shop-via-ucp`, `browse-via-ucp`, `serve-via-ucp`). |
+
+## Exploring the codebase with graphify (optional)
+
+[graphify](https://github.com/Graphify-Labs/graphify) turns a gem into a queryable knowledge graph — handy for orienting yourself before a change ("what calls `Dispatcher`?", "how does `buy` reach `PolicyGuard`?"). It is entirely optional and nothing in the build depends on it.
+
+```bash
+uv tool install graphifyy   # or: pipx install graphifyy
+graphify install            # registers the /graphify skill with your coding agent
+```
+
+Then, from your agent, build a graph for the gem you're working on:
+
+```
+/graphify portage-cli
+```
+
+Code is parsed locally with tree-sitter (no LLM, no API key). Only READMEs and CHANGELOGs go through your agent, so expect a small token cost per gem. Outputs land in `<gem>/graphify-out/` — open `graph.html` in a browser or read `GRAPH_REPORT.md`, and query from the CLI:
+
+```bash
+cd portage-cli
+graphify query "how does buy enforce the spending policy?"
+graphify path "Portage::Cli::Buy" "Portage::Ucp::PolicyGuard"
+```
+
+To see the whole stack at once, graph each gem and merge them at the repo root:
+
+```bash
+graphify merge-graphs portage-cli/graphify-out/graph.json portage-ucp/graphify-out/graph.json \
+  portage-ucp-client/graphify-out/graph.json --out graphify-out/graph.json
+```
+
+Note that the merge keeps each gem's nodes separate: graphify doesn't link a reference like `Portage::Ucp::Policy` in `portage-cli` to its definition in `portage-ucp`, so questions across gem boundaries will come back incomplete.
+
+`graphify-out/` is gitignored — graphs go stale with every commit, so please don't commit them. Run `graphify update <gem>` to refresh a graph after you pull.
 
 ## Running the tests
 
