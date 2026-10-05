@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **README: `shop-research` is on ClawHub.** The OpenClaw bullet said it wasn't published yet; it links to the `@tomtom87/portage-shop-research` listing now.
+
 ## [0.17.0] - 2026-10-05
 
 - **Release set:** `portage-ucp` 0.12.0, `portage-cli` 0.13.0, `portage-ucp-shopify` 0.6.0, `portage-ucp-woocommerce` 0.3.0, `portage-ucp-wix`, `portage-ucp-bigcommerce`, `portage-ucp-magento` and `portage-ucp-instagram` 0.2.0, plus the `buy` plugin and the OpenClaw plugin `@tomtom87/portage` 0.10.5. Mostly the over-engineering cleanup: dead public methods and constants removed (minor bumps, each one marked **breaking** in its gem's changelog), duplicated helpers shared, and `portage browser import` reading history through the `sqlite3` gem instead of the `sqlite3` CLI. Fixes: `Security::Signature` answers a malformed trusted JWK with a 401 instead of a 500, and `payment enroll`'s own-store fallback finds the session again and follows homepage redirects. The `buy` plugin drops its raw-UCP direct-checkout fallback (see below). Dependency ranges are unchanged; `portage-cli` still takes `portage-ucp` `~> 0.11`. `portage-ucp-client`, `portage-ucp-webmcp` and `portage-ucp-etsy` changed only in docs, comments or internals, so they stay unreleased. The ClawHub listings are published separately.
