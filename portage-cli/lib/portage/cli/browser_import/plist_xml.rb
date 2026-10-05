@@ -1,4 +1,5 @@
 require "strscan"
+require "cgi/escape"
 
 module Portage
   module Cli
@@ -8,7 +9,8 @@ module Portage
       # form into XML. `plutil -convert json` would be simpler but refuses
       # any plist holding a <date> (Safari's Reading List entries carry
       # them), and a real XML library (rexml) isn't a runtime dependency of
-      # this gem — this is ~50 lines instead of a new one.
+      # this gem — this is ~50 lines instead of a new one. Entities go
+      # through CGI.unescapeHTML from `cgi/escape`, a default library.
       #
       # Dates, data and numbers come back as their raw text; bookmark
       # import only ever reads strings out of the tree.
@@ -16,7 +18,6 @@ module Portage
         class ParseError < StandardError; end
 
         SCALARS = "string|key|data|date|integer|real".freeze
-        ENTITIES = { "amp" => "&", "lt" => "<", "gt" => ">", "quot" => '"', "apos" => "'" }.freeze
 
         def self.parse(xml)
           scanner = StringScanner.new(xml.to_s)
@@ -31,7 +32,7 @@ module Portage
           elsif scanner.scan(%r{<(true|false)\s*/>}) then scanner[1] == "true"
           elsif scanner.scan("<dict>") then dict(scanner)
           elsif scanner.scan("<array>") then array(scanner)
-          elsif scanner.scan(%r{<(#{SCALARS})>(.*?)</\1>}m) then unescape(scanner[2])
+          elsif scanner.scan(%r{<(#{SCALARS})>(.*?)</\1>}m) then CGI.unescapeHTML(scanner[2])
           else raise ParseError, "unexpected plist content at #{scanner.pos}"
           end
         end
@@ -57,15 +58,7 @@ module Portage
           { "dict" => {}, "array" => [] }.fetch(tag, "")
         end
 
-        def self.unescape(text)
-          text.gsub(/&(#x?)?(\w+);/) do
-            if Regexp.last_match(1) == "#x" then [Regexp.last_match(2).to_i(16)].pack("U")
-            elsif Regexp.last_match(1) == "#" then [Regexp.last_match(2).to_i].pack("U")
-            else ENTITIES.fetch(Regexp.last_match(2), Regexp.last_match(0))
-            end
-          end
-        end
-        private_class_method :value, :dict, :array, :empty, :unescape
+        private_class_method :value, :dict, :array, :empty
       end
     end
   end
