@@ -2,15 +2,13 @@ require "json"
 require "fileutils"
 require "securerandom"
 require "uri"
-require "net/http"
 require "portage/ucp"
 require "portage/ucp/client"
-require "portage/ucp/support/connection"
 
 require_relative "payment_methods/keychain_backend"
 require_relative "payment_methods/secret_service_backend"
 require_relative "payment_methods/env_backend"
-require_relative "permissive_authenticator"
+require_relative "adapter_session"
 require_relative "user_agent"
 require_relative "handoff_only"
 
@@ -216,7 +214,8 @@ module Portage
       # Same native-manifest-first, own-store-adapter-fallback discovery as
       # Buy#call — duplicated rather than extracted since Buy's version is
       # entangled with cart/checkout-specific branching this only needs the
-      # session object from.
+      # session object from. The adapter fallback itself is AdapterSession,
+      # shared with HandoffReconciler.
       def discover_session(url)
         native = Portage::Ucp::Client.discover(url, headers: UserAgent.headers)
         native if native
@@ -224,29 +223,11 @@ module Portage
         adapter_session(url)
       end
 
+      # The homepage fetch stays on the :payment route (forced direct unless
+      # a proxy is named for it), redirects included.
       def adapter_session(url)
-        uri = URI.parse(url.to_s =~ %r{\Ahttps?://}i ? url.to_s : "https://#{url}")
-        body, headers = fetch_homepage(uri)
-        platform = body && Portage::Ucp::Resolver.detect_platform(body, headers)
-        return nil unless platform
-
-        env = Portage::Ucp::Resolver.env_for(platform)
-        return nil if Portage::Ucp::Resolver.missing_env(platform, env).any?
-
-        adapter = Portage::Ucp::Resolver.build_adapter(platform, env)
-        Portage::Ucp::Client.for_adapter(adapter, authenticator: PermissiveAuthenticator.new)
-      rescue StandardError
-        nil
-      end
-
-      def fetch_homepage(uri)
-        response = Portage::Ucp::Support::Connection.start(uri, route: :payment, open_timeout: 5,
-                                                                read_timeout: 5) do |http|
-          http.get(uri.request_uri, UserAgent.headers)
-        end
-        response.is_a?(Net::HTTPSuccess) ? [response.body, response.to_hash] : [nil, {}]
-      rescue StandardError
-        [nil, {}]
+        uri = normalized_uri(url)
+        uri && AdapterSession.call(uri, route: :payment)
       end
 
       def payment_enrollment_advertised?(session)

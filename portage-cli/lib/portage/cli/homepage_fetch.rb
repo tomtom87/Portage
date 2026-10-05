@@ -13,21 +13,23 @@ module Portage
     module HomepageFetch
       REDIRECT_LIMIT = 5
 
+      # @param route [Symbol] Support::Connection route for every hop,
+      #   redirects included (:store, or :payment for PaymentMethods).
       # @return [Array(String, Hash), Array(nil, Hash)] the body and response
       #   headers, or [nil, {}] on any failure/redirect exhaustion — same
       #   "no automated path, not a crash" posture as the rest of the buy
       #   flow.
-      def self.call(uri, limit: REDIRECT_LIMIT)
+      def self.call(uri, limit: REDIRECT_LIMIT, route: :store)
         return [nil, {}] if limit.zero?
 
-        response = Portage::Ucp::Support::Connection.start(uri, route: :store, open_timeout: 5,
+        response = Portage::Ucp::Support::Connection.start(uri, route: route, open_timeout: 5,
                                                                 read_timeout: 5) do |http|
           http.get(uri.request_uri, UserAgent.headers)
         end
 
         case response
         when Net::HTTPRedirection
-          call(URI.join(uri, response["location"]), limit: limit - 1)
+          call(URI.join(uri, response["location"]), limit: limit - 1, route: route)
         when Net::HTTPSuccess
           [response.body, response.to_hash]
         else

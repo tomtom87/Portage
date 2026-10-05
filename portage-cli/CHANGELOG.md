@@ -16,6 +16,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **`portage browser import` no longer needs the `sqlite3` command-line tool.** It reads the copied Chromium, Firefox and Safari history databases through the `sqlite3` gem, which `portage-cli` already depends on for the local index, instead of shelling out to the system `sqlite3` CLI. The copy-to-tmpdir step (with the `-wal` file) and the UTF-8 scrub are unchanged. `error: "reader_unavailable"` now means a SQLite error reading the copy (for example a corrupt or non-SQLite file) or, for Safari bookmarks, a missing `plutil`; `docs/api/cli-json.md` and the `buy` skill's `references/outcomes.md` say so. `BrowserImport::Sqlite.new` no longer takes a `command:` keyword (it only existed for a spec), which is **breaking** for any caller passing it; minor-level for a pre-1.0 gem.
 
+- **Fix: `payment_methods` enroll now finds your own store when its homepage redirects** (for example apex to `www`). The adapter fallback's homepage fetch followed no redirects; it now follows up to five, like `buy`'s, and every hop stays on the `payment` proxy route (forced direct unless a proxy is named for it). Internally, `PaymentMethods` and `HandoffReconciler` now share one `Cli::AdapterSession` for that fallback, and `HomepageFetch.call` takes a `route:` keyword (default `:store`). Patch-level.
+
 ## [0.12.0] - 2026-10-01
 
 - **Release note: the confidence check wants `portage-ucp-decision` 0.1.2.** `portage-ucp-decision` stays an optional install, not a dependency, but 0.1.2 is the version that rejects a malformed backend answer (see its changelog); the README says so.
