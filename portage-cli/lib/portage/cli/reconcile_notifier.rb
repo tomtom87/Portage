@@ -1,6 +1,7 @@
 require_relative "notifier"
 require_relative "macos_notifier"
 require_relative "reconcile_notify"
+require_relative "money"
 
 module Portage
   module Cli
@@ -55,11 +56,7 @@ module Portage
         parts.join(" — ")
       end
 
-      def format_amount(amount, currency)
-        return nil unless amount
-
-        "#{format('%.2f', amount / 100.0)}#{" #{currency}" if currency}"
-      end
+      def format_amount(amount, currency) = amount && Money.format_amount(amount, currency)
     end
   end
 end

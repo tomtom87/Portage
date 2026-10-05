@@ -10,6 +10,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Breaking: removed `Portage::Ucp::CapabilityNegotiator`.** Nothing in the gem, the CLI or any adapter ever called `#negotiate`, so no request path used it; it was public but dead. Anyone requiring it directly must carry their own version intersection. Minor-level change for a pre-1.0 gem.
 
+- **Breaking: removed `Dispatcher#call`'s `agent_profile:` keyword and `SchemaValidator#valid?`.** `Dispatcher#call` accepted `agent_profile:` and ignored it (`Mcp::Server` still logs the profile itself, it just no longer passes it on); a caller passing it now gets an `ArgumentError`. Nothing called `SchemaValidator#valid?`; use `errors_for(...).empty?`. Minor-level change for a pre-1.0 gem.
+
 ## [0.11.0] - 2026-09-29
 
 - `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`

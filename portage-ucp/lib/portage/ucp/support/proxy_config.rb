@@ -208,16 +208,12 @@ module Portage
           case spec
           when Profile then spec
           when :direct, "direct" then Profile::DIRECT
-          when Hash then Profile.new(**symbolize_keys(spec))
+          when Hash then Profile.new(**spec.transform_keys(&:to_sym))
           when String, Symbol
             @profiles[spec.to_s] || raise(ConfigError, "unknown proxy profile #{spec.inspect}")
           else
             raise ConfigError, "invalid proxy profile #{spec.inspect}"
           end
-        end
-
-        def symbolize_keys(hash)
-          hash.each_with_object({}) { |(key, value), out| out[key.to_sym] = value }
         end
       end
     end

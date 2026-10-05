@@ -269,13 +269,6 @@ RSpec.describe Portage::Ucp::Dispatcher do
       .to raise_error(Portage::Ucp::UnknownActionError, /not_a_real_action/)
   end
 
-  it "accepts an agent_profile: kwarg without changing the result (purely additive)" do
-    response = dispatcher.call(capability: "dev.ucp.shopping.catalog", action: "search_catalog",
-                               arguments: { query: "brew", limit: 10 }, agent_profile: "agent-123")
-
-    expect(response[:structuredContent]["products"]).to eq([product.to_wire_h])
-  end
-
   it "is a no-op when no journal is configured (default)" do
     checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
                                arguments: { line_items: [{ product_id: "prod_1", quantity: 1 }],

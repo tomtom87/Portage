@@ -34,10 +34,6 @@ module Portage
         schemer.validate(data).map { |error| JSONSchemer::Errors.pretty(error) }
       end
 
-      def valid?(relative_path, data)
-        errors_for(relative_path, data).empty?
-      end
-
       # Method names declared by a vendored OpenRPC document, e.g.
       # "services/shopping/mcp.openrpc.json" -> %w[create_checkout get_cart ...].
       def method_names(relative_path)
