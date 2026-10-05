@@ -11,18 +11,14 @@ module Portage
       module Mapper
         module_function
 
-        # Both take a Shopify MoneyV2 node ({amount:, currencyCode:}) rather
-        # than a bare amount — the arithmetic itself is Support::Amounts'.
-        def money(price)
-          Portage::Ucp::Support::Amounts.money(price["amount"], price["currencyCode"])
-        end
-
+        # Takes a Shopify MoneyV2 node ({amount:, currencyCode:}) rather than
+        # a bare amount — the arithmetic itself is Support::Amounts'.
         def minor_units(price)
           Portage::Ucp::Support::Amounts.decimal_to_minor(price["amount"])
         end
 
         # dev.ucp.shopping.catalog's Price (types/price.json) — the
-        # wire-shape counterpart to #money above, used everywhere a Product/
+        # wire-shape counterpart to Money, used everywhere a Product/
         # Variant field carries currency directly rather than through the
         # arithmetic-only Money type.
         def price(node)

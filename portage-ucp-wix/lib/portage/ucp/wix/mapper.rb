@@ -13,16 +13,12 @@ module Portage
       module Mapper
         module_function
 
-        def money(amount, currency)
-          Portage::Ucp::Support::Amounts.money(amount, currency)
-        end
-
         def minor_units(amount)
           Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
 
         # dev.ucp.shopping.catalog's Price (types/price.json) — the
-        # wire-shape counterpart to #money above, used everywhere a Product/
+        # wire-shape counterpart to Money, used everywhere a Product/
         # Variant field carries currency directly rather than through the
         # arithmetic-only Money type.
         def price(amount, currency)

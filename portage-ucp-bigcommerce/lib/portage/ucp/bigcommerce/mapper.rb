@@ -13,10 +13,6 @@ module Portage
       module Mapper
         module_function
 
-        def money(amount, currency)
-          Portage::Ucp::Support::Amounts.money(amount, currency)
-        end
-
         def minor_units(amount)
           Portage::Ucp::Support::Amounts.decimal_to_minor(amount)
         end
