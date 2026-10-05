@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/); this project is
 pre-1.0, so APIs may still shift between minor versions.
 
+## [Unreleased]
+
+- **Breaking: removed the `site_url:` keyword from `Mapper.product`.** Nothing passed it. A caller passing `site_url:` now gets an `ArgumentError`. Minor-level change for a pre-1.0 gem.
+
 ## [0.1.5] - 2026-09-25
 
 - `AccessTokenFetcher#fetch` now goes through

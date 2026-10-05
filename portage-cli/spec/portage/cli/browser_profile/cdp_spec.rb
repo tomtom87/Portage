@@ -50,18 +50,4 @@ RSpec.describe Portage::Cli::BrowserProfile::Cdp do
       expect(stub).to have_been_requested
     end
   end
-
-  describe ".close_tab" do
-    it "returns true on a 200 even though the body is plain text, not JSON" do
-      stub_request(:get, "http://127.0.0.1:#{port}/json/close/2").to_return(status: 200, body: "Target is closing")
-
-      expect(described_class.close_tab(port: port, id: "2")).to be true
-    end
-
-    it "returns false when the profile isn't reachable" do
-      stub_request(:get, "http://127.0.0.1:#{port}/json/close/2").to_raise(Errno::ECONNREFUSED)
-
-      expect(described_class.close_tab(port: port, id: "2")).to be false
-    end
-  end
 end

@@ -280,7 +280,7 @@ Source: `portage-ucp/lib/portage/ucp/capability_registry.rb`, `portage-ucp/lib/p
 | Method | Signature | Returns | Notes |
 |---|---|---|---|
 | `Dispatcher.new` | `Dispatcher.new(adapter:, registry: CapabilityRegistry.default, logger: Portage::Ucp.configuration.logger, shop: nil, transaction_log: Support::TransactionLog.new, policy: Policy.load, confirmer: Confirmer::Terminal.new, order_ledger: Support::OrderLedger.new, journal: nil, mandate_trust_keys: Portage::Ucp.configuration.mandate_trusted_keys, require_mandate_signature: Portage::Ucp.configuration.require_mandate_signature)` | dispatcher | |
-| `#call` | `call(capability:, action:, arguments: {}, correlation_id: nil, agent_profile: nil)` | `{ content:, structuredContent: }` | `arguments` is a hash with symbol keys. |
+| `#call` | `call(capability:, action:, arguments: {}, correlation_id: nil)` | `{ content:, structuredContent: }` | `arguments` is a hash with symbol keys. |
 
 Order of checks in `#call`:
 

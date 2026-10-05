@@ -70,7 +70,7 @@ module Portage
                          capability: capability.name, action: action_name, arguments: kwargs)
 
           result = context.dispatcher.call(capability: capability.name, action: action_name, arguments: kwargs,
-                                           correlation_id: correlation_id, agent_profile: agent_profile)
+                                           correlation_id: correlation_id)
           ::MCP::Tool::Response.new(result[:content], structured_content: result[:structuredContent])
         end
 

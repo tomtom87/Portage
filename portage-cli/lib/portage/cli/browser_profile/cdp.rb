@@ -34,15 +34,6 @@ module Portage
           get(host, port, "/json/new?#{URI.encode_www_form_component(url)}", method: :put)
         end
 
-        # `/json/close/<id>` answers plain text ("Target is closing"), not
-        # JSON — checked by success status only, never parsed as JSON.
-        def self.close_tab(port:, id:, host: HOST)
-          uri = URI("http://#{host}:#{port}/json/close/#{id}")
-          fetch(uri, :get).is_a?(Net::HTTPSuccess)
-        rescue StandardError
-          false
-        end
-
         def self.get(host, port, path, method: :get)
           uri = URI("http://#{host}:#{port}#{path}")
           response = fetch(uri, method)

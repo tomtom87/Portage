@@ -5,7 +5,7 @@
 // The buy skill's "No CLI available" section tells the agent to install `portage` and stop. In
 // OpenClaw every step goes through the plugin's portage_* tools, so the copy swaps that section for
 // one that names them.
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,7 +31,6 @@ export function replaceNoCliSection(skill) {
 
 /** Copies each bundled skill to `<target>/<name>`, replacing any stale copy. Returns the names copied. */
 export function copySkills(target = join(here, "..", "skills"), source = join(here, "..", "..", "plugins", "buy", "skills")) {
-  mkdirSync(target, { recursive: true });
   for (const name of BUNDLED) {
     const from = join(source, name);
     if (!existsSync(join(from, "SKILL.md"))) throw new Error(`skill not found: ${from}`);

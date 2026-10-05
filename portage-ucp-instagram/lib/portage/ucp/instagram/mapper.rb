@@ -70,14 +70,14 @@ module Portage
         # Shopify/BigCommerce have one. Fetching the group's other members
         # is a second call, made only for #get_product's single-product
         # path, same N+1 reasoning as every other adapter's variant fetch.
-        def product(node, site_url: nil)
+        def product(node)
           Portage::Ucp::Product.new(
             id: node["id"],
             title: node["name"],
             description: description(node),
             price_range: price_range(node["price"]),
             variants: variants(node),
-            url: node["url"] || site_url
+            url: node["url"]
           )
         end
 

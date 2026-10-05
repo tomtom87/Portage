@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import type { PortageConfig } from "./config.js";
 
 /** Oldest portage-cli these tools are written against (`find --store` landed in 0.12.0). */
 export const MIN_CLI_VERSION = "0.12.0";
@@ -84,7 +85,7 @@ function describeFailure(bin: string, o: ExecOutcome, timeoutMs: number): string
   return null; // non-zero exit: handled by the caller
 }
 
-export function createRunner(config: { portageBin: string; timeoutSeconds: number }, runCommand: RunCommand): Runner {
+export function createRunner(config: PortageConfig, runCommand: RunCommand): Runner {
   const bin = config.portageBin;
   let versionCheck: Promise<string | null> | undefined;
 

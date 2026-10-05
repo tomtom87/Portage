@@ -3,7 +3,7 @@ export interface PortageConfig {
   timeoutSeconds: number;
 }
 
-export const DEFAULT_CONFIG: PortageConfig = { portageBin: "portage", timeoutSeconds: 120 };
+const DEFAULT_CONFIG: PortageConfig = { portageBin: "portage", timeoutSeconds: 120 };
 
 /** Reads plugin config defensively; invalid values fall back to defaults. */
 export function resolveConfig(raw: Record<string, unknown> | undefined): PortageConfig {
