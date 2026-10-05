@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Removed the unused `services/shopping/embedded.openrpc.json` schema.** Nothing loaded or listed it (`SchemaValidator` only reads `mcp.openrpc.json`); it just shipped in the gem. Patch-level.
+
 ## [0.11.0] - 2026-09-29
 
 - `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`
