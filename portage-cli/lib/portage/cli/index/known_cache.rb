@@ -5,7 +5,6 @@ require "fileutils"
 require "timeout"
 require "portage/ucp/support/connection"
 
-require_relative "../known_stores_url"
 require_relative "../user_agent"
 
 module Portage
@@ -32,6 +31,14 @@ module Portage
         STORES_PATH = File.join(Dir.home, ".portage", "index", "known-stores.json").freeze
         PRODUCTS_PATH = File.join(Dir.home, ".portage", "index", "known-products.json").freeze
 
+        # Published on the same jsdelivr `@main` channel AgentProfileUrl
+        # uses for the agent profile: free GitHub, no Actions, so a new
+        # entry reaches every install on its next refresh as soon as a PR
+        # merges, with no gem/brew release to wait on.
+        BASE_URL = "https://cdn.jsdelivr.net/gh/tomtom87/Portage@main/portage-cli/known-stores".freeze
+        STORES_URL = "#{BASE_URL}/stores.json".freeze
+        PRODUCTS_URL = "#{BASE_URL}/products.json".freeze
+
         STALE_AFTER = 7 * 24 * 60 * 60
         TIMEOUT = 5
 
@@ -44,7 +51,7 @@ module Portage
         FORBIDDEN_FIELDS = %w[price amount stock].freeze
 
         def initialize(stores_path: STORES_PATH, products_path: PRODUCTS_PATH,
-                       stores_url: KnownStoresUrl::STORES, products_url: KnownStoresUrl::PRODUCTS)
+                       stores_url: STORES_URL, products_url: PRODUCTS_URL)
           @stores_path = stores_path
           @products_path = products_path
           @stores_url = stores_url

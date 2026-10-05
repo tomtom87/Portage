@@ -142,8 +142,8 @@ RSpec.configure do |config|
     # stubbing the real URLs to a plain 404 here means that lazy fetch
     # resolves the ordinary "no known cache" way instead, in every spec
     # that doesn't stub something else for these URLs itself.
-    stub_request(:get, Portage::Cli::KnownStoresUrl::STORES).to_return(status: 404)
-    stub_request(:get, Portage::Cli::KnownStoresUrl::PRODUCTS).to_return(status: 404)
+    stub_request(:get, Portage::Cli::Index::KnownCache::STORES_URL).to_return(status: 404)
+    stub_request(:get, Portage::Cli::Index::KnownCache::PRODUCTS_URL).to_return(status: 404)
 
     allow(Portage::Cli::Config).to receive(:load).and_wrap_original do |original, **kwargs|
       kwargs = { path: @config_path }.merge(kwargs) unless kwargs.key?(:path)
