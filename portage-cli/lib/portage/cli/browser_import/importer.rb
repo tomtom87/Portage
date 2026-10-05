@@ -88,7 +88,7 @@ module Portage
         # @return [Hash] the proposal: counts, `kept` (domains to save) and
         #   `products` (only with include_product_pages) — or `error:` /
         #   `message:` when the browser's files couldn't be read (Safari
-        #   without Full Disk Access, no sqlite3, no profile found).
+        #   without Full Disk Access, a SQLite error, no plutil, no profile found).
         def plan(options)
           profiles = Profiles.locate(options.browser, root: options.root)
           return no_profile(options) if profiles.empty?

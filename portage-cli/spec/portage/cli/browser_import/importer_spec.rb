@@ -297,8 +297,6 @@ RSpec.describe Portage::Cli::BrowserImport::Importer do
   end
 
   describe "which files are opened (never a credential, cookie or autofill store)" do
-    before { skip "sqlite3 CLI not installed" unless sqlite_available? }
-
     it "opens exactly Chrome's History and Bookmarks, lists only the profile root, and nothing else" do
       ucp_origins << "https://shop.example"
       profile = chrome_profile(@root, visits: [{ url: "https://shop.example/products/boots", title: "Boots" }],

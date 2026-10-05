@@ -1316,7 +1316,6 @@ RSpec.describe Portage::Cli do
     include BrowserImportFixtures
 
     before do
-      skip "sqlite3 CLI not installed" unless sqlite_available?
       allow($stdin).to receive(:tty?).and_return(false)
       session = instance_double(Portage::Ucp::Client::Session, capabilities: %w[dev.ucp.shopping.catalog])
       allow(Portage::Ucp::Client).to receive(:discover) do |origin, **|

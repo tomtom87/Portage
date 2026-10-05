@@ -835,7 +835,7 @@ Exit `0` for all three. When `error` is present the exit is `1`. Error values:
 | `full_disk_access_required` | Safari: macOS needs Full Disk Access for the terminal. |
 | `permission_denied` | Another browser's profile folder could not be read. |
 | `no_profile` | No profile with history or bookmarks was found for that browser or `--profile-root`. |
-| `reader_unavailable` | The `sqlite3` command is missing or failed. `message` names the cause. |
+| `reader_unavailable` | A SQLite error reading the copied history file (corrupt or not a SQLite database), or, for Safari bookmarks, the `plutil` command is missing or failed. `message` names the cause. |
 
 An error report is `{ "browser": ..., "error": ..., "message": ..., "saved": false, "needs_confirmation": false }`. Relay `message`. Do not work around a permission error.
 
