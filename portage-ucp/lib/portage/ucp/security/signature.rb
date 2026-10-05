@@ -264,6 +264,8 @@ module Portage
 
           padded = value + ("=" * ((4 - (value.length % 4)) % 4))
           Base64.urlsafe_decode64(padded)
+        rescue ArgumentError
+          raise MalformedSignatureError, "JWK coordinate isn't valid base64url"
         end
 
         def digests_match?(expected, actual)

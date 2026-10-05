@@ -87,6 +87,12 @@ RSpec.describe Portage::Ucp::Security::Signature do
     expect { verify(headers) }.to raise_error(Portage::Ucp::Security::DigestMismatchError)
   end
 
+  it "raises MalformedSignatureError, not a raw ArgumentError, for a trusted JWK whose x isn't base64url" do
+    bad_jwk = jwk.merge("x" => "not*base64url!")
+    expect { verify(signed_headers, trusted_keys: [bad_jwk]) }
+      .to raise_error(Portage::Ucp::Security::MalformedSignatureError, /base64url/)
+  end
+
   it "raises StaleSignatureError when the signature is older than max_age" do
     headers = signed_headers(created: Time.now.to_i - 3600)
     expect { verify(headers, max_age: 300) }.to raise_error(Portage::Ucp::Security::StaleSignatureError)
