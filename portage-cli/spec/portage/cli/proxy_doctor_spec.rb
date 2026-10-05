@@ -1,5 +1,5 @@
 require "spec_helper"
-require "support/local_proxy"
+require_relative "../../../../portage-ucp/spec/support/local_proxy"
 
 # ProxyDoctor's reachability check dials a real socket (through Support::
 # Connection, the same code every real request uses) rather than faking it,
