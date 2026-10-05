@@ -220,4 +220,4 @@ Amazon (every country's site) is hand-off only by default, and so is any host th
 
 ## 6. No CLI available
 
-If `portage` can't be installed, you can still drive a store's UCP endpoint over MCP by hand. Follow [references/raw-ucp.md](references/raw-ucp.md) exactly. The same hard rules apply.
+Every step in this skill goes through the `portage` CLI. If `portage` can't be installed or `portage doctor --json` fails, tell the user to install or upgrade it (`brew install tomtom87/portage/portage` or `gem install portage-cli`) and stop. Never drive a store's UCP or MCP endpoint, cart, checkout or payment yourself, with a shell, a web fetch or a browser: that skips Portage's spending policy, approval and checkout-mismatch checks.

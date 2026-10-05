@@ -26,7 +26,7 @@ describe("copy-skills", () => {
     expect(readFileSync(join(target, "portage-openclaw", "SKILL.md"), "utf8")).toBe("mine");
   });
 
-  it("leaves out the raw-UCP direct-checkout fallback and points the buy skill back at the tools", () => {
+  it("ships no direct-checkout fallback and points the buy skill back at the tools", () => {
     const target = mkdtempSync(join(tmpdir(), "portage-skills-"));
     copySkills(target);
 
@@ -40,6 +40,14 @@ describe("copy-skills", () => {
         const text = readFileSync(join(target, n, file), "utf8");
         expect(text, `${n}/${file}`).not.toMatch(/raw-ucp|complete_checkout|over MCP by hand/);
       }
+    }
+  });
+
+  it("finds no direct-checkout fallback in the source skills either", () => {
+    const source = join(ROOT, "..", "plugins", "buy", "skills");
+    for (const file of readdirSync(source, { recursive: true, encoding: "utf8" })) {
+      if (!file.endsWith(".md")) continue;
+      expect(readFileSync(join(source, file), "utf8"), file).not.toMatch(/raw-ucp|complete_checkout|over MCP by hand/);
     }
   });
 
