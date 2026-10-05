@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Removed `Mapper.money`.** It was a one-line pass-through to `Support::Amounts.money` that nothing in the gem called. It is a public module function, so this is **breaking** for any caller using it directly; minor-level for a pre-1.0 gem.
+
 ## [0.1.5] - 2026-09-29
 
 - Fixes a `NoMethodError` at launch: `exe/portage-ucp-wix` handed the

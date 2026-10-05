@@ -1,14 +1,6 @@
 require "spec_helper"
 
 RSpec.describe Portage::Ucp::Magento::Mapper do
-  describe ".money" do
-    it "converts a decimal amount to integer minor units without float drift" do
-      money = described_class.money(19.99, "USD")
-
-      expect(money).to eq(Portage::Ucp::Money.new(amount_minor: 1999, currency: "USD"))
-    end
-  end
-
   describe ".product" do
     let(:node) do
       { "sku" => "cold-brew", "name" => "Cold Brew", "price" => 5.0, "status" => 1,
