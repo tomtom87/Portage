@@ -53,5 +53,5 @@ See [You pick the store and approve the total](buy.md#you-pick-the-store-and-app
 
 The plugin ships three skills:
 
-- [`buy`](buy.md) and [`shop-research`](shop-research.md): copies of the Portage skills, made at build time, so the flow and the judgement calls stay in one place. The copy of `buy` leaves out its [raw UCP fallback](references/raw-ucp.md), which has the agent create and pay a checkout itself outside Portage's checks; in OpenClaw the skill says to stop and ask the user to install `portage` instead.
+- [`buy`](buy.md) and [`shop-research`](shop-research.md): copies of the Portage skills, made at build time, so the flow and the judgement calls stay in one place. The copy of `buy` swaps its "No CLI available" section for one that names the `portage_*` tools: without `portage`, the agent stops and asks the user to install it, and never creates or pays a checkout itself outside Portage's checks.
 - `portage-openclaw`: written for this plugin. It maps each CLI step in the buy flow to its tool, tells the agent to prefer the tools over a shell, and restates the approval rules.

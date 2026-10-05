@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Security: the `buy` skill no longer has a raw-UCP direct-checkout fallback.** Found by ClawHub's security audit of the `portage-buy` skill 0.10.4, which flagged its "No CLI available" section (Description-Behavior Mismatch and Context-Inappropriate Capability, both medium): with `portage` missing, it had the agent create and pay a store's checkout over raw UCP/MCP itself (`references/raw-ucp.md`), outside the CLI's spending policy, approval and checkout-mismatch checks the rest of the skill relies on. That section now tells the agent to ask the user to install or upgrade `portage` and stop, and never to drive a store's endpoint, cart, checkout or payment with a shell, web fetch or browser, the same stop the OpenClaw plugin's copy already had. `references/raw-ucp.md` and its docs page are gone; buying over raw UCP stays in the standalone `shop-via-ucp` skill. The OpenClaw plugin's build no longer has a file to leave out, and a test checks the source skills carry no direct-checkout path.
+
 ## [0.16.2] - 2026-10-01
 
 - **Release set:** `buy` plugin 0.10.4 and the OpenClaw plugin `@tomtom87/portage` 0.10.4, for the ClawHub security audit fixes below (0.10.3 shipped the runner change on its own). The `buy` and `shop-research` skills are reworded, with no instruction changes. No gem changed.

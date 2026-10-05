@@ -2,18 +2,14 @@
 // Copies the repo's buy and shop-research skills into the plugin's skills/ directory (build output,
 // gitignored). The hand-written skills/portage-openclaw is never touched.
 //
-// The buy skill's "No CLI available" fallback (references/raw-ucp.md) has the agent create and
-// complete a store's checkout over raw UCP/MCP itself, outside Portage's policy, approval and
-// mismatch checks. This plugin always has the CLI behind its tools, so the copy leaves that file
-// out and replaces the section with a stop.
+// The buy skill's "No CLI available" section tells the agent to install `portage` and stop. In
+// OpenClaw every step goes through the plugin's portage_* tools, so the copy swaps that section for
+// one that names them.
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const BUNDLED = ["buy", "shop-research"];
-
-/** Files under a bundled skill that the plugin never ships, relative to the skills directory. */
-export const EXCLUDED = ["buy/references/raw-ucp.md"];
 
 const NO_CLI_HEADING = "## 6. No CLI available";
 
@@ -24,7 +20,7 @@ In OpenClaw every step goes through the \`portage_*\` tools, which need the \`po
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** Swaps the buy skill's raw-UCP fallback section for NO_CLI_SECTION. Throws if the section moved. */
+/** Swaps the buy skill's "No CLI available" section for NO_CLI_SECTION. Throws if the section moved. */
 export function replaceNoCliSection(skill) {
   const start = skill.indexOf(NO_CLI_HEADING);
   if (start === -1) throw new Error(`buy/SKILL.md: "${NO_CLI_HEADING}" not found; update scripts/copy-skills.mjs`);
@@ -43,7 +39,6 @@ export function copySkills(target = join(here, "..", "skills"), source = join(he
     rmSync(to, { recursive: true, force: true });
     cpSync(from, to, { recursive: true });
   }
-  for (const path of EXCLUDED) rmSync(join(target, path), { force: true });
   const buy = join(target, "buy", "SKILL.md");
   writeFileSync(buy, replaceNoCliSection(readFileSync(buy, "utf8")));
   return BUNDLED;
