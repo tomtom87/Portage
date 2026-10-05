@@ -944,7 +944,7 @@ module Portage
       [
         "#{Time.at(entry['at'])} — #{entry['outcome'] || entry['checkout_status'] || entry['message']}",
         "#{entry['url']} (#{entry['query']})", (items unless items.empty?),
-        (format_amount(entry["total"], entry["currency"]) if entry["total"]),
+        (Money.format_amount(entry["total"], entry["currency"]) if entry["total"]),
         (entry["checkout_url"] unless entry["outcome"] == "purchased")
       ].compact.join(" — ")
     end
@@ -1267,7 +1267,7 @@ module Portage
       parts = ["#{result.idempotency_key}: #{result.status}"]
       parts << "resolution: #{result.resolution}" if result.resolution
       parts << "order: #{result.order_id}" if result.order_id
-      parts << format_amount(result.amount, result.currency) if result.amount
+      parts << Money.format_amount(result.amount, result.currency) if result.amount
       parts.join(" — ")
     end
 
@@ -1823,7 +1823,7 @@ module Portage
     def self.format_checkout(report)
       lines = Array(report[:items]).map { |item| "  in checkout: #{item_label(item)}" }
       total = report_total(report)
-      lines << "  total: #{format_amount(total, report[:currency])}" if total
+      lines << "  total: #{Money.format_amount(total, report[:currency])}" if total
       lines + Array(report[:warnings]).map { |w| "  warning: #{w}" }
     end
 
@@ -1874,10 +1874,8 @@ module Portage
     def self.format_price(offer)
       return "price n/a" unless offer[:amount]
 
-      format_amount(offer[:amount], offer[:currency])
+      Money.format_amount(offer[:amount], offer[:currency])
     end
-
-    def self.format_amount(amount, currency) = Money.format_amount(amount, currency)
 
     private_class_method(*(singleton_methods(false) - [:run]))
   end
