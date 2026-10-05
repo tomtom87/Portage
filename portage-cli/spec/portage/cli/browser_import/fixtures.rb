@@ -1,6 +1,7 @@
 require "json"
 require "fileutils"
 require "open3"
+require "sqlite3"
 
 # Builds fake browser profiles in a tmpdir — never a real one. Each
 # profile also gets the credential/cookie/autofill decoys a real profile
@@ -15,14 +16,11 @@ module BrowserImportFixtures
     "firefox" => %w[logins.json key4.db cookies.sqlite formhistory.sqlite cert9.db prefs.js]
   }.freeze
 
-  def sqlite_available? = system("command -v sqlite3 > /dev/null 2>&1")
-
   def plutil_available? = system("command -v plutil > /dev/null 2>&1")
 
   def sqlite!(path, sql)
     FileUtils.mkdir_p(File.dirname(path))
-    _out, err, status = Open3.capture3("sqlite3", path, sql)
-    raise "sqlite3 fixture failed: #{err}" unless status.success?
+    SQLite3::Database.new(path) { |db| db.execute_batch(sql) }
   end
 
   def write_decoys(dir, family)

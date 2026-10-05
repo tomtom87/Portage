@@ -13,8 +13,6 @@ RSpec.describe Portage::Cli::BrowserImport::Readers do
   let(:since) { Time.now.to_i - (90 * 86_400) }
 
   describe "Chromium" do
-    before { skip "sqlite3 CLI not installed" unless sqlite_available? }
-
     it "reads history inside the window and bookmarks with their folder names" do
       chrome_profile(@root, visits: [{ url: "https://shop.example/products/trail-boots", title: "Trail Boots",
                                        visits: 4, days_ago: 2 },
@@ -33,33 +31,48 @@ RSpec.describe Portage::Cli::BrowserImport::Readers do
     it "queries a copy, never the locked original, and deletes the copy afterwards" do
       chrome_profile(@root, visits: [{ url: "https://shop.example/", title: "Shop" }])
       profile = profiles.locate("chrome", root: @root).first
-      commands = []
-      allow(Open3).to receive(:capture3).and_wrap_original do |original, *args|
-        commands << args
-        original.call(*args)
+      opened = []
+      allow(SQLite3::Database).to receive(:new).and_wrap_original do |original, path, *args, **kwargs|
+        opened << [path, kwargs]
+        original.call(path, *args, **kwargs)
       end
 
       described_class.for("chromium").history(profile, since: since)
 
-      db_arg = commands.first[3]
-      expect(commands.first[0..2]).to eq(%w[sqlite3 -readonly -json])
+      db_arg, options = opened.first
+      expect(options).to include(readonly: true)
       expect(db_arg).not_to eq(profile.history)
       expect(File.exist?(db_arg)).to be(false)
     end
 
-    it "reports a missing sqlite3 binary as Unavailable rather than falling back to anything else" do
-      chrome_profile(@root, visits: [{ url: "https://shop.example/", title: "Shop" }])
+    it "sees visits still in the -wal file, without the browser's -shm" do
+      dir = chrome_profile(@root)
+      db = SQLite3::Database.new(File.join(dir, "History"))
+      db.execute("PRAGMA journal_mode = WAL")
+      db.execute("PRAGMA wal_autocheckpoint = 0")
+      at = (Time.now.to_i + 11_644_473_600) * 1_000_000
+      db.execute("INSERT INTO urls (url, title, visit_count, last_visit_time) VALUES (?, ?, ?, ?)",
+                 ["https://wal.example/", "Wal", 2, at])
+      expect(File.size(File.join(dir, "History-wal"))).to be > 0
       profile = profiles.locate("chrome", root: @root).first
-      sqlite = Portage::Cli::BrowserImport::Sqlite.new(command: "definitely-not-sqlite3")
 
-      expect { described_class.for("chromium", sqlite: sqlite).history(profile, since: since) }
-        .to raise_error(Portage::Cli::BrowserImport::Sqlite::Unavailable, /isn't installed/)
+      expect(described_class.for("chromium").history(profile, since: since).map { |r| r[:url] })
+        .to eq(["https://wal.example/"])
+    ensure
+      db&.close
+    end
+
+    it "reports a file that isn't a SQLite database as Unavailable rather than falling back to anything else" do
+      dir = chrome_profile(@root)
+      File.write(File.join(dir, "History"), "not a database at all" * 100)
+      profile = profiles.locate("chrome", root: @root).first
+
+      expect { described_class.for("chromium").history(profile, since: since) }
+        .to raise_error(Portage::Cli::BrowserImport::Sqlite::Unavailable, /SQLite error/)
     end
   end
 
   describe "Firefox" do
-    before { skip "sqlite3 CLI not installed" unless sqlite_available? }
-
     it "reads history and bookmarks from one places.sqlite" do
       firefox_profile(@root, visits: [{ url: "https://shop.example/collections/tents", title: "Tents", visits: 3 }],
                              bookmarks: [[1, "My tent shop"]])
@@ -111,8 +124,6 @@ RSpec.describe Portage::Cli::BrowserImport::Readers do
     end
 
     it "reads History.db visits inside the window" do
-      skip "sqlite3 CLI not installed" unless sqlite_available?
-
       recent = Time.now.to_i - 86_400 - 978_307_200
       sqlite!(File.join(@root, "History.db"),
               "CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT, visit_count INTEGER); " \

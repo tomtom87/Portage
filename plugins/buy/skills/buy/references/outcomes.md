@@ -110,7 +110,7 @@ Otherwise the `--yes` run turns into a dry run and returns `needs_approval`, so 
 | `error: "full_disk_access_required"` | Safari: macOS needs Full Disk Access for the terminal | Relay `message`. The user changes the setting. Never work around it. |
 | `error: "permission_denied"` | Another browser's profile folder couldn't be read | Relay `message`. Same rule. |
 | `error: "no_profile"` | No profile with history or bookmarks for that browser | Try `--browser`, or `--profile-root DIR` if the user gives one. |
-| `error: "reader_unavailable"` | The `sqlite3` (or, for Safari, `plutil`) command is missing | Tell the user; nothing else reads those files. |
+| `error: "reader_unavailable"` | The browser's history file couldn't be read as SQLite, or (for Safari) the `plutil` command is missing | Tell the user; nothing else reads those files. |
 
 Each `kept[]` entry's `verdict` is `ucp` (answered `/.well-known/ucp`), `indexed` / `known` (already in the local index / the published known-stores list, not probed), or `handoff_only`. An empty `category_names` means the store is only used when the user names it.
 

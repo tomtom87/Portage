@@ -1,22 +1,21 @@
-require "json"
-require "open3"
+require "sqlite3"
 require "tmpdir"
 require "fileutils"
 
 module Portage
   module Cli
     module BrowserImport
-      # Reads a browser's SQLite history database without a native gem:
-      # the database (plus its `-wal` file, when the browser left one — it
-      # holds the most recent visits until the next checkpoint) is copied
-      # into a private tmpdir first, since a running browser holds it
-      # locked, and the copy is queried with the system `sqlite3` CLI in
-      # `-readonly -json` mode. The copy is deleted before this returns,
-      # success or not. The original file is only ever read by the copy.
+      # Reads a browser's SQLite history database: the database (plus its
+      # `-wal` file, when the browser left one — it holds the most recent
+      # visits until the next checkpoint) is copied into a private tmpdir
+      # first, since a running browser holds it locked, and the copy is
+      # queried read-only through the sqlite3 gem. The `-shm` index is not
+      # copied: SQLite rebuilds it from the `-wal` in the (writable) tmpdir.
+      # The copy is deleted before this returns, success or not. The
+      # original file is only ever read by the copy.
       #
-      # `sqlite3` ships with macOS and every mainstream Linux distro; when
-      # it's missing, Unavailable says so rather than falling back to
-      # anything else.
+      # Any SQLite error (a corrupt or non-SQLite file, a schema that
+      # doesn't match the query) is Unavailable, never a fallback.
       class Sqlite
         class Unavailable < StandardError; end
 
@@ -24,12 +23,6 @@ module Portage
         # all (Safari's History.db without Full Disk Access). Never worked
         # around — see Importer's own handling.
         class PermissionDenied < StandardError; end
-
-        # @param command [String] the sqlite3 executable — injectable so a
-        #   spec can prove the missing-binary path without uninstalling it.
-        def initialize(command: "sqlite3")
-          @command = command
-        end
 
         # Copies `path` once and yields a query proc, so one copy serves
         # several queries (Firefox's history and bookmarks both live in
@@ -54,14 +47,15 @@ module Portage
         end
 
         def run(copy, sql)
-          out, err, status = Open3.capture3(@command, "-readonly", "-json", copy, sql)
-          raise Unavailable, "sqlite3 failed: #{err.strip}" unless status.success?
-
-          text = out.dup.force_encoding("UTF-8").scrub
-          text.strip.empty? ? [] : JSON.parse(text)
-        rescue Errno::ENOENT
-          raise Unavailable, "the sqlite3 command isn't installed (it ships with macOS and most Linux distros)"
+          db = SQLite3::Database.new(copy, readonly: true, results_as_hash: true)
+          db.execute(sql).map { |row| row.transform_values { |v| v.is_a?(String) ? scrub(v) : v } }
+        rescue SQLite3::Exception => e
+          raise Unavailable, "SQLite error: #{e.message}"
+        ensure
+          db&.close
         end
+
+        def scrub(text) = text.dup.force_encoding("UTF-8").scrub
       end
     end
   end
