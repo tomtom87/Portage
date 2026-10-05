@@ -1,10 +1,9 @@
 require "json"
-require "net/http"
 require "open3"
 require "timeout"
 require "uri"
-require "portage/ucp/support/connection"
 require_relative "config"
+require_relative "notifier"
 require_relative "user_agent"
 
 module Portage
@@ -150,12 +149,13 @@ module Portage
         def excerpt(stderr, stdout) = (stderr.to_s.empty? ? stdout.to_s : stderr.to_s).strip[0, BODY_EXCERPT]
       end
 
-      # POSTs the payload as JSON — https only, same connection helper and
-      # short timeout as Notifier, failures swallowed into the return
-      # value rather than raised.
+      # POSTs the payload as JSON — https only, through Notifier.post_json
+      # (same connection helper as --notify-webhook, with a longer timeout),
+      # failures swallowed into the return value rather than raised. Never
+      # Notifier#call itself: that falls back to PORTAGE_NOTIFY_WEBHOOK_URL
+      # or config, so a blank agent URL would post to the global webhook.
       class Webhook
         TIMEOUT = 10
-        BODY_EXCERPT = 200
 
         def initialize(url)
           @url = url.to_s
@@ -164,21 +164,7 @@ module Portage
         def call(payload)
           return "agent webhook must be https" unless @url.start_with?("https://")
 
-          response = post(URI(@url), JSON.generate(payload))
-          return nil if response.is_a?(Net::HTTPSuccess)
-
-          "agent webhook answered #{response.code}: #{response.body.to_s[0, BODY_EXCERPT]}"
-        rescue StandardError => e
-          "agent webhook POST failed: #{e.message}"
-        end
-
-        private
-
-        def post(uri, body)
-          Portage::Ucp::Support::Connection.start(uri, route: :notify, open_timeout: TIMEOUT,
-                                                       read_timeout: TIMEOUT) do |http|
-            http.post(uri.request_uri, body, UserAgent.headers.merge("Content-Type" => "application/json"))
-          end
+          Notifier.post_json(@url, payload, timeout: TIMEOUT, label: "agent webhook")
         end
       end
     end
