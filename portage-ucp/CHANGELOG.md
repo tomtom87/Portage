@@ -12,6 +12,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Breaking: removed `Dispatcher#call`'s `agent_profile:` keyword and `SchemaValidator#valid?`.** `Dispatcher#call` accepted `agent_profile:` and ignored it (`Mcp::Server` still logs the profile itself, it just no longer passes it on); a caller passing it now gets an `ArgumentError`. Nothing called `SchemaValidator#valid?`; use `errors_for(...).empty?`. Minor-level change for a pre-1.0 gem.
 
+- **Fixed: `Security::Signature` now raises `MalformedSignatureError` for a trusted JWK whose `x` or `y` isn't valid base64url.** It used to leak a raw `ArgumentError`, which `Rack::SignatureVerification` doesn't rescue, so the request failed with a 500 instead of the 401 `invalid_signature` every other bad signature gets. `Ap2::MandateSignature` already mapped the same input to `InvalidMandateError`. Patch-level.
+
 ## [0.11.0] - 2026-09-29
 
 - `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`
