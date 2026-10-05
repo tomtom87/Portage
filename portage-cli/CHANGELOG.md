@@ -22,6 +22,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - Internal: `BrowserImport::PlistXml` decodes entities with `CGI.unescapeHTML` (from the default `cgi/escape` library) instead of its own table. The same for the five named entities and decimal and hex character references; an uppercase `&#X41;` now decodes (it used to become NUL) and an out-of-range code point is left as written (it used to raise `RangeError`). No gemspec change.
 
+- Internal: the private `Cli.format_amount` wrapper is gone; its four callers in `cli.rb` call `Cli::Money.format_amount` directly. No behaviour change.
+
 ## [0.12.0] - 2026-10-01
 
 - **Release note: the confidence check wants `portage-ucp-decision` 0.1.2.** `portage-ucp-decision` stays an optional install, not a dependency, but 0.1.2 is the version that rejects a malformed backend answer (see its changelog); the README says so.
