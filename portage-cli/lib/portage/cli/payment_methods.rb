@@ -7,14 +7,10 @@ require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/support/connection"
 
-# Buy::PermissiveAuthenticator (adapter-loopback auth) is used by
-# #adapter_session below — not require_relative'd here to avoid a load
-# cycle (buy.rb will require this file too, for PaymentMethods.default);
-# cli.rb requires "cli/buy" before "cli/payment_methods", so it's already
-# loaded by the time #enroll actually runs.
 require_relative "payment_methods/keychain_backend"
 require_relative "payment_methods/secret_service_backend"
 require_relative "payment_methods/env_backend"
+require_relative "permissive_authenticator"
 require_relative "user_agent"
 require_relative "handoff_only"
 
@@ -238,7 +234,7 @@ module Portage
         return nil if Portage::Ucp::Resolver.missing_env(platform, env).any?
 
         adapter = Portage::Ucp::Resolver.build_adapter(platform, env)
-        Portage::Ucp::Client.for_adapter(adapter, authenticator: Buy::PermissiveAuthenticator.new)
+        Portage::Ucp::Client.for_adapter(adapter, authenticator: PermissiveAuthenticator.new)
       rescue StandardError
         nil
       end
