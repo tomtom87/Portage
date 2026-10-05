@@ -5,6 +5,7 @@ require_relative "../user_agent"
 require_relative "../classifier"
 require_relative "../probe_cache"
 require_relative "../handoff_only"
+require_relative "../offer_sources"
 require_relative "store"
 require_relative "product_store"
 require_relative "known_cache"
@@ -103,7 +104,7 @@ module Portage
         # Opt-in: a crawl is up to 21 more requests and 20s of pauses, where
         # a plain add is one probe.
         def add(url, crawl: false)
-          origin = origin_of(url)
+          origin = OfferSources.origin_of(url)
           return { added: false, message: "Not a valid http(s) URL: #{url}" } unless origin
           return store_manual_handoff_only(origin) if handoff_only_origin?(origin)
 
@@ -355,16 +356,6 @@ module Portage
 
         def progress(message)
           @out&.puts(message)
-        end
-
-        def origin_of(url)
-          uri = URI.parse(url.to_s)
-          return nil unless uri.host && uri.scheme.to_s.start_with?("http")
-
-          port = uri.port == uri.default_port ? "" : ":#{uri.port}"
-          "#{uri.scheme}://#{uri.host}#{port}"
-        rescue URI::InvalidURIError
-          nil
         end
       end
     end
