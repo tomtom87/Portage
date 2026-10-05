@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require "support/local_proxy"
+require_relative "../../portage-ucp/spec/support/local_proxy"
 require "base64"
 require "timeout"
 
