@@ -55,21 +55,25 @@ module Portage
       def call(payload)
         return nil unless enabled?
 
-        response = post(URI(webhook_url), JSON.generate(payload))
-        return nil if response.is_a?(Net::HTTPSuccess)
-
-        "webhook answered #{response.code}: #{response.body.to_s[0, BODY_EXCERPT]}"
-      rescue StandardError => e
-        "webhook POST failed: #{e.message}"
+        self.class.post_json(webhook_url, payload, timeout: TIMEOUT, label: "webhook")
       end
 
-      private
-
-      def post(uri, body)
-        Portage::Ucp::Support::Connection.start(uri, route: :notify, open_timeout: TIMEOUT,
-                                                     read_timeout: TIMEOUT) do |http|
-          http.post(uri.request_uri, body, UserAgent.headers.merge("Content-Type" => "application/json"))
+      # The one JSON POST both this and HandoffAgents::Webhook make, on the
+      # :notify route. `label` starts each failure message.
+      #
+      # @return [String, nil] the failure message, or nil on any 2xx.
+      def self.post_json(url, payload, timeout:, label:)
+        uri = URI(url)
+        response = Portage::Ucp::Support::Connection.start(uri, route: :notify, open_timeout: timeout,
+                                                                read_timeout: timeout) do |http|
+          http.post(uri.request_uri, JSON.generate(payload),
+                    UserAgent.headers.merge("Content-Type" => "application/json"))
         end
+        return nil if response.is_a?(Net::HTTPSuccess)
+
+        "#{label} answered #{response.code}: #{response.body.to_s[0, BODY_EXCERPT]}"
+      rescue StandardError => e
+        "#{label} POST failed: #{e.message}"
       end
     end
   end

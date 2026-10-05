@@ -18,6 +18,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Fix: `payment_methods` enroll now finds your own store when its homepage redirects** (for example apex to `www`). The adapter fallback's homepage fetch followed no redirects; it now follows up to five, like `buy`'s, and every hop stays on the `payment` proxy route (forced direct unless a proxy is named for it). Internally, `PaymentMethods` and `HandoffReconciler` now share one `Cli::AdapterSession` for that fallback, and `HomepageFetch.call` takes a `route:` keyword (default `:store`). Patch-level.
 
+- Internal: `HandoffAgents::Webhook` and `Notifier` now make their JSON POST through one `Notifier.post_json` class method instead of two copies. Timeouts, the agent webhook's https-only check and the error messages are unchanged, and the agent webhook still never falls back to `PORTAGE_NOTIFY_WEBHOOK_URL`. No behaviour change.
+
 ## [0.12.0] - 2026-10-01
 
 - **Release note: the confidence check wants `portage-ucp-decision` 0.1.2.** `portage-ucp-decision` stays an optional install, not a dependency, but 0.1.2 is the version that rejects a malformed backend answer (see its changelog); the README says so.
