@@ -8,6 +8,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Removed the unused `services/shopping/embedded.openrpc.json` schema.** Nothing loaded or listed it (`SchemaValidator` only reads `mcp.openrpc.json`); it just shipped in the gem. Patch-level.
 
+- **Breaking: removed `Portage::Ucp::CapabilityNegotiator`.** Nothing in the gem, the CLI or any adapter ever called `#negotiate`, so no request path used it; it was public but dead. Anyone requiring it directly must carry their own version intersection. Minor-level change for a pre-1.0 gem.
+
 ## [0.11.0] - 2026-09-29
 
 - `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`
