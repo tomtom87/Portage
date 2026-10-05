@@ -178,7 +178,7 @@ module Portage
         end
 
         # Raw uncompressed EC point encoding: 0x04 || x (32 bytes) || y (32
-        # bytes) for P-256 — see Portage::Ucp::Security::Signature::CURVES,
+        # bytes) for P-256 — see Portage::Ucp::Security::EcJwk::CURVES,
         # which decodes the same layout in reverse when verifying.
         def coordinates(pkey)
           octets = pkey.public_key.to_bn.to_s(2)
