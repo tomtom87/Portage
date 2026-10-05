@@ -512,7 +512,7 @@ probes per run), throttled, with progress output. Sources:
 | --- | --- | --- |
 | `shopify_catalog` | Merchant origins and product identities, one query per top-level taxonomy node, from `catalog.shopify.com`'s open catalog | on |
 | `stores_file` | Your own `~/.portage/stores.yml` | on |
-| `browser` | Whatever `portage browser import` (below) already saved — this source itself never reads a browser | on, but yields nothing unless you've run `browser import` |
+| `browser` | Whatever `portage browser import` (below) already saved — this source itself never reads a browser | opt-in (`--sources browser`); yields nothing unless you've run `browser import` |
 | `wikidata` | Retailers'/brands' official sites via a public SPARQL query | opt-in (`--sources wikidata`) |
 | `webmcp_sweep` | Which WebMCP preset an origin matches, when a bridge is attached | opt-in, needs a bridge |
 | `storefront_products` | Each indexed Shopify store's own `/products.json`: title, brand, handle, URL, first image, options and variant ids, mapped through the UCP `Product` shape with price and availability dropped | opt-in (`--sources storefront_products`, or `index add URL --crawl`) |
