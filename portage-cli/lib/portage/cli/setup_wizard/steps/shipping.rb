@@ -1,5 +1,5 @@
 require_relative "../../shipping_profile"
-require_relative "../../dot_env"
+require_relative "env_keys_step"
 
 module Portage
   module Cli
@@ -12,7 +12,7 @@ module Portage
         # store prices in no market and can report in-stock items as out of
         # stock (see Doctor#shipping_finding, which this step exists to
         # resolve).
-        class Shipping
+        class Shipping < EnvKeysStep
           LABELS = {
             street_address: "Street address", extended_address: "Apt/suite (optional)",
             address_locality: "City", address_region: "State/region (optional)",
@@ -21,29 +21,15 @@ module Portage
             phone_number: "Phone (optional)"
           }.freeze
 
-          def initialize(prompt:) = @prompt = prompt
+          FIELDS = ShippingProfile::ENV_VARS.to_h { |key, var| [var, LABELS.fetch(key)] }.freeze
 
           def title = "Shipping address"
           def default_yes? = true
 
-          def call
-            @prompt.say("Enter keeps whatever's already set for a field.")
-            assignments = collect
-            return @prompt.say("Left shipping address unchanged.") if assignments.empty?
-
-            path = DotEnv.update!(assignments)
-            @prompt.say("Saved #{assignments.keys.join(', ')} to #{path} (chmod 600).")
-          end
-
           private
 
-          def collect
-            ShippingProfile::ENV_VARS.each_with_object({}) do |(key, var), assignments|
-              hint = ENV.fetch(var, nil).to_s.empty? ? "not set" : "already set"
-              answer = @prompt.ask(LABELS.fetch(key), hint: hint)
-              assignments[var] = answer if answer
-            end
-          end
+          def intro = "Enter keeps whatever's already set for a field."
+          def unchanged_message = "Left shipping address unchanged."
         end
       end
     end
