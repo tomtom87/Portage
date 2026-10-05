@@ -10,3 +10,6 @@ coverage/
 .env.*
 !.env.example
 *.key.pem
+
+# graphify knowledge-graph output (regenerate locally; see CONTRIBUTING.md)
+graphify-out/
