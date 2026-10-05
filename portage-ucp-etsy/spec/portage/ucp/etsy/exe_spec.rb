@@ -33,8 +33,8 @@ RSpec.describe "exe/portage-ucp-etsy" do
     expect(stderr).to match(/ETSY_SHOP_ID/)
   end
 
-  it "loads examples/portage_ucp.rb via PORTAGE_UCP_CONFIG" do
-    example_path = File.join(gem_root, "examples", "portage_ucp.rb")
+  it "loads portage-ucp's examples/portage_ucp.rb via PORTAGE_UCP_CONFIG" do
+    example_path = File.expand_path("../portage-ucp/examples/portage_ucp.rb", gem_root)
 
     _stdout, stderr, status = run_exe(
       "PORTAGE_UCP_CONFIG" => example_path,

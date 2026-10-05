@@ -17,5 +17,5 @@ Each adapter gem needs its backend's own credentials, read from env by its execu
 | [`portage-ucp-etsy`](adapters/etsy.md) | `portage-ucp-etsy` | An Etsy OAuth access_token (shop-owner consent) plus your app's `x-api-key` — catalog/order only, checkout is redirect-link |
 | [`portage-ucp-instagram`](adapters/instagram.md) | `portage-ucp-instagram` | A Meta Graph API long-lived access token plus your Commerce Catalog id — catalog only, checkout is redirect-link |
 
-Every adapter gem ships the same `exe/` executable, `examples/portage_ucp.rb` starting
-point, and `PORTAGE_UCP_CONFIG` config hook — see [Library usage](library-usage.md).
+Every adapter gem ships the same `exe/` executable and `PORTAGE_UCP_CONFIG` config hook,
+with a shared [`examples/portage_ucp.rb`](https://github.com/tomtom87/Portage/blob/main/portage-ucp/examples/portage_ucp.rb) starting point — see [Library usage](library-usage.md).

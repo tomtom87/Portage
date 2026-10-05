@@ -63,8 +63,8 @@ and [Security](security.md).
 | `portage-ucp-etsy` | 0.1.5 | Merchants | Etsy Open API v3 catalog and orders; checkout is a redirect link | [README](adapters/etsy.md) |
 | `portage-ucp-instagram` | 0.1.5 | Merchants | Meta Commerce Catalog; checkout is a redirect link; `get_order` is deprecated and stops working after Meta removes its Order Management endpoints on 2026-10-27 | [README](adapters/instagram.md) |
 
-Every adapter gem ships an `exe/` server, an `examples/portage_ucp.rb` starting point and
-the `PORTAGE_UCP_CONFIG` hook ([library usage](library-usage.md)). Credentials per
+Every adapter gem ships an `exe/` server and the `PORTAGE_UCP_CONFIG` hook, with a shared
+[`examples/portage_ucp.rb`](https://github.com/tomtom87/Portage/blob/main/portage-ucp/examples/portage_ucp.rb) starting point ([library usage](library-usage.md)). Credentials per
 platform: [adapter requirements](adapter-requirements.md). Row-per-adapter view: the
 [feature matrix](adapters/feature-matrix.md). On Shopify, the native Universal Commerce
 Agent app covers checkout and orders with no code; Portage adds `cart`, `catalog` and a
