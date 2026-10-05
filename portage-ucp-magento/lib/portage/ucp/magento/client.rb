@@ -35,10 +35,6 @@ module Portage
           admin_request(Net::HTTP::Get, path)
         end
 
-        def admin_post(path, body = {})
-          admin_request(Net::HTTP::Post, path, body)
-        end
-
         def guest_get(path)
           guest_request(Net::HTTP::Get, path)
         end

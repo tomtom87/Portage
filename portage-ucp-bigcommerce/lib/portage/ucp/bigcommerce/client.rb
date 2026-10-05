@@ -39,20 +39,12 @@ module Portage
           admin_request(Net::HTTP::Get, "v2", path)
         end
 
-        def v2_post(path, body = {})
-          admin_request(Net::HTTP::Post, "v2", path, body)
-        end
-
         def v3_get(path)
           admin_request(Net::HTTP::Get, "v3", path)
         end
 
         def v3_post(path, body = {})
           admin_request(Net::HTTP::Post, "v3", path, body)
-        end
-
-        def v3_put(path, body = {})
-          admin_request(Net::HTTP::Put, "v3", path, body)
         end
 
         def v3_delete(path)
