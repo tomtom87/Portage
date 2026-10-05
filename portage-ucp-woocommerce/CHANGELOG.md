@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Removed the unused `Client#admin_post` and `Client#store_delete`.** Nothing in the gem called them. They were public on the client class, so this is **breaking** for any caller using them directly; minor-level for a pre-1.0 gem.
+
 ## [0.2.2] - 2026-09-29
 
 - Fixes a `NoMethodError` at launch: `exe/portage-ucp-woocommerce` handed

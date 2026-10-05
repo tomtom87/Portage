@@ -45,20 +45,12 @@ module Portage
           admin_request(Net::HTTP::Get, path)
         end
 
-        def admin_post(path, body = {})
-          admin_request(Net::HTTP::Post, path, body)
-        end
-
         def store_get(path)
           store_request(Net::HTTP::Get, path)
         end
 
         def store_post(path, body = {})
           store_request(Net::HTTP::Post, path, body)
-        end
-
-        def store_delete(path)
-          store_request(Net::HTTP::Delete, path)
         end
 
         private

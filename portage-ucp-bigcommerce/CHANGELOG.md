@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Removed the unused `Client#v2_post` and `Client#v3_put`.** Nothing in the gem called them. They were public on the client class, so this is **breaking** for any caller using them directly; minor-level for a pre-1.0 gem.
+
 ## [0.1.5] - 2026-09-29
 
 - Fixes a `NoMethodError` at launch: `exe/portage-ucp-bigcommerce` handed
