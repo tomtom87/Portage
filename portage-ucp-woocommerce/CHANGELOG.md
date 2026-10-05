@@ -8,6 +8,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Removed the unused `Client#admin_post` and `Client#store_delete`.** Nothing in the gem called them. They were public on the client class, so this is **breaking** for any caller using them directly; minor-level for a pre-1.0 gem.
 
+- Documentation only, no code change. The README and a changelog entry linked to `docs/plans/woocommerce-local-validation.md`, which is retired; they now link to a permalink at commit d51200f. Patch-level.
+
 ## [0.2.2] - 2026-09-29
 
 - Fixes a `NoMethodError` at launch: `exe/portage-ucp-woocommerce` handed
@@ -33,7 +35,7 @@ pre-1.0, so APIs may still shift between minor versions.
   Token JWT as `?session=` and clones the guest session's data into a
   fresh cookie session before the page renders — so this is a one-line
   fix, not new infrastructure. Confirmed live against the local Docker
-  WooCommerce install (`docs/plans/woocommerce-local-validation.md`'s
+  WooCommerce install ([validation plan](https://github.com/tomtom87/Portage/blob/d51200f/docs/plans/woocommerce-local-validation.md)'s
   stack): `--auto-open`'s hand-off now opens a browser straight onto a
   checkout page with the cart's actual contents, not an empty one.
 - `Resolver`'s WooCommerce `billing_address` is hardened: malformed

@@ -13,6 +13,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 - **One shared `examples/portage_ucp.rb`, in `portage-ucp`.** The seven adapter gems each carried a byte-identical copy (apart from the `bundle exec` line in a comment). The single copy now lives at `portage-ucp/examples/portage_ucp.rb`, with a generic usage comment; the adapter exes' header comments, the Etsy and Instagram READMEs, the root README and the adapter docs link to it on GitHub, and the Etsy and Instagram `exe_spec`s load it from there. The files were never in a gem's `files` list, so no gem contents change.
 
+- **Retired four finished plans from `docs/plans/`.** `woocommerce-fixes`, `woocommerce-local-validation`, `openclaw-plugin` and `homebrew-distribution` were done and nothing built on them. They are deleted, and the references to them (the root and gem changelogs, the WooCommerce README, `script/homebrew-formula`, comments in `portage-cli`) now point at permalinks at commit d51200f, where the files can still be read. `docs/design-log.md` has an index entry saying so.
+
 ## [0.16.2] - 2026-10-01
 
 - **Release set:** `buy` plugin 0.10.4 and the OpenClaw plugin `@tomtom87/portage` 0.10.4, for the ClawHub security audit fixes below (0.10.3 shipped the runner change on its own). The `buy` and `shop-research` skills are reworded, with no instruction changes. No gem changed.
@@ -293,7 +295,7 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 - `.env.example` and the install docs point at `~/.portage/.env`, which
   `portage-cli` 0.7.5 loads on startup.
 
-- **Homebrew-first install docs** (`docs/plans/homebrew-distribution.md`
+- **Homebrew-first install docs** ([plan](https://github.com/tomtom87/Portage/blob/d51200f/docs/plans/homebrew-distribution.md)
   Phase 4). The README, quickstart, CLI tutorial and `portage-cli` README
   list `brew install tomtom87/portage/portage` first and `gem install
   portage-cli` second, with upgrading, Linux `secret-tool`, and PATH

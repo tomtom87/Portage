@@ -20,7 +20,7 @@ Unlike Shopify/Wix, there's no `AccessTokenFetcher` — WooCommerce Admin keys a
 
 ## ⚠️ Verified against a local install
 
-Run against a throwaway Docker WooCommerce (WP 7.1.1 + WooCommerce 11.1.1, TLS via a local Caddy reverse proxy — see `docs/plans/woocommerce-local-validation.md` for the full setup and test ladder). What actually held up, and what didn't:
+Run against a throwaway Docker WooCommerce (WP 7.1.1 + WooCommerce 11.1.1, TLS via a local Caddy reverse proxy — see the [validation plan](https://github.com/tomtom87/Portage/blob/d51200f/docs/plans/woocommerce-local-validation.md) for the full setup and test ladder). What actually held up, and what didn't:
 
 **Confirmed working:**
 - Admin REST Basic Auth, `Client#store_request`'s `Cart-Token`/`Nonce` session threading across `create_cart` → `update_cart` → `create_checkout` → `get_checkout`, and `Resolver.detect_platform` all work exactly as coded — against a real store, not just WebMock stubs.
