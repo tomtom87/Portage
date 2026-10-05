@@ -129,7 +129,6 @@ module Portage
       puts VERSION
       0
     end
-    private_class_method :run_version
 
     # --- proxy (docs/plans/proxy-support.md Phase 2) ---
 
@@ -149,7 +148,6 @@ module Portage
       warn "portage: #{e.message}"
       nil
     end
-    private_class_method :apply_proxy_settings
 
     # --- find ---
 
@@ -165,21 +163,18 @@ module Portage
       puts json ? JSON.pretty_generate(report) : format_find(report)
       report[:offers].any? ? 0 : 1
     end
-    private_class_method :run_find
 
     # @return [Hash, nil] the saved search entry.
     def self.record_find(report)
       History.new.record_search(query: report[:query], offer_count: report[:offers].length,
                                 message: report[:message], offers: report[:offers])
     end
-    private_class_method :record_find
 
     # docs/plans/human-pick-and-approve.md Phase 2: the saved search's id,
     # for `portage pick --search`. Additive; absent when nothing was saved.
     def self.with_search_id(report, entry)
       entry.is_a?(Hash) && entry["search_id"] ? report.merge(search_id: entry["search_id"]) : report
     end
-    private_class_method :with_search_id
 
     def self.parse_find_options(argv)
       opts = {}
@@ -191,7 +186,6 @@ module Portage
 
       valid_find_store?(opts) ? opts : nil
     end
-    private_class_method :parse_find_options
 
     # `--store` must be an http(s) URL (a bare host is read as https); anything
     # else is a usage error rather than a silent no-op search.
@@ -203,7 +197,6 @@ module Portage
       warn USAGE
       false
     end
-    private_class_method :valid_find_store?
 
     def self.find_option_parser(opts)
       opts[:proxy] = {}
@@ -218,13 +211,11 @@ module Portage
         ProxySettings.add_options(parser, opts[:proxy])
       end
     end
-    private_class_method :find_option_parser
 
     # `--max-price 400` means 400 of whatever the offer is priced in, and the
     # comparison happens per-offer in that offer's own currency — no FX
     # conversion, and no attempt to handle zero-decimal currencies like JPY.
     def self.to_minor_units(major) = (major * 100).round
-    private_class_method :to_minor_units
 
     # --- check ---
 
@@ -240,7 +231,6 @@ module Portage
       puts opts[:json] ? JSON.pretty_generate(report) : format_check(report)
       Check::USABLE_VERDICTS.include?(report[:verdict]) ? 0 : 1
     end
-    private_class_method :run_check
 
     def self.parse_check_options(argv)
       opts = { proxy: {} }
@@ -254,7 +244,6 @@ module Portage
       warn USAGE
       nil
     end
-    private_class_method :parse_check_options
 
     def self.valid_check_url?(url)
       uri = URI.parse(url =~ %r{\Ahttps?://}i ? url : "https://#{url}")
@@ -262,7 +251,6 @@ module Portage
     rescue URI::InvalidURIError
       false
     end
-    private_class_method :valid_check_url?
 
     def self.format_check(report)
       lines = ["#{report[:url]}: #{report[:verdict]}"]
@@ -272,7 +260,6 @@ module Portage
       lines << "  index: `#{report[:index_hint]}` adds its catalogue to your local index" if report[:index_hint]
       lines.join("\n")
     end
-    private_class_method :format_check
 
     # --- compare ---
 
@@ -289,7 +276,6 @@ module Portage
       puts json ? JSON.pretty_generate(report) : format_compare(report)
       report[:offers].any? ? 0 : 1
     end
-    private_class_method :run_compare
 
     # Recorded as a search, not a purchase — compare never checks out. The
     # query string names the compare so `portage history list` doesn't
@@ -303,7 +289,6 @@ module Portage
       History.new.record_search(query: "compare: #{url} (product #{product_id})", offer_count: offers.length,
                                 message: report[:message], offers: offers)
     end
-    private_class_method :record_compare
 
     def self.parse_compare_options(argv)
       url = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
@@ -317,7 +302,6 @@ module Portage
       opts[:url] = url
       opts
     end
-    private_class_method :parse_compare_options
 
     def self.compare_option_parser(opts)
       opts[:proxy] = {}
@@ -330,7 +314,6 @@ module Portage
         ProxySettings.add_options(parser, opts[:proxy])
       end
     end
-    private_class_method :compare_option_parser
 
     # --- buy ---
 
@@ -348,7 +331,6 @@ module Portage
 
       dispatch_buy(parsed, url)
     end
-    private_class_method :run_buy
 
     # A saved quote or offer names its own store; otherwise a url does, and
     # with neither the search picks one.
@@ -359,7 +341,6 @@ module Portage
 
       buy_from_search(parsed)
     end
-    private_class_method :dispatch_buy
 
     # Built and validated up front, same posture as #confidence_check — an
     # unknown --handoff-target/PORTAGE_HANDOFF_TARGET/config.json value is a
@@ -371,7 +352,6 @@ module Portage
     rescue ArgumentError => e
       invalid_buy_option(e.message, url: url, json: parsed[:json])
     end
-    private_class_method :handoff_target
 
     # `portage buy` with no URL: search first, then buy from the store the
     # caller picks. `--yes` alone deliberately isn't enough to get here —
@@ -389,7 +369,6 @@ module Portage
       parsed[:page] = { title: offer[:title], url: offer[:url] }
       execute_buy(parsed, offer[:store], product_id: offer[:product_id])
     end
-    private_class_method :buy_from_search
 
     # `--offer REF`: the store, product and query come from the saved
     # `find` that produced the ref, as if they'd been passed as flags.
@@ -406,7 +385,6 @@ module Portage
       parsed[:buy][:query] = offer["query"].to_s
       execute_buy(parsed, offer["store"], product_id: offer["product_id"])
     end
-    private_class_method :buy_from_offer
 
     # `--quote QUOTE_ID`: buys what a `--dry-run` showed. Buy is handed the
     # quoted total as a cap and refuses (`quote_changed`) if the real
@@ -434,7 +412,6 @@ module Portage
                  quote_title: quote["title"])
       execute_buy(parsed, quote["store"])
     end
-    private_class_method :buy_from_quote
 
     def self.usable_quote(parsed)
       quote = Quotes.new.find(parsed[:quote])
@@ -447,7 +424,6 @@ module Portage
       invalid_buy_option("Quote #{parsed[:quote]} has already been used — dry-run again for a new one.",
                          url: quote["store"], json: parsed[:json], outcome: "quote_used")
     end
-    private_class_method :usable_quote
 
     def self.refuse_unapproved_quote(parsed, quote, level)
       summary = Approve.summary(quote)
@@ -456,7 +432,6 @@ module Portage
       print_buy_report(report, nil, parsed[:json])
       buy_exit_code(report)
     end
-    private_class_method :refuse_unapproved_quote
 
     # With a terminal (and no --json) the person picks there, through the
     # same HumanPrompt numbered pick `portage pick` uses; otherwise the
@@ -470,7 +445,6 @@ module Portage
 
       prompt_for_offer(prompt, report)
     end
-    private_class_method :pick_offer
 
     def self.prompt_for_offer(prompt, report)
       prompt.say(report[:message].to_s)
@@ -478,7 +452,6 @@ module Portage
       index = prompt.choose("Pick one to buy", choices, view: OfferChoice.method(:view_message))
       index && report[:offers][index]
     end
-    private_class_method :prompt_for_offer
 
     # docs/plans/human-pick-and-approve.md Phase 2: under
     # `--require-approval any|person` a real `--yes` run with no approved
@@ -498,7 +471,6 @@ module Portage
       print_buy_report(report, result, parsed[:json])
       buy_exit_code(report)
     end
-    private_class_method :execute_buy
 
     def self.buy_options(parsed, url, product_id: nil)
       options = parsed[:buy].merge(url: url, confidence_check: parsed[:confidence_check],
@@ -507,23 +479,19 @@ module Portage
       options[:webmcp_bridge] = profile_webmcp_bridge(url) if parsed[:handoff_target].profile?
       options
     end
-    private_class_method :buy_options
 
     # `needs_approval` exits 0 like Buy's own `needs_confirmation`: the run
     # did what it could and is waiting on the person.
     def self.buy_exit_code(report)
       report[:outcome] == "needs_approval" || report[:checkout] || report[:browse] ? 0 : 1
     end
-    private_class_method :buy_exit_code
 
     def self.real_run?(parsed) = parsed[:buy][:yes] && !parsed[:buy][:dry_run]
-    private_class_method :real_run?
 
     # An approved quote already passed ApprovalPolicy in #buy_from_quote.
     def self.approval_gate?(parsed)
       real_run?(parsed) && !parsed[:quote_record] && ApprovalPolicy.level != "off"
     end
-    private_class_method :approval_gate?
 
     # A gated run that got as far as a priced checkout saved a quote; one
     # that didn't (no match, a dead end) is reported as it is — nothing
@@ -535,7 +503,6 @@ module Portage
       summary = Approve.summary(quote)
       report.merge(Approve.needs_approval(summary, message: approval_message(summary, ApprovalPolicy.level)))
     end
-    private_class_method :needs_approval_report
 
     def self.approval_message(summary, level)
       id = summary[:quote_id]
@@ -547,7 +514,6 @@ module Portage
       how = level == "person" ? "`portage approve #{id} --via tty` at a terminal" : "`portage approve #{id}`"
       "Nothing was bought. #{held} Approve it with #{how}, then run `portage buy --quote #{id} --yes`."
     end
-    private_class_method :approval_message
 
     # A dry run saves a quote and reports its `quote_id`. A run of a saved
     # quote spends it once it purchases or hands off; any other outcome
@@ -566,7 +532,6 @@ module Portage
                                 **quote_page(report, parsed))
       saved ? report.merge(quote_id: saved["quote_id"]) : report
     end
-    private_class_method :settle_quote
 
     # What `portage approve` shows (docs/plans/human-pick-and-approve.md
     # Phase 2): the title of what's in the checkout, else the picked
@@ -575,7 +540,6 @@ module Portage
       page = parsed[:page] || {}
       { title: Array(report[:items]).first&.dig(:title) || page[:title], url: page[:url] }
     end
-    private_class_method :quote_page
 
     # docs/plans/buy-skill-and-local-browser.md Phase 6: `--handoff-target
     # profile` gives `portage buy` a browser of its own — the Portage
@@ -604,7 +568,6 @@ module Portage
     rescue StandardError
       nil
     end
-    private_class_method :profile_webmcp_bridge
 
     # Same "bare host gets an https:// prefix" normalization Buy#initialize
     # applies to the same `url` — done again here since this runs before
@@ -615,7 +578,6 @@ module Portage
       raw = url.to_s.strip
       raw =~ %r{\Ahttps?://}i ? raw : "https://#{raw}"
     end
-    private_class_method :absolute_url
 
     # An existing tab already on this store's host, so a shopper who's
     # mid-session there isn't yanked to a fresh one; otherwise a brand new
@@ -626,14 +588,12 @@ module Portage
                                     .find { |t| t["type"] == "page" && same_host?(t["url"], host) }
       existing || BrowserProfile::Cdp.new_tab(port: profile.port, url: url)
     end
-    private_class_method :browser_profile_target
 
     def self.same_host?(url, host)
       URI(url.to_s).host == host
     rescue URI::InvalidURIError
       false
     end
-    private_class_method :same_host?
 
     # docs/plans/handoff-reconcile.md Phase 3 — `portage buy --wait`. A
     # no-op (returns nil) whenever there's nothing to wait on: --dry-run
@@ -663,12 +623,10 @@ module Portage
                                  wait_timeout_override: parsed[:wait_timeout])
       waiter.call(record) { |event, result| emit_wait_event(event, result, json) }
     end
-    private_class_method :wait_for_handoff
 
     def self.pending_shopper_record(checkout_id, transaction_log)
       transaction_log.each_record.find { |r| r["checkout_id"] == checkout_id && r["settled_by"] == "shopper" }
     end
-    private_class_method :pending_shopper_record
 
     # `terminal` is forced on for a plain-text wait (see ReconcileNotify) so
     # the shopper sees a line the moment it settles even with nothing
@@ -678,13 +636,11 @@ module Portage
     def self.wait_notifier(json)
       ReconcileNotifier.new(channels: ReconcileNotify.resolve(extra: json ? [] : ["terminal"]))
     end
-    private_class_method :wait_notifier
 
     def self.handoff_event(report)
       { event: "handoff", checkout_id: report[:checkout_id], checkout_url: report[:checkout_url],
         reason: report[:outcome] }
     end
-    private_class_method :handoff_event
 
     # Only `:settled` ever reaches stdout as `handoff_settled` — a timeout or
     # an interrupted wait leaves `result.settled` false, and that's already
@@ -700,16 +656,13 @@ module Portage
                       order_id: result.order_id, amount: result.amount, currency: result.currency }.compact)
       end
     end
-    private_class_method :emit_wait_event
 
     def self.emit_ndjson(payload) = puts JSON.generate(payload)
-    private_class_method :emit_ndjson
 
     def self.print_buy_report(report, result, json)
       report = report.merge(reconcile: result.to_h) if result
       puts json ? JSON.pretty_generate(report) : format_report(report)
     end
-    private_class_method :print_buy_report
 
     # Built before the buy starts (and before the search, when there's no
     # URL), so a bad --min-confidence, or a bad PORTAGE_MIN_CONFIDENCE with
@@ -720,7 +673,6 @@ module Portage
     rescue ArgumentError => e
       invalid_buy_option(e.message, url: url, json: parsed[:json])
     end
-    private_class_method :confidence_check
 
     # A buy refused before it started. Under --json that's a report like
     # any other, with outcome `invalid_option`, so an agent loop reading
@@ -736,7 +688,6 @@ module Portage
                                 outcome: outcome, browse: false, checkout: false, message: message)
       nil
     end
-    private_class_method :invalid_buy_option
 
     # A buy that created a checkout is a purchase entry, whatever its
     # outcome. One that never got that far (no match, browse-only, dead end,
@@ -756,12 +707,10 @@ module Portage
         items: Array(report[:items]).map { |item| item.transform_keys(&:to_s) }, message: report[:message]
       )
     end
-    private_class_method :record_buy
 
     def self.report_total(report)
       Portage::Ucp::Support::Totals.amount(report[:totals])
     end
-    private_class_method :report_total
 
     # A flag OptionParser can't read (`--min-confidence high`, `--qty two`,
     # an unknown flag) is refused the same way as an out-of-range
@@ -785,12 +734,10 @@ module Portage
     rescue OptionParser::ParseError => e
       invalid_buy_option(e.message, url: url, json: json)
     end
-    private_class_method :parse_buy_options
 
     def self.buy_target?(url, buy, parsed)
       url || !buy[:query].strip.empty? || parsed[:offer] || parsed[:quote]
     end
-    private_class_method :buy_target?
 
     # Bare arg is normally the store URL (`portage buy <url> --query "..."`),
     # but `portage buy "coffee"` — no --query, and "coffee" doesn't look like
@@ -805,10 +752,8 @@ module Portage
       parsed[:find][:query] = buy[:query] = url
       nil
     end
-    private_class_method :reinterpret_bare_query
 
     def self.url_like?(text) = text.match?(%r{\A[a-z][a-z0-9+.-]*://}i) || text.include?(".")
-    private_class_method :url_like?
 
     def self.buy_option_parser(buy, parsed)
       OptionParser.new do |parser|
@@ -825,7 +770,6 @@ module Portage
         add_confidence_options(parser, parsed[:confidence])
       end
     end
-    private_class_method :buy_option_parser
 
     # The opt-in confidence gate in front of a `--yes` completion (see
     # ConfidenceCheck) — both default to their PORTAGE_* env vars.
@@ -833,14 +777,12 @@ module Portage
       parser.on("--decision-backend NAME") { |v| confidence[:backend] = v }
       parser.on("--min-confidence N", Float) { |v| confidence[:threshold] = v }
     end
-    private_class_method :add_confidence_options
 
     def self.add_handoff_options(parser, buy)
       parser.on("--[no-]auto-open") { |v| buy[:auto_open] = v }
       parser.on("--notify-webhook URL") { |v| buy[:notify_webhook] = v }
       parser.on("--handoff-target TARGET") { |v| buy[:handoff_target] = v }
     end
-    private_class_method :add_handoff_options
 
     # docs/plans/handoff-reconcile.md Phase 3 — `--wait`/`--wait-timeout`
     # land on `parsed`, never on `buy`: they're consumed by
@@ -850,7 +792,6 @@ module Portage
       parser.on("--wait") { parsed[:wait] = true }
       parser.on("--wait-timeout DURATION") { |v| parsed[:wait_timeout] = v }
     end
-    private_class_method :add_wait_options
 
     # `--query` feeds both halves: it's the store search when there's no URL
     # and the catalog search once a store is settled, so it's registered once
@@ -863,7 +804,6 @@ module Portage
       parser.on("--limit N", Integer) { |v| parsed[:find][:limit] = v }
       parser.on("--max-price N", Float) { |v| parsed[:find][:max_price] = buy[:max_price] = to_minor_units(v) }
     end
-    private_class_method :add_search_options
 
     # --- pick / approve (docs/plans/human-pick-and-approve.md Phase 2) ---
 
@@ -885,7 +825,6 @@ module Portage
                       **opts.slice(:search, :choose, :view, :compare))
       print_prompt_result(pick.call, opts[:json])
     end
-    private_class_method :run_pick
 
     def self.run_approve(argv)
       quote_id = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
@@ -900,7 +839,6 @@ module Portage
                             **opts.slice(:relayed_yes, :view))
       print_prompt_result(approve.call, opts[:json])
     end
-    private_class_method :run_approve
 
     # `--via`/`--json` for both commands, plus whatever the block adds.
     # @return [Hash, nil] nil on a bad flag (already reported).
@@ -917,13 +855,11 @@ module Portage
       prompt_usage(json, e.message)
       nil
     end
-    private_class_method :parse_prompt_options
 
     def self.prompt_usage(json, message)
       json ? puts(JSON.pretty_generate(outcome: "invalid_option", message: message)) : warn("#{message}\n#{USAGE}")
       1
     end
-    private_class_method :prompt_usage
 
     # Pick's "Compare an offer across stores": the same Compare run
     # `portage compare` does, from the saved offer's store and product.
@@ -932,13 +868,11 @@ module Portage
 
       Compare.new(origin_url: offer["store"], origin_product_id: offer["product_id"]).call
     end
-    private_class_method :compare_offer
 
     def self.print_prompt_result(result, json)
       puts json ? JSON.pretty_generate(result) : format_prompt_result(result)
       PROMPT_OK_OUTCOMES.include?(result[:outcome]) ? 0 : 1
     end
-    private_class_method :print_prompt_result
 
     def self.format_prompt_result(result)
       lines = ["[#{result[:outcome]}] #{result[:message]}"]
@@ -946,12 +880,10 @@ module Portage
       lines << "  #{approval_line(result[:summary])}" if result[:summary]
       lines.join("\n")
     end
-    private_class_method :format_prompt_result
 
     def self.choice_line(choice)
       [choice[:label], choice[:url], ("ref #{choice[:ref]}" if choice[:ref])].compact.join(" — ")
     end
-    private_class_method :choice_line
 
     # --- history ---
 
@@ -965,7 +897,6 @@ module Portage
         1
       end
     end
-    private_class_method :run_history
 
     def self.run_history_list(argv)
       opts = { limit: History::MAX_ENTRIES }
@@ -978,7 +909,6 @@ module Portage
       puts json ? JSON.pretty_generate(result) : format_history(result)
       0
     end
-    private_class_method :run_history_list
 
     def self.run_history_clear(argv)
       opts = {}
@@ -987,7 +917,6 @@ module Portage
       puts "Cleared #{opts[:kind] || 'purchase and search'} history."
       0
     end
-    private_class_method :run_history_clear
 
     def self.history_option_parser(opts)
       OptionParser.new do |parser|
@@ -997,7 +926,6 @@ module Portage
         parser.on("--json") { opts[:json] = true }
       end
     end
-    private_class_method :history_option_parser
 
     def self.format_history(result)
       lines = ["Purchases:"]
@@ -1008,7 +936,6 @@ module Portage
       lines << "(none)" if result[:searches].empty?
       lines.join("\n")
     end
-    private_class_method :format_history
 
     # `outcome` first, since it's what the entry is for. Entries recorded
     # before `outcome` existed fall back to their checkout_status/message.
@@ -1021,7 +948,6 @@ module Portage
         (entry["checkout_url"] unless entry["outcome"] == "purchased")
       ].compact.join(" — ")
     end
-    private_class_method :history_purchase_line
 
     # Takes a report's symbol-keyed item or a history entry's string-keyed
     # one.
@@ -1029,13 +955,11 @@ module Portage
       item = item.transform_keys(&:to_s)
       "#{item['title'] || item['id']} x#{item['quantity']}"
     end
-    private_class_method :item_label
 
     def self.history_search_line(entry)
       where = entry["url"] ? " at #{entry['url']}" : ""
       "#{Time.at(entry['at'])} — \"#{entry['query']}\"#{where} — #{entry['offer_count']} result(s)"
     end
-    private_class_method :history_search_line
 
     # --- payment ---
 
@@ -1055,7 +979,6 @@ module Portage
       warn USAGE
       1
     end
-    private_class_method :run_payment
 
     def self.run_payment_list(argv)
       json = false
@@ -1064,7 +987,6 @@ module Portage
       puts json ? JSON.pretty_generate(methods) : format_payment_list(methods)
       0
     end
-    private_class_method :run_payment_list
 
     # Shared by set-default/remove/freeze/revoke — each takes exactly one
     # `<id>` positional arg and reports the (now-updated) entry, or fails
@@ -1083,7 +1005,6 @@ module Portage
       warn "No payment method enrolled with id #{id}."
       1
     end
-    private_class_method :run_payment_mutate
 
     def self.parse_payment_enroll_options(argv)
       opts = { scope_merchants: [], proxy: {} }
@@ -1098,7 +1019,6 @@ module Portage
       opts[:url] = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
       opts
     end
-    private_class_method :parse_payment_enroll_options
 
     # nil (not `{}`) when no --scope-* flag was given at all, so
     # PaymentMethods#enroll's `scope:` default of no-scope-written stays the
@@ -1110,7 +1030,6 @@ module Portage
       { merchants: opts[:scope_merchants], max_amount: opts[:scope_max_amount], currency: opts[:scope_currency] }
         .compact
     end
-    private_class_method :payment_enroll_scope
 
     def self.run_payment_enroll(argv)
       opts = parse_payment_enroll_options(argv)
@@ -1130,7 +1049,6 @@ module Portage
       warn e.message
       1
     end
-    private_class_method :run_payment_enroll
 
     # --- policy ---
 
@@ -1144,7 +1062,6 @@ module Portage
         1
       end
     end
-    private_class_method :run_policy
 
     # `require_approval` is always shown at its effective value, the
     # default included, so "what does `--yes` need right now" is never a
@@ -1157,7 +1074,6 @@ module Portage
       puts json ? JSON.pretty_generate(effective) : format_policy(policy)
       0
     end
-    private_class_method :run_policy_show
 
     def self.format_policy(policy)
       spending = policy.to_h.except(ApprovalPolicy::KEY)
@@ -1165,7 +1081,6 @@ module Portage
       default = " (default)" unless ApprovalPolicy.configured?(policy)
       "#{body}\nrequire_approval: #{ApprovalPolicy.level(policy)}#{default}"
     end
-    private_class_method :format_policy
 
     def self.parse_policy_set_options(argv)
       opts = { allow: [] }
@@ -1179,7 +1094,6 @@ module Portage
       end.parse!(argv)
       opts
     end
-    private_class_method :parse_policy_set_options
 
     def self.add_policy_cap_options(parser, opts)
       parser.on("--per-transaction-cap N", Integer) { |v| opts[:per_transaction_cap] = v }
@@ -1187,7 +1101,6 @@ module Portage
       parser.on("--rolling-window-seconds N", Integer) { |v| opts[:rolling_window_seconds] = v }
       parser.on("--currency CUR") { |v| opts[:currency] = v }
     end
-    private_class_method :add_policy_cap_options
 
     # Each `--*` group is applied independently and only when its required
     # fields are present — `portage policy set --allow shop.example.com`
@@ -1211,7 +1124,6 @@ module Portage
       warn "#{e.message}\n#{USAGE}"
       1
     end
-    private_class_method :run_policy_set
 
     # docs/plans/human-pick-and-approve.md Phase 2: raising the level (or
     # setting the same one) needs nothing; lowering it (person -> any/off,
@@ -1228,7 +1140,6 @@ module Portage
       policy.set(ApprovalPolicy::KEY, level)
       true
     end
-    private_class_method :require_approval_applied?
 
     def self.confirm_lowering(current, level)
       prompt = HumanPrompt.new(via: "tty")
@@ -1241,14 +1152,12 @@ module Portage
            "terminal here — nothing changed. Run it yourself from a terminal."
       false
     end
-    private_class_method :confirm_lowering
 
     def self.lowering_effect(level)
       return "`portage buy --yes` would then buy without anyone approving the total." if level == "off"
 
       "An agent relaying your yes would then be enough to buy."
     end
-    private_class_method :lowering_effect
 
     def self.set_policy_cap(policy, opts)
       if opts[:per_transaction_cap]
@@ -1260,14 +1169,12 @@ module Portage
       policy.set("rolling_cap", { "amount" => opts[:rolling_cap], "currency" => require_currency!(opts),
                                   "window_seconds" => opts[:rolling_window_seconds] })
     end
-    private_class_method :set_policy_cap
 
     def self.set_policy_velocity(policy, opts)
       return unless opts[:velocity_count] && opts[:velocity_window_seconds]
 
       policy.set("velocity", { "count" => opts[:velocity_count], "window_seconds" => opts[:velocity_window_seconds] })
     end
-    private_class_method :set_policy_velocity
 
     def self.set_policy_allowlist(policy, opts)
       return policy.set("merchant_allowlist", []) if opts[:clear_allowlist]
@@ -1275,19 +1182,16 @@ module Portage
 
       policy.set("merchant_allowlist", (policy.merchant_allowlist + opts[:allow]).uniq)
     end
-    private_class_method :set_policy_allowlist
 
     def self.require_currency!(opts)
       opts[:currency] || raise(ArgumentError, "--currency is required alongside a cap")
     end
-    private_class_method :require_currency!
 
     def self.format_payment_list(methods)
       return "(no payment methods enrolled)" if methods.empty?
 
       methods.map { |m| "#{m['label']} (#{m['id']}) — default: #{m['default']}, frozen: #{m['frozen']}" }.join("\n")
     end
-    private_class_method :format_payment_list
 
     def self.format_payment_enroll(result)
       case result[:status]
@@ -1301,7 +1205,6 @@ module Portage
       else "This store doesn't support payment enrollment."
       end
     end
-    private_class_method :format_payment_enroll
 
     # --- orders ---
 
@@ -1319,7 +1222,6 @@ module Portage
       warn USAGE
       1
     end
-    private_class_method :run_orders
 
     def self.run_orders_reconcile(argv)
       opts = {}
@@ -1335,14 +1237,12 @@ module Portage
       puts opts[:json] ? JSON.pretty_generate(results.map(&:to_h)) : format_reconcile(results)
       0
     end
-    private_class_method :run_orders_reconcile
 
     def self.reconcile_records(checkout_id, transaction_log, reconciler)
       return reconcile_one_checkout(checkout_id, transaction_log, reconciler) if checkout_id
 
       HandoffReconciler.each_pending_shopper_record(transaction_log).map { |record| reconciler.call(record) }
     end
-    private_class_method :reconcile_records
 
     # `--checkout ID` reconciles the one named record whatever its
     # `settled_by`/status — #call itself still refuses to settle anything
@@ -1354,14 +1254,12 @@ module Portage
 
       [reconciler.call(transaction_log.find(key))]
     end
-    private_class_method :reconcile_one_checkout
 
     def self.format_reconcile(results)
       return "(nothing to reconcile)" if results.empty?
 
       results.map { |r| format_reconcile_result(r) }.join("\n")
     end
-    private_class_method :format_reconcile
 
     def self.format_reconcile_result(result)
       return "#{result.idempotency_key}: #{result.note}" unless result.settled
@@ -1372,7 +1270,6 @@ module Portage
       parts << format_amount(result.amount, result.currency) if result.amount
       parts.join(" — ")
     end
-    private_class_method :format_reconcile_result
 
     # --- index (docs/plans/buy-skill-and-local-browser.md Phase 2b) ---
 
@@ -1393,7 +1290,6 @@ module Portage
       warn USAGE
       1
     end
-    private_class_method :run_index
 
     def self.parse_index_build_options(argv)
       opts = { sources: nil, queries: nil, dry_run: false, json: false, export: nil }
@@ -1407,7 +1303,6 @@ module Portage
       opts[:queries] &&= File.readlines(opts[:queries]).map(&:strip).reject(&:empty?)
       opts
     end
-    private_class_method :parse_index_build_options
 
     def self.run_index_build(argv, refresh:)
       opts = parse_index_build_options(argv)
@@ -1420,10 +1315,8 @@ module Portage
       puts opts[:json] ? JSON.pretty_generate(result) : format_index_build(result)
       0
     end
-    private_class_method :run_index_build
 
     def self.index_sources(names) = names ? Index::Sources.by_name(names) : nil
-    private_class_method :index_sources
 
     def self.format_index_build(result)
       lines = ["Ran #{result[:sources_run].join(', ')} — #{result[:candidates]} candidate(s)."]
@@ -1437,7 +1330,6 @@ module Portage
       end
       lines.join("\n")
     end
-    private_class_method :format_index_build
 
     INDEX_SHOW_PER_PAGE = 50
 
@@ -1455,12 +1347,10 @@ module Portage
       puts opts[:json] ? JSON.pretty_generate(result) : format_index_show(result)
       0
     end
-    private_class_method :run_index_show
 
     def self.index_show_all(kind)
       { stores: kind == "products" ? [] : Index::Store.new.all, products: kind == "stores" ? [] : Index::ProductStore.new.all }
     end
-    private_class_method :index_show_all
 
     # `--products` pages (docs/plans/local-catalogue.md Phase 2): a crawled
     # index can hold thousands.
@@ -1469,7 +1359,6 @@ module Portage
       { stores: [], products: products.page(opts[:page], per_page: opts[:per_page]), page: opts[:page],
         per_page: opts[:per_page], products_total: products.count }
     end
-    private_class_method :index_products_page
 
     def self.format_index_show(result)
       paged = result.key?(:page)
@@ -1480,13 +1369,11 @@ module Portage
       lines << index_page_line(result) if paged
       lines.join("\n")
     end
-    private_class_method :format_index_show
 
     def self.index_store_lines(stores)
       lines = ["Stores:"] + stores.map { |s| "  #{s['origin']} (#{Array(s['sources']).join(', ')})" }
       stores.empty? ? lines + ["(none)"] : lines
     end
-    private_class_method :index_store_lines
 
     def self.index_page_line(result)
       first = ((result[:page] - 1) * result[:per_page]) + 1
@@ -1496,7 +1383,6 @@ module Portage
       "Showing #{first}-#{last} of #{result[:products_total]}. Next: --page #{result[:page] + 1}" \
         "#{" --per-page #{result[:per_page]}" unless result[:per_page] == INDEX_SHOW_PER_PAGE}"
     end
-    private_class_method :index_page_line
 
     # `portage index search` (docs/plans/local-catalogue.md Phase 2): local
     # index entries only, no request. Exits 1 with no hits.
@@ -1515,7 +1401,6 @@ module Portage
       puts opts[:json] ? JSON.pretty_generate(result) : format_index_search(result)
       result[:products].empty? ? 1 : 0
     end
-    private_class_method :run_index_search
 
     def self.index_search(query, opts)
       products = Index::ProductStore.new
@@ -1523,7 +1408,6 @@ module Portage
       hits = products.search(query, **filters).map { |entry| entry.merge("product" => Index::EntryProduct.wire(entry)) }
       { query: query, engine: products.search_engine, live: false, filters: filters, products: hits }
     end
-    private_class_method :index_search
 
     def self.format_index_search(result)
       return "No index products match \"#{result[:query]}\"." if result[:products].empty?
@@ -1534,14 +1418,12 @@ module Portage
       lines << "(FTS5 isn't available in this SQLite, so this was a plain text match.)" if result[:engine] == "like"
       lines.join("\n")
     end
-    private_class_method :format_index_search
 
     def self.index_search_line(product)
       hosts = Array(product["stores"]).filter_map { |s| URI.parse(s["origin"].to_s).host }.join(", ")
       ["#{product['title']}#{" — #{product['brand']}" if product['brand']}", ("(#{hosts})" unless hosts.empty?),
        product["url"]].compact.join(" ")
     end
-    private_class_method :index_search_line
 
     def self.run_index_add(argv)
       json = !argv.delete("--json").nil?
@@ -1556,7 +1438,6 @@ module Portage
       puts json ? JSON.pretty_generate(result) : result[:message]
       result[:added] ? 0 : 1
     end
-    private_class_method :run_index_add
 
     def self.run_index_remove(argv)
       json = argv.delete("--json") ? true : false
@@ -1570,7 +1451,6 @@ module Portage
       puts json ? JSON.pretty_generate(result) : result[:message]
       result[:removed] ? 0 : 1
     end
-    private_class_method :run_index_remove
 
     def self.run_index_sources(argv)
       json = argv.delete("--json") ? true : false
@@ -1578,12 +1458,10 @@ module Portage
       puts json ? JSON.pretty_generate(sources) : format_index_sources(sources)
       0
     end
-    private_class_method :run_index_sources
 
     def self.format_index_sources(sources)
       sources.map { |s| "#{s[:name]}: #{s[:description]}#{" (#{s[:path]})" if s[:path]}" }.join("\n")
     end
-    private_class_method :format_index_sources
 
     # --- browser (docs/plans/buy-skill-and-local-browser.md Phase 3) ---
 
@@ -1597,7 +1475,6 @@ module Portage
       warn USAGE
       1
     end
-    private_class_method :run_browser
 
     def self.parse_browser_import_options(argv)
       opts = { browser: nil, root: nil, history_days: BrowserImport::Importer::DEFAULT_HISTORY_DAYS,
@@ -1606,7 +1483,6 @@ module Portage
       browser_import_option_parser(opts).parse!(argv)
       opts
     end
-    private_class_method :parse_browser_import_options
 
     def self.browser_import_option_parser(opts)
       OptionParser.new do |parser|
@@ -1620,7 +1496,6 @@ module Portage
         end
       end
     end
-    private_class_method :browser_import_option_parser
 
     # Reads, reduces and probes (BrowserImport::Importer#plan), shows the
     # list, and saves only through BrowserImport::Confirm's gate: `--yes`,
@@ -1643,7 +1518,6 @@ module Portage
       warn "#{e.message}\n#{USAGE}"
       1
     end
-    private_class_method :run_browser_import
 
     # The real HandoffOnly list (docs/plans/buy-skill-and-local-browser.md
     # Phase 5) into Importer's own injectable `handoff_only_hosts:` seam
@@ -1653,7 +1527,6 @@ module Portage
     def self.browser_importer
       BrowserImport::Importer.new(handoff_only_hosts: HandoffOnly.new.hosts)
     end
-    private_class_method :browser_importer
 
     def self.browser_import_options(opts)
       browser = opts[:browser] || BrowserImport::Profiles.detect || "chrome"
@@ -1663,7 +1536,6 @@ module Portage
         max_probes: opts[:max_probes], exclude: opts[:exclude]
       )
     end
-    private_class_method :browser_import_options
 
     BROWSER_IMPORT_MESSAGES = {
       dry_run: "Dry run — nothing saved.",
@@ -1683,14 +1555,12 @@ module Portage
       end
       plan[:error] ? 1 : 0
     end
-    private_class_method :report_browser_import
 
     def self.browser_import_message(decision, saved)
       return "Saved #{saved[:stores]} store(s) and #{saved[:products]} product(s) to your local index." if saved
 
       BROWSER_IMPORT_MESSAGES.fetch(decision, "Nothing saved.")
     end
-    private_class_method :browser_import_message
 
     def self.format_browser_import(plan)
       lines = browser_import_counts(plan)
@@ -1700,7 +1570,6 @@ module Portage
       lines << "#{plan[:products].length} product page(s) to keep." if plan[:products].any?
       lines.join("\n")
     end
-    private_class_method :format_browser_import
 
     def self.browser_import_counts(plan)
       skipped = plan[:skipped].map { |reason, n| "#{n} #{reason}" }.join(", ")
@@ -1711,14 +1580,12 @@ module Portage
       lines << "Hit the #{plan[:probed]}-probe cap; #{plan[:unprobed]} domain(s) left unprobed." if plan[:capped]
       lines
     end
-    private_class_method :browser_import_counts
 
     def self.browser_import_line(entry)
       categories = entry[:category_names].empty? ? "uncategorised" : entry[:category_names].join(", ")
       "#{entry[:domain]} — #{entry[:verdict]} — #{categories} " \
         "(#{entry[:sources].join(', ')}, #{entry[:visits]} visit(s))"
     end
-    private_class_method :browser_import_line
 
     # --- browser profile (docs/plans/buy-skill-and-local-browser.md Phase 6) ---
 
@@ -1734,13 +1601,11 @@ module Portage
 
       BROWSER_PROFILE_SUBCOMMANDS[sub].call(argv)
     end
-    private_class_method :run_browser_profile
 
     def self.browser_profile_usage
       warn USAGE
       1
     end
-    private_class_method :browser_profile_usage
 
     def self.parse_browser_profile_options(argv)
       opts = { browser: nil, port: BrowserProfile::Profile::DEFAULT_PORT, url: nil, json: false }
@@ -1752,7 +1617,6 @@ module Portage
       end.parse!(argv)
       opts
     end
-    private_class_method :parse_browser_profile_options
 
     # `--browser` names the exact browser; without it, the first Chromium
     # family browser BrowserImport::Profiles finds installed, falling back
@@ -1762,7 +1626,6 @@ module Portage
       browser = opts[:browser] || BrowserProfile::Browsers.detect || "chrome"
       BrowserProfile::Profile.new(browser: browser, port: opts[:port])
     end
-    private_class_method :browser_profile_for
 
     def self.run_browser_profile_init(argv)
       opts = parse_browser_profile_options(argv)
@@ -1773,7 +1636,6 @@ module Portage
       warn "#{e.message}\n#{USAGE}"
       1
     end
-    private_class_method :run_browser_profile_init
 
     # Launches the profile (if it isn't already running on its own port)
     # and either opens a new tab at --url or attaches to the first
@@ -1791,7 +1653,6 @@ module Portage
       warn "#{e.message}\n#{USAGE}"
       1
     end
-    private_class_method :run_browser_profile_open
 
     def self.run_browser_profile_status(argv)
       opts = parse_browser_profile_options(argv)
@@ -1802,20 +1663,17 @@ module Portage
       warn "#{e.message}\n#{USAGE}"
       1
     end
-    private_class_method :run_browser_profile_status
 
     def self.format_browser_profile_open(result)
       tab = result.dig(:target, "url")
       "#{result[:browser]} profile is open (port #{result[:port]}, #{result[:dir]})#{" — tab: #{tab}" if tab}."
     end
-    private_class_method :format_browser_profile_open
 
     def self.format_browser_profile_status(result)
       return "#{result[:browser]} profile (#{result[:dir]}) isn't running." unless result[:running]
 
       "#{result[:browser]} profile is running on port #{result[:port]} (#{result[:dir]})."
     end
-    private_class_method :format_browser_profile_status
 
     def self.report_browser_profile_error(error, json)
       if json
@@ -1825,7 +1683,6 @@ module Portage
       end
       1
     end
-    private_class_method :report_browser_profile_error
 
     # --- doctor ---
 
@@ -1839,7 +1696,6 @@ module Portage
       end.parse!(argv)
       opts
     end
-    private_class_method :parse_doctor_options
 
     # `wizard: :force` is `portage setup`, always offering the wizard on a
     # TTY; `:auto` is `doctor`/`configure`, which only offers it when
@@ -1859,10 +1715,8 @@ module Portage
 
       report_doctor(doctor.call, json: opts[:json])
     end
-    private_class_method :run_doctor
 
     def self.run_setup(argv) = run_doctor(argv, wizard: :force)
-    private_class_method :run_setup
 
     # --json or no TTY on stdin always stays today's read-only report,
     # whichever command name was used — a piped/CI/agent run never blocks
@@ -1873,18 +1727,15 @@ module Portage
 
       doctor.nothing_configured?
     end
-    private_class_method :run_wizard?
 
     def self.run_setup_wizard
       SetupWizard.new.call
     end
-    private_class_method :run_setup_wizard
 
     def self.report_doctor(findings, json:)
       puts json ? JSON.pretty_generate(findings.map(&:to_h)) : format_doctor(findings)
       findings.none?(&:warning?) ? 0 : 1
     end
-    private_class_method :report_doctor
 
     # Info findings (install method, Ruby, adapters, PATH) first, then the
     # warnings, which alone decide the exit code.
@@ -1895,7 +1746,6 @@ module Portage
       lines.concat(warnings.empty? ? ["No issues found."] : warnings.map { |f| "[#{f.check}] #{f.message}" })
       lines.join("\n")
     end
-    private_class_method :format_doctor
 
     # --- generate ---
 
@@ -1909,7 +1759,6 @@ module Portage
         1
       end
     end
-    private_class_method :run_generate
 
     def self.run_generate_adapter(rest)
       name, *rest = rest
@@ -1924,7 +1773,6 @@ module Portage
       puts "Scaffolded #{path}/"
       0
     end
-    private_class_method :run_generate_adapter
 
     def self.run_generate_agent_profile(rest)
       out = "agent-profile.json"
@@ -1944,7 +1792,6 @@ module Portage
            "`bundle exec rake agent_profile:purge` from the repo root — see docs/agent-profile.md."
       0
     end
-    private_class_method :run_generate_agent_profile
 
     # --- output ---
 
@@ -1960,19 +1807,16 @@ module Portage
       lines.concat(format_decisions(report[:decisions])) if report[:decisions]&.any?
       lines.join("\n")
     end
-    private_class_method :format_report
 
     def self.format_quote(report)
       lines = report[:quote_id] ? ["  quote: #{report[:quote_id]}"] : []
       lines << "  approve: #{approval_line(report[:summary])}" if report[:summary]
       lines
     end
-    private_class_method :format_quote
 
     def self.approval_line(summary)
       [Approve.describe(summary), summary[:url]].compact.join(" — ")
     end
-    private_class_method :approval_line
 
     # What the checkout holds, as opposed to the search results above it,
     # and where it differs from the request.
@@ -1982,26 +1826,22 @@ module Portage
       lines << "  total: #{format_amount(total, report[:currency])}" if total
       lines + Array(report[:warnings]).map { |w| "  warning: #{w}" }
     end
-    private_class_method :format_checkout
 
     def self.format_decisions(decisions)
       decisions.map do |name, verdict|
         "  decision #{name}: #{verdict.compact.map { |key, value| "#{key}=#{value}" }.join(' ')}"
       end
     end
-    private_class_method :format_decisions
 
     def self.format_handoff(handoff)
       lines = ["  opened in browser: #{handoff[:opened]}", "  notified: #{handoff[:notified]}"]
       lines << "  notify error: #{handoff[:notify_error]}" if handoff[:notify_error]
       lines
     end
-    private_class_method :format_handoff
 
     def self.product_line(product)
       product.respond_to?(:title) ? "#{product.id}: #{product.title}" : "#{product['id']}: #{product['title']}"
     end
-    private_class_method :product_line
 
     def self.format_find(report)
       lines = [report[:message].to_s]
@@ -2009,7 +1849,6 @@ module Portage
       lines << "  search: #{report[:search_id]} (portage pick --search #{report[:search_id]})" if report[:search_id]
       lines.join("\n")
     end
-    private_class_method :format_find
 
     def self.offer_line(offer)
       parts = ["#{offer[:store]} — #{offer[:title]} (#{offer[:product_id]})", format_price(offer)]
@@ -2017,7 +1856,6 @@ module Portage
       parts << "ref #{offer[:offer_ref]}" if offer[:offer_ref]
       parts.join(" — ")
     end
-    private_class_method :offer_line
 
     def self.format_compare(report)
       lines = [report[:message].to_s]
@@ -2025,7 +1863,6 @@ module Portage
       lines << "  search: #{report[:search_id]} (portage pick --search #{report[:search_id]})" if report[:search_id]
       lines.join("\n")
     end
-    private_class_method :format_compare
 
     def self.compare_offer_line(offer)
       parts = ["[#{offer[:match]}] #{offer[:store]} — #{offer[:title]} (#{offer[:product_id]})", format_price(offer)]
@@ -2033,16 +1870,15 @@ module Portage
       parts << "ref #{offer[:offer_ref]}" if offer[:offer_ref]
       parts.join(" — ")
     end
-    private_class_method :compare_offer_line
 
     def self.format_price(offer)
       return "price n/a" unless offer[:amount]
 
       format_amount(offer[:amount], offer[:currency])
     end
-    private_class_method :format_price
 
     def self.format_amount(amount, currency) = Money.format_amount(amount, currency)
-    private_class_method :format_amount
+
+    private_class_method(*(singleton_methods(false) - [:run]))
   end
 end
