@@ -191,4 +191,18 @@ RSpec.describe Portage::Cli::PaymentMethods do
       expect(backend.read(id)).to be_nil
     end
   end
+
+  describe "adapter-fallback session" do
+    it "builds a loopback client authenticated with the shared PermissiveAuthenticator" do
+      adapter = Object.new
+      client = Object.new
+      allow(payment_methods).to receive(:fetch_homepage).and_return(["<html></html>", {}])
+      allow(Portage::Ucp::Resolver).to receive_messages(detect_platform: double(env: {}),
+                                                        missing_env: [], build_adapter: adapter)
+      expect(Portage::Ucp::Client).to receive(:for_adapter)
+        .with(adapter, authenticator: an_instance_of(Portage::Cli::PermissiveAuthenticator)).and_return(client)
+
+      expect(payment_methods.send(:adapter_session, "https://shop.example")).to be(client)
+    end
+  end
 end

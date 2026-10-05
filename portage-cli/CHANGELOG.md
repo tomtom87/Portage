@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fix: `payment_methods` adapter fallback no longer silently fails.** `PaymentMethods#adapter_session` referenced `Buy::PermissiveAuthenticator`, which doesn't exist (the class is `Portage::Cli::PermissiveAuthenticator`); the resulting `NameError` was swallowed by the method's `rescue StandardError`, so enrolling against your own adapter-backed store always reported no session. It now requires and uses the right constant. Patch-level bug fix.
+
 ## [0.12.0] - 2026-10-01
 
 - **Release note: the confidence check wants `portage-ucp-decision` 0.1.2.** `portage-ucp-decision` stays an optional install, not a dependency, but 0.1.2 is the version that rejects a malformed backend answer (see its changelog); the README says so.
