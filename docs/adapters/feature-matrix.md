@@ -38,10 +38,10 @@ caveat noted in a footnote below. Derived 2026-09-24.
     endpoints on **2026-10-27**. After that date this adapter is catalog search/product +
     checkout handoff only — there is no replacement order-status API on Meta's side.
 
-[^pending-exe]: Etsy and Instagram gain `exe/` + `examples/portage_ucp.rb` via the
+[^pending-exe]: Etsy and Instagram gain `exe/` via the
     `feat/etsy-exe` and `harden/instagram` branches (not yet merged as of this writing) —
     describing the post-merge state, all seven bundled adapters ship the same standalone
-    executable, example config, and `PORTAGE_UCP_CONFIG` hook (see
+    executable and `PORTAGE_UCP_CONFIG` hook (see
     [Library usage](../library-usage.md)).
 
 See [Capability coverage](../capability-coverage.md) for the same data organized by UCP

@@ -42,7 +42,7 @@ MCP::Server::Transports::StdioTransport.new(server).open # stdio; or mount as St
 That's a running MCP server, wired up inline. Every adapter gem also ships an
 executable that does steps 1 and 3 for you, so you don't need a throwaway Ruby file
 just to point an MCP client (Claude Desktop, etc.) at a `command`
-(Etsy and Instagram gain this `exe/` + `examples/` once `feat/etsy-exe` and
+(Etsy and Instagram gain this `exe/` once `feat/etsy-exe` and
 `harden/instagram` merge — see the [feature matrix](adapters/feature-matrix.md) for
 current status):
 
@@ -54,7 +54,7 @@ bundle exec portage-ucp-shopify   # stdio, reads SHOPIFY_SHOP_DOMAIN /
 Step 2 (wiring a real `authenticator`/`rate_limiter`/`business`) still has to come from
 you — the exe won't guess those — so point `PORTAGE_UCP_CONFIG` at a Ruby file that
 calls `Portage::Ucp.configure`, the same `-r`-a-file pattern `rackup`/Sidekiq use.
-`portage-ucp-shopify/examples/portage_ucp.rb` is a copy-paste starting point
+[`portage-ucp/examples/portage_ucp.rb`](https://github.com/tomtom87/Portage/blob/main/portage-ucp/examples/portage_ucp.rb) is a copy-paste starting point
 (bearer-token authenticator, in-process rate limiter):
 
 ```bash

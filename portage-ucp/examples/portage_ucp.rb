@@ -3,7 +3,7 @@
 # Example PORTAGE_UCP_CONFIG file — copy this somewhere in your app (e.g.
 # config/portage_ucp.rb), fill in the two collaborators below, then run:
 #
-#   PORTAGE_UCP_CONFIG=./config/portage_ucp.rb bundle exec portage-ucp-etsy
+#   PORTAGE_UCP_CONFIG=./config/portage_ucp.rb bundle exec <your-adapter>  # e.g. portage-ucp-shopify
 #
 # Everything here is the "wire a real one" side of the exe's step 2 — the
 # unconfigured defaults (UnconfiguredAuthenticator, NullRateLimiter) are safe

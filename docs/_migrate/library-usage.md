@@ -49,7 +49,7 @@ bundle exec portage-ucp-shopify   # stdio, reads SHOPIFY_SHOP_DOMAIN /
 Step 2 (wiring a real `authenticator`/`rate_limiter`/`business`) still has to come from
 you — the exe won't guess those — so point `PORTAGE_UCP_CONFIG` at a Ruby file that
 calls `Portage::Ucp.configure`, the same `-r`-a-file pattern `rackup`/Sidekiq use.
-[`portage-ucp-shopify/examples/portage_ucp.rb`](portage-ucp-shopify/examples/portage_ucp.rb)
+[`portage-ucp/examples/portage_ucp.rb`](https://github.com/tomtom87/Portage/blob/main/portage-ucp/examples/portage_ucp.rb)
 is a copy-paste starting point (bearer-token authenticator, in-process rate limiter):
 
 ```bash

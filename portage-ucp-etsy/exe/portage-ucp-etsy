@@ -5,7 +5,8 @@
 # vars, and — since this gem ships with permissive-nothing defaults (see
 # README's "Security hooks") — wire a real Authenticator/RateLimiter/etc. via
 # a config file loaded with PORTAGE_UCP_CONFIG, the same way `rackup -r` or
-# Sidekiq's `-r` work — see ../examples/portage_ucp.rb for a starting point.
+# Sidekiq's `-r` work — see a starting point at
+# https://github.com/tomtom87/Portage/blob/main/portage-ucp/examples/portage_ucp.rb.
 # Without one, the server still starts but rejects every mutating call.
 #
 # Only ETSY_ACCESS_TOKEN and ETSY_API_KEY are read here, not ETSY_CLIENT_ID/
