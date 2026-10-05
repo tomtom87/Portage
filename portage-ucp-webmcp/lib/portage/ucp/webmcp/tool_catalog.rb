@@ -1,4 +1,5 @@
 require_relative "tool_schemas"
+require_relative "jsonable"
 
 module Portage
   module Ucp
@@ -90,7 +91,7 @@ module Portage
         end
 
         def decorate(tool, action, capability_name)
-          schema = stringify(tool[:inputSchema] || {})
+          schema = Jsonable.call(tool[:inputSchema] || {})
           mutating = schema.fetch("properties", {}).key?("idempotency_key")
           {
             "name" => "#{@prefix}#{action}", "action" => action, "capability" => capability_name,
@@ -113,14 +114,6 @@ module Portage
             "properties" => properties,
             "required" => Array(schema["required"]) - ["idempotency_key"]
           )
-        end
-
-        def stringify(value)
-          case value
-          when Hash then value.to_h { |k, v| [k.to_s, stringify(v)] }
-          when Array then value.map { |v| stringify(v) }
-          else value
-          end
         end
       end
     end
