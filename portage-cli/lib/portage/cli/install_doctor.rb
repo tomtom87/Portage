@@ -3,7 +3,8 @@ require_relative "version"
 
 module Portage
   module Cli
-    # Phase 4 of docs/plans/homebrew-distribution.md's `doctor` checks: how
+    # Phase 4 of homebrew-distribution.md's `doctor` checks (see
+    # https://github.com/tomtom87/Portage/blob/d51200f/docs/plans/homebrew-distribution.md): how
     # this copy of portage-cli was installed (Homebrew formula or plain
     # `gem install`), which Ruby it runs on, which first-party adapter gems
     # it can load, and whether the `portage` a shell would actually run is

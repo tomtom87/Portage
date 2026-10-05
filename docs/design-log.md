@@ -3588,3 +3588,7 @@ later and are worth a separate look.
 **Verdict.** Track A is **blocked on Instacart's closed applications**, not
 on a terms prohibition. Revisit when applications reopen, or if the user
 already holds a key.
+
+## 54. Retired plans (2026-10-05)
+
+The finished plans `woocommerce-fixes`, `woocommerce-local-validation`, `openclaw-plugin` and `homebrew-distribution` were deleted from `docs/plans/`; they can still be read at commit d51200f, e.g. [homebrew-distribution.md](https://github.com/tomtom87/Portage/blob/d51200f/docs/plans/homebrew-distribution.md).

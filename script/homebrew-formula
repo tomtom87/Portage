@@ -4,8 +4,8 @@
 # Renders the Formula/portage.rb for the tomtom87/homebrew-portage tap: every
 # gem `portage` needs at runtime — portage-cli itself, its own transitive
 # dependencies, and every first-party adapter/webmcp/decision gem bundled by
-# default (docs/plans/homebrew-distribution.md, "Bundle all first-party
-# adapters") — pinned to an exact version with a sha256 fetched from
+# default (homebrew-distribution.md, "Bundle all first-party
+# adapters"; https://github.com/tomtom87/Portage/blob/d51200f/docs/plans/homebrew-distribution.md) — pinned to an exact version with a sha256 fetched from
 # rubygems.org. No hand-maintained resource list: re-run this after any
 # bundled gem is released and the formula's `resource` blocks follow.
 #
