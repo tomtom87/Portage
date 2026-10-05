@@ -44,6 +44,11 @@ RSpec.describe Portage::Cli::BrowserImport::PlistXml do
     expect(parsed).to include("Empty" => "", "Flag" => true, "Count" => "3")
   end
 
+  it "decodes all five named entities and decimal and hex character references" do
+    parsed = described_class.parse("<plist><string>&lt;&gt;&amp;&quot;&apos; &#233; &#xE9; &#x1F600;</string></plist>")
+    expect(parsed).to eq("<>&\"' é é \u{1F600}")
+  end
+
   it "raises ParseError on something that isn't an XML plist" do
     expect { described_class.parse("bplist00garbage") }.to raise_error(described_class::ParseError)
     expect { described_class.parse("<plist><dict><key>a</key>") }.to raise_error(described_class::ParseError)
