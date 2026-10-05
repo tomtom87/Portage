@@ -1,5 +1,6 @@
 require "openssl"
 require "base64"
+require_relative "ec_jwk"
 
 module Portage
   module Ucp
@@ -43,16 +44,6 @@ module Portage
       # the gem doesn't assume single-platform trust, without inventing
       # multi-platform discovery logic that isn't pinned anywhere yet.
       class Signature
-        # ECDSA only, per the spec: P-256 mandatory, P-384 optional. `coord`
-        # is the byte length of each of r/s in the required raw r||s
-        # signature encoding (never ASN.1/DER on the wire) and of the JWK's
-        # x/y coordinates.
-        CURVES = {
-          "P-256" => { openssl_name: "prime256v1", oid: "1.2.840.10045.3.1.7", coord: 32, digest: "SHA256" },
-          "P-384" => { openssl_name: "secp384r1", oid: "1.3.132.0.34", coord: 48, digest: "SHA384" }
-        }.freeze
-        EC_PUBLIC_KEY_OID = "1.2.840.10045.2.1".freeze
-
         SIGNATURE_INPUT_FORMAT = /\A(?<label>[!\w-]+)=\((?<components>[^)]*)\)(?<params>.*)\z/
         SIGNATURE_FORMAT = %r{\A[!\w-]+=:(?<value>[A-Za-z0-9+/=]+):\z}
 
@@ -220,52 +211,18 @@ module Portage
 
         def verify_ecdsa!(jwk, base, raw_signature)
           crv = jwk["crv"] || jwk[:crv]
-          curve = CURVES.fetch(crv) { raise MalformedSignatureError, "unsupported curve #{crv.inspect}" }
+          curve = EcJwk::CURVES.fetch(crv) { raise MalformedSignatureError, "unsupported curve #{crv.inspect}" }
           unless raw_signature.bytesize == curve[:coord] * 2
             raise InvalidSignatureError,
                   "signature is the wrong length for #{crv}"
           end
 
-          key = ec_public_key(jwk, curve)
-          der = raw_to_der(raw_signature, curve[:coord])
+          key = EcJwk.public_key(jwk, curve, error: MalformedSignatureError)
+          der = EcJwk.raw_to_der(raw_signature, curve[:coord])
           verified = key.verify(curve[:digest], der, base)
           raise InvalidSignatureError, "signature does not verify" unless verified
         rescue OpenSSL::PKey::PKeyError, OpenSSL::PKey::EC::Point::Error, OpenSSL::ASN1::ASN1Error => e
           raise InvalidSignatureError, "signature verification failed: #{e.message}"
-        end
-
-        # Builds the public key from raw DER rather than
-        # OpenSSL::PKey::EC#public_key= — that setter no longer works since
-        # EC keys became immutable in the openssl gem's OpenSSL 3.0 support.
-        def ec_public_key(jwk, curve)
-          x = decode_base64url(jwk["x"] || jwk[:x])
-          y = decode_base64url(jwk["y"] || jwk[:y])
-          raise MalformedSignatureError, "JWK missing x/y" if x.nil? || y.nil?
-
-          octet_string = "\x04".b + x + y
-          der = OpenSSL::ASN1::Sequence.new([
-                                              OpenSSL::ASN1::Sequence.new([
-                                                                            OpenSSL::ASN1::ObjectId.new(EC_PUBLIC_KEY_OID),
-                                                                            OpenSSL::ASN1::ObjectId.new(curve[:oid])
-                                                                          ]),
-                                              OpenSSL::ASN1::BitString.new(octet_string)
-                                            ]).to_der
-          OpenSSL::PKey::EC.new(der)
-        end
-
-        def raw_to_der(raw_signature, coord)
-          r = OpenSSL::BN.new(raw_signature.byteslice(0, coord), 2)
-          s = OpenSSL::BN.new(raw_signature.byteslice(coord, coord), 2)
-          OpenSSL::ASN1::Sequence.new([OpenSSL::ASN1::Integer.new(r), OpenSSL::ASN1::Integer.new(s)]).to_der
-        end
-
-        def decode_base64url(value)
-          return nil unless value
-
-          padded = value + ("=" * ((4 - (value.length % 4)) % 4))
-          Base64.urlsafe_decode64(padded)
-        rescue ArgumentError
-          raise MalformedSignatureError, "JWK coordinate isn't valid base64url"
         end
 
         def digests_match?(expected, actual)

@@ -14,6 +14,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Fixed: `Security::Signature` now raises `MalformedSignatureError` for a trusted JWK whose `x` or `y` isn't valid base64url.** It used to leak a raw `ArgumentError`, which `Rack::SignatureVerification` doesn't rescue, so the request failed with a 500 instead of the 401 `invalid_signature` every other bad signature gets. `Ap2::MandateSignature` already mapped the same input to `InvalidMandateError`. Patch-level.
 
+- **Breaking: `Security::Signature::CURVES`, `Security::Signature::EC_PUBLIC_KEY_OID`, `Ap2::MandateSignature::CURVES` and `Ap2::MandateSignature::EC_PUBLIC_KEY_OID` moved to the new `Security::EcJwk`.** Both verifiers carried identical copies of the curve table and the JWK-to-public-key and raw-to-DER helpers; they now share `Security::EcJwk`, which takes the error class each one raises, so verification and its errors are unchanged. The unread `openssl_name` curve field is gone. Nothing outside the two verifiers read the constants; anyone who did should use `Security::EcJwk::CURVES`. Minor-level change for a pre-1.0 gem.
+
 ## [0.11.0] - 2026-09-29
 
 - `Portage::Ucp::Check` (and `portage-ucp-check`) now follows a `<link rel="ucp" href="...">`
