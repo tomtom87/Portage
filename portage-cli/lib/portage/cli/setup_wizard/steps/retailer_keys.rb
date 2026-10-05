@@ -1,4 +1,4 @@
-require_relative "../../dot_env"
+require_relative "env_keys_step"
 
 module Portage
   module Cli
@@ -12,7 +12,7 @@ module Portage
         # setting a key here only makes `find` show more real offers, it
         # never lets `portage buy` complete a purchase at any of these
         # retailers.
-        class RetailerKeys
+        class RetailerKeys < EnvKeysStep
           FIELDS = {
             "WALMART_AFFILIATE_API_KEY" => "Walmart Affiliate API key",
             "EBAY_BROWSE_ACCESS_TOKEN" => "eBay Browse API access token (Buy It Now search only)",
@@ -21,33 +21,21 @@ module Portage
             "AMAZON_CREATORS_ACCESS_TOKEN" => "Amazon Creators API access token"
           }.freeze
 
-          def initialize(prompt:) = @prompt = prompt
-
           def title = "Retailer offer sources"
           def default_yes? = false
 
-          def call
-            @prompt.say("Optional: official buyer-side APIs for Walmart, eBay (Buy It Now only), Best " \
-                        "Buy, Etsy and Amazon. Each needs its own key from that retailer's developer " \
-                        "program — skip any you don't have. None of these ever completes a purchase: " \
-                        "every offer they return still ends in hand-off, same as Amazon today. Neither " \
-                        "key is echoed back; Enter keeps whatever's already set.")
-            assignments = collect
-            return @prompt.say("Left retailer offer source keys unchanged.") if assignments.empty?
-
-            path = DotEnv.update!(assignments)
-            @prompt.say("Saved #{assignments.keys.join(', ')} to #{path} (chmod 600).")
-          end
-
           private
 
-          def collect
-            FIELDS.each_with_object({}) do |(var, label), assignments|
-              hint = ENV.fetch(var, nil).to_s.empty? ? "not set" : "already set"
-              answer = @prompt.ask_secret(label, hint: hint)
-              assignments[var] = answer if answer
-            end
+          def intro
+            "Optional: official buyer-side APIs for Walmart, eBay (Buy It Now only), Best " \
+              "Buy, Etsy and Amazon. Each needs its own key from that retailer's developer " \
+              "program — skip any you don't have. None of these ever completes a purchase: " \
+              "every offer they return still ends in hand-off, same as Amazon today. Neither " \
+              "key is echoed back; Enter keeps whatever's already set."
           end
+
+          def unchanged_message = "Left retailer offer source keys unchanged."
+          def secret?(_var) = true
         end
       end
     end

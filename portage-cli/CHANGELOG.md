@@ -12,6 +12,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Removed `Portage::Cli::BrowserProfile::Cdp.close_tab`.** Nothing in the CLI called it. It is a public class method, so this is **breaking** for any caller using it directly; minor-level for a pre-1.0 gem.
 
+- Internal: the Shipping, SearchKeys and RetailerKeys setup-wizard steps now share one `SetupWizard::Steps::EnvKeysStep` base class instead of three copies of the same prompt-and-save body. No behaviour change.
+
 ## [0.12.0] - 2026-10-01
 
 - **Release note: the confidence check wants `portage-ucp-decision` 0.1.2.** `portage-ucp-decision` stays an optional install, not a dependency, but 0.1.2 is the version that rejects a malformed backend answer (see its changelog); the README says so.
