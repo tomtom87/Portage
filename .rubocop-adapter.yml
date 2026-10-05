@@ -1,0 +1,41 @@
+# Shared RuboCop config for the seven adapter gems. Each gem's .rubocop.yml
+# inherits this and adds only its own Metrics/ModuleLength and
+# Metrics/ClassLength exemptions. Paths here resolve against this file's
+# directory (the repo root), hence the portage-ucp-*/ prefix.
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.2
+  SuggestExtensions: false
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/BlockLength:
+  Exclude:
+    - "portage-ucp-*/spec/**/*.rb"
+    - "portage-ucp-*/*.gemspec"
+
+Metrics/MethodLength:
+  Max: 15
+
+Metrics/AbcSize:
+  Max: 25
+
+Metrics/ParameterLists:
+  Max: 6
+
+Lint/UnusedMethodArgument:
+  Exclude:
+    - "portage-ucp-*/spec/**/*.rb"
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Gemspec/RequireMFA:
+  Enabled: false

@@ -15,6 +15,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 - **Retired four finished plans from `docs/plans/`.** `woocommerce-fixes`, `woocommerce-local-validation`, `openclaw-plugin` and `homebrew-distribution` were done and nothing built on them. They are deleted, and the references to them (the root and gem changelogs, the WooCommerce README, `script/homebrew-formula`, comments in `portage-cli`) now point at permalinks at commit d51200f, where the files can still be read. `docs/design-log.md` has an index entry saying so.
 
+- **One shared RuboCop config for the seven adapter gems.** Their `.rubocop.yml` files were the same apart from each gem's `Metrics/ModuleLength` and `Metrics/ClassLength` exemptions. The shared part now lives in `.rubocop-adapter.yml` at the repo root, and each adapter's `.rubocop.yml` inherits it and keeps only its own exemptions. What RuboCop checks is unchanged.
+
 - **OpenClaw plugin: small tidy-ups, no behaviour change.** `DEFAULT_CONFIG` is no longer exported from `src/config.ts` (nothing imported it), `createRunner` takes the shared `PortageConfig` type, and `scripts/copy-skills.mjs` drops a redundant `mkdirSync` (`cpSync` already creates the target).
 
 ## [0.16.2] - 2026-10-01
