@@ -4,10 +4,9 @@ require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/journal"
 require_relative "user_agent"
-require_relative "homepage_fetch"
+require_relative "adapter_session"
 require_relative "handoff_spend_mode"
 require_relative "reconcile_notifier"
-require_relative "permissive_authenticator"
 require_relative "handoff_only"
 require_relative "handoff_reconciler/wire_adapters"
 
@@ -230,32 +229,13 @@ module Portage
         raise ReconnectError, "#{uri.host} is hand-off only — never reconciled automatically" \
           if @handoff_only.host?(uri.host)
 
-        native_session(uri) || adapter_session(uri) ||
+        native_session(uri) || AdapterSession.call(uri) ||
           raise(ReconnectError, "no automated path back into #{store_url}")
       end
 
       def native_session(uri)
         Portage::Ucp::Client.discover(uri.to_s, headers: UserAgent.headers)
       rescue Portage::Ucp::Client::DiscoveryError
-        nil
-      end
-
-      # Mirrors Buy's own own-store loopback fallback (#adapter_flow) — a
-      # later process re-discovers the platform from the homepage the same
-      # way, and must not assume the original process's session or
-      # credentials still exist, only that this platform's env vars are
-      # still set (see the plan's non-negotiable constraint).
-      def adapter_session(uri)
-        body, headers = HomepageFetch.call(uri)
-        platform = body && Portage::Ucp::Resolver.detect_platform(body, headers)
-        return nil unless platform
-
-        env = Portage::Ucp::Resolver.env_for(platform)
-        return nil unless Portage::Ucp::Resolver.missing_env(platform, env).empty?
-
-        adapter = Portage::Ucp::Resolver.build_adapter(platform, env)
-        Portage::Ucp::Client.for_adapter(adapter, authenticator: PermissiveAuthenticator.new)
-      rescue StandardError
         nil
       end
     end

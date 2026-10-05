@@ -196,13 +196,20 @@ RSpec.describe Portage::Cli::PaymentMethods do
     it "builds a loopback client authenticated with the shared PermissiveAuthenticator" do
       adapter = Object.new
       client = Object.new
-      allow(payment_methods).to receive(:fetch_homepage).and_return(["<html></html>", {}])
+      allow(Portage::Cli::HomepageFetch).to receive(:call).and_return(["<html></html>", {}])
       allow(Portage::Ucp::Resolver).to receive_messages(detect_platform: double(env: {}),
                                                         missing_env: [], build_adapter: adapter)
       expect(Portage::Ucp::Client).to receive(:for_adapter)
         .with(adapter, authenticator: an_instance_of(Portage::Cli::PermissiveAuthenticator)).and_return(client)
 
       expect(payment_methods.send(:adapter_session, "https://shop.example")).to be(client)
+    end
+
+    it "fetches the homepage over the :payment route, never :store" do
+      allow(Portage::Cli::HomepageFetch).to receive(:call).and_return([nil, {}])
+
+      expect(payment_methods.send(:adapter_session, "shop.example")).to be_nil
+      expect(Portage::Cli::HomepageFetch).to have_received(:call).with(URI("https://shop.example"), route: :payment)
     end
   end
 end

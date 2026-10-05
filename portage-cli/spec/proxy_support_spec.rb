@@ -83,13 +83,13 @@ RSpec.describe "Phase 1 env-proxy support via Support::Connection (portage-cli)"
     end
   end
 
-  describe "PaymentMethods#fetch_homepage (route :payment)" do
+  describe "PaymentMethods' adapter-fallback homepage fetch (route :payment)" do
     it "closes docs/design-log.md #44's gap: routes an https target through HTTPS_PROXY/https_proxy" do
       ENV["https_proxy"] = "http://#{proxy.host}:#{proxy.port}"
       methods = Portage::Cli::PaymentMethods.new(path: File.join(Dir.mktmpdir, "payment_methods.json"),
                                                  backend: Object.new)
 
-      methods.send(:fetch_homepage, URI("https://shop.example.invalid/"))
+      methods.send(:adapter_session, "https://shop.example.invalid/")
 
       rec = proxy.last_request
       expect(rec).not_to be_nil
