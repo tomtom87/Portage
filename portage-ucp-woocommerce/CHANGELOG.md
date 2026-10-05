@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-05
+
 - **Removed the unused `Client#admin_post` and `Client#store_delete`.** Nothing in the gem called them. They were public on the client class, so this is **breaking** for any caller using them directly; minor-level for a pre-1.0 gem.
 
 - Documentation only, no code change. The README and a changelog entry linked to `docs/plans/woocommerce-local-validation.md`, which is retired; they now link to a permalink at commit d51200f. Patch-level.

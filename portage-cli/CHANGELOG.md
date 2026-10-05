@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-05
+
 - **Fix: `payment_methods` adapter fallback no longer silently fails.** `PaymentMethods#adapter_session` referenced `Buy::PermissiveAuthenticator`, which doesn't exist (the class is `Portage::Cli::PermissiveAuthenticator`); the resulting `NameError` was swallowed by the method's `rescue StandardError`, so enrolling against your own adapter-backed store always reported no session. It now requires and uses the right constant. Patch-level bug fix.
 
 - Documentation only, no code change. Comments and changelog entries that cited `docs/plans/homebrew-distribution.md`, which is retired, now cite a permalink at commit d51200f. Patch-level.

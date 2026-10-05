@@ -21,7 +21,7 @@
 
 Portage lets an AI agent find and buy things from real online stores for you, and you approve every payment. It ships as a command-line tool (`portage`), a Claude Code plugin (`buy`) that drives it, and Ruby gems that let any store serve the same open protocols ([MCP](https://modelcontextprotocol.io) and [UCP](https://ucp.dev)) to shopping agents. It is for people who want an agent to shop for them, developers building shopping agents, and merchants who want agents to buy from their store.
 
-> **Status:** pre-1.0. APIs may still change between minor versions. Latest release set: 0.15.0 ([changelog](CHANGELOG.md)).
+> **Status:** pre-1.0. APIs may still change between minor versions. Latest release set: 0.17.0 ([changelog](CHANGELOG.md)).
 
 ## Quickstart
 
@@ -218,23 +218,23 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.10.0 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only shop-research skill | [buy skill](docs/skills/buy.md), [shop-research skill](docs/skills/shop-research.md) |
-| [`portage-cli`](portage-cli/) | 0.12.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
+| `buy` plugin | 0.10.5 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only shop-research skill | [buy skill](docs/skills/buy.md), [shop-research skill](docs/skills/shop-research.md) |
+| [`portage-cli`](portage-cli/) | 0.13.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
 | [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Buy through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
 | [`browse-via-ucp`](skills/browse-via-ucp/SKILL.md) skill | – | Agent builders | Read-only: a store's manifest, catalog and whether it supports automated buying | [skill page](docs/skills/browse-via-ucp.md) |
 | [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
 | [`portage-ucp-decision`](portage-ucp-decision/) | 0.1.2 | Agent builders | Offer ranking, escalation policy, confidence gate (Jev/Laya), `PolicyGuard` | – |
 | [`portage-ucp-journal`](portage-ucp-journal/) | 0.1.1 | Agent builders | Buyer-side purchase journal and its `Store` abstraction | – |
 | [`portage-ucp-webmcp`](portage-ucp-webmcp/) | 0.2.0 | Both | WebMCP transport: serve tools in the page, or drive a page's tools (Tier B profile, autofill) | – |
-| [`portage-ucp`](portage-ucp/) | 0.11.0 | Merchants | Protocol core: `Adapter` contract, capability registry, manifest builder, MCP server | [serving `/.well-known/ucp`](docs/well-known-ucp.md), [security hooks](docs/security-hooks.md), [library usage](docs/library-usage.md) |
+| [`portage-ucp`](portage-ucp/) | 0.12.0 | Merchants | Protocol core: `Adapter` contract, capability registry, manifest builder, MCP server | [serving `/.well-known/ucp`](docs/well-known-ucp.md), [security hooks](docs/security-hooks.md), [library usage](docs/library-usage.md) |
 | [`serve-via-ucp`](skills/serve-via-ucp/SKILL.md) skill | – | Merchants | Set up a store's own UCP endpoint | [skill page](docs/skills/serve-via-ucp.md) |
-| [`portage-ucp-shopify`](portage-ucp-shopify/) | 0.5.1 | Merchants | Shopify Admin and Storefront GraphQL APIs | – |
-| [`portage-ucp-wix`](portage-ucp-wix/) | 0.1.5 | Merchants | Wix Stores Catalog and eCommerce REST APIs | – |
-| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | 0.2.2 | Merchants | WooCommerce Admin REST API and Store API | – |
-| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | 0.1.5 | Merchants | BigCommerce v3 Catalog/Carts/Checkouts and v2 Orders APIs | – |
-| [`portage-ucp-magento`](portage-ucp-magento/) | 0.1.5 | Merchants | Magento/Adobe Commerce REST v1 | – |
+| [`portage-ucp-shopify`](portage-ucp-shopify/) | 0.6.0 | Merchants | Shopify Admin and Storefront GraphQL APIs | – |
+| [`portage-ucp-wix`](portage-ucp-wix/) | 0.2.0 | Merchants | Wix Stores Catalog and eCommerce REST APIs | – |
+| [`portage-ucp-woocommerce`](portage-ucp-woocommerce/) | 0.3.0 | Merchants | WooCommerce Admin REST API and Store API | – |
+| [`portage-ucp-bigcommerce`](portage-ucp-bigcommerce/) | 0.2.0 | Merchants | BigCommerce v3 Catalog/Carts/Checkouts and v2 Orders APIs | – |
+| [`portage-ucp-magento`](portage-ucp-magento/) | 0.2.0 | Merchants | Magento/Adobe Commerce REST v1 | – |
 | [`portage-ucp-etsy`](portage-ucp-etsy/) | 0.1.5 | Merchants | Etsy Open API v3 catalog and orders; checkout is a redirect link | – |
-| [`portage-ucp-instagram`](portage-ucp-instagram/) | 0.1.5 | Merchants | Meta Commerce Catalog; checkout is a redirect link; `get_order` is deprecated and stops working after Meta removes its Order Management endpoints on 2026-10-27 | – |
+| [`portage-ucp-instagram`](portage-ucp-instagram/) | 0.2.0 | Merchants | Meta Commerce Catalog; checkout is a redirect link; `get_order` is deprecated and stops working after Meta removes its Order Management endpoints on 2026-10-27 | – |
 
 **Merchants:** an adapter gem, or your own `Adapter` subclass of `portage-ucp`, serves your catalog, cart and checkout over MCP and UCP. Each adapter gem ships an `exe/` server and the `PORTAGE_UCP_CONFIG` hook, with a shared [`examples/portage_ucp.rb`](https://github.com/tomtom87/Portage/blob/main/portage-ucp/examples/portage_ucp.rb) starting point ([library usage](docs/library-usage.md), [credentials](docs/adapter-requirements.md), [capability coverage](docs/capability-coverage.md)). On Shopify, the native Universal Commerce Agent app covers checkout and orders with no code; Portage adds `cart`, `catalog` and a signed manifest ([serving `/.well-known/ucp`](docs/well-known-ucp.md)).
 

@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-05
+
 - **Removed the unused `Client#admin_post`.** Nothing in the gem called it. It was public on the client class, so this is **breaking** for any caller using it directly; minor-level for a pre-1.0 gem.
 
 - **Removed `Mapper.money`.** It was a one-line pass-through to `Support::Amounts.money` that nothing in the gem called. It is a public module function, so this is **breaking** for any caller using it directly; minor-level for a pre-1.0 gem.

@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-05
+
 - **Breaking: removed the `site_url:` keyword from `Mapper.product`.** Nothing passed it. A caller passing `site_url:` now gets an `ArgumentError`. Minor-level change for a pre-1.0 gem.
 
 ## [0.1.5] - 2026-09-25

@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-05
+
 - **Removed `Mapper.money`.** It was a one-line pass-through to `Support::Amounts.money` that nothing in the gem called. It is a public module function, so this is **breaking** for any caller using it directly; minor-level for a pre-1.0 gem.
 
 ## [0.5.1] - 2026-09-25

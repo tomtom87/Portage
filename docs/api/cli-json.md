@@ -1,6 +1,6 @@
 # CLI JSON reference
 
-This page is the machine-readable contract of `portage` (gem `portage-cli` 0.12.0) for agents and scripts that drive it with `--json`.
+This page is the machine-readable contract of `portage` (gem `portage-cli` 0.13.0) for agents and scripts that drive it with `--json`.
 
 For flags and human-readable output, see the [CLI reference](../cli-reference.md). For how an agent loop uses these reports end to end, see [Agentic flow](../agentic-flow.md).
 
@@ -728,12 +728,12 @@ The seller checks (`authenticator`, `rate_limiter`, `signing_keys`, `payment_han
 [
   {
     "check": "runtime",
-    "message": "Ruby 4.0.7 (/opt/homebrew/Cellar/ruby/4.0.7/bin/ruby), portage-cli 0.12.0",
+    "message": "Ruby 4.0.7 (/opt/homebrew/Cellar/ruby/4.0.7/bin/ruby), portage-cli 0.13.0",
     "level": "info",
     "details": {
       "ruby_version": "4.0.7",
       "ruby_path": "/opt/homebrew/Cellar/ruby/4.0.7/bin/ruby",
-      "portage_cli_version": "0.12.0"
+      "portage_cli_version": "0.13.0"
     }
   },
   {

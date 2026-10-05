@@ -1,5 +1,5 @@
 module Portage
   module Ucp
-    VERSION = "0.11.0".freeze
+    VERSION = "0.12.0".freeze
   end
 end
