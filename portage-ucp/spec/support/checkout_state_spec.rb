@@ -43,6 +43,89 @@ RSpec.describe Portage::Ucp::Support::CheckoutState do
     expect(adapter.origin_of("123")).to eq("cart-1")
   end
 
+  describe "the optional platform_checkout_order hook (design-log §55)" do
+    let(:order) do
+      Portage::Ucp::Order.new(
+        id: "order-9", checkout_id: "", permalink_url: "https://shop.example/orders/9",
+        line_items: [Portage::Ucp::OrderLineItem.new(
+          id: "li-1", item: Portage::Ucp::Item.new(id: "sku-1", title: "Lamp", price: 500),
+          quantity: { original: 2, total: 2, fulfilled: 0 }, totals: Portage::Ucp::Support::Totals.line(1000),
+          status: "processing"
+        )],
+        fulfillment: Portage::Ucp::Fulfillment.new, currency: "USD",
+        totals: Portage::Ucp::Support::Totals.summary(subtotal: 1000, total: 1000)
+      )
+    end
+    let(:hooked_class) do
+      Class.new(adapter_class) do
+        attr_accessor :platform_answer, :lookups
+
+        def order_of(checkout_id) = checkout_order(checkout_id)
+        def rebuilt(checkout_id) = checkout_from_platform_order(checkout_id)
+
+        private
+
+        def platform_checkout_order(_checkout_id)
+          self.lookups = (lookups || 0) + 1
+          platform_answer.respond_to?(:call) ? platform_answer.call : platform_answer
+        end
+      end
+    end
+    let(:fresh) { hooked_class.new }
+
+    it "reports completed plus the order for an unknown checkout the platform says became an order" do
+      fresh.platform_answer = order
+      expect(fresh.status_of("cart-1")).to eq("completed")
+      expect(fresh.order_of("cart-1").to_wire_h).to eq("id" => "order-9",
+                                                       "permalink_url" => "https://shop.example/orders/9")
+      expect(fresh.origin_of("order-9")).to eq("cart-1")
+    end
+
+    it "caches a found order, so the platform is asked once per process" do
+      fresh.platform_answer = order
+      2.times { fresh.status_of("cart-1") }
+      expect(fresh.lookups).to eq(1)
+    end
+
+    it "keeps incomplete when the platform has no order, and asks again next time" do
+      fresh.platform_answer = nil
+      2.times { expect(fresh.status_of("cart-1")).to eq("incomplete") }
+      expect(fresh.lookups).to eq(2)
+      expect(fresh.order_of("cart-1")).to be_nil
+    end
+
+    it "falls back to incomplete when the lookup raises" do
+      fresh.platform_answer = -> { raise IOError, "connection reset" }
+      expect(fresh.status_of("cart-1")).to eq("incomplete")
+    end
+
+    it "never asks the platform about a checkout this process already tracks" do
+      fresh.mark("cart-1", "incomplete")
+      fresh.platform_answer = order
+      expect(fresh.status_of("cart-1")).to eq("incomplete")
+      expect(fresh.lookups).to be_nil
+    end
+
+    it "rebuilds a completed checkout from the order when the cart itself is gone" do
+      fresh.platform_answer = order
+      wire = fresh.rebuilt("cart-1").to_wire_h
+      expect(wire).to include("id" => "cart-1", "status" => "completed", "currency" => "USD",
+                              "order" => { "id" => "order-9", "permalink_url" => "https://shop.example/orders/9" })
+      expect(wire["line_items"].first).to include("quantity" => 2, "item" => include("id" => "sku-1"))
+      expect(Portage::Ucp::Support::Totals.amount(wire["totals"])).to eq(1000)
+    end
+
+    it "reports nothing for a gone cart with no order: a vanished cart is never a completion" do
+      fresh.platform_answer = nil
+      expect(fresh.rebuilt("cart-1")).to be_nil
+    end
+
+    it "keeps the default incomplete for an adapter without the hook" do
+      expect(adapter.send(:checkout_from_platform_order, "cart-1")).to be_nil
+      expect(adapter.status_of("cart-1")).to eq("incomplete")
+    end
+  end
+
   it "doesn't log when nothing has set observability via .with_observability (§23)" do
     expect { adapter.mark("cart-1", "completed") }.not_to raise_error
   end
