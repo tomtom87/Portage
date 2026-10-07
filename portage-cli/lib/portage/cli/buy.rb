@@ -1075,8 +1075,13 @@ module Portage
         return quote_changed_report(source, products, checkout, warnings) if quote_exceeded?(checkout)
 
         escalation = decide_escalation(checkout, warnings)
+        # A dry run never hands off, so an escalating checkout is still just
+        # a priced dry run: reporting it as `requires_escalation` saved no
+        # quote, and the CLI's approval gate had nothing to approve
+        # (design-log §55). The real run after approval escalates and hands
+        # off, which is where the pending record gets written.
+        return dry_run_report(source, products, checkout, warnings, escalates: escalation[:escalate]) if @dry_run
         return escalated_report(source, products, checkout, warnings, escalation) if escalation[:escalate]
-        return dry_run_report(source, products, checkout, warnings) if @dry_run
         return webmcp_handoff_checkout_report(source, products, checkout, warnings) if force_handoff
         return confirmation_needed_report(source, products, checkout, warnings) unless confirmed?
 
@@ -1582,9 +1587,13 @@ module Portage
       # `warnings` here are #reconcile_checkout's mismatches, which a real
       # run of the same checkout stops on — so the report says so up front,
       # before anyone approves a quote for it.
-      def dry_run_report(source, products, checkout, warnings = [])
+      def dry_run_report(source, products, checkout, warnings = [], escalates: false)
         message = "Dry run — checkout created but not completed."
         extra = {}
+        if escalates
+          message += " The store needs the shopper to finish this checkout, so a real run hands it off."
+          extra[:handoff_expected] = true
+        end
         if warnings.any?
           message += " It doesn't match the request (#{warnings.join(' ')}), so a real purchase would stop " \
                      "with checkout_mismatch."

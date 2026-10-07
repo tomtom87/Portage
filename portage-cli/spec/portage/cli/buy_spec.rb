@@ -1041,6 +1041,14 @@ RSpec.describe Portage::Cli::Buy do
       expect(transaction_log.all).to be_empty
     end
 
+    it "reports an escalating checkout on --dry-run as a priced dry run that will hand off" do
+      report = buy_and_escalate(dry_run: true, yes: false)
+
+      expect(report).to include(outcome: "dry_run", handoff_expected: true, handoff: nil)
+      expect(report[:message]).to include("a real run hands it off")
+      expect(report[:decisions][:escalation]).to eq(escalate: true, reason: "requires_escalation")
+    end
+
     it "surfaces a warning on the report, without failing the hand-off, when the reserve write fails" do
       allow_any_instance_of(Portage::Ucp::Support::TransactionLog).to receive(:reserve)
         .and_raise(Errno::EACCES, "transactions.json")
