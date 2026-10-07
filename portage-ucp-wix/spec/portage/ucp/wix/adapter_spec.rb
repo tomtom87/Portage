@@ -151,6 +151,57 @@ RSpec.describe Portage::Ucp::Wix::Adapter do
     end
   end
 
+  # A fresh adapter instance stands in for `portage orders reconcile`'s new
+  # process: it never saw the checkout being created.
+  describe "#get_checkout from a process that didn't create the checkout (design-log §55)" do
+    let(:fresh_adapter) { described_class.new(client: client) }
+    let(:search_body) do
+      { search: { filter: { checkoutId: "checkout_1", status: "APPROVED" }, cursorPaging: { limit: 1 } } }
+    end
+    let(:approved_order) do
+      { id: "order_1", number: "10001", checkoutId: "checkout_1", status: "APPROVED", paymentStatus: "PAID",
+        currency: "USD", priceSummary: { subtotal: { amount: "5.00" }, total: { amount: "5.00" } },
+        lineItems: [{ id: "oli_1", quantity: 1, price: { amount: "5.00" }, fulfillmentStatus: "NOT_FULFILLED",
+                      catalogReference: { catalogItemId: "var_1" }, productName: { original: "Cold Brew" } }] }
+    end
+
+    def stub_checkout(completed:)
+      stub_request(:get, "https://www.wixapis.com/ecom/v1/checkouts/checkout_1")
+        .to_return(status: 200, body: { checkout: cart_response.merge("id" => "checkout_1",
+                                                                      "completed" => completed) }.to_json)
+    end
+
+    def stub_search(orders)
+      stub_request(:post, "https://www.wixapis.com/ecom/v1/orders/search")
+        .with(body: search_body.to_json).to_return(status: 200, body: { orders: orders }.to_json)
+    end
+
+    it "reports completed with the order when an approved order came from the checkout" do
+      stub_checkout(completed: true)
+      stub_search([approved_order])
+
+      wire = fresh_adapter.get_checkout(checkout_id: "checkout_1").to_wire_h
+
+      expect(wire["status"]).to eq("completed")
+      expect(wire["order"]).to eq("id" => "order_1", "permalink_url" => "")
+    end
+
+    it "stays incomplete when no approved order came from the checkout" do
+      stub_checkout(completed: false)
+      stub_search([])
+
+      expect(fresh_adapter.get_checkout(checkout_id: "checkout_1").status).to eq("incomplete")
+    end
+
+    it "falls back to incomplete when the order search is refused" do
+      stub_checkout(completed: false)
+      stub_request(:post, "https://www.wixapis.com/ecom/v1/orders/search")
+        .to_return(status: 403, body: { message: "insufficient permissions" }.to_json)
+
+      expect(fresh_adapter.get_checkout(checkout_id: "checkout_1").status).to eq("incomplete")
+    end
+  end
+
   describe "#cancel_checkout" do
     it "marks the tracked status canceled" do
       stub_request(:get, "https://www.wixapis.com/ecom/v1/checkouts/checkout_1")

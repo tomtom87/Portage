@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fixed: a checkout the shopper paid for in the browser now reads as `completed` from a new process.** Status lived only in the creating process, so `portage orders reconcile` always saw `incomplete`. `#get_checkout` now runs Search Orders filtered on `checkoutId` and `status: APPROVED` (Wix's paid, or zero-total/offline, state) and reports `completed` with the `order` confirmation when it finds one, rebuilding the checkout from that order if the checkout itself comes back empty. No order, or a failed search, keeps `incomplete`. Needs the `portage-ucp` release with the `CheckoutState` platform hook. Patch-level.
+
 ## [0.2.0] - 2026-10-05
 
 - **Removed `Mapper.money`.** It was a one-line pass-through to `Support::Amounts.money` that nothing in the gem called. It is a public module function, so this is **breaking** for any caller using it directly; minor-level for a pre-1.0 gem.
