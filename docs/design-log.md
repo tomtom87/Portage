@@ -3684,20 +3684,44 @@ and its `key` is different on every read.
   checkout as `dry_run` with `handoff_expected: true`, so the gated run
   becomes `needs_approval`; the approved `buy --quote ID --yes` escalates
   for real, and that hand-off writes the pending record.
-- **Open: adapter stores can't report `completed` to a later process.**
-  WooCommerce, BigCommerce, Magento, Wix and the Shopify adapter keep checkout
-  status in `CheckoutState`, an in-process hash that defaults to
-  `incomplete`, and the WooCommerce adapter reads `/cart` with its own new
-  Cart-Token. A reconcile in a new process therefore sees `incomplete`, or
-  not-found once the platform drops the cart, and never `completed`,
-  whatever the shopper did in the browser. WooCommerce
-  checkouts carry no `expires_at` at all, so those records stay pending for
-  good. `tmp/woo-local/` describes a Docker WooCommerce store, but Docker
-  wasn't running and the code path above already answers the question, so it
-  wasn't started. A local store in test mode is still the one place a full
-  paid leg could run without real money (WooCommerce's Cash on delivery or
-  Check payments gateway), and it would confirm this; the fix is a lookup by
-  order (Admin API `get_order`/list), which is the plan's open decision 3.
+- **Fixed (code only, UNVERIFIED live): adapter stores couldn't report
+  `completed` to a later process.** WooCommerce, BigCommerce, Magento, Wix
+  and the Shopify adapter kept checkout status in `CheckoutState`, an
+  in-process hash that defaults to `incomplete`, so a reconcile in a new
+  process saw `incomplete`, or not-found once the platform dropped the cart,
+  and never `completed`. `CheckoutState` now falls back, for an id the
+  process has no record of, to an optional private
+  `platform_checkout_order(checkout_id)` hook on the adapter. A placed order
+  makes `get_checkout` report `completed` with the `order` confirmation, and
+  when the cart itself is gone (BigCommerce deletes it on payment, Magento
+  deactivates the quote) the checkout is rebuilt from that order. No order,
+  no hook, or a lookup error keeps `incomplete`; a gone cart with no order
+  stays not-found, so nothing settles on a vanished cart. Per platform:
+  - BigCommerce: v2 List Orders filtered on `cart_id` (the checkout id is
+    the cart id), counting only paid statuses (2, 3, 4, 8, 9, 10, 11, 13,
+    14; not 7 Awaiting Payment).
+  - Magento: `GET /V1/guest-carts/{maskedId}` still returns an inactive
+    quote's `id`; admin orders searched by `quote_id`, counting `processing`,
+    `complete` and `closed` (not `new` or `pending_payment`). Needs
+    `admin_token`.
+  - Wix: Search Orders filtered on `checkoutId` and `status: APPROVED`.
+  - Shopify adapter: the Admin `orders(query: "cart_token:…")` search it
+    already used at completion, then `GET_ORDER`.
+  - WooCommerce: no hook. The shopper pays from a session WooCommerce clones
+    from the Cart-Token, and no order field or REST filter links back to
+    it, so there is no reliable signal; those records still stay pending
+    (and have no `expires_at`). The adapter also still reads `/cart` with
+    its own new Cart-Token in a new process.
+
+  Each signal was checked against the platform's docs and is covered by
+  stubbed specs plus a loopback reconcile spec in portage-cli, but none has
+  been seen live: that a paid order carries those fields on a real store,
+  that BigCommerce's `cart_id` filter matches the checkout id, that
+  Shopify's `cart_token:` search finds a browser-paid order, and that
+  Wix's search filter accepts `checkoutId` with `status` together. A local
+  WooCommerce store in test mode (`tmp/woo-local/`) is still the cheapest
+  place to try a paid leg without real money, but it would only confirm the
+  WooCommerce gap.
 - A one-off `Client.discover` failure on warmies.com during a reconcile run
   surfaced as "no automated path back into …" and left the record pending,
   which is the intended behaviour; three later discovers succeeded.
