@@ -3672,16 +3672,18 @@ and its `key` is different on every read.
   now sends `AgentProfileUrl.resolve`, like `Buy#agent_meta`. The not-found
   note was also the whole UCP envelope (about 5 KB); it is now
   `ServerError#summary`.
-- **Open: under the default `require_approval: any`, an escalating store
-  never records a pending hand-off.** `Cli.execute_buy` turns a gated
-  `--yes` run into a dry run. A dry run's `hand_off` returns early, so no
-  pending record is written, and because the outcome is
-  `requires_escalation` rather than `dry_run`, no quote is saved either, so
-  there is nothing to `portage approve`. The report still prints
-  `checkout_url` and "visit the link to complete it". A shopper who pays there
-  is never reconciled. Four of the five stores here escalate. This needs a
-  decision (record the pending hand-off on a gated escalation, or save a
-  quote for it), not a one-line fix.
+- **Fixed (same branch): under the default `require_approval: any`, an
+  escalating store never recorded a pending hand-off.** `Cli.execute_buy`
+  turns a gated `--yes` run into a dry run, and `Buy#finish_checkout`
+  checked escalation before the dry run, so the outcome was
+  `requires_escalation`: no quote was saved, nothing could be approved, and
+  the report still said "visit the link to complete it". A shopper who paid
+  there was never reconciled. Decision: save a quote, don't record a
+  pending hand-off on an unapproved run (that would let an unapproved
+  checkout through the approval gate). A dry run now reports an escalating
+  checkout as `dry_run` with `handoff_expected: true`, so the gated run
+  becomes `needs_approval`; the approved `buy --quote ID --yes` escalates
+  for real, and that hand-off writes the pending record.
 - **Open: adapter stores can't report `completed` to a later process.**
   WooCommerce, BigCommerce, Magento, Wix and the Shopify adapter keep checkout
   status in `CheckoutState`, an in-process hash that defaults to
