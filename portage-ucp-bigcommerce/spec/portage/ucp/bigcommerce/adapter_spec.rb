@@ -187,6 +187,78 @@ RSpec.describe Portage::Ucp::BigCommerce::Adapter do
     end
   end
 
+  # A fresh adapter instance stands in for `portage orders reconcile`'s new
+  # process: it never saw the checkout being created.
+  describe "#get_checkout from a process that didn't create the checkout (design-log §55)" do
+    let(:fresh_adapter) { described_class.new(client: client, site_url: "https://shop.example.com", currency: "USD") }
+    let(:orders_url) { "https://api.bigcommerce.com/stores/abc123/v2/orders?cart_id=cart_1" }
+    let(:paid_order) do
+      { id: 99, cart_id: "cart_1", status: "Awaiting Fulfillment", status_id: 11, currency_code: "USD",
+        subtotal_ex_tax: "5.0000", total_inc_tax: "5.0000" }
+    end
+
+    def stub_order_products
+      stub_request(:get, "https://api.bigcommerce.com/stores/abc123/v2/orders/99/products")
+        .to_return(status: 200, body: [{ id: 7, product_id: 1, name: "Cold Brew", quantity: 1,
+                                         price_inc_tax: "5.0000", total_inc_tax: "5.0000" }].to_json)
+    end
+
+    it "reports completed with the order when a paid order came from this cart" do
+      stub_checkout_get
+      stub_request(:get, orders_url).to_return(status: 200, body: [paid_order].to_json)
+      stub_order_products
+
+      wire = fresh_adapter.get_checkout(checkout_id: "cart_1").to_wire_h
+
+      expect(wire["status"]).to eq("completed")
+      expect(wire["order"]).to eq("id" => "99",
+                                  "permalink_url" => "https://shop.example.com/account.php?action=order_status&order_id=99")
+    end
+
+    it "rebuilds the completed checkout from the order once BigCommerce has deleted the paid cart" do
+      stub_request(:get, "https://api.bigcommerce.com/stores/abc123/v3/checkouts/cart_1")
+        .to_return(status: 404, body: { status: 404, title: "Not Found" }.to_json)
+      stub_request(:get, orders_url).to_return(status: 200, body: [paid_order].to_json)
+      stub_order_products
+
+      checkout = fresh_adapter.get_checkout(checkout_id: "cart_1")
+
+      expect(checkout.status).to eq("completed")
+      expect(checkout.order.id).to eq("99")
+      expect(Portage::Ucp::Support::Totals.amount(checkout.totals)).to eq(500)
+      expect(checkout.line_items.map(&:quantity)).to eq([1])
+    end
+
+    it "stays incomplete when no order came from the cart (204, no body)" do
+      stub_checkout_get
+      stub_request(:get, orders_url).to_return(status: 204, body: "")
+
+      expect(fresh_adapter.get_checkout(checkout_id: "cart_1").status).to eq("incomplete")
+    end
+
+    it "stays incomplete while the only order is Awaiting Payment" do
+      stub_checkout_get
+      stub_request(:get, orders_url).to_return(status: 200, body: [paid_order.merge(status_id: 7)].to_json)
+
+      expect(fresh_adapter.get_checkout(checkout_id: "cart_1").status).to eq("incomplete")
+    end
+
+    it "keeps a gone cart with no order as not-found" do
+      stub_request(:get, "https://api.bigcommerce.com/stores/abc123/v3/checkouts/cart_1")
+        .to_return(status: 404, body: { status: 404, title: "Not Found" }.to_json)
+      stub_request(:get, orders_url).to_return(status: 204, body: "")
+
+      expect(fresh_adapter.get_checkout(checkout_id: "cart_1")).to be_nil
+    end
+
+    it "falls back to incomplete when the order lookup errors" do
+      stub_checkout_get
+      stub_request(:get, orders_url).to_return(status: 500, body: { title: "boom" }.to_json)
+
+      expect(fresh_adapter.get_checkout(checkout_id: "cart_1").status).to eq("incomplete")
+    end
+  end
+
   describe "#get_order" do
     it "queries the v2 Orders endpoint plus its products, threading through a checkout_id recorded at completion" do
       stub_checkout_get

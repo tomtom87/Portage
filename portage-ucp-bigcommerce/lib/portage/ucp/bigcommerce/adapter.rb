@@ -43,6 +43,16 @@ module Portage
         # than an empty body, which UCP's reads report as nil.
         include Portage::Ucp::Support::NotFound
 
+        # Order statuses that mean the shopper placed and paid the order
+        # (https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/orders/order-status/get-order-statuses):
+        # 2 Shipped, 3 Partially Shipped, 4 Refunded, 8 Awaiting Pickup,
+        # 9 Awaiting Shipment, 10 Completed, 11 Awaiting Fulfillment ("payment
+        # has been confirmed"), 13 Disputed, 14 Partially Refunded. Left out:
+        # 0 Incomplete and 1 Pending (checkout not finished), 7 Awaiting
+        # Payment (not confirmed yet), 12 Manual Verification Required, and
+        # 5 Cancelled / 6 Declined, which stay pending rather than guess.
+        PLACED_ORDER_STATUS_IDS = [2, 3, 4, 8, 9, 10, 11, 13, 14].freeze
+
         def initialize(client:, site_url:, currency:, payment_gateway_id: nil)
           super()
           @client = client
@@ -114,11 +124,16 @@ module Portage
           end
         end
 
+        # A paid checkout's cart is deleted ("Once the order is paid, the
+        # cart is deleted", Create an Order docs), so a not-found here falls
+        # back to the order BigCommerce placed from it, if any (see
+        # #platform_checkout_order).
         def get_checkout(checkout_id:)
-          nil_on_not_found do
-            node = fetch_checkout_node(checkout_id)
-            node && Mapper.checkout(node, id: checkout_id, status: checkout_status(checkout_id))
-          end
+          node = nil_on_not_found { fetch_checkout_node(checkout_id) }
+          return checkout_from_platform_order(checkout_id) unless node
+
+          Mapper.checkout(node, id: checkout_id, status: checkout_status(checkout_id),
+                                order: checkout_order(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart — BigCommerce's
@@ -157,6 +172,20 @@ module Portage
         end
 
         private
+
+        # Support::CheckoutState's platform hook. v2 List Orders filters on
+        # `cart_id`, "the cart ID from which this order originated", and the
+        # checkout id here *is* the cart id
+        # (https://docs.bigcommerce.com/developer/api-reference/rest/admin/management/orders/get-orders).
+        # v2 answers an empty list with 204 and no body, which parses as {}.
+        def platform_checkout_order(checkout_id)
+          orders = @client.v2_get("/orders?cart_id=#{URI.encode_www_form_component(checkout_id)}")
+          placed = Array(orders).find { |o| o.is_a?(Hash) && PLACED_ORDER_STATUS_IDS.include?(o["status_id"]) }
+          return nil unless placed
+
+          Mapper.order(placed, products: @client.v2_get("/orders/#{placed['id']}/products"), site_url: @site_url,
+                               checkout_id: checkout_id)
+        end
 
         def fetch_cart_node(cart_id)
           include_param = "line_items.physical_items.options,line_items.digital_items.options"
