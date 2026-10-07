@@ -67,8 +67,16 @@ end
 # with no `lib/` and nobody noticed before pushing). Yields the built gem's
 # path (inside a tmpdir that's cleaned up on return) so callers can push it
 # without re-building.
-def build_and_verify_gem(gem_dir)
+#
+# `gem_cache:` is a directory of downloaded `.gem` files shared across
+# calls: it seeds this install's cache, which `gem install` checks before
+# downloading, so `publish_all` fetches each dependency once rather than
+# once per adapter. The install dir itself stays per gem on purpose: any
+# gem in GEM_HOME is requirable, so a shared one would let a dependency a
+# gemspec forgot to declare pass the require check below.
+def build_and_verify_gem(gem_dir, gem_cache: nil)
   require "tmpdir"
+  require "fileutils"
 
   Dir.mktmpdir do |tmp|
     # --output writes the package straight into the tmpdir. Building into the
@@ -80,7 +88,13 @@ def build_and_verify_gem(gem_dir)
     abort "gem build produced no .gem file for #{gem_dir} — check the gemspec" unless File.exist?(gem_file)
 
     install_dir = File.join(tmp, "install")
-    sh "gem install --install-dir #{install_dir} #{gem_file}"
+    cache_dir = File.join(install_dir, "cache")
+    if gem_cache
+      FileUtils.mkdir_p(cache_dir)
+      FileUtils.cp(Dir[File.join(gem_cache, "*.gem")], cache_dir)
+    end
+    sh "gem install --no-document --install-dir #{install_dir} #{gem_file}"
+    FileUtils.cp(Dir[File.join(cache_dir, "*.gem")], gem_cache) if gem_cache
 
     # Pinned to the exact version rather than globbing `#{gem_dir}-*`: for
     # `portage-ucp` that wildcard also matches a `portage-ucp-client` or
@@ -226,6 +240,8 @@ desc "Build, smoke-test, and push every gem whose gemspec version isn't on " \
      "build_and_verify_gem check as release_check. rubygems MFA requires a " \
      "fresh OTP per push, so this pauses for input at each `gem push`."
 task :publish_all do
+  require "tmpdir"
+
   # Before any push: a drifted or incomplete OpenClaw package shouldn't be
   # found out after the gems are already on rubygems.org.
   Rake::Task["openclaw:release_check"].invoke
@@ -252,9 +268,11 @@ task :publish_all do
 
   puts "\n#{to_publish.size} gem(s) to push, so expect #{to_publish.size} MFA prompt(s)."
 
-  to_publish.each do |gem_dir|
-    puts "\n=== #{gem_dir} #{gemspec_version(gem_dir)} ==="
-    build_and_verify_gem(gem_dir) { |gem_path| sh "gem push #{gem_path}" }
+  Dir.mktmpdir do |gem_cache|
+    to_publish.each do |gem_dir|
+      puts "\n=== #{gem_dir} #{gemspec_version(gem_dir)} ==="
+      build_and_verify_gem(gem_dir, gem_cache: gem_cache) { |gem_path| sh "gem push #{gem_path}" }
+    end
   end
 
   if ENV["SKIP_HOMEBREW"]
