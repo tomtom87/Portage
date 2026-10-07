@@ -1,6 +1,6 @@
 # Storage Abstraction + Buyer-Side Purchase Journal
 
-**Status:** planned, not started
+**Status:** shipped — Phases 1–2 landed as `portage-ucp-journal` 0.1.0 (2026-09-15) and `Dispatcher`'s `journal:` hook. Open decisions below stay open.
 **Driver:** design-log §22, "Persistence is the common dependency." `TransactionLog`/`OrderLedger` (0.5.0) each hand-roll their own file/flock/JSON convention. Console and scheduler work (§22, both unbuilt) will need the same shape a third and fourth time unless one injectable store gets decided now, in the `rate_limiter`/`authenticator` mold.
 
 ## Context

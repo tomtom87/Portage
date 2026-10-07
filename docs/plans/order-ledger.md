@@ -1,6 +1,6 @@
 # Order Ledger: Durable Local Purchase History
 
-**Status:** planned, not started
+**Status:** Phases 1–2 shipped (`Support::OrderLedger` writing `~/.portage/orders.json` from `Dispatcher`, read by `portage console`'s `orders`). Phase 3 (post-purchase adjustments: write on cancel/refund/return, `refresh` for disputes) not started.
 **Driver:** proposal for an immutable purchase-history ledger + a re-order engine. Investigation found most of both already shipped — what's actually missing is that nothing persists an `Order` locally, so "history" survives only as long as the remote platform chooses to serve it.
 
 ## Context

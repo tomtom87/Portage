@@ -13,3 +13,7 @@ coverage/
 
 # graphify knowledge-graph output (regenerate locally; see CONTRIBUTING.md)
 graphify-out/
+
+# Local scratch: live-check output, release dry runs, per-dir Claude settings
+/tmp/
+openclaw-plugin/.claude/
