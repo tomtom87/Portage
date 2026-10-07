@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-07
+
 - **Added: `Support::CheckoutState` can ask the platform about a checkout this process doesn't track.** An adapter may define a private `platform_checkout_order(checkout_id)` that returns the `Order` its platform placed from that checkout, or nil. `#checkout_status` then reports `completed` for an id with no in-process record, the new `#checkout_order` returns its `OrderConfirmation`, and the new `#checkout_from_platform_order` rebuilds a completed `Checkout` from the order when the platform has already dropped the cart. A found order is cached through `#record_checkout_status`/`#record_order_checkout`; no order, no hook, or a lookup error keeps today's `incomplete`. This lets `portage orders reconcile`, which runs in a new process, see a checkout the shopper paid for in the browser (design-log §55). The `Adapter` contract is unchanged. Minor-level.
 
 ## [0.12.0] - 2026-10-05

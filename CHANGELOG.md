@@ -9,6 +9,10 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-07
+
+- **Release set:** `portage-ucp` 0.13.0, `portage-cli` 0.13.1, `portage-ucp-shopify` 0.6.1, and `portage-ucp-wix`, `portage-ucp-bigcommerce` and `portage-ucp-magento` 0.2.1. `portage orders reconcile` can now settle a hand-off: it sends the agent profile a native UCP store requires, and the four adapters ask their platform whether a checkout the shopper paid in the browser became an order, through the new `Support::CheckoutState` platform hook in `portage-ucp` 0.13.0. Those four adapters now require `portage-ucp` `~> 0.13`. A dry run of a store that escalates its checkout now saves a quote (`dry_run` with `handoff_expected: true`), so it can be approved under `require_approval`. WooCommerce has no order-to-cart link to look up, so its gem only gained a comment and stays at 0.3.0; `portage-cli` keeps `portage-ucp` `~> 0.11`. None of the platform order lookups has been tried against a live store yet (design-log §55). The `buy` and OpenClaw plugins didn't change and stay at 0.10.5.
+
 - **README: `shop-research` is on ClawHub.** The OpenClaw bullet said it wasn't published yet; it links to the `@tomtom87/portage-shop-research` listing now.
 
 ## [0.17.0] - 2026-10-05
