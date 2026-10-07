@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Documented: a checkout paid in the browser still reads as `incomplete` from a new process.** Unlike the BigCommerce, Magento, Wix and Shopify adapters, this one adds no platform lookup: the shopper pays from a cloned session, and nothing on a WooCommerce order links back to the Cart-Token, so there is no reliable signal to report `completed` from. See the comment on `Adapter#get_checkout`. No behaviour change.
+
 ## [0.3.0] - 2026-10-05
 
 - **Removed the unused `Client#admin_post` and `Client#store_delete`.** Nothing in the gem called them. They were public on the client class, so this is **breaking** for any caller using them directly; minor-level for a pre-1.0 gem.
