@@ -113,6 +113,26 @@ module Portage
           end
         end
 
+        # Deliberately no Support::CheckoutState `platform_checkout_order`
+        # hook, so a process that didn't create this checkout still reports
+        # "incomplete" for it (design-log §55). WooCommerce gives no reliable
+        # way to tell this Cart-Token's checkout became an order:
+        #
+        # - The shopper pays on `/checkout/?session=<token>` (see
+        #   Mapper.checkout_links), and for a guest WooCommerce *clones* that
+        #   token session into a new cookie session there
+        #   (WC_Session_Handler#init_session_from_request / #clone_session_data,
+        #   https://github.com/woocommerce/woocommerce/blob/trunk/plugins/woocommerce/includes/class-wc-session-handler.php),
+        #   so the order is placed from a different session than this token's.
+        # - A WC order stores neither the Cart-Token nor a session id, and the
+        #   REST v3 orders list can't filter on either
+        #   (https://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-orders).
+        #   Matching on items/total/time would be a guess, and a wrong
+        #   `completed` inflates spend caps.
+        #
+        # Reconcile therefore keeps these records pending (WooCommerce
+        # checkouts have no `expires_at` either); the agent-side email check
+        # is the way to confirm one.
         def get_checkout(checkout_id:)
           Mapper.checkout(fetch_cart_node, id: checkout_id, status: checkout_status(checkout_id), site_url: @site_url)
         end
