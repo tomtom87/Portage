@@ -39,8 +39,9 @@ module Portage
         # natively, so §9a dedup comes from Support::Idempotency's in-process
         # table.
         include Portage::Ucp::Support::Idempotency
-        # Wix Checkout has no confirmed native status field, so status is
-        # tracked adapter-side via Support::CheckoutState. Only the status
+        # Wix Checkout has no lifecycle status enum (only a `completed`
+        # flag), so status is tracked adapter-side via Support::CheckoutState,
+        # with #platform_checkout_order as its fallback. Only the status
         # half is used here: unlike Shopify and WooCommerce, a Wix Order
         # carries its originating `checkoutId` natively (see #get_order).
         include Portage::Ucp::Support::CheckoutState
@@ -107,7 +108,9 @@ module Portage
 
         def get_checkout(checkout_id:)
           node = fetch_checkout_node(checkout_id)
-          node && Mapper.checkout(node, status: checkout_status(checkout_id))
+          return checkout_from_platform_order(checkout_id) unless node
+
+          Mapper.checkout(node, status: checkout_status(checkout_id), order: checkout_order(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart.
@@ -146,6 +149,22 @@ module Portage
         end
 
         private
+
+        # Support::CheckoutState's platform hook. A Wix Checkout's own
+        # `completed` flag turns true once "an order was successfully created
+        # from this checkout" and paid for (unless the total is 0), and the
+        # Order carries `checkoutId`, a filterable Search Orders field
+        # (https://dev.wix.com/docs/rest/business-solutions/e-commerce/orders/search-orders).
+        # Searching for that order directly answers both "did it complete?"
+        # and "which order?" in one call. `status: APPROVED` is Wix's "online
+        # payment is received" (or zero-total/offline) state; Search Orders
+        # never returns INITIALIZED orders anyway, and PENDING/REJECTED/
+        # CANCELED stay out.
+        def platform_checkout_order(checkout_id)
+          body = { search: { filter: { checkoutId: checkout_id, status: "APPROVED" }, cursorPaging: { limit: 1 } } }
+          node = @client.post("/ecom/v1/orders/search", body).dig("orders", 0)
+          node && Mapper.order(node)
+        end
 
         def fetch_cart_node(cart_id)
           @client.get("/ecom/v1/carts/#{cart_id}")["cart"]
