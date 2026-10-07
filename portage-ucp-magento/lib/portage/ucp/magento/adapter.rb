@@ -46,6 +46,13 @@ module Portage
         # rather than an empty body, which UCP's reads report as nil.
         include Portage::Ucp::Support::NotFound
 
+        # Order states that mean the order was placed and paid
+        # (https://experienceleague.adobe.com/en/docs/commerce-admin/stores-sales/order-management/orders/order-status):
+        # `processing` (invoiced), `complete` ("created, paid, and shipped")
+        # and `closed` (paid, then refunded). Left out: `new` (no invoice
+        # yet), `pending_payment`, `payment_review`, `holded`, `canceled`.
+        PLACED_ORDER_STATES = %w[processing complete closed].freeze
+
         def initialize(client:, currency:, site_url: nil, payment_method: nil, payment_data_key: "cc_token",
                        default_address: nil)
           super()
@@ -125,10 +132,16 @@ module Portage
           end
         end
 
+        # Placing an order deactivates the guest cart's quote, and the
+        # items/totals endpoints only read an active quote (404 after that),
+        # so a not-found here falls back to the order Magento placed from it,
+        # if any (see #platform_checkout_order).
         def get_checkout(checkout_id:)
-          items, currency = cart_snapshot(checkout_id)
+          items, currency = nil_on_not_found { cart_snapshot(checkout_id) }
+          return checkout_from_platform_order(checkout_id) unless items
+
           Mapper.checkout(items, id: checkout_id, currency: currency,
-                                 status: checkout_status(checkout_id))
+                                 status: checkout_status(checkout_id), order: checkout_order(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart.
@@ -166,6 +179,27 @@ module Portage
         end
 
         private
+
+        # Support::CheckoutState's platform hook. The masked guest-cart id
+        # never appears on an order, but `GET /V1/guest-carts/{cartId}`
+        # resolves it to the quote's own `id` even after the quote went
+        # inactive (GuestCartRepository#get loads it with
+        # QuoteRepository#get, not #getActive:
+        # https://github.com/magento/magento2/blob/2.4-develop/app/code/Magento/Quote/Model/GuestCart/GuestCartRepository.php),
+        # and an order's `quote_id` is that id, searchable through the admin
+        # orders endpoint's searchCriteria
+        # (https://developer.adobe.com/commerce/webapi/rest/use-rest/performing-searches/).
+        def platform_checkout_order(checkout_id)
+          quote_id = @client.guest_get("/guest-carts/#{checkout_id}")["id"]
+          return nil unless quote_id
+
+          params = { "searchCriteria[filterGroups][0][filters][0][field]" => "quote_id",
+                     "searchCriteria[filterGroups][0][filters][0][value]" => quote_id,
+                     "searchCriteria[filterGroups][0][filters][0][conditionType]" => "eq" }
+          orders = @client.admin_get("/orders?#{URI.encode_www_form(params)}")["items"] || []
+          placed = orders.find { |o| PLACED_ORDER_STATES.include?(o["state"]) }
+          placed && Mapper.order(placed, checkout_id: checkout_id)
+        end
 
         # Merges the guest-cart `items` resource (sku/name/qty/price) with
         # the `totals` resource (row_total/tax_amount/quote_currency_code)
