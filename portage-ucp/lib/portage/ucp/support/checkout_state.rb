@@ -14,7 +14,9 @@ module Portage
       #
       # Both default rather than raise on an unknown id ("incomplete" and "",
       # respectively): a checkout this process didn't create is still
-      # schema-valid to report, just not information-complete.
+      # schema-valid to report, just not information-complete. An adapter
+      # can add a platform lookup for the unknown-id case (see
+      # #platform_order).
       module CheckoutState
         # Dispatcher wraps each adapter call in .with_observability rather
         # than writing [logger, correlation_id] onto an instance variable on
@@ -49,8 +51,77 @@ module Portage
 
         private
 
+        # A checkout this process has no record of falls back to the
+        # platform: `portage orders reconcile` runs in a new process, after
+        # the shopper paid in their browser, and the in-process hash alone
+        # would always say "incomplete" there (design-log §55). See
+        # #platform_order.
         def checkout_status(checkout_id)
-          (@checkout_status ||= {}).fetch(checkout_id, "incomplete")
+          recorded = (@checkout_status ||= {})[checkout_id]
+          return recorded if recorded
+
+          platform_order(checkout_id) ? "completed" : "incomplete"
+        end
+
+        # The order_confirmation for a checkout #platform_order found an order
+        # for, nil otherwise (an in-process #complete_checkout hands its own
+        # back directly).
+        def checkout_order(checkout_id)
+          order = (@platform_orders ||= {})[checkout_id]
+          order && Portage::Ucp::OrderConfirmation.new(id: order.id, permalink_url: order.permalink_url)
+        end
+
+        # For a #get_checkout whose cart read came back not-found: most
+        # platforms drop the cart once it becomes an order (BigCommerce
+        # deletes it on payment, Magento deactivates the quote), so a paid
+        # checkout would otherwise only ever read as not-found. This builds
+        # the completed Checkout from the order the platform reports for it.
+        # No order means nil: a vanished cart on its own is never read as a
+        # completion (docs/plans/handoff-reconcile.md, "Settle only on a
+        # `completed` status the store actually reports").
+        def checkout_from_platform_order(checkout_id)
+          order = platform_order(checkout_id)
+          return nil unless order
+
+          line_items = order.line_items.map do |li|
+            Portage::Ucp::LineItem.new(id: li.id, item: li.item, quantity: li.quantity[:total], totals: li.totals)
+          end
+          Portage::Ucp::Checkout.new(id: checkout_id, status: "completed", line_items: line_items,
+                                     currency: order.currency, totals: order.totals, links: [],
+                                     order: checkout_order(checkout_id))
+        end
+
+        # The optional per-adapter hook: an adapter that can ask its platform
+        # "did this checkout become a placed order?" defines a private
+        # `platform_checkout_order(checkout_id)` returning that Portage::Ucp::
+        # Order, or nil. Without the hook (or when this process already
+        # tracks the checkout) nothing changes. A found order is cached
+        # through #record_checkout_status/#record_order_checkout so the rest
+        # of this process agrees with it. A lookup error is swallowed: the
+        # caller gets today's in-process answer, which reconcile reads as
+        # "still pending", never as a settle. The hook is a private method
+        # rather than a new Adapter method or kwarg for the same §9/§23
+        # reason as .with_observability above.
+        def platform_order(checkout_id)
+          orders = (@platform_orders ||= {})
+          return orders[checkout_id] if orders.key?(checkout_id)
+
+          order = ask_platform(checkout_id)
+          return nil unless order
+
+          orders[checkout_id] = order
+          record_order_checkout(order.id, checkout_id)
+          record_checkout_status(checkout_id, "completed")
+          order
+        end
+
+        def ask_platform(checkout_id)
+          return nil if (@checkout_status ||= {}).key?(checkout_id)
+          return nil unless respond_to?(:platform_checkout_order, true)
+
+          platform_checkout_order(checkout_id)
+        rescue StandardError
+          nil
         end
 
         def record_checkout_status(checkout_id, status)
