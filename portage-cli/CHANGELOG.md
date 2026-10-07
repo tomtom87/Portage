@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fix: `portage orders reconcile` (and `buy --wait`) can read a native UCP checkout again.** `HandoffReconciler` called `get_checkout` and `get_order` without `meta.ucp-agent.profile`, so every real UCP store answered `MissingAgentProfileError`. Reconcile read that as "not found", so a pending hand-off never settled while the checkout lived and would have settled `failed`/`unknown` at expiry even if the shopper had paid. It now sends the same agent profile `buy` does (found in the handoff-reconcile Phase 0 live check, design-log §55). A store error's note is now the server's own message (`ServerError#summary`), not Shopify's whole several-kilobyte UCP envelope.
+
 ## [0.13.0] - 2026-10-05
 
 - **Fix: `payment_methods` adapter fallback no longer silently fails.** `PaymentMethods#adapter_session` referenced `Buy::PermissiveAuthenticator`, which doesn't exist (the class is `Portage::Cli::PermissiveAuthenticator`); the resulting `NameError` was swallowed by the method's `rescue StandardError`, so enrolling against your own adapter-backed store always reported no session. It now requires and uses the right constant. Patch-level bug fix.

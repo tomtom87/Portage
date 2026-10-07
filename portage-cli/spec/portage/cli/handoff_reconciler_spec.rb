@@ -24,6 +24,19 @@ RSpec.describe Portage::Cli::HandoffReconciler do
     session
   end
 
+  # A real UCP server rejects any call without meta.ucp-agent.profile
+  # (MissingAgentProfileError); before this, every live reconcile settled
+  # nothing and read as "not found" (design-log §55).
+  it "sends the agent profile on get_checkout" do
+    reserve_pending
+    session = stub_checkout({ "id" => "chk_1", "status" => "incomplete" })
+
+    reconciler.call(transaction_log.find("portage-buy:shop.example:chk_1"))
+
+    expect(session).to have_received(:get_checkout)
+      .with(checkout_id: "chk_1", meta: { agent_profile: Portage::Cli::AgentProfileUrl.resolve })
+  end
+
   describe "records this isn't for" do
     it "no-ops on an already-settled record" do
       transaction_log.reserve(idempotency_key: "k1", checkout_id: "chk_1", payment_token_ref: nil,
@@ -140,6 +153,23 @@ RSpec.describe Portage::Cli::HandoffReconciler do
       expect(result.resolution).to eq("unknown")
     end
 
+    # Shape seen live on Shopify right after cancel_checkout (design-log §55).
+    it "notes a store's checkout_not_found error by its message, not the whole envelope" do
+      reserve_pending
+      body = { "ucp" => { "status" => "error" }, "continue_url" => "https://shop.example/",
+               "messages" => [{ "type" => "error", "code" => "checkout_not_found",
+                                "content" => "The requested checkout does not exist", "severity" => "unrecoverable" }] }
+      session = instance_double(Portage::Ucp::Client::Session)
+      allow(session).to receive(:get_checkout)
+        .and_raise(Portage::Ucp::Client::ServerError.new(JSON.generate(body), payload: body))
+      allow(Portage::Ucp::Client).to receive(:discover).and_return(session)
+
+      result = reconciler.call(transaction_log.find("portage-buy:shop.example:chk_1"))
+
+      expect(result.status).to eq("pending")
+      expect(result.note).to eq("The requested checkout does not exist")
+    end
+
     it "treats a transport error the same as not-found" do
       reserve_pending(expires_at: (Time.now - 3600).utc.iso8601)
       stub_request(:get, "https://shop.example/").to_return(status: 500)
@@ -185,7 +215,7 @@ RSpec.describe Portage::Cli::HandoffReconciler do
                    "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 1,
                                       "totals" => [{ "type" => "total", "amount" => 100 }] }] }
       session = stub_checkout(checkout)
-      allow(session).to receive(:get_order).with(order_id: "ord_1")
+      allow(session).to receive(:get_order).with(order_id: "ord_1", meta: { agent_profile: String })
                                            .and_return({ "id" => "ord_1", "checkout_id" => "chk_1" })
 
       result = reconciler.call(transaction_log.find("portage-buy:shop.example:chk_1"))

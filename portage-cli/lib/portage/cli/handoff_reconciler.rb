@@ -4,6 +4,7 @@ require "portage/ucp"
 require "portage/ucp/client"
 require "portage/ucp/journal"
 require_relative "user_agent"
+require_relative "agent_profile_url"
 require_relative "adapter_session"
 require_relative "handoff_spend_mode"
 require_relative "reconcile_notifier"
@@ -92,7 +93,7 @@ module Portage
 
       def reconcile(record)
         session = reconnect(record["store_url"])
-        checkout = session.get_checkout(checkout_id: record["checkout_id"])
+        checkout = session.get_checkout(checkout_id: record["checkout_id"], meta: agent_meta)
         settle_from_checkout(record, checkout)
       rescue StandardError => e
         # A reconnect failure (no automated path back into the store) and a
@@ -102,7 +103,9 @@ module Portage
         # buys nothing here: either way, this run learned nothing new about
         # whether the shopper paid, and the record's own `expires_at` is
         # still the only thing allowed to turn that into a settle.
-        settle_not_found(record, note: e.message)
+        # ServerError#summary: Shopify answers a gone checkout with its whole
+        # UCP envelope as the message; the note only needs its messages[].
+        settle_not_found(record, note: e.respond_to?(:summary) ? e.summary : e.message)
       end
 
       def settle_from_checkout(record, checkout)
@@ -176,7 +179,7 @@ module Portage
         return nil unless order && order["id"]
 
         session = reconnect(record["store_url"])
-        order_wire = session.get_order(order_id: order["id"])
+        order_wire = session.get_order(order_id: order["id"], meta: agent_meta)
         return order["id"] unless order_wire
 
         @order_ledger.record(idempotency_key: record["idempotency_key"], order: WireOrder.new(order_wire))
@@ -232,6 +235,11 @@ module Portage
         native_session(uri) || AdapterSession.call(uri) ||
           raise(ReconnectError, "no automated path back into #{store_url}")
       end
+
+      # Same `meta.ucp-agent.profile` Buy#agent_meta sends: a real UCP
+      # server rejects any call without it, so leaving it off made every
+      # native reconcile fail as "not found" (design-log §55).
+      def agent_meta = { agent_profile: AgentProfileUrl.resolve }
 
       def native_session(uri)
         Portage::Ucp::Client.discover(uri.to_s, headers: UserAgent.headers)
