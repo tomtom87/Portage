@@ -6,7 +6,9 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
-- **Fixed: a checkout the shopper paid for in the browser now reads as `completed` from a new process.** Status lived only in the creating process, so `portage orders reconcile` always saw `incomplete`, or not-found once Storefront stopped returning the cart. `#get_checkout` now runs the Admin `orders(query: "cart_token:…")` search the adapter already used at completion, and when an order exists reports `completed` with the `order` confirmation (id and `statusPageUrl`), rebuilding the checkout from the order if the cart is gone. No order, or a failed search, keeps `incomplete`/not-found. Needs the Admin token and the `portage-ucp` release with the `CheckoutState` platform hook. Patch-level.
+## [0.6.1] - 2026-10-07
+
+- **Fixed: a checkout the shopper paid for in the browser now reads as `completed` from a new process.** Status lived only in the creating process, so `portage orders reconcile` always saw `incomplete`, or not-found once Storefront stopped returning the cart. `#get_checkout` now runs the Admin `orders(query: "cart_token:…")` search the adapter already used at completion, and when an order exists reports `completed` with the `order` confirmation (id and `statusPageUrl`), rebuilding the checkout from the order if the cart is gone. No order, or a failed search, keeps `incomplete`/not-found. Needs the Admin token, and `portage-ucp` 0.13.0 for the `CheckoutState` platform hook, so the gem now requires `portage-ucp` `~> 0.13`. Patch-level.
 
 ## [0.6.0] - 2026-10-05
 

@@ -6,7 +6,7 @@ approve every payment. It ships as a command-line tool (`portage`), a Claude Cod
 ([MCP](https://modelcontextprotocol.io) and [UCP](https://ucp.dev)) to shopping agents.
 
 !!! info "Status"
-    Pre-1.0. APIs may still change between minor versions. Latest release set: 0.17.0
+    Pre-1.0. APIs may still change between minor versions. Latest release set: 0.18.0
     ([changelog](changelog.md)).
 
 ## Start here
@@ -46,20 +46,20 @@ and [Security](security.md).
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
 | `buy` plugin | 0.10.5 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only shop-research skill | [buy skill](skills/buy.md), [shop-research skill](skills/shop-research.md) |
-| `portage-cli` | 0.13.0 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
+| `portage-cli` | 0.13.1 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
 | `shop-via-ucp` skill | – | Agent builders | Buy through a store's UCP endpoint, with or without `portage` | [skill](skills/shop-via-ucp.md) |
 | `browse-via-ucp` skill | – | Agent builders | Read-only: a store's manifest, catalog and whether it supports automated buying | [skill](skills/browse-via-ucp.md) |
 | `portage-ucp-client` | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [API](api/portage-ucp-client.md), [README](core-gems/portage-ucp-client.md) |
 | `portage-ucp-decision` | 0.1.2 | Agent builders | Offer ranking, escalation policy, confidence gate (Jev/Laya), `PolicyGuard` | [API](api/portage-ucp-decision.md), [README](core-gems/portage-ucp-decision.md) |
 | `portage-ucp-journal` | 0.1.1 | Agent builders | Buyer-side purchase journal and its `Store` abstraction | [API](api/portage-ucp-journal.md), [README](core-gems/portage-ucp-journal.md) |
 | `portage-ucp-webmcp` | 0.2.0 | Both | WebMCP transport: serve tools in the page, or drive a page's tools (Tier B profile, autofill) | [API](api/portage-ucp-webmcp.md), [README](adapters/webmcp.md) |
-| `portage-ucp` | 0.12.0 | Merchants | Protocol core: `Adapter` contract, capability registry, manifest builder, MCP server | [API](api/portage-ucp.md), [README](core-gems/portage-ucp.md) |
+| `portage-ucp` | 0.13.0 | Merchants | Protocol core: `Adapter` contract, capability registry, manifest builder, MCP server | [API](api/portage-ucp.md), [README](core-gems/portage-ucp.md) |
 | `serve-via-ucp` skill | – | Merchants | Set up a store's own UCP endpoint | [skill](skills/serve-via-ucp.md) |
-| `portage-ucp-shopify` | 0.6.0 | Merchants | Shopify Admin and Storefront GraphQL APIs | [README](adapters/shopify.md) |
-| `portage-ucp-wix` | 0.2.0 | Merchants | Wix Stores Catalog and eCommerce REST APIs | [README](adapters/wix.md) |
+| `portage-ucp-shopify` | 0.6.1 | Merchants | Shopify Admin and Storefront GraphQL APIs | [README](adapters/shopify.md) |
+| `portage-ucp-wix` | 0.2.1 | Merchants | Wix Stores Catalog and eCommerce REST APIs | [README](adapters/wix.md) |
 | `portage-ucp-woocommerce` | 0.3.0 | Merchants | WooCommerce Admin REST API and Store API | [README](adapters/woocommerce.md) |
-| `portage-ucp-bigcommerce` | 0.2.0 | Merchants | BigCommerce v3 Catalog/Carts/Checkouts and v2 Orders APIs | [README](adapters/bigcommerce.md) |
-| `portage-ucp-magento` | 0.2.0 | Merchants | Magento/Adobe Commerce REST v1 | [README](adapters/magento.md) |
+| `portage-ucp-bigcommerce` | 0.2.1 | Merchants | BigCommerce v3 Catalog/Carts/Checkouts and v2 Orders APIs | [README](adapters/bigcommerce.md) |
+| `portage-ucp-magento` | 0.2.1 | Merchants | Magento/Adobe Commerce REST v1 | [README](adapters/magento.md) |
 | `portage-ucp-etsy` | 0.1.5 | Merchants | Etsy Open API v3 catalog and orders; checkout is a redirect link | [README](adapters/etsy.md) |
 | `portage-ucp-instagram` | 0.2.0 | Merchants | Meta Commerce Catalog; checkout is a redirect link; `get_order` is deprecated and stops working after Meta removes its Order Management endpoints on 2026-10-27 | [README](adapters/instagram.md) |
 

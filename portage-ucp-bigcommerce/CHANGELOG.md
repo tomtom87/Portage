@@ -6,7 +6,9 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
-- **Fixed: a checkout the shopper paid for in the browser now reads as `completed` from a new process.** Status lived only in the creating process, so `portage orders reconcile` always saw `incomplete`, and once BigCommerce deleted the paid cart, not-found. `#get_checkout` now asks v2 List Orders for an order with this `cart_id` in a paid status (Shipped, Awaiting Fulfillment, Completed and the like; not Awaiting Payment, Pending or Incomplete) and then reports `completed` with the `order` confirmation, rebuilding the checkout from that order if the cart is gone. No order, or a failed lookup, keeps `incomplete`/not-found. Needs the `portage-ucp` release with the `CheckoutState` platform hook. Patch-level.
+## [0.2.1] - 2026-10-07
+
+- **Fixed: a checkout the shopper paid for in the browser now reads as `completed` from a new process.** Status lived only in the creating process, so `portage orders reconcile` always saw `incomplete`, and once BigCommerce deleted the paid cart, not-found. `#get_checkout` now asks v2 List Orders for an order with this `cart_id` in a paid status (Shipped, Awaiting Fulfillment, Completed and the like; not Awaiting Payment, Pending or Incomplete) and then reports `completed` with the `order` confirmation, rebuilding the checkout from that order if the cart is gone. No order, or a failed lookup, keeps `incomplete`/not-found. Needs `portage-ucp` 0.13.0 for the `CheckoutState` platform hook, so the gem now requires `portage-ucp` `~> 0.13`. Patch-level.
 
 ## [0.2.0] - 2026-10-05
 

@@ -1,6 +1,6 @@
 # CLI JSON reference
 
-This page is the machine-readable contract of `portage` (gem `portage-cli` 0.13.0) for agents and scripts that drive it with `--json`.
+This page is the machine-readable contract of `portage` (gem `portage-cli` 0.13.1) for agents and scripts that drive it with `--json`.
 
 For flags and human-readable output, see the [CLI reference](../cli-reference.md). For how an agent loop uses these reports end to end, see [Agentic flow](../agentic-flow.md).
 
@@ -215,6 +215,7 @@ Checkout reports (those that created a checkout) add:
 | `tool_names_proposal` | object | Only on `webmcp_mapping_unconfirmed`. Maps a slot to `{tool_name, confidence, reason}`. |
 | `reconcile` | object | Only with `--wait`. See [buy --wait](#buy-wait-ndjson-stream). |
 | `checkout_mismatch` | boolean | Only on `dry_run`, and only `true`: `warnings` holds a mismatch, so a real run of this checkout stops with `checkout_mismatch`. |
+| `handoff_expected` | boolean | Only on `dry_run`, and only `true`: the store escalates this checkout, so a real run hands it off to the shopper (`requires_escalation`) instead of paying. |
 | `quote_id` | string | On `dry_run` (and `needs_approval`, `quote_changed`): the saved [quote](#quotes). Omitted if it couldn't be saved. |
 | `quoted_total`, `quoted_currency`, `current_total`, `current_currency` | integer, string | Only on `quote_changed`. Totals in minor units. |
 | `summary` | object | Only on `needs_approval`. See [needs_approval](#needs_approval). |
@@ -728,12 +729,12 @@ The seller checks (`authenticator`, `rate_limiter`, `signing_keys`, `payment_han
 [
   {
     "check": "runtime",
-    "message": "Ruby 4.0.7 (/opt/homebrew/Cellar/ruby/4.0.7/bin/ruby), portage-cli 0.13.0",
+    "message": "Ruby 4.0.7 (/opt/homebrew/Cellar/ruby/4.0.7/bin/ruby), portage-cli 0.13.1",
     "level": "info",
     "details": {
       "ruby_version": "4.0.7",
       "ruby_path": "/opt/homebrew/Cellar/ruby/4.0.7/bin/ruby",
-      "portage_cli_version": "0.13.0"
+      "portage_cli_version": "0.13.1"
     }
   },
   {

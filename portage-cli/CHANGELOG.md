@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-07
+
 - **Fix: `portage orders reconcile` can settle a hand-off on a BigCommerce, Magento, Wix or Shopify-adapter store.** Those adapters kept checkout status in the process that created the checkout, so reconcile (a new process) only ever saw `incomplete` or not-found. With their new releases, an adapter checkout that became a paid order reads as `completed` with its `order`, and reconcile settles it and snapshots the order as it does for native UCP stores. No CLI code changed; a new spec covers the adapter loopback path end to end. WooCommerce has no such signal and still stays pending (design-log §55).
 
 - **Fix: `portage orders reconcile` (and `buy --wait`) can read a native UCP checkout again.** `HandoffReconciler` called `get_checkout` and `get_order` without `meta.ucp-agent.profile`, so every real UCP store answered `MissingAgentProfileError`. Reconcile read that as "not found", so a pending hand-off never settled while the checkout lived and would have settled `failed`/`unknown` at expiry even if the shopper had paid. It now sends the same agent profile `buy` does (found in the handoff-reconcile Phase 0 live check, design-log §55). A store error's note is now the server's own message (`ServerError#summary`), not Shopify's whole several-kilobyte UCP envelope.
