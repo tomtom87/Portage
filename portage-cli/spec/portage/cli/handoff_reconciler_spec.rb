@@ -240,6 +240,59 @@ RSpec.describe Portage::Cli::HandoffReconciler do
     end
   end
 
+  # Design-log §55: an adapter-backed store tracked checkout status only in
+  # the process that created the checkout, so reconcile (always a new
+  # process, reconnecting through AdapterSession's loopback) could never see
+  # `completed`. This runs the real loopback against a fresh adapter whose
+  # cart is gone and whose platform reports the order, end to end.
+  describe "an adapter store whose platform reports the order (design-log §55)" do
+    let(:order) do
+      Portage::Ucp::Order.new(
+        id: "ord_9", checkout_id: "chk_1", permalink_url: "https://shop.example/orders/9",
+        line_items: [Portage::Ucp::OrderLineItem.new(
+          id: "li_1", item: Portage::Ucp::Item.new(id: "p1", title: "Lamp", price: 1250),
+          quantity: { original: 2, total: 2, fulfilled: 0 }, totals: Portage::Ucp::Support::Totals.line(2500),
+          status: "processing"
+        )],
+        fulfillment: Portage::Ucp::Fulfillment.new, currency: "USD",
+        totals: Portage::Ucp::Support::Totals.summary(subtotal: 2500, total: 2500)
+      )
+    end
+    let(:adapter_class) do
+      Class.new(Portage::Ucp::Adapter) do
+        include Portage::Ucp::Support::CheckoutState
+
+        def initialize(order)
+          super()
+          @order = order
+        end
+
+        # The platform already dropped the cart, as BigCommerce/Magento do.
+        def get_checkout(checkout_id:) = checkout_from_platform_order(checkout_id)
+        def get_order(order_id:) = (@order if order_id == @order.id)
+
+        private
+
+        def platform_checkout_order(_checkout_id) = @order
+      end
+    end
+
+    it "settles complete with the order's amount and snapshots the order" do
+      reserve_pending
+      allow(Portage::Ucp::Client).to receive(:discover).and_raise(Portage::Ucp::Client::DiscoveryError, "no manifest")
+      allow(Portage::Cli::AdapterSession).to receive(:call) do
+        Portage::Ucp::Client.for_adapter(adapter_class.new(order), authenticator: Portage::Cli::PermissiveAuthenticator.new)
+      end
+
+      result = reconciler.call(transaction_log.find("portage-buy:shop.example:chk_1"))
+
+      expect(result.to_h).to include(settled: true, status: "complete", order_id: "ord_9", amount: 2500,
+                                     currency: "USD")
+      expect(order_ledger).to have_received(:record).with(idempotency_key: "portage-buy:shop.example:chk_1",
+                                                          order: having_attributes(id: "ord_9"))
+    end
+  end
+
   describe "spend-cap mode (Phase 2)" do
     it "counts a completed record toward caps under block (default)" do
       reserve_pending
