@@ -198,6 +198,96 @@ RSpec.describe Portage::Ucp::Magento::Adapter do
     end
   end
 
+  # A fresh adapter instance stands in for `portage orders reconcile`'s new
+  # process: it never saw the checkout being created.
+  describe "#get_checkout from a process that didn't create the checkout (design-log §55)" do
+    let(:fresh_adapter) { described_class.new(client: client, currency: "USD") }
+    let(:orders_search) do
+      { "searchCriteria" => { "filterGroups" => [{ "filters" => [{ "field" => "quote_id", "value" => "42",
+                                                                   "conditionType" => "eq" }] }] } }
+    end
+    let(:paid_order) do
+      { "entity_id" => 7, "quote_id" => 42, "state" => "processing", "status" => "processing",
+        "order_currency_code" => "USD", "subtotal" => 5.0, "grand_total" => 5.0,
+        "items" => [{ "item_id" => 3, "sku" => "cold-brew", "name" => "Cold Brew", "qty_ordered" => 1,
+                      "price" => 5.0, "row_total" => 5.0 }] }
+    end
+
+    def stub_guest_cart(is_active:)
+      stub_request(:get, "https://shop.example.com/rest/V1/guest-carts/masked-1")
+        .to_return(status: 200, body: { id: 42, is_active: is_active, items_count: 1 }.to_json)
+    end
+
+    def stub_orders(items)
+      body = { items: items, total_count: items.size }.to_json
+      stub_request(:get, "https://shop.example.com/rest/V1/orders").with(query: orders_search)
+                                                                   .to_return(status: 200, body: body)
+    end
+
+    def stub_inactive_cart
+      %w[items totals].each do |part|
+        stub_request(:get, "https://shop.example.com/rest/V1/guest-carts/masked-1/#{part}")
+          .to_return(status: 404, body: { message: "No such entity with %fieldName = %fieldValue" }.to_json)
+      end
+    end
+
+    it "reports completed with the order when the cart's quote became a paid order" do
+      stub_cart("masked-1")
+      stub_guest_cart(is_active: true)
+      stub_orders([paid_order])
+
+      wire = fresh_adapter.get_checkout(checkout_id: "masked-1").to_wire_h
+
+      expect(wire["status"]).to eq("completed")
+      expect(wire["order"]).to eq("id" => "7", "permalink_url" => "")
+    end
+
+    it "rebuilds the completed checkout from the order once Magento deactivated the quote" do
+      stub_inactive_cart
+      stub_guest_cart(is_active: false)
+      stub_orders([paid_order])
+
+      checkout = fresh_adapter.get_checkout(checkout_id: "masked-1")
+
+      expect(checkout.status).to eq("completed")
+      expect(checkout.order.id).to eq("7")
+      expect(Portage::Ucp::Support::Totals.amount(checkout.totals)).to eq(500)
+    end
+
+    it "stays incomplete when no order came from the quote" do
+      stub_cart("masked-1")
+      stub_guest_cart(is_active: true)
+      stub_orders([])
+
+      expect(fresh_adapter.get_checkout(checkout_id: "masked-1").status).to eq("incomplete")
+    end
+
+    it "stays incomplete while the only order is still pending payment" do
+      stub_cart("masked-1")
+      stub_guest_cart(is_active: false)
+      stub_orders([paid_order.merge("state" => "pending_payment", "status" => "pending_payment")])
+
+      expect(fresh_adapter.get_checkout(checkout_id: "masked-1").status).to eq("incomplete")
+    end
+
+    it "reports a gone cart with no order as not-found" do
+      stub_inactive_cart
+      stub_guest_cart(is_active: false)
+      stub_orders([])
+
+      expect(fresh_adapter.get_checkout(checkout_id: "masked-1")).to be_nil
+    end
+
+    it "falls back to incomplete without an admin token for the order search" do
+      stub_cart("masked-1")
+      stub_guest_cart(is_active: true)
+      guest_only = described_class.new(client: Portage::Ucp::Magento::Client.new(base_url: "https://shop.example.com"),
+                                       currency: "USD")
+
+      expect(guest_only.get_checkout(checkout_id: "masked-1").status).to eq("incomplete")
+    end
+  end
+
   describe "#get_order" do
     it "queries the admin orders endpoint, threading through a checkout_id recorded at completion" do
       stub_cart("cart_1")

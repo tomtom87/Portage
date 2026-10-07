@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fixed: a checkout the shopper paid for in the browser now reads as `completed` from a new process.** Status lived only in the creating process, so `portage orders reconcile` always saw `incomplete`, or an error once Magento deactivated the quote. `#get_checkout` now resolves the masked cart id to its quote id (`GET /V1/guest-carts/{cartId}`, which still answers for an inactive quote), searches admin orders by `quote_id`, and reports `completed` with the `order` confirmation when one is `processing`, `complete` or `closed`, rebuilding the checkout from that order if the cart can no longer be read. The order search needs `admin_token`. No order, or a failed lookup, keeps `incomplete`; a cart that 404s with no order now returns nil instead of raising `ApiError`, like the other reads. Needs the `portage-ucp` release with the `CheckoutState` platform hook. Patch-level.
+
 ## [0.2.0] - 2026-10-05
 
 - **Removed the unused `Client#admin_post`.** Nothing in the gem called it. It was public on the client class, so this is **breaking** for any caller using it directly; minor-level for a pre-1.0 gem.
