@@ -3592,3 +3592,130 @@ already holds a key.
 ## 54. Retired plans (2026-10-05)
 
 The finished plans `woocommerce-fixes`, `woocommerce-local-validation`, `openclaw-plugin` and `homebrew-distribution` were deleted from `docs/plans/`; they can still be read at commit d51200f, e.g. [homebrew-distribution.md](https://github.com/tomtom87/Portage/blob/d51200f/docs/plans/homebrew-distribution.md).
+
+## 55. Handoff reconcile Phase 0: live signal check (2026-10-07)
+
+docs/plans/handoff-reconcile.md Phase 0 ran for the first time, against five
+native-UCP Shopify stores: The Light Yard plus four from
+`portage-cli/known-stores/stores.json`. Phases 1–3 were built on the
+assumption that `get_checkout` reports `completed` after the shopper pays
+(§44). This run covers everything **before** payment. Nothing was paid.
+
+**Setup.** Installed `portage` 0.13.0 with `HOME` pointed at a scratch
+directory, so the real `~/.portage` was neither read nor written.
+`portage payment list` there showed no enrolled method, so a run could only
+end in a hand-off. No `--auto-open`; `--handoff-target print`. One cheap item
+at qty 1 per store. No buyer identity was sent. Under the default
+`require_approval: any` every `--yes` run became a dry run (see "Bugs this found"),
+and a dry run still creates a real checkout, so the checkouts below come from
+those. Each was then polled with `get_checkout` from a fresh, anonymous
+`Client.discover` session per call (the same thing `HandoffReconciler` does),
+seven times, a minute apart (06:07–06:14 UTC, up to 10 minutes after
+creation). Scripts and raw NDJSON are in
+`tmp/live-checks-2026-10-07/` (gitignored).
+
+| Store | Item (qty 1) | Total | Status, every read | `expires_at` | `order` |
+|---|---|---|---|---|---|
+| usartsupply.com | blending stumps | 6.99 USD | `requires_escalation` | read time + 30 d 1 h | absent |
+| warmies.com | lavender Hot-Pak | 19.99 USD | `requires_escalation` | read time + 30 d 1 h | absent |
+| cuddleandkind.com | 8x10 print | 20.00 USD | `requires_escalation` | read time + 30 d 1 h | absent |
+| losangelesapparel.net | Unisock | 274.00 THB | `requires_escalation` | read time + 30 d 1 h | absent |
+| thelightyard.co.uk | Cube LED deck light, small | 190.00 GBP | `incomplete` | read time + 30 d 1 h | absent |
+
+Checkout ids have the shape `gid://shopify/Checkout/<REDACTED>?key=<REDACTED>`;
+`continue_url` is `https://<shop>.myshopify.com/cart/c/<REDACTED>?key=<REDACTED>`
+and its `key` is different on every read.
+
+**What we saw.**
+
+1. **An anonymous fresh session reads the checkout.** Every poll from a new
+   session answered with the full checkout. No cookie or session state from
+   the creating call is needed, only the checkout id (which carries its own
+   `key`) and an agent profile.
+2. **`expires_at` slides.** Each read reports a time 30 days and 1 hour after
+   that read, not a fixed time from creation (the schema's 6 h default never
+   applies here). So the `expires_at` `hand_off` stores is a floor at best,
+   and a record whose checkout went silent stays pending for 30 days before
+   reconcile may settle it `failed`/`unknown`.
+3. **Status comes from the store's own messages.** The Light Yard reports
+   `incomplete` (contact method, address and delivery missing, all
+   `recoverable`). The other four add `extension_interaction_required`
+   (`requires_buyer_input`), which makes them `requires_escalation`. Nothing
+   changed over 7 minutes, as expected with no one at the checkout.
+4. **`cancel_checkout` answers `canceled`, then the checkout is gone.** On
+   usartsupply.com the cancel call itself returned `status: "canceled"` with
+   `expires_at` set to that second. The next `get_checkout`, one second later,
+   raised `ServerError` with `messages: [{code: "checkout_not_found",
+   severity: "unrecoverable", content: "The requested checkout does not
+   exist"}]` and `continue_url` set to the shop's homepage. It still did five
+   minutes later. **`canceled` is not observable through `get_checkout` on
+   Shopify**: a cancel looks exactly like a vanished checkout, so reconcile
+   keeps it pending (not-found before expiry), and that pending lasts the
+   30 days from point 2.
+5. **Currency follows geo-IP unless the buyer context says otherwise.** Los
+   Angeles Apparel and a first Light Yard checkout came back in THB (the run
+   machine's location). With `PORTAGE_SHIP_COUNTRY=GB` The Light Yard
+   checked out in GBP.
+
+**Bugs this found.**
+
+- **Fixed: reconcile never sent the agent profile.** `HandoffReconciler`
+  called `get_checkout`/`get_order` with no `meta`, so every real UCP store
+  raised `MissingAgentProfileError`. Reconcile treats any error as
+  not-found, so on 0.13.0 every live pending hand-off stayed pending and,
+  once past `expires_at`, would have settled `failed`/`unknown` even if the
+  shopper had paid: the "false `failed` hides a real charge" case the plan
+  forbids. Confirmed by running the real `HandoffReconciler` against all six
+  checkouts with a scratch `TransactionLog`: before the fix, six
+  `MissingAgentProfileError` notes; after it, the live status for each
+  (`requires_escalation`/`incomplete`) and not-found for the canceled one. It
+  now sends `AgentProfileUrl.resolve`, like `Buy#agent_meta`. The not-found
+  note was also the whole UCP envelope (about 5 KB); it is now
+  `ServerError#summary`.
+- **Open: under the default `require_approval: any`, an escalating store
+  never records a pending hand-off.** `Cli.execute_buy` turns a gated
+  `--yes` run into a dry run. A dry run's `hand_off` returns early, so no
+  pending record is written, and because the outcome is
+  `requires_escalation` rather than `dry_run`, no quote is saved either, so
+  there is nothing to `portage approve`. The report still prints
+  `checkout_url` and "visit the link to complete it". A shopper who pays there
+  is never reconciled. Four of the five stores here escalate. This needs a
+  decision (record the pending hand-off on a gated escalation, or save a
+  quote for it), not a one-line fix.
+- **Open: adapter stores can't report `completed` to a later process.**
+  WooCommerce, BigCommerce, Magento, Wix and the Shopify adapter keep checkout
+  status in `CheckoutState`, an in-process hash that defaults to
+  `incomplete`, and the WooCommerce adapter reads `/cart` with its own new
+  Cart-Token. A reconcile in a new process therefore sees `incomplete`, or
+  not-found once the platform drops the cart, and never `completed`,
+  whatever the shopper did in the browser. WooCommerce
+  checkouts carry no `expires_at` at all, so those records stay pending for
+  good. `tmp/woo-local/` describes a Docker WooCommerce store, but Docker
+  wasn't running and the code path above already answers the question, so it
+  wasn't started. A local store in test mode is still the one place a full
+  paid leg could run without real money (WooCommerce's Cash on delivery or
+  Check payments gateway), and it would confirm this; the fix is a lookup by
+  order (Admin API `get_order`/list), which is the plan's open decision 3.
+- A one-off `Client.discover` failure on warmies.com during a reconcile run
+  surfaced as "no automated path back into …" and left the record pending,
+  which is the intended behaviour; three later discovers succeeded.
+
+**Still UNVERIFIED (the post-payment leg).** Nobody paid, so none of these is
+known yet:
+
+- whether `get_checkout` ever reports `completed` after the shopper pays at
+  `continue_url`;
+- whether it still answers after completion, or goes `checkout_not_found`
+  as it does after a cancel (point 4 makes this a real possibility);
+- whether a completed checkout carries `order`;
+- whether the browser checkout the shopper pays on keeps the UCP checkout
+  id. §50 saw Shopify redirect a checkout URL opened in a second browser to a
+  different checkout path; if paying happens on a new checkout, the original
+  id may never see `completed`.
+
+**Exit criteria: not decidable yet.** The pre-payment signals work (with the
+fix above), but the plan's three branches all hinge on the paid leg.
+Point 4 shows Shopify drops a terminal checkout from `get_checkout` at least
+for cancels, which leans towards the "gone after payment" branch. Closing it
+takes one supervised, real purchase: pay a native-UCP Shopify checkout by
+hand, then poll it with the fixed reconciler.
