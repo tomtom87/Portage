@@ -360,6 +360,79 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
     end
   end
 
+  # A fresh adapter instance stands in for `portage orders reconcile`'s new
+  # process: it never saw the checkout being created.
+  describe "#get_checkout from a process that didn't create the checkout (design-log §55)" do
+    let(:fresh_adapter) { described_class.new(client: client) }
+    let(:checkout_id) { "gid://shopify/Cart/1?key=abc" }
+    let(:order_node) do
+      { id: "gid://shopify/Order/1", statusPageUrl: "https://test-shop.myshopify.com/orders/abc123",
+        currentTotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+        currentSubtotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+        lineItems: { nodes: [{ id: "gid://shopify/LineItem/1", quantity: 1, currentQuantity: 1, unfulfilledQuantity: 1,
+                               discountedTotalSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },
+                               variant: { id: "gid://shopify/ProductVariant/1", title: "Cold Brew",
+                                          price: { amount: "5.00", currencyCode: "USD" } } }] } }
+    end
+
+    def stub_cart_token_search(nodes)
+      stub_admin({ data: { orders: { nodes: nodes } } })
+        .with(body: hash_including("variables" => { "query" => "cart_token:1" }))
+    end
+
+    def stub_get_order
+      stub_admin({ data: { order: order_node } })
+        .with(body: hash_including("query" => a_string_matching(/query GetOrder/)))
+    end
+
+    it "reports completed with the order when the cart produced an order" do
+      stub_storefront({ data: { cart: cart_response } })
+      stub_cart_token_search([{ id: "gid://shopify/Order/1",
+                                statusPageUrl: "https://test-shop.myshopify.com/orders/abc123" }])
+      stub_get_order
+
+      wire = fresh_adapter.get_checkout(checkout_id: checkout_id).to_wire_h
+
+      expect(wire["status"]).to eq("completed")
+      expect(wire["order"]).to eq("id" => "gid://shopify/Order/1",
+                                  "permalink_url" => "https://test-shop.myshopify.com/orders/abc123")
+    end
+
+    it "rebuilds the completed checkout from the order when Storefront no longer returns the cart" do
+      stub_storefront({ data: { cart: nil } })
+      stub_cart_token_search([{ id: "gid://shopify/Order/1" }])
+      stub_get_order
+
+      checkout = fresh_adapter.get_checkout(checkout_id: checkout_id)
+
+      expect(checkout.status).to eq("completed")
+      expect(checkout.order.id).to eq("gid://shopify/Order/1")
+      expect(Portage::Ucp::Support::Totals.amount(checkout.totals)).to eq(500)
+    end
+
+    it "stays incomplete when no order came from the cart" do
+      stub_storefront({ data: { cart: cart_response } })
+      stub_cart_token_search([])
+
+      expect(fresh_adapter.get_checkout(checkout_id: checkout_id).status).to eq("incomplete")
+    end
+
+    it "keeps a gone cart with no order as not-found" do
+      stub_storefront({ data: { cart: nil } })
+      stub_cart_token_search([])
+
+      expect(fresh_adapter.get_checkout(checkout_id: checkout_id)).to be_nil
+    end
+
+    it "falls back to incomplete when the Admin API refuses the search" do
+      stub_storefront({ data: { cart: cart_response } })
+      stub_request(:post, "https://test-shop.myshopify.com/admin/api/2026-04/graphql.json")
+        .to_return(status: 401, body: { errors: "[API] Invalid API key or access token" }.to_json)
+
+      expect(fresh_adapter.get_checkout(checkout_id: checkout_id).status).to eq("incomplete")
+    end
+  end
+
   describe "#update_checkout" do
     it "submits the agent's selected_option_id via cartSelectedDeliveryOptionsUpdate" do
       stub_storefront({ data: { cart: cart_with_delivery_groups } })

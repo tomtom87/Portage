@@ -111,9 +111,14 @@ module Portage
           end
         end
 
+        # A cart Storefront no longer returns (as after it became an order)
+        # falls back to the order Shopify placed from it, if any (see
+        # #platform_checkout_order).
         def get_checkout(checkout_id:)
           cart_node = fetch_cart_node(checkout_id)
-          cart_node && Mapper.checkout(cart_node, status: checkout_status(checkout_id))
+          return checkout_from_platform_order(checkout_id) unless cart_node
+
+          Mapper.checkout(cart_node, status: checkout_status(checkout_id), order: checkout_order(checkout_id))
         end
 
         # Full replacement, same rationale as #update_cart — Shopify checkout
@@ -357,15 +362,35 @@ module Portage
         # hand the freshly-created order id back to #complete_checkout's own
         # caller — nothing else surfaces it.
         def link_cart_to_order(checkout_id)
-          token = checkout_id[%r{Cart/([^?]+)}, 1]
-          return unless token
-
-          data = @client.admin_query(Queries::ORDER_BY_CART_TOKEN, variables: { query: "cart_token:#{token}" })
-          order_node = data.dig("orders", "nodes", 0)
+          order_node = order_node_for_cart(checkout_id)
           return unless order_node
 
           record_order_checkout(order_node["id"], checkout_id)
           Portage::Ucp::OrderConfirmation.new(id: order_node["id"], permalink_url: order_node["statusPageUrl"])
+        end
+
+        # Support::CheckoutState's platform hook. The checkout id is the
+        # Storefront Cart GID (`gid://shopify/Cart/<token>?key=...`), and the
+        # Admin `orders(query:)` search's documented `cart_token:` filter
+        # finds the order placed from it
+        # (https://shopify.dev/docs/api/admin-graphql/latest/queries/orders).
+        # A Shopify Order only exists once checkout completed, so finding one
+        # is the platform saying the order was placed; nothing else on Cart
+        # reports that.
+        def platform_checkout_order(checkout_id)
+          order_node = order_node_for_cart(checkout_id)
+          return nil unless order_node
+
+          node = @client.admin_query(Queries::GET_ORDER, variables: { id: order_node["id"] })["order"]
+          node && Mapper.order(node, checkout_id: checkout_id)
+        end
+
+        def order_node_for_cart(checkout_id)
+          token = checkout_id[%r{Cart/([^?]+)}, 1]
+          return unless token
+
+          data = @client.admin_query(Queries::ORDER_BY_CART_TOKEN, variables: { query: "cart_token:#{token}" })
+          data.dig("orders", "nodes", 0)
         end
 
         # Retries a SubmitThrottled cartSubmitForCompletion up to
