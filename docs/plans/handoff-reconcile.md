@@ -159,7 +159,7 @@ Setting `webmcp_checkout_mode`:
 
 1. ~~How `warn` excludes records~~: resolved, core field filtered in the `TransactionLog` wrapper (Phase 2).
 2. ~~`--wait` ceiling~~: resolved, 30m default, configurable, `off` to disable.
-3. Is reason `unknown` (vanished checkout, never confirmed) worth an opt-in fallback to the platform adapter's `get_order`/list when credentials are present? It depends on what Phase 0 finds.
+3. ~~Is reason `unknown` worth a fallback to the platform adapter's `get_order`/list when credentials are present?~~ Resolved for adapter stores (design-log §55): not opt-in, and not in `HandoffReconciler`. `Support::CheckoutState` asks the adapter's optional `platform_checkout_order` hook about a checkout the process doesn't know, so `get_checkout` itself reports `completed` with `order` on BigCommerce, Magento, Wix and the Shopify adapter, using credentials the adapter already holds. A vanished cart with no placed order still reads as not-found. WooCommerce has no reliable signal and still stays pending. Unverified live. Native UCP stores are unchanged and still wait on Phase 0's paid leg.
 4. Does `precheck` ever withhold the URL? Currently no, since the URL is always printed.
 5. Should `portage orders reconcile` also run the order-ledger Phase 3 adjustment refresh in the same pass, or stay a separate `orders refresh`? Separate keeps each command's job clear; combined means one cron line.
 
@@ -177,3 +177,4 @@ Setting `webmcp_checkout_mode`:
 | Date | Phase | Result |
 |---|---|---|
 | 2026-10-07 | 0 (pre-payment) | Ran against usartsupply.com, warmies.com, cuddleandkind.com, losangelesapparel.net and thelightyard.co.uk with isolated state (scratch `HOME`, no payment method), nothing paid. Statuses `requires_escalation` (4) and `incomplete` (Light Yard), unchanged across 7 polls a minute apart; fresh anonymous sessions read every checkout; `expires_at` = read time + 30 d 1 h; no `order`. `cancel_checkout` returned `canceled`, then `get_checkout` gave `checkout_not_found`. **Fixed:** `HandoffReconciler` sent no agent profile, so every live reconcile failed as not-found (cli 1360 green, rubocop clean). **Open:** gated `--yes` escalations record no pending hand-off; adapter stores can't report `completed` to a new process. Post-payment leg unverified. Design-log §55. |
+| 2026-10-07 | 1 (adapter stores) | `CheckoutState` platform hook: BigCommerce (v2 orders by `cart_id`), Magento (quote id, orders by `quote_id`), Wix (Search Orders by `checkoutId`), Shopify adapter (`cart_token:` search) now report `completed` + `order` to a new process; WooCommerce has no signal. Stubbed specs only, unverified live. Open decision 3 resolved. Design-log §55. |
