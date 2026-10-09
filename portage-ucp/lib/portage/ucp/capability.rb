@@ -3,7 +3,7 @@ module Portage
     # A named, versioned UCP capability (e.g. "dev.ucp.shopping.catalog") mapping
     # UCP action names to the Adapter methods that back them.
     class Capability
-      attr_reader :name, :version, :actions
+      attr_reader :name, :version, :actions, :schema
 
       # `predicate:` is for extension capabilities like
       # dev.ucp.shopping.discount and dev.ucp.shopping.fulfillment that add a
@@ -11,8 +11,13 @@ module Portage
       # there's no dedicated method whose override signals support, so the
       # adapter exposes a boolean method instead and the capability asks it
       # directly rather than inspecting `actions`.
-      def initialize(name:, version:, actions:, predicate: nil)
+      #
+      # `schema:` is the capability's schema path under a UCP revision's
+      # `schemas/` (e.g. "shopping/checkout.json"); the manifest turns it into
+      # the `schema` URL 2026-08-25 business profiles require.
+      def initialize(name:, version:, actions:, predicate: nil, schema: nil)
         @name = name
+        @schema = schema
         @version = version
         @actions = actions
         @predicate = predicate

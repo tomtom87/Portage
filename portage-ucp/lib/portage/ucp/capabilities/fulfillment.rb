@@ -8,6 +8,7 @@ module Portage
       FULFILLMENT = Portage::Ucp::Capability.new(
         name: "dev.ucp.shopping.fulfillment",
         version: "1",
+        schema: "shopping/fulfillment.json",
         actions: {},
         predicate: :fulfillment_supported?
       )

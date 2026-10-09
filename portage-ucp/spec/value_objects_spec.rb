@@ -315,6 +315,18 @@ RSpec.describe "Portage::Ucp value objects" do
     end
   end
 
+  describe Portage::Ucp::FulfillmentOption, "description" do
+    let(:totals) { [Portage::Ucp::Total.new(type: "total", amount: 500)] }
+
+    it "wraps a bare String as a description.json object, and passes a Hash through" do
+      plain = described_class.new(id: "o", title: "t", totals: totals, description: "Arrives in 4 days")
+      rich = described_class.new(id: "o", title: "t", totals: totals, description: { "markdown" => "**Fast**" })
+
+      expect(plain.to_wire_h["description"]).to eq("plain" => "Arrives in 4 days")
+      expect(rich.to_wire_h["description"]).to eq("markdown" => "**Fast**")
+    end
+  end
+
   describe Portage::Ucp::FulfillmentGroup do
     it "defaults to no options and no selection" do
       group = Portage::Ucp::FulfillmentGroup.new(id: "grp_1", line_item_ids: ["li_1"])

@@ -272,6 +272,8 @@ module Portage
 
     # schemas/shopping/types/fulfillment_option.json — a single priced choice
     # within a FulfillmentGroup (e.g. "Standard Shipping $5", "Express $15").
+    # `description` is a common/types/description.json object
+    # ({"plain"/"html"/"markdown" => ...}); a bare String is sent as `plain`.
     FulfillmentOption = Data.define(:id, :title, :totals, :description, :carrier, :earliest_fulfillment_time,
                                     :latest_fulfillment_time) do
       def initialize(id:, title:, totals:, description: nil, carrier: nil, earliest_fulfillment_time: nil,
@@ -281,7 +283,7 @@ module Portage
 
       def to_wire_h
         h = { "id" => id, "title" => title, "totals" => totals.map(&:to_wire_h) }
-        h["description"] = description if description
+        h["description"] = description.is_a?(String) ? { "plain" => description } : description if description
         h["carrier"] = carrier if carrier
         h["earliest_fulfillment_time"] = earliest_fulfillment_time if earliest_fulfillment_time
         h["latest_fulfillment_time"] = latest_fulfillment_time if latest_fulfillment_time

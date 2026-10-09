@@ -298,6 +298,7 @@ RSpec.describe Portage::Ucp::Shopify::Mapper do
       expect(group.selected_option_id).to eq("standard")
       expect(group.options.map(&:id)).to eq(%w[standard express])
       expect(group.options.first.totals).to eq([Portage::Ucp::Total.new(type: "total", amount: 500)])
+      expect(group.options.first.to_wire_h["description"]).to eq("plain" => "5-7 days")
     end
 
     it "exposes the cart's one buyer-submitted address as the single destination \"current\"" do

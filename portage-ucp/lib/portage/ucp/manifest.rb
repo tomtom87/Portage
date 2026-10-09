@@ -6,11 +6,12 @@ module Portage
     # Builds the /.well-known/ucp discovery document: protocol version, the
     # business's advertised capabilities (only those the Adapter overrides —
     # see Capability#advertised_for?), payment handlers, signing keys, and the
-    # services array (transport + endpoint, e.g. {transport: "mcp", endpoint:
+    # services (transport + endpoint, e.g. {transport: "mcp", endpoint:
     # "https://..."}) a client needs to find where to actually connect.
     # Signing keys are never generated here — see §9, consumer-provided only.
     class Manifest
       UCP_VERSION = "2026-08-25".freeze
+      SERVICE_KEY = "dev.ucp.shopping".freeze
 
       # @param signer [#kid, #sign] optional. Consumer-provided — the gem never
       #   generates or stores keys itself (§9). `sign(canonical_json_string)`
@@ -36,14 +37,19 @@ module Portage
       # Allbirds, Glossier, and 34+ others) serve under their own manifest
       # "version": "2026-08-25", and the shape portage-ucp-client's
       # Client.discover reads. As of 2026-08-25 the JWK Set is `keys` beside
-      # `ucp` (not `ucp.signing_keys`) and every service entry needs a version.
+      # `ucp` (not `ucp.signing_keys`), and `services`, `capabilities` and
+      # `payment_handlers` are objects keyed by reverse-domain name whose
+      # entries carry a date `version` (capabilities also a `schema` URL,
+      # handlers an `id`). `services` still accepts the old bare array of
+      # entries, filed under SERVICE_KEY; `payment_handlers` must already be
+      # a Hash of key => [entry, ...].
       def to_h
         ucp = {
           version: UCP_VERSION,
           business: @business,
-          services: @services.map { |service| { version: UCP_VERSION }.merge(service) },
+          services: keyed(service_hash),
           capabilities: capability_hash,
-          payment_handlers: @payment_handlers
+          payment_handlers: keyed(@payment_handlers)
         }
         ucp = ucp.merge(signature: sign(ucp)) if @signer
 
@@ -53,7 +59,24 @@ module Portage
       private
 
       def capability_hash
-        @registry.advertised(@adapter).to_h { |capability| [capability.name, [{ version: capability.version }]] }
+        @registry.advertised(@adapter).to_h do |capability|
+          entry = { version: UCP_VERSION }
+          entry[:schema] = "https://ucp.dev/#{UCP_VERSION}/schemas/#{capability.schema}" if capability.schema
+          [capability.name, [entry]]
+        end
+      end
+
+      def service_hash
+        return @services if @services.is_a?(Hash)
+
+        @services.empty? ? {} : { SERVICE_KEY => @services }
+      end
+
+      # Every entry needs a version; the caller's own wins.
+      def keyed(entries_by_key)
+        entries_by_key.to_h do |key, entries|
+          [key, [entries].flatten(1).map { |entry| { version: UCP_VERSION }.merge(entry) }]
+        end
       end
 
       def sign(payload)
