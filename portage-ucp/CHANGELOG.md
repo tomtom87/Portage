@@ -6,6 +6,16 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-09
+
+Moves the gem to UCP 2026-08-25 (design-log §56-58). Minor-level for a pre-1.0 gem, with breaking config changes below.
+
+- **Breaking: `config.payment_handlers` is now a Hash of `reverse-domain-key => [entry, ...]`, each entry carrying an `id`.** Default is `{}` (was an Array). The manifest emits it as UCP 2026-08-25's keyed `payment_handlers` object with date `version`s; an Array no longer works. `config.services` arrays still work: they are keyed by service name and each entry gets a `version`. A services Hash already keyed by name passes through, keeping an entry's own `version`.
+- **Breaking: the manifest emits `keys` (a JWK Set) at the document root; `ucp.signing_keys` is gone.** Anything reading signing keys from `ucp.signing_keys` must read `keys`. Each key needs a `kid`.
+- **Changed: UCP version is 2026-08-25** (manifest, `WireEnvelope`, `SchemaValidator` default). Capabilities are keyed by reverse-domain name with a date `version` and `schema` URL, and the whole manifest validates against `profile.json#/$defs/business_schema`.
+- **Changed: `FulfillmentOption` `description` is sent as a `description.json` object** rather than a bare string, as 2026-08-25 requires.
+- **Removed: the vendored `schemas/2026-04-08/` tree.** `SchemaValidator.new(version: "2026-04-08")` no longer loads; only `schemas/2026-08-25/` ships. Nothing else in the workspace validated against it (`portage-ucp-client` reads remote profiles without vendored schemas, so stores still serving 2026-04-08 keep working).
+
 ## [0.13.0] - 2026-10-07
 
 - **Added: `Support::CheckoutState` can ask the platform about a checkout this process doesn't track.** An adapter may define a private `platform_checkout_order(checkout_id)` that returns the `Order` its platform placed from that checkout, or nil. `#checkout_status` then reports `completed` for an id with no in-process record, the new `#checkout_order` returns its `OrderConfirmation`, and the new `#checkout_from_platform_order` rebuilds a completed `Checkout` from the order when the platform has already dropped the cart. A found order is cached through `#record_checkout_status`/`#record_order_checkout`; no order, no hook, or a lookup error keeps today's `incomplete`. This lets `portage orders reconcile`, which runs in a new process, see a checkout the shopper paid for in the browser (design-log §55). The `Adapter` contract is unchanged. Minor-level.

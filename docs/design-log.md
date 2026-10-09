@@ -3840,3 +3840,21 @@ and `.lookup`; ours is one `dev.ucp.shopping.catalog` pointed at
 advertising them emits no `schema` and won't validate. Both are separate
 looks.
 
+
+## 59. UCP 2026-08-25 Phase 4: release prep (2026-10-09)
+
+`portage-ucp` goes 0.13.0 → 0.14.0 with a changelog that marks the
+`payment_handlers` Hash and root-level `keys` as breaking. No other gem
+changed outside specs on the branch, so nothing else bumps. The 13
+`Gemfile.lock` files and the `docs/index.md` version table follow.
+
+The vendored `schemas/2026-04-08/` tree is gone. Only `portage-ucp`
+used `SchemaValidator`; `portage-ucp-client` reads remote profiles
+without vendored schemas, so stores still on 2026-04-08 keep working.
+Remaining `2026-04-08` strings are sample data for older stores in
+specs, the pinned `signature.rb` citation, and history.
+
+Adapter constraints stay `~> 0.13`: no adapter gem or the CLI sets
+`payment_handlers` as an Array (`doctor` wraps it in `Array()`, which
+handles a Hash). Publishing and tagging are left to the release itself
+(`docs/development.md`).

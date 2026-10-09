@@ -130,13 +130,10 @@ RSpec.describe Portage::Ucp::SchemaValidator do
     end
   end
 
-  # Phase 1 of docs/plans/ucp-2026-08-25.md: both vendored revisions must load,
-  # resolve their cross-document $refs offline, and validate a business profile.
-  # The business profile moved: 2026-04-08 validates the bare `ucp` object against
-  # schemas/ucp.json#/$defs/business_schema (signing_keys inside it); 2026-08-25
-  # validates the whole document against schemas/profile.json#/$defs/business_schema,
-  # with `keys` (a JWK Set) beside `ucp`.
-  describe "vendored spec revisions" do
+  # The vendored 2026-08-25 revision must load, resolve its cross-document $refs
+  # offline, and validate the whole business profile against
+  # schemas/profile.json#/$defs/business_schema, with `keys` (a JWK Set) beside `ucp`.
+  describe "vendored spec revision" do
     def ucp_block(version)
       mcp = { "transport" => "mcp", "endpoint" => "https://shop.test/mcp", "version" => version,
               "spec" => "https://ucp.dev/#{version}/services/shopping/mcp.openrpc.json",
@@ -146,12 +143,6 @@ RSpec.describe Portage::Ucp::SchemaValidator do
 
     let(:jwk) do
       { "kid" => "k1", "kty" => "OKP", "crv" => "Ed25519", "x" => "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
-    end
-
-    it "validates a business profile against 2026-04-08" do
-      v = described_class.new(version: "2026-04-08")
-
-      expect(v.errors_for("schemas/ucp.json#/$defs/business_schema", ucp_block("2026-04-08"))).to eq([])
     end
 
     it "validates a business profile with root-level keys against 2026-08-25" do
