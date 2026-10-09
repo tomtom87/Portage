@@ -21,7 +21,7 @@ bundle exec exe/portage generate agent-profile \
 Commit the `--out` JSON. Never commit `--key-out` — it's covered by the
 root `.gitignore`'s `*.key.pem` pattern. Nothing in this repo signs outbound
 requests with that key yet (`Portage::Ucp::Security::Signature` only
-*verifies* inbound ones); it's published now so `signing_keys` isn't empty
+*verifies* inbound ones); it's published now so `keys` isn't empty
 and so a future signer has a `kid` to sign under without reshaping the
 document again.
 

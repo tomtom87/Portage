@@ -23,7 +23,8 @@ module Portage
       # document and nests `signing_keys` inside its own "ucp" envelope
       # (portage-ucp/lib/portage/ucp/manifest.rb); the UCP spec's agent
       # profile is a different document describing the *agent* calling in,
-      # and puts `signing_keys` as a sibling of "ucp" at the document root.
+      # and puts its JWK Set as `keys` (2026-08-25 dropped `signing_keys`)
+      # beside "ucp" at the document root.
       # Same-looking key material, structurally different document — not
       # interchangeable, so this doesn't subclass or reuse Manifest.
       #
@@ -79,18 +80,22 @@ module Portage
         # and two per-shop endpoints: the granular ids answer `search_catalog`
         # with real products at the anonymous tier (no token, no allowlist),
         # the coarse id answers `Tool not found` on the same connection.
-        CAPABILITY_IDS = %w[
-          dev.ucp.shopping.catalog.search
-          dev.ucp.shopping.catalog.lookup
-          dev.ucp.shopping.cart
-          dev.ucp.shopping.checkout
-          dev.ucp.shopping.order
-        ].freeze
+        #
+        # Values are [spec page, schema file] under ucp.dev/<version>/: a
+        # platform profile's capability entries require both (capability.json
+        # `platform_schema`).
+        CAPABILITIES = {
+          "dev.ucp.shopping.catalog.search" => %w[shopping/catalog/search shopping/catalog_search.json],
+          "dev.ucp.shopping.catalog.lookup" => %w[shopping/catalog/lookup shopping/catalog_lookup.json],
+          "dev.ucp.shopping.cart" => %w[shopping/cart shopping/cart.json],
+          "dev.ucp.shopping.checkout" => %w[shopping/checkout shopping/checkout.json],
+          "dev.ucp.shopping.order" => %w[shopping/order shopping/order.json]
+        }.freeze
 
         # @param out [String] path to write the public profile JSON document
         # @param key_out [String] path to write the new private key's PEM —
         #   caller's responsibility to keep this out of version control
-        # @param rotate [Boolean] keep existing signing_keys from `out` (if
+        # @param rotate [Boolean] keep existing keys from `out` (if
         #   it already exists) and add a new one, instead of replacing them
         # @return [Hash] { profile_path:, private_key_path:, kid: } — the
         #   kid of the newly generated key
@@ -119,12 +124,15 @@ module Portage
         def carried_forward_keys
           return [] unless @rotate && File.exist?(@out)
 
-          JSON.parse(File.read(@out)).fetch("signing_keys", [])
+          # `signing_keys` is the pre-2026-08-25 name; read it so rotating an
+          # old profile still carries its keys forward.
+          doc = JSON.parse(File.read(@out))
+          doc["keys"] || doc.fetch("signing_keys", [])
         rescue JSON::ParserError
           []
         end
 
-        def build_document(signing_keys)
+        def build_document(keys)
           {
             "ucp" => {
               "version" => UCP_VERSION,
@@ -132,7 +140,7 @@ module Portage
               "capabilities" => capability_hash,
               "payment_handlers" => {}
             },
-            "signing_keys" => signing_keys
+            "keys" => keys
           }
         end
 
@@ -148,7 +156,11 @@ module Portage
         end
 
         def capability_hash
-          CAPABILITY_IDS.to_h { |id| [id, [{ "version" => UCP_VERSION }]] }
+          CAPABILITIES.to_h do |id, (spec, schema)|
+            [id, [{ "version" => UCP_VERSION,
+                    "spec" => "https://ucp.dev/#{UCP_VERSION}/specification/#{spec}",
+                    "schema" => "https://ucp.dev/#{UCP_VERSION}/schemas/#{schema}" }]]
+          end
         end
 
         def write_profile(doc)

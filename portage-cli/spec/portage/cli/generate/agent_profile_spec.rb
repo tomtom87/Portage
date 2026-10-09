@@ -10,13 +10,13 @@ RSpec.describe Portage::Cli::Generate::AgentProfile do
   end
 
   it "writes a profile document shaped per the UCP agent-profile schema — " \
-     "signing_keys as a root sibling of ucp, not nested inside it" do
+     "keys (not the pre-2026-08-25 signing_keys) as a root sibling of ucp" do
     described_class.generate(out: "profile.json", key_out: "key.pem")
 
     doc = JSON.parse(File.read("profile.json"))
-    expect(doc.keys).to contain_exactly("ucp", "signing_keys")
+    expect(doc.keys).to contain_exactly("ucp", "keys")
     expect(doc["ucp"]).to include("version" => "2026-08-25", "payment_handlers" => {})
-    expect(doc["signing_keys"].size).to eq(1)
+    expect(doc["keys"].size).to eq(1)
   end
 
   # The bug this asserts against cost a month of debugging: catalog is
@@ -36,7 +36,21 @@ RSpec.describe Portage::Cli::Generate::AgentProfile do
       "dev.ucp.shopping.cart", "dev.ucp.shopping.checkout", "dev.ucp.shopping.order"
     )
     expect(capabilities).not_to have_key("dev.ucp.shopping.catalog")
-    expect(capabilities.values.flatten).to all(eq("version" => "2026-08-25"))
+    expect(capabilities["dev.ucp.shopping.catalog.search"]).to contain_exactly(
+      "version" => "2026-08-25",
+      "spec" => "https://ucp.dev/2026-08-25/specification/shopping/catalog/search",
+      "schema" => "https://ucp.dev/2026-08-25/schemas/shopping/catalog_search.json"
+    )
+    expect(capabilities.values.flatten).to all(include("version", "spec", "schema"))
+  end
+
+  it "carries keys forward from a pre-2026-08-25 profile that used signing_keys" do
+    File.write("profile.json", JSON.generate("ucp" => {}, "signing_keys" => [{ "kid" => "old" }]))
+
+    result = described_class.generate(out: "profile.json", key_out: "key.pem", rotate: true)
+
+    kids = JSON.parse(File.read("profile.json"))["keys"].map { |k| k["kid"] }
+    expect(kids).to contain_exactly("old", result[:kid])
   end
 
   # An empty `services` declares an agent that speaks no service at all, so
@@ -56,7 +70,7 @@ RSpec.describe Portage::Cli::Generate::AgentProfile do
   it "publishes a JWK whose kid is the RFC 7638 thumbprint of its own key material" do
     described_class.generate(out: "profile.json", key_out: "key.pem")
 
-    jwk = JSON.parse(File.read("profile.json"))["signing_keys"].first
+    jwk = JSON.parse(File.read("profile.json"))["keys"].first
     expect(jwk).to include("kty" => "EC", "crv" => "P-256", "use" => "sig", "alg" => "ES256")
     expect(jwk["kid"]).to eq(
       Base64.urlsafe_encode64(
@@ -74,23 +88,23 @@ RSpec.describe Portage::Cli::Generate::AgentProfile do
     expect(File.stat("key.pem").mode & 0o777).to eq(0o600)
   end
 
-  it "replaces any existing signing_keys by default (no rotate)" do
+  it "replaces any existing keys by default (no rotate)" do
     described_class.generate(out: "profile.json", key_out: "key1.pem")
-    old_kid = JSON.parse(File.read("profile.json"))["signing_keys"].first["kid"]
+    old_kid = JSON.parse(File.read("profile.json"))["keys"].first["kid"]
 
     described_class.generate(out: "profile.json", key_out: "key2.pem")
-    kids = JSON.parse(File.read("profile.json"))["signing_keys"].map { |k| k["kid"] }
+    kids = JSON.parse(File.read("profile.json"))["keys"].map { |k| k["kid"] }
 
-    expect(kids).to eq([JSON.parse(File.read("profile.json"))["signing_keys"].first["kid"]])
+    expect(kids).to eq([JSON.parse(File.read("profile.json"))["keys"].first["kid"]])
     expect(kids).not_to include(old_kid)
   end
 
   it "keeps every previously published key when rotating, and adds a new one" do
     described_class.generate(out: "profile.json", key_out: "key1.pem")
-    old_kid = JSON.parse(File.read("profile.json"))["signing_keys"].first["kid"]
+    old_kid = JSON.parse(File.read("profile.json"))["keys"].first["kid"]
 
     result = described_class.generate(out: "profile.json", key_out: "key2.pem", rotate: true)
-    kids = JSON.parse(File.read("profile.json"))["signing_keys"].map { |k| k["kid"] }
+    kids = JSON.parse(File.read("profile.json"))["keys"].map { |k| k["kid"] }
 
     expect(kids).to contain_exactly(old_kid, result[:kid])
   end
@@ -101,7 +115,7 @@ RSpec.describe Portage::Cli::Generate::AgentProfile do
     expect(result).to eq(
       profile_path: "profile.json",
       private_key_path: "key.pem",
-      kid: JSON.parse(File.read("profile.json"))["signing_keys"].first["kid"]
+      kid: JSON.parse(File.read("profile.json"))["keys"].first["kid"]
     )
   end
 
