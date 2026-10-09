@@ -3745,3 +3745,33 @@ Point 4 shows Shopify drops a terminal checkout from `get_checkout` at least
 for cancels, which leans towards the "gone after payment" branch. Closing it
 takes one supervised, real purchase: pay a native-UCP Shopify checkout by
 hand, then poll it with the fixed reconciler.
+
+## 56. UCP 2026-08-25 Phase 1: vendored schemas (2026-10-09)
+
+Vendored `portage-ucp/schemas/2026-08-25/` from tag `v2026-08-25` of
+Universal-Commerce-Protocol/ucp (commit `cd78fb38`). The repo's `source/`
+tree is unversioned with relative `$ref`s, so the copy applies what the
+upstream `hooks.py` build does: relative `$ref`s resolved to `$id`s, ids
+rewritten to `https://ucp.dev/2026-08-25/schemas/...`, `version` stamped.
+`source/handlers/` is skipped, as it was for 2026-04-08.
+
+`SchemaValidator` needed no change: its `https://ucp.dev/<version>/` prefix
+rewrite already resolves the new tree. Default `version:` stays 2026-04-08
+until Phase 2.
+
+What moved or changed:
+
+- Shared types moved from `shopping/types/` to `common/types/` (amount,
+  context, description, link, message*, postal_address, price*, total(s),
+  payment_* and others). `retail_location` became `common/types/location*`;
+  `shopping/payment.json` split into `common/payment_*`.
+- New `schemas/profile.json`: the business profile is now
+  `profile.json#/$defs/business_schema`, applied to the whole document, with
+  `keys` (JWK array, `kid`/`kty` required) at the root. `base` allows extra
+  properties, so a stale `ucp.signing_keys` would still validate; specs must
+  assert on `keys` directly.
+- Every `ucp.services` entry now requires `version`; `Manifest` doesn't emit
+  it (Phase 2).
+- `fulfillment_option.description` is a `common/types/description.json`
+  object (`plain`/`html`/`markdown`, `minProperties: 1`), in the new
+  `shopping/types/fulfillment_option_base.json` (Phase 3).

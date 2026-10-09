@@ -129,4 +129,49 @@ RSpec.describe Portage::Ucp::SchemaValidator do
       expect(Portage::Ucp::Capabilities::CART.actions.keys - real_methods).to eq([])
     end
   end
+
+  # Phase 1 of docs/plans/ucp-2026-08-25.md: both vendored revisions must load,
+  # resolve their cross-document $refs offline, and validate a business profile.
+  # The business profile moved: 2026-04-08 validates the bare `ucp` object against
+  # schemas/ucp.json#/$defs/business_schema (signing_keys inside it); 2026-08-25
+  # validates the whole document against schemas/profile.json#/$defs/business_schema,
+  # with `keys` (a JWK Set) beside `ucp`.
+  describe "vendored spec revisions" do
+    def ucp_block(version)
+      mcp = { "transport" => "mcp", "endpoint" => "https://shop.test/mcp", "version" => version,
+              "spec" => "https://ucp.dev/#{version}/services/shopping/mcp.openrpc.json",
+              "schema" => "https://ucp.dev/#{version}/services/shopping/mcp.openrpc.json" }
+      { "version" => version, "services" => { "dev.ucp.shopping" => [mcp] }, "payment_handlers" => {} }
+    end
+
+    let(:jwk) do
+      { "kid" => "k1", "kty" => "OKP", "crv" => "Ed25519", "x" => "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
+    end
+
+    it "validates a business profile against 2026-04-08 (the default)" do
+      expect(validator.errors_for("schemas/ucp.json#/$defs/business_schema", ucp_block("2026-04-08"))).to eq([])
+    end
+
+    it "validates a business profile with root-level keys against 2026-08-25" do
+      v = described_class.new(version: "2026-08-25")
+      profile = { "ucp" => ucp_block("2026-08-25"), "keys" => [jwk] }
+
+      expect(v.errors_for("schemas/profile.json#/$defs/business_schema", profile)).to eq([])
+      expect(v.errors_for("schemas/profile.json#/$defs/business_schema",
+                          profile.merge("keys" => [jwk.except("kid")]))).not_to be_empty
+    end
+
+    it "validates a cart against 2026-08-25 and loads its OpenRPC method names" do
+      v = described_class.new(version: "2026-08-25")
+      item = Portage::Ucp::Item.new(id: "prod_1", title: "Cold Brew", price: 500)
+      totals = [Portage::Ucp::Total.new(type: "subtotal", amount: 500),
+                Portage::Ucp::Total.new(type: "total", amount: 500)]
+      line_item = Portage::Ucp::LineItem.new(id: "li_1", item: item, quantity: 1, totals: totals)
+      cart = Portage::Ucp::Cart.new(id: "cart_1", line_items: [line_item], currency: "USD", totals: totals)
+      payload = Portage::Ucp::WireEnvelope.wrap("dev.ucp.shopping.cart", cart.to_wire_h)
+
+      expect(v.errors_for("schemas/shopping/cart.json", payload)).to eq([])
+      expect(v.method_names("services/shopping/mcp.openrpc.json")).to include("create_checkout")
+    end
+  end
 end
