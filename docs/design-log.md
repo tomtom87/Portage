@@ -3802,3 +3802,41 @@ Known gap: `manifest_spec` validates the whole document against
 `YYYY-MM-DD` `version` and a `schema` URL; ours emit arrays and `"1"`.
 Reshaping changes what `config.services` / `config.payment_handlers`
 accept, so it belongs with Phase 3's wire shapes.
+
+## 58. UCP 2026-08-25 Phase 3: wire shapes (2026-10-09)
+
+`FulfillmentOption#to_wire_h` sends `description` as a
+`common/types/description.json` object: a String becomes
+`{"plain" => str}`, a Hash passes through. Doing it in the value object
+covers every adapter; Shopify is the only mapper that sets one.
+
+The manifest now validates whole against `business_schema`; the error
+filter from §57 is gone. `services`, `capabilities` and
+`payment_handlers` are objects keyed by reverse-domain name, and every
+entry carries `version: UCP_VERSION` unless it sets its own. Capabilities
+gain an optional `schema:` path (e.g. `shopping/checkout.json`) that the
+manifest turns into `https://ucp.dev/2026-08-25/schemas/<path>`.
+`Capability#version` stays `"1"` internally and is no longer emitted.
+
+`config.services` still accepts the old bare array, filed under
+`Manifest::SERVICE_KEY` (`dev.ucp.shopping`). `config.payment_handlers`
+now defaults to `{}` and must be a Hash of `key => [entry, ...]` with
+caller-supplied `id`s; no array shim, since a bare array has no key to
+file under. That is a breaking config change for the changelog.
+
+`Client.discover` already read both the array and keyed `services`
+shapes; a spec now covers a nested `ucp` manifest with a bare array too.
+
+The conformance kit passes under the 2026-08-25 default for the
+reference adapter and every non-Shopify adapter gem. Shopify's kit is
+live-store only and was not run. No `allows_*`, `multi_destination` or
+buyer `consent` use exists, and `FulfillmentMethod#type` is already a
+string.
+
+Known gaps: upstream splits catalog into `dev.ucp.shopping.catalog.search`
+and `.lookup`; ours is one `dev.ucp.shopping.catalog` pointed at
+`catalog_search.json`. `dev.ucp.shopping.identity` and the
+`app.portage-ucp.*` capabilities have no vendored schema, so a manifest
+advertising them emits no `schema` and won't validate. Both are separate
+looks.
+

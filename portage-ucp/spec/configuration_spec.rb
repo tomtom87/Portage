@@ -13,7 +13,7 @@ RSpec.describe Portage::Ucp do
     expect(config.registry).to be_a(Portage::Ucp::CapabilityRegistry)
     expect(config.authenticator).to be_a(Portage::Ucp::UnconfiguredAuthenticator)
     expect(config.rate_limiter).to be_a(Portage::Ucp::NullRateLimiter)
-    expect(config.payment_handlers).to eq([])
+    expect(config.payment_handlers).to eq({})
     expect(config.signing_keys).to eq([])
     expect(config.services).to eq([])
   end

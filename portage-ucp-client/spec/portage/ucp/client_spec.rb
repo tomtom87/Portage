@@ -145,5 +145,25 @@ RSpec.describe Portage::Ucp::Client do
 
       expect(session.capabilities).to contain_exactly("dev.ucp.shopping.checkout", "dev.ucp.shopping.cart")
     end
+
+    # What portage-ucp emitted before 2026-08-25: nested under "ucp" but with
+    # `services` still a bare array of entries.
+    it "parses a nested manifest whose services is still the old bare array" do
+      stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
+        status: 200,
+        body: {
+          ucp: {
+            version: "2026-04-08",
+            services: [{ transport: "mcp", endpoint: "https://shop.example/mcp" }],
+            capabilities: { "dev.ucp.shopping.cart" => [{ version: "1" }] }
+          }
+        }.to_json
+      )
+      allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
+        .with(url: "https://shop.example/mcp", headers: {}, proxy: nil)
+        .and_return(instance_double(Portage::Ucp::Client::Transports::Http))
+
+      expect(described_class.discover("https://shop.example").capabilities).to eq(["dev.ucp.shopping.cart"])
+    end
   end
 end

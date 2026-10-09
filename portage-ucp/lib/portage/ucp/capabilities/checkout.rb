@@ -4,6 +4,7 @@ module Portage
       CHECKOUT = Portage::Ucp::Capability.new(
         name: "dev.ucp.shopping.checkout",
         version: "1",
+        schema: "shopping/checkout.json",
         actions: {
           "create_checkout" => :create_checkout,
           "get_checkout" => :get_checkout,

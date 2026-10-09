@@ -77,7 +77,7 @@ GET https://your-shop.myshopify.com/.well-known/ucp
 }
 ```
 
-Everything nests under `ucp`, and `services`, `capabilities` and `payment_handlers` are keyed by name. `Portage::Ucp::Manifest` has used the same nesting, with capabilities keyed by name, since `portage-ucp` 0.8.0. `Portage::Ucp::Client.discover` reads both this shape and the older flat one.
+Everything nests under `ucp`, and `services`, `capabilities` and `payment_handlers` are keyed by name. `Portage::Ucp::Manifest` has used the same nesting since `portage-ucp` 0.8.0, and keys `services` and `payment_handlers` by name too as of the 2026-08-25 move (a bare `config.services` array is filed under `dev.ucp.shopping`; `config.payment_handlers` must be a Hash). `Portage::Ucp::Client.discover` reads both this shape and the older flat one.
 
 The gap is signing. There's no `keys` and no signature, so an agent has nothing to verify the manifest against. `Portage::Ucp::Manifest` emits `keys` (a JWK Set, a sibling of `ucp` at the document root, as UCP 2026-08-25 requires), and signs the body when you give it a signer. The config option is still called `signing_keys`.
 

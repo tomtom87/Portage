@@ -51,7 +51,7 @@ module Portage
         @authenticator = UnconfiguredAuthenticator.new
         @rate_limiter = NullRateLimiter.new
         @logger = Logger.new($stdout)
-        @payment_handlers = []
+        @payment_handlers = {}
         @signing_keys = []
         @services = []
         @require_mandate_signature = false

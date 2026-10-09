@@ -15,14 +15,13 @@ RSpec.describe Portage::Ucp::Manifest do
     jwk = { kid: "k1", kty: "OKP", crv: "Ed25519", x: "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
     document = described_class.new(
       adapter: adapter, business: business, signing_keys: [jwk],
-      services: [{ transport: "mcp", endpoint: "https://example.com/mcp" }]
+      services: [{ transport: "mcp", endpoint: "https://example.com/mcp" }],
+      payment_handlers: { "com.example.pay" => [{ id: "pay_1" }] }
     ).to_h
 
     errors = validator.errors_for("schemas/profile.json#/$defs/business_schema", JSON.parse(JSON.generate(document)))
 
-    # Known gap (not this phase): services / capabilities / payment_handlers still use the
-    # pre-2026-08-25 array shape and "1" capability versions, so only the rest is held to the schema.
-    expect(errors.grep_v(%r{/ucp/(services|capabilities|payment_handlers)})).to eq([])
+    expect(errors).to eq([])
   end
 
   it "reports the UCP spec version" do
@@ -35,34 +34,44 @@ RSpec.describe Portage::Ucp::Manifest do
     expect(capabilities.keys).to include("dev.ucp.shopping.catalog", "dev.ucp.shopping.cart",
                                          "dev.ucp.shopping.checkout", "dev.ucp.shopping.order")
     expect(capabilities.keys).not_to include("dev.ucp.shopping.identity")
-    expect(capabilities["dev.ucp.shopping.checkout"]).to eq([{ version: "1" }])
+    expect(capabilities["dev.ucp.shopping.checkout"])
+      .to eq([{ version: "2026-08-25", schema: "https://ucp.dev/2026-08-25/schemas/shopping/checkout.json" }])
   end
 
-  it "passes through business info, payment handlers, and signing keys verbatim" do
+  it "passes through business info, payment handlers (adding a default version), and signing keys verbatim" do
     manifest = described_class.new(
       adapter: adapter, business: business,
-      payment_handlers: [{ type: "card_token" }], signing_keys: [{ kid: "k1", public_key: "..." }]
+      payment_handlers: { "com.example.pay" => [{ id: "pay_1" }] }, signing_keys: [{ kid: "k1", public_key: "..." }]
     )
 
     document = manifest.to_h
     expect(document[:ucp][:business]).to eq(business)
-    expect(document[:ucp][:payment_handlers]).to eq([{ type: "card_token" }])
+    expect(document[:ucp][:payment_handlers])
+      .to eq({ "com.example.pay" => [{ version: "2026-08-25", id: "pay_1" }] })
     expect(document[:keys]).to eq([{ kid: "k1", public_key: "..." }])
     expect(document[:ucp]).not_to have_key(:signing_keys)
   end
 
-  it "includes the services array a client needs to find where to connect" do
+  it "files a bare services array under dev.ucp.shopping, keyed as 2026-08-25 requires" do
     manifest = described_class.new(
       adapter: adapter, business: business,
       services: [{ transport: "mcp", endpoint: "https://example.com/mcp" }]
     )
 
-    expect(manifest.to_h[:ucp][:services])
-      .to eq([{ version: "2026-08-25", transport: "mcp", endpoint: "https://example.com/mcp" }])
+    expect(manifest.to_h[:ucp][:services]).to eq(
+      "dev.ucp.shopping" => [{ version: "2026-08-25", transport: "mcp", endpoint: "https://example.com/mcp" }]
+    )
   end
 
-  it "defaults services to an empty array when none are configured" do
-    expect(manifest.to_h[:ucp][:services]).to eq([])
+  it "passes an already-keyed services object through, keeping an entry's own version" do
+    services = { "dev.ucp.shopping" => [{ version: "2026-04-08", transport: "rest", endpoint: "https://example.com/r" }] }
+
+    expect(described_class.new(adapter: adapter, business: business, services: services).to_h[:ucp][:services])
+      .to eq(services)
+  end
+
+  it "defaults services and payment_handlers to empty objects when none are configured" do
+    expect(manifest.to_h[:ucp].values_at(:services, :payment_handlers)).to eq([{}, {}])
   end
 
   it "has no signature block when no signer is configured" do
@@ -84,15 +93,18 @@ RSpec.describe Portage::Ucp::Manifest do
 
   it "falls back to Portage::Ucp.configuration for collaborators not passed explicitly" do
     Portage::Ucp.configure do |c|
-      c.payment_handlers = [{ type: "configured_handler" }]
+      c.payment_handlers = { "com.example.pay" => [{ id: "configured" }] }
       c.services = [{ transport: "mcp", endpoint: "https://configured.example.com/mcp" }]
     end
 
     result = described_class.new(adapter: adapter, business: business).to_h[:ucp]
 
-    expect(result[:payment_handlers]).to eq([{ type: "configured_handler" }])
-    expect(result[:services])
-      .to eq([{ version: "2026-08-25", transport: "mcp", endpoint: "https://configured.example.com/mcp" }])
+    expect(result[:payment_handlers]).to eq({ "com.example.pay" => [{ version: "2026-08-25", id: "configured" }] })
+    expect(result[:services]).to eq(
+      "dev.ucp.shopping" => [
+        { version: "2026-08-25", transport: "mcp", endpoint: "https://configured.example.com/mcp" }
+      ]
+    )
   ensure
     Portage::Ucp.instance_variable_set(:@configuration, nil)
   end

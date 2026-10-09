@@ -14,8 +14,8 @@ Portage::Ucp.configure do |config|
 
   # config.signer = MySigner.new
   # config.signing_keys = []
-  # config.payment_handlers = []
-  # config.services = []
+  # config.payment_handlers = {} # { "com.example.pay" => [{ id: "..." }] }
+  # config.services = {}        # { "dev.ucp.shopping" => [{ transport: "mcp", endpoint: "..." }] }
   # config.mandate_trusted_keys = []
   # config.require_mandate_signature = false
 end

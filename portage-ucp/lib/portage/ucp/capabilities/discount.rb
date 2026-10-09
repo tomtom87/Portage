@@ -8,6 +8,7 @@ module Portage
       DISCOUNT = Portage::Ucp::Capability.new(
         name: "dev.ucp.shopping.discount",
         version: "1",
+        schema: "shopping/discount.json",
         actions: {},
         predicate: :discount_codes_supported?
       )

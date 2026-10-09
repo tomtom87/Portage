@@ -4,6 +4,7 @@ module Portage
       CART = Portage::Ucp::Capability.new(
         name: "dev.ucp.shopping.cart",
         version: "1",
+        schema: "shopping/cart.json",
         actions: {
           "create_cart" => :create_cart,
           "get_cart" => :get_cart,

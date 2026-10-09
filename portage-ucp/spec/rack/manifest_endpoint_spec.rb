@@ -32,7 +32,7 @@ RSpec.describe Portage::Ucp::Rack::ManifestEndpoint do
   context "with payment handlers configured" do
     let(:manifest) do
       Portage::Ucp::Manifest.new(adapter: adapter, business: { name: "Test Roastery" },
-                                 payment_handlers: [{ type: "card_token" }])
+                                 payment_handlers: { "com.example.pay" => [{ id: "pay_1" }] })
     end
 
     it "refuses to serve over plaintext HTTP (§9)" do
