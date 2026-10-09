@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fix: the agent profile now matches UCP 2026-08-25.** It declared `2026-08-25` but published its keys as `signing_keys`, a field that revision removed; they are now under `keys`. Each capability entry now also carries the `spec` and `schema` URLs a platform profile requires. `portage generate agent-profile --rotate` still carries keys forward from an older profile that used `signing_keys`. The published `agent-profile/agent-profile.json` is rewritten with the same two keys.
+
 ## [0.13.1] - 2026-10-07
 
 - **Fix: `portage orders reconcile` can settle a hand-off on a BigCommerce, Magento, Wix or Shopify-adapter store.** Those adapters kept checkout status in the process that created the checkout, so reconcile (a new process) only ever saw `incomplete` or not-found. With their new releases, an adapter checkout that became a paid order reads as `completed` with its `order`, and reconcile settles it and snapshots the order as it does for native UCP stores. No CLI code changed; a new spec covers the adapter loopback path end to end. WooCommerce has no such signal and still stays pending (design-log §55).
