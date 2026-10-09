@@ -9,8 +9,8 @@ module Portage
     # is the CI-safe equivalent).
     #
     # The vendored tree mirrors https://ucp.dev/<version>/... path-for-path
-    # (schemas/2026-04-08/schemas/shopping/cart.json <->
-    # https://ucp.dev/2026-04-08/schemas/shopping/cart.json), so every $ref
+    # (schemas/2026-08-25/schemas/shopping/cart.json <->
+    # https://ucp.dev/2026-08-25/schemas/shopping/cart.json), so every $ref
     # inside a vendored document — however deeply nested — resolves to another
     # vendored file with a single prefix rewrite, no network access needed.
     class SchemaValidator
