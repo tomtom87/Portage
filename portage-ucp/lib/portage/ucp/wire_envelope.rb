@@ -6,7 +6,7 @@ module Portage
     # capability's minimum envelope shape live in one place, not duplicated
     # across value objects.
     module WireEnvelope
-      SPEC_VERSION = "2026-04-08".freeze
+      SPEC_VERSION = "2026-08-25".freeze
 
       ENVELOPES = {
         "dev.ucp.shopping.cart" => -> { { "version" => SPEC_VERSION } },

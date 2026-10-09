@@ -215,7 +215,7 @@ Portage extensions and helpers:
 | `Money` | `amount_minor`, `currency` (internal arithmetic only; never on the wire) |
 | `Ap2::PaymentMandate` | `amount`, `currency`, `merchant`, `expires_at`, `signature`, `kid: nil` |
 
-`WireEnvelope.wrap(capability_name, payload_hash)` adds the `ucp` envelope (`{"version" => "2026-04-08"}`, plus `payment_handlers` for checkout) to cart, checkout, order and catalog payloads. `Dispatcher` calls it for you.
+`WireEnvelope.wrap(capability_name, payload_hash)` adds the `ucp` envelope (`{"version" => "2026-08-25"}`, plus `payment_handlers` for checkout) to cart, checkout, order and catalog payloads. `Dispatcher` calls it for you.
 
 Source: `portage-ucp/lib/portage/ucp/value_objects.rb`, `portage-ucp/lib/portage/ucp/wire_envelope.rb`, `portage-ucp/lib/portage/ucp/ap2/mandate.rb`
 
@@ -256,11 +256,11 @@ Source: `portage-ucp/lib/portage/ucp/value_objects.rb`, `portage-ucp/lib/portage
 | Method | Signature | Returns | Notes |
 |---|---|---|---|
 | `Manifest.new` | `Manifest.new(adapter:, business:, registry:, payment_handlers:, signing_keys:, signer:, services:)` | manifest | Every keyword except `adapter:` defaults to the matching `Portage::Ucp.configuration` value. |
-| `#to_h` | `to_h` | `Hash` | `{ ucp: { version:, business:, services:, capabilities:, payment_handlers:, signing_keys: [, signature:] } }` |
+| `#to_h` | `to_h` | `Hash` | `{ ucp: { version:, business:, services:, capabilities:, payment_handlers: [, signature:] }, keys: [...] }` |
 
 `Manifest::UCP_VERSION` is `"2026-04-08"`. `capabilities` is a hash keyed by capability name, each value `[{ version: "1" }]`.
 
-Signing is optional. The gem never generates or stores keys. Pass a `signer` that responds to `#kid` and `#sign(canonical_json_string)`. `sign` returns raw signature bytes. The manifest adds `signature: { kid:, value: <strict base64> }` over `JSON.generate` of the `ucp` hash. The gem does not pick an algorithm. Publish the matching public keys in `signing_keys`.
+Signing is optional. The gem never generates or stores keys. Pass a `signer` that responds to `#kid` and `#sign(canonical_json_string)`. `sign` returns raw signature bytes. The manifest adds `signature: { kid:, value: <strict base64> }` over `JSON.generate` of the `ucp` hash. The gem does not pick an algorithm. Publish the matching public keys in `signing_keys`; the manifest serves them as `keys`.
 
 ### Serving the manifest
 

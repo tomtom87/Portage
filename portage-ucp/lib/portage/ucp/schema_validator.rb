@@ -14,7 +14,7 @@ module Portage
     # inside a vendored document — however deeply nested — resolves to another
     # vendored file with a single prefix rewrite, no network access needed.
     class SchemaValidator
-      def initialize(version: "2026-04-08", root: File.join(__dir__, "..", "..", "..", "schemas"))
+      def initialize(version: "2026-08-25", root: File.join(__dir__, "..", "..", "..", "schemas"))
         @base_url = "https://ucp.dev/#{version}/"
         @base_dir = File.expand_path(File.join(root, version))
       end

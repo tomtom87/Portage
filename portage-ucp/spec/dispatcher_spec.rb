@@ -30,7 +30,7 @@ RSpec.describe Portage::Ucp::Dispatcher do
                                arguments: { query: "brew", limit: 10 })
 
     expect(response[:structuredContent]["products"]).to eq([product.to_wire_h])
-    expect(response[:structuredContent]["ucp"]).to eq({ "version" => "2026-04-08" })
+    expect(response[:structuredContent]["ucp"]).to eq({ "version" => "2026-08-25" })
   end
 
   it "wraps the adapter's return value as both structuredContent and a text content block" do
@@ -46,7 +46,7 @@ RSpec.describe Portage::Ucp::Dispatcher do
                                             idempotency_key: "k1" })
 
     expect(response[:structuredContent]["line_items"].size).to eq(1)
-    expect(response[:structuredContent]["ucp"]).to eq({ "version" => "2026-04-08" })
+    expect(response[:structuredContent]["ucp"]).to eq({ "version" => "2026-08-25" })
   end
 
   it "rejects a complete_checkout call whose payment_token looks like a raw PAN (§9)" do
