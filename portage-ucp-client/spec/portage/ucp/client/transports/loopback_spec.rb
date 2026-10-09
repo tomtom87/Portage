@@ -34,7 +34,7 @@ RSpec.describe Portage::Ucp::Client::Transports::Loopback do
     )
 
     expect(checkout["status"]).to eq("ready_for_complete")
-    expect(checkout["ucp"]["version"]).to eq("2026-04-08")
+    expect(checkout["ucp"]["version"]).to eq("2026-08-25")
   end
 
   it "enforces the no-anonymous-mutation default when no authenticator is configured" do

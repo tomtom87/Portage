@@ -3775,3 +3775,30 @@ What moved or changed:
 - `fulfillment_option.description` is a `common/types/description.json`
   object (`plain`/`html`/`markdown`, `minProperties: 1`), in the new
   `shopping/types/fulfillment_option_base.json` (Phase 3).
+
+## 57. UCP 2026-08-25 Phase 2: manifest (2026-10-09)
+
+`Manifest::UCP_VERSION`, `WireEnvelope::SPEC_VERSION` and the
+`SchemaValidator` default all move to 2026-08-25. Wire-shape and
+conformance specs still pass under the new default; the one 2026-04-08
+business-profile spec now passes `version:` explicitly.
+
+`Manifest#to_h` returns `{ ucp:, keys: }`: the JWK Set sits at the root
+and `ucp.signing_keys` is gone. The signature still covers only `ucp`.
+Every `ucp.services` entry gets `version: UCP_VERSION` unless it sets one.
+`Configuration#signing_keys` keeps its name, so the `portage doctor`
+message is unchanged. No client or adapter read a manifest's
+`signing_keys` (`Client.discover` reads only `services` and
+`capabilities`), so no dual-read was added.
+
+The `signature.rb` citation of the 2026-04-08 signatures page stays: it
+records a dated lookup, not the emitted version.
+
+Known gap: `manifest_spec` validates the whole document against
+`profile.json#/$defs/business_schema` but filters errors under
+`/ucp/(services|capabilities|payment_handlers)`. 2026-08-25 wants
+`services` and `payment_handlers` as objects keyed by reverse-domain name
+(handlers need `id` and `version`), and capability entries need a
+`YYYY-MM-DD` `version` and a `schema` URL; ours emit arrays and `"1"`.
+Reshaping changes what `config.services` / `config.payment_handlers`
+accept, so it belongs with Phase 3's wire shapes.

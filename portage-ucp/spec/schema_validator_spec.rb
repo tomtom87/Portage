@@ -148,8 +148,10 @@ RSpec.describe Portage::Ucp::SchemaValidator do
       { "kid" => "k1", "kty" => "OKP", "crv" => "Ed25519", "x" => "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" }
     end
 
-    it "validates a business profile against 2026-04-08 (the default)" do
-      expect(validator.errors_for("schemas/ucp.json#/$defs/business_schema", ucp_block("2026-04-08"))).to eq([])
+    it "validates a business profile against 2026-04-08" do
+      v = described_class.new(version: "2026-04-08")
+
+      expect(v.errors_for("schemas/ucp.json#/$defs/business_schema", ucp_block("2026-04-08"))).to eq([])
     end
 
     it "validates a business profile with root-level keys against 2026-08-25" do

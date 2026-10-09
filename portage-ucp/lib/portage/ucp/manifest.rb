@@ -10,7 +10,7 @@ module Portage
     # "https://..."}) a client needs to find where to actually connect.
     # Signing keys are never generated here — see §9, consumer-provided only.
     class Manifest
-      UCP_VERSION = "2026-04-08".freeze
+      UCP_VERSION = "2026-08-25".freeze
 
       # @param signer [#kid, #sign] optional. Consumer-provided — the gem never
       #   generates or stores keys itself (§9). `sign(canonical_json_string)`
@@ -35,20 +35,19 @@ module Portage
       # capability name. That is the shape live Shopify UCP rollouts (Casper,
       # Allbirds, Glossier, and 34+ others) serve under their own manifest
       # "version": "2026-08-25", and the shape portage-ucp-client's
-      # Client.discover reads. Only the shape is borrowed: `version` here is
-      # still UCP_VERSION ("2026-04-08"), the spec revision this gem targets.
+      # Client.discover reads. As of 2026-08-25 the JWK Set is `keys` beside
+      # `ucp` (not `ucp.signing_keys`) and every service entry needs a version.
       def to_h
         ucp = {
           version: UCP_VERSION,
           business: @business,
-          services: @services,
+          services: @services.map { |service| { version: UCP_VERSION }.merge(service) },
           capabilities: capability_hash,
-          payment_handlers: @payment_handlers,
-          signing_keys: @signing_keys
+          payment_handlers: @payment_handlers
         }
         ucp = ucp.merge(signature: sign(ucp)) if @signer
 
-        { ucp: ucp }
+        { ucp: ucp, keys: @signing_keys }
       end
 
       private
