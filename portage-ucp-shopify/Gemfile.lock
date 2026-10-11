@@ -3,7 +3,9 @@ PATH
   specs:
     portage-ucp (0.14.0)
       base64 (~> 0.2)
+      bigdecimal (>= 3.1)
       json_schemer (~> 2.5)
+      logger (~> 1.5)
       mcp (~> 0.24)
       rack (~> 3.0)
 
@@ -11,6 +13,7 @@ PATH
   remote: .
   specs:
     portage-ucp-shopify (0.6.1)
+      bigdecimal (>= 3.1)
       portage-ucp (~> 0.13)
 
 GEM
@@ -35,6 +38,7 @@ GEM
       simpleidn (~> 0.2)
     language_server-protocol (3.17.0.6)
     lint_roller (1.1.0)
+    logger (1.7.0)
     mcp (0.25.0)
       json_schemer (>= 2.4)
     parallel (2.1.0)
