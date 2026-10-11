@@ -18,7 +18,9 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "base64", "~> 0.2"
+  spec.add_dependency "bigdecimal", ">= 3.1"
   spec.add_dependency "json_schemer", "~> 2.5"
+  spec.add_dependency "logger", "~> 1.5"
   spec.add_dependency "mcp", "~> 0.24"
   spec.add_dependency "rack", "~> 3.0"
 

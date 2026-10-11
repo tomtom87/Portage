@@ -28,6 +28,7 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
+  spec.add_dependency "base64", "~> 0.2"
   # portage-console's REPL. A default gem through Ruby 3.4 but only a bundled
   # gem from 4.0 on, so it has to be declared to load under Homebrew's Ruby.
   spec.add_dependency "irb", ">= 1.6"
@@ -36,6 +37,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "portage-ucp-journal", "~> 0.1"
   spec.add_dependency "sqlite3", "~> 2.9"
 
+  spec.add_development_dependency "benchmark", "~> 0.4"
   spec.add_development_dependency "rspec", "~> 3.13"
   spec.add_development_dependency "rubocop", "~> 1.88"
   spec.add_development_dependency "webmock", "~> 3.24"
