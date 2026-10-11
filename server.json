@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.tomtom87/portage",
+  "title": "Portage",
+  "description": "Serve a Shopify store's catalog to AI shopping agents over MCP (read-only).",
+  "repository": {
+    "url": "https://github.com/tomtom87/Portage",
+    "source": "github"
+  },
+  "websiteUrl": "https://portage.readthedocs.io",
+  "version": "0.14.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/tomtom87/portage-ucp:0.14.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        { "name": "SHOPIFY_SHOP_DOMAIN", "description": "Your shop, e.g. your-shop.myshopify.com", "isRequired": true },
+        { "name": "SHOPIFY_STOREFRONT_ACCESS_TOKEN", "description": "Storefront API access token", "isRequired": true, "isSecret": true },
+        { "name": "SHOPIFY_ADMIN_ACCESS_TOKEN", "description": "Admin API access token (optional)", "isSecret": true }
+      ]
+    }
+  ]
+}
