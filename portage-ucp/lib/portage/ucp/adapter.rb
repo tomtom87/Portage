@@ -132,6 +132,16 @@ module Portage
       # @return [Boolean]
       def fulfillment_supported? = false
 
+      # --- Permalink (dev.ucp.shopping.permalink) ---
+      # The business's browser endpoint for shopping permalinks, e.g.
+      # "https://merchant.example/buy" (absolute https, no query, fragment or
+      # trailing slash). The endpoint itself is a redirect route the
+      # business's storefront serves, not an MCP action, so this is a
+      # config-carrying predicate: nil (the default) leaves the capability
+      # out, a String advertises it with `config.endpoint`.
+      # @return [String, nil]
+      def permalink_endpoint = nil
+
       # --- Identity Linking (dev.ucp.shopping.identity, OAuth 2.0) ---
       # @return [Portage::Ucp::Identity] linked profile for an exchanged OAuth token
       def link_identity(oauth_token:) = not_implemented

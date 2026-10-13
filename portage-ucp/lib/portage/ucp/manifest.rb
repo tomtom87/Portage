@@ -62,6 +62,8 @@ module Portage
         @registry.advertised(@adapter).to_h do |capability|
           entry = { version: UCP_VERSION }
           entry[:schema] = "https://ucp.dev/#{UCP_VERSION}/schemas/#{capability.schema}" if capability.schema
+          config = capability.config_for(@adapter)
+          entry[:config] = config if config
           [capability.name, [entry]]
         end
       end
