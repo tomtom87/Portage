@@ -115,9 +115,10 @@ module Portage
     # (Shopify/Wix metafields etc.) — see Portage::Ucp::Shopify.configure's
     # metadata_field.
     Product = Data.define(:id, :title, :description, :price_range, :variants, :handle, :url, :categories,
-                          :list_price_range, :media, :options, :tags, :metadata, :rating) do
+                          :list_price_range, :media, :options, :tags, :metadata, :rating, :policies) do
       def initialize(id:, title:, description:, price_range:, variants:, handle: nil, url: nil, categories: [],
-                     list_price_range: nil, media: [], options: [], tags: [], metadata: nil, rating: nil)
+                     list_price_range: nil, media: [], options: [], tags: [], metadata: nil, rating: nil,
+                     policies: [])
         super
       end
 
@@ -135,6 +136,7 @@ module Portage
         h["media"] = media.map(&:to_wire_h) unless media.empty?
         h["options"] = options.map(&:to_wire_h) unless options.empty?
         h["tags"] = tags unless tags.empty?
+        h["policies"] = policies unless policies.empty?
         h
       end
     end
@@ -144,12 +146,13 @@ module Portage
     # isn't schema-conformant (search_response requires `ucp` + `products` at
     # the top level, not a bare array). `messages` entries are left as plain
     # wire-shaped hashes, same rationale as Variant#barcodes above.
-    CatalogSearchResult = Data.define(:products, :messages) do
-      def initialize(products:, messages: []) = super
+    CatalogSearchResult = Data.define(:products, :messages, :policies) do
+      def initialize(products:, messages: [], policies: []) = super
 
       def to_wire_h
         h = { "products" => products.map(&:to_wire_h) }
         h["messages"] = messages unless messages.empty?
+        h["policies"] = policies unless policies.empty?
         h
       end
     end
@@ -161,8 +164,14 @@ module Portage
     # extension (interactive variant narrowing) — Adapter#get_product's
     # signature has no `selected:`/`preferences:` params to source it from
     # yet; unresearched, same status as design-log §16's other backlog items.
-    ProductDetail = Data.define(:product) do
-      def to_wire_h = { "product" => product.to_wire_h }
+    ProductDetail = Data.define(:product, :policies) do
+      def initialize(product:, policies: []) = super
+
+      def to_wire_h
+        h = { "product" => product.to_wire_h }
+        h["policies"] = policies unless policies.empty?
+        h
+      end
     end
 
     # One cost-breakdown entry (schemas/shopping/types/total.json). `amount` is a
@@ -198,6 +207,10 @@ module Portage
       end
     end
 
+    # `policies` (cart/checkout/order/catalog responses and products) is the
+    # 2026-08-25 policy.json array (return/warranty terms), optional and omitted
+    # when empty. Entries stay wire-shaped hashes (`type` and `description` are
+    # required, `applies_to`/`url` optional), same posture as `messages`.
     # schemas/shopping/types/link.json
     Link = Data.define(:type, :url, :title) do
       def initialize(type:, url:, title: nil) = super
@@ -380,13 +393,14 @@ module Portage
     # `discounts` is the dev.ucp.shopping.discount extension (optional on both
     # cart.json and its own schema) — omitted from the wire payload when empty,
     # same as Order#adjustments.
-    Cart = Data.define(:id, :line_items, :currency, :totals, :discounts) do
-      def initialize(id:, line_items:, currency:, totals:, discounts: Discounts.new) = super
+    Cart = Data.define(:id, :line_items, :currency, :totals, :discounts, :policies) do
+      def initialize(id:, line_items:, currency:, totals:, discounts: Discounts.new, policies: []) = super
 
       def to_wire_h
         h = { "id" => id, "line_items" => line_items.map(&:to_wire_h), "currency" => currency,
               "totals" => totals.map(&:to_wire_h) }
         h["discounts"] = discounts.to_wire_h unless discounts.empty?
+        h["policies"] = policies unless policies.empty?
         h
       end
     end
@@ -415,9 +429,9 @@ module Portage
     # omitted from the wire payload when empty), same posture as
     # Order#adjustments.
     Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links, :order, :discounts,
-                           :fulfillment) do
+                           :fulfillment, :policies) do
       def initialize(id:, status:, line_items:, currency:, totals:, links:, order: nil, discounts: Discounts.new,
-                     fulfillment: CheckoutFulfillment.new)
+                     fulfillment: CheckoutFulfillment.new, policies: [])
         super
       end
 
@@ -427,6 +441,7 @@ module Portage
         h["order"] = order.to_wire_h if order
         h["discounts"] = discounts.to_wire_h unless discounts.empty?
         h["fulfillment"] = fulfillment.to_wire_h unless fulfillment.empty?
+        h["policies"] = policies unless policies.empty?
         h
       end
     end
@@ -508,9 +523,9 @@ module Portage
     # line_items/fulfillment/currency/totals. `adjustments` is optional —
     # omitted from the wire payload when empty.
     Order = Data.define(:id, :checkout_id, :permalink_url, :line_items, :fulfillment, :currency, :totals,
-                        :adjustments) do
+                        :adjustments, :policies) do
       def initialize(id:, checkout_id:, permalink_url:, line_items:, fulfillment:, currency:, totals:,
-                     adjustments: [])
+                     adjustments: [], policies: [])
         super
       end
 
@@ -519,6 +534,7 @@ module Portage
               "line_items" => line_items.map(&:to_wire_h), "fulfillment" => fulfillment.to_wire_h,
               "currency" => currency, "totals" => totals.map(&:to_wire_h) }
         h["adjustments"] = adjustments.map(&:to_wire_h) unless adjustments.empty?
+        h["policies"] = policies unless policies.empty?
         h
       end
     end

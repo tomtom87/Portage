@@ -27,6 +27,36 @@ RSpec.describe Portage::Ucp::SchemaValidator do
     expect(validator.errors_for("schemas/shopping/cart.json", valid_cart_payload)).to eq([])
   end
 
+  describe "policies (UCP 2026-08-25)" do
+    let(:policy) do
+      { "type" => "dev.ucp.shopping.policy.return", "description" => { "plain" => "30-day returns" },
+        "applies_to" => ["$.line_items[0]"], "url" => "https://example.com/returns" }
+    end
+
+    it "validates a Cart and an Order carrying a policy built through the value objects" do
+      cart = valid_cart_payload.merge("policies" => [policy])
+      order = valid_order_payload.merge("policies" => [policy])
+
+      expect(validator.errors_for("schemas/shopping/cart.json", cart)).to eq([])
+      expect(validator.errors_for("schemas/shopping/order.json", order)).to eq([])
+    end
+
+    it "validates a Checkout carrying a policy" do
+      checkout = Portage::Ucp::Checkout.new(id: "chk_1", status: "incomplete", line_items: [], currency: "USD",
+                                            totals: [], links: [], policies: [policy])
+      payload = Portage::Ucp::WireEnvelope.wrap("dev.ucp.shopping.checkout", checkout.to_wire_h)
+
+      expect(payload["policies"]).to eq([policy])
+      expect(validator.errors_for("schemas/shopping/checkout.json", payload).grep(/polic/)).to be_empty
+    end
+
+    it "reports a policy missing its required description" do
+      cart = valid_cart_payload.merge("policies" => [policy.except("description")])
+
+      expect(validator.errors_for("schemas/shopping/cart.json", cart)).not_to be_empty
+    end
+  end
+
   it "reports errors for a payload missing a required field" do
     invalid_cart = valid_cart_payload.except("line_items")
 
