@@ -63,6 +63,22 @@ RSpec.describe Portage::Ucp::SchemaValidator do
       expect(validator.errors_for("schemas/shopping/checkout.json", checkout_payload)).to be_empty
     end
 
+    it "validates adapter messages combined with derived warnings on a Cart and a Checkout" do
+      totals = [Portage::Ucp::Total.new(type: "subtotal", amount: 0), Portage::Ucp::Total.new(type: "total", amount: 0)]
+      messages = [{ "type" => "info", "content" => "Ships from the EU" },
+                  { "type" => "warning", "code" => "stock", "content" => "Low stock", "presentation" => "notice" }]
+      cart = Portage::Ucp::Cart.new(id: "c1", line_items: [], currency: "USD", totals: totals,
+                                    policies: [policy], messages: messages)
+      checkout = Portage::Ucp::Checkout.new(id: "chk_1", status: "incomplete", line_items: [], currency: "USD",
+                                            totals: totals, links: [], policies: [policy], messages: messages)
+      cart_payload = Portage::Ucp::WireEnvelope.wrap("dev.ucp.shopping.cart", cart.to_wire_h)
+      checkout_payload = Portage::Ucp::WireEnvelope.wrap("dev.ucp.shopping.checkout", checkout.to_wire_h)
+
+      expect(cart_payload["messages"].size).to eq(3)
+      expect(validator.errors_for("schemas/shopping/cart.json", cart_payload)).to be_empty
+      expect(validator.errors_for("schemas/shopping/checkout.json", checkout_payload)).to be_empty
+    end
+
     it "reports a policy missing its required description" do
       cart = valid_cart_payload.merge("policies" => [policy.except("description")])
 
