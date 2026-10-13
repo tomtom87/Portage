@@ -3946,7 +3946,7 @@ hidden or auto-dismissed); a compelled policy display is the latter.
 `Cart#to_wire_h` and `Checkout#to_wire_h` derive one warning per policy via
 `Portage::Ucp.policy_messages`: `presentation: "disclosure"`, `content` from
 `description.plain` (else `markdown`, with `content_type: "markdown"`; an
-html-only policy falls back to its `type`, since the warning has no html
+html-only policy has its tags stripped, since the warning has no html
 format), `url` from the policy, and `path` only when `applies_to` names a
 single node (a warning carries one path). Deriving at serialization, rather
 than storing `messages` on the value objects, is the single point every

@@ -1,3 +1,5 @@
+require "cgi"
+
 module Portage
   module Ucp
     # Internal arithmetic helper only — never appears in a wire shape directly.
@@ -391,19 +393,25 @@ module Portage
     # whose `code` equals the policy `type` (policy.json). Derived at
     # serialization for Cart and Checkout, so it needs no storage and survives
     # any rebuild without duplicating. Content is the plain (else markdown)
-    # description; an html-only policy falls back to its type, since the
+    # description; an html-only policy has its tags stripped, since the
     # warning schema has no html format.
     def self.policy_messages(policies)
       policies.map do |policy|
         description = policy["description"]
         markdown = !description["plain"] && description["markdown"]
+        content = description["plain"] || description["markdown"] || html_to_text(description["html"])
         message = { "type" => "warning", "code" => policy["type"], "presentation" => "disclosure",
-                    "content" => description["plain"] || description["markdown"] || policy["type"] }
+                    "content" => content }
         message["content_type"] = "markdown" if markdown
         message["url"] = policy["url"] if policy["url"]
         message["path"] = policy["applies_to"].first if policy["applies_to"]&.one?
         message
       end
+    end
+
+    def self.html_to_text(html)
+      text = html.gsub(%r{</(p|div|li|h\d)>|<br\s*/?>}i, "\n").gsub(/<[^>]*>/, "")
+      CGI.unescapeHTML(text).gsub(/\n{3,}/, "\n\n").strip
     end
 
     # schemas/shopping/cart.json — requires ucp/id/line_items/currency/totals.
