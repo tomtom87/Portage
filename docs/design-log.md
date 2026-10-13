@@ -3901,3 +3901,31 @@ and the custom `com.shopify.policy.shipping` (`url` plus `description.html` and
 a tag-stripped `description.plain`) to cart, checkout and order via
 `Data#with`, so `checkout_state.rb` needs no change: the adapter re-attaches
 after `checkout_from_platform_order`. Catalog responses are left out.
+
+## 61. UCP 2026-08-25 shopping permalinks (2026-10-13)
+
+`dev.ucp.shopping.permalink` is a capability for a browser endpoint the
+business serves, not a UCP operation: `GET {endpoint}/{id:qty,...}?<field
+path>=<value>&continue_to=/path` redirects the buyer (`303` only, with
+`Cache-Control: no-store` and `Referrer-Policy: no-referrer`) to a
+buyer-facing page. It adds no fields of its own; query parameters address
+existing UCP field paths. Its business profile entry requires
+`config.endpoint` (absolute https, no userinfo, query, fragment or
+trailing slash); platforms declare it with no config. The
+`permalink_url` already on `Order` and `OrderConfirmation` is an unrelated
+order-page link and is unchanged.
+
+`Adapter#permalink_endpoint` (nil by default) is the config-carrying
+predicate: a String advertises the capability. `Capability` gained an
+optional `config:` callable (`#config_for(adapter)`) and the manifest adds
+the result as the entry's `config`; `Capabilities::PERMALINK` uses it. No MCP
+tool, since the spec defines no operation beyond the redirect, and serving
+that route is the host app's job. `manifest_spec` validates a permalink
+entry against `business_schema` and checks the schema rejects a trailing
+slash.
+
+No adapter supplies an endpoint. Shopify has a cart-permalink URL scheme
+(`/cart/{variant}:{qty}`) but that is Shopify's own, not this redirect
+contract, and the adapter holds no store endpoint data it could vouch for,
+so none was wired. Phase 2 (policy `messages[]`) is in
+`docs/plans/ucp-permalinks-and-policy-messages.md`.

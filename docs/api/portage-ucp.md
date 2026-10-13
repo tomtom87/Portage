@@ -124,12 +124,13 @@ These are not part of the UCP spec.
 
 ### Extension capabilities
 
-Two capabilities add a parameter to existing actions instead of adding actions of their own. They are declared with predicate methods on the adapter:
+Two capabilities add a parameter to existing actions instead of adding actions of their own. They are declared with predicate methods on the adapter. A third, permalink, has no actions at all (see below):
 
 | Method | Signature | Returns | Notes |
 |---|---|---|---|
 | `discount_codes_supported?` | `discount_codes_supported?` | `Boolean` | Default `false`. Advertises `dev.ucp.shopping.discount`. |
 | `fulfillment_supported?` | `fulfillment_supported?` | `Boolean` | Default `false`. Advertises `dev.ucp.shopping.fulfillment`. |
+| `permalink_endpoint` | `permalink_endpoint` | `String`, `nil` | Default `nil`. A String advertises `dev.ucp.shopping.permalink` with `config.endpoint`: your absolute https browser endpoint, no query, fragment or trailing slash. Portage does not serve the redirect route; your storefront does (`303`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer`). |
 
 ### How capabilities are declared
 
