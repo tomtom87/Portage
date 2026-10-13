@@ -9,6 +9,10 @@ module Portage
       # the only `dev.ucp.shopping.checkout` action that dispatches a charge.
       PAYMENT_COMPLETING_ACTION = "complete_checkout".freeze
 
+      # Each returns the updated Order whose adjustments land on the order
+      # ledger (docs/plans/order-ledger.md Phase 3).
+      ORDER_ADJUSTING_ACTIONS = %w[cancel_order refund_order request_return].freeze
+
       # @param shop [String, nil] identifies which store this Dispatcher
       #   instance is completing charges for, threaded straight onto the
       #   transaction log record — Dispatcher/Adapter have no shared notion
@@ -92,6 +96,11 @@ module Portage
                  else
                    call_adapter(method_name, arguments, correlation_id)
                  end
+        # Same after-the-adapter posture as the Phase 1 snapshot in
+        # #call_and_log_transaction: the cancel/refund/return has already
+        # happened upstream, so a ledger write failure surfaces only after
+        # it — never instead of it, never retried or rolled back here.
+        @order_ledger.record_adjustments(result) if result && ORDER_ADJUSTING_ACTIONS.include?(action)
         validate_outbound_boundaries!(result)
         wrap(capability, result)
       end

@@ -259,6 +259,44 @@ RSpec.describe Portage::Ucp::Dispatcher do
     expect(canceled["adjustments"].last["type"]).to eq("cancellation")
   end
 
+  describe "post-purchase adjustments on the ledger (Phase 3)" do
+    def complete_order(key)
+      checkout = dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "create_checkout",
+                                 arguments: { line_items: [{ product_id: "prod_1", quantity: 2 }],
+                                              idempotency_key: key })[:structuredContent]
+      dispatcher.call(capability: "dev.ucp.shopping.checkout", action: "complete_checkout",
+                      arguments: { checkout_id: checkout["id"], payment_token: "tok_visa",
+                                   idempotency_key: "#{key}-complete" })[:structuredContent]["order"]["id"]
+    end
+
+    def refund(order_id, key)
+      line_item_id = adapter.get_order(order_id: order_id).line_items[0].id
+      dispatcher.call(capability: "dev.ucp.shopping.order", action: "refund_order",
+                      arguments: { order_id: order_id, line_items: [{ id: line_item_id, quantity: 1 }],
+                                   idempotency_key: key })
+    end
+
+    it "lands a dispatched refund on the ledger, leaving the purchase snapshot untouched" do
+      order_id = complete_order("chk-adj")
+      purchase = order_ledger.find(order_id)["order"]
+
+      refund(order_id, "ref-adj")
+
+      stored = order_ledger.find(order_id)["order"]
+      expect(stored["adjustments"].map { |a| a["type"] }).to eq(["refund"])
+      expect(stored.except("adjustments")).to eq(purchase.except("adjustments"))
+    end
+
+    it "surfaces a ledger write failure only after the refund has already happened upstream" do
+      order_id = complete_order("chk-adj-fail")
+      allow(order_ledger).to receive(:record_adjustments).and_raise(IOError, "disk full")
+
+      expect { refund(order_id, "ref-adj-fail") }.to raise_error(IOError)
+
+      expect(adapter.get_order(order_id: order_id).adjustments.map(&:type)).to eq(["refund"])
+    end
+  end
+
   it "raises UnknownCapabilityError for a capability name that isn't registered" do
     expect { dispatcher.call(capability: "dev.ucp.shopping.nonexistent", action: "whatever", arguments: {}) }
       .to raise_error(Portage::Ucp::UnknownCapabilityError, /dev\.ucp\.shopping\.nonexistent/)
