@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: `dev.ucp.shopping.permalink` capability** (UCP 2026-08-25). An adapter that overrides `Adapter#permalink_endpoint` (default `nil`) to return its https browser endpoint is advertised with `config.endpoint`. `Capability` takes an optional `config:` callable for the manifest entry's `config`. No MCP tool: the permalink is a browser redirect the host serves (design-log §61).
+
 ## [0.15.0] - 2026-10-13
 
 - **Added: optional `policies:` on `Cart`, `Checkout`, `Order`, `Product`, `CatalogSearchResult` and `ProductDetail`** (UCP 2026-08-25 `policies[]`). An array of `policy.json` hashes (`type` and `description` required; `applies_to` and `url` optional), default `[]`, omitted from the wire payload when empty. `portage-ucp-shopify` 0.7.0 supplies it (design-log §60).
