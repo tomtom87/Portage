@@ -167,7 +167,7 @@ Catalog:
 | `CatalogSearchResult` | `products`, `messages: []`, `policies: []` |
 | `ProductDetail` | `product`, `policies: []` |
 
-Cart, checkout and order. `policies:` (also on `Product`, `CatalogSearchResult` and `ProductDetail`) is an optional array of UCP `policy.json` hashes, e.g. `{ "type" => "dev.ucp.shopping.policy.return", "description" => { "plain" => "30-day returns" }, "url" => "https://..." }`; omitted from the response when empty:
+Cart, checkout and order. `policies:` (also on `Product`, `CatalogSearchResult` and `ProductDetail`) is an optional array of UCP `policy.json` hashes, e.g. `{ "type" => "dev.ucp.shopping.policy.return", "description" => { "plain" => "30-day returns" }, "url" => "https://..." }`; omitted from the response when empty. On `Cart` and `Checkout` each policy also produces a `messages[]` warning (`code` = policy `type`, `presentation: "disclosure"`) derived at serialization; orders do not:
 
 | Class | Attributes |
 |---|---|
