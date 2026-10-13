@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: cart, checkout and order responses carry the shop's `policies[]`** (UCP 2026-08-25). The Storefront `shop { refundPolicy shippingPolicy }` becomes `dev.ucp.shopping.policy.return` and the custom `com.shopify.policy.shipping`, each with the policy `url` and a `description` of the sanitized `html` plus a tag-stripped `plain`. A policy the merchant never wrote is omitted. It costs one extra Storefront request per adapter instance (cached for the process, so a policy edited later shows after a restart); a failed fetch, or a client without a `storefront_access_token`, yields no policies rather than an error. Catalog responses don't carry it. Needs `portage-ucp` with `policies:` (unreleased after 0.14.0; design-log §60).
+
 ## [0.6.1] - 2026-10-07
 
 - **Fixed: a checkout the shopper paid for in the browser now reads as `completed` from a new process.** Status lived only in the creating process, so `portage orders reconcile` always saw `incomplete`, or not-found once Storefront stopped returning the cart. `#get_checkout` now runs the Admin `orders(query: "cart_token:…")` search the adapter already used at completion, and when an order exists reports `completed` with the `order` confirmation (id and `statusPageUrl`), rebuilding the checkout from the order if the cart is gone. No order, or a failed search, keeps `incomplete`/not-found. Needs the Admin token, and `portage-ucp` 0.13.0 for the `CheckoutState` platform hook, so the gem now requires `portage-ucp` `~> 0.13`. Patch-level.

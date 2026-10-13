@@ -7,6 +7,10 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
   end
   let(:adapter) { described_class.new(client: client) }
 
+  # Existing examples stub the Storefront endpoint with one catch-all
+  # response; the shop-policies query has its own describe below.
+  before { allow(adapter).to receive(:policies).and_return([]) }
+
   let(:cart_response) do
     {
       "id" => "gid://shopify/Cart/1",
@@ -734,6 +738,101 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
                                line_items: [{ id: "gid://shopify/FulfillmentLineItem/1", quantity: 1 }],
                                idempotency_key: "ret2")
       end.to raise_error(Portage::Ucp::Shopify::UserError, /unfulfilled/)
+    end
+  end
+
+  describe "shop policies (design-log §60)" do
+    let(:schema_validator) { Portage::Ucp::SchemaValidator.new }
+    let(:refund_body) do
+      "<p>Return within <strong>30 days</strong> &amp; get a refund.</p><p>Items must be unused.</p>"
+    end
+    let(:policies_response) do
+      { data: { shop: { refundPolicy: { body: refund_body,
+                                        url: "https://test-shop.myshopify.com/policies/refund-policy" },
+                        shippingPolicy: nil } } }
+    end
+
+    before { allow(adapter).to receive(:policies).and_call_original }
+
+    def wire(capability, response)
+      Portage::Ucp::WireEnvelope.wrap(capability, response.to_wire_h)
+    end
+
+    def stub_policies(response)
+      stub_storefront(response).with(body: hash_including("query" => a_string_matching(/query ShopPolicies/)))
+    end
+
+    it "maps the refund policy to a return policy and omits a null shipping policy" do
+      stub_storefront({ data: { cartCreate: { cart: cart_response, userErrors: [] } } })
+        .with(body: hash_including("query" => a_string_matching(/mutation CartCreate/)))
+      stub_policies(policies_response)
+
+      checkout = adapter.create_checkout(line_items: [{ product_id: "gid://shopify/ProductVariant/1", quantity: 1 }],
+                                         idempotency_key: "pol1")
+
+      expect(checkout.to_wire_h["policies"]).to eq(
+        [{ "type" => "dev.ucp.shopping.policy.return",
+           "url" => "https://test-shop.myshopify.com/policies/refund-policy",
+           "description" => { "html" => refund_body,
+                              "plain" => "Return within 30 days & get a refund.\nItems must be unused." } }]
+      )
+      expect(schema_validator.errors_for("schemas/shopping/checkout.json",
+                                         wire("dev.ucp.shopping.checkout", checkout))).to be_empty
+    end
+
+    it "maps a shipping policy to the Shopify-namespaced type" do
+      stub_admin({ data: { order: order_node } })
+      stub_policies({ data: { shop: { refundPolicy: nil,
+                                      shippingPolicy: { body: "<p>Ships in 2 days</p>", url: nil } } } })
+
+      order = adapter.get_order(order_id: "gid://shopify/Order/1")
+
+      expect(order.policies).to eq([{ "type" => "com.shopify.policy.shipping",
+                                      "description" => { "html" => "<p>Ships in 2 days</p>",
+                                                         "plain" => "Ships in 2 days" } }])
+      expect(schema_validator.errors_for("schemas/shopping/order.json",
+                                         wire("dev.ucp.shopping.order", order))).to be_empty
+    end
+
+    it "fetches once per adapter and attaches policies to carts, checkouts and orders" do
+      cart_stub = stub_storefront({ data: { cart: cart_response } })
+                  .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_admin({ data: { order: order_node } })
+      policies_stub = stub_policies(policies_response)
+
+      cart = adapter.get_cart(cart_id: "gid://shopify/Cart/1")
+      adapter.get_checkout(checkout_id: "gid://shopify/Cart/1")
+      order = adapter.get_order(order_id: "gid://shopify/Order/1")
+
+      expect(policies_stub).to have_been_requested.once
+      expect(cart_stub).to have_been_requested.twice
+      expect([cart, order].map { |r| r.policies.map { |p| p["type"] } }).to all(eq(["dev.ucp.shopping.policy.return"]))
+      expect(schema_validator.errors_for("schemas/shopping/cart.json", wire("dev.ucp.shopping.cart", cart))).to be_empty
+    end
+
+    it "carries policies onto a checkout rebuilt from a placed order" do
+      stub_storefront({ data: { cart: nil } })
+        .with(body: hash_including("query" => a_string_matching(/query GetCart/)))
+      stub_admin({ data: { orders: { nodes: [{ id: "gid://shopify/Order/1", statusPageUrl: "https://x/o" }] } } })
+        .with(body: hash_including("variables" => { "query" => "cart_token:1" }))
+      stub_admin({ data: { order: order_node } })
+        .with(body: hash_including("query" => a_string_matching(/query GetOrder/)))
+      stub_policies(policies_response)
+
+      checkout = adapter.get_checkout(checkout_id: "gid://shopify/Cart/1?key=k")
+
+      expect(checkout.status).to eq("completed")
+      expect(checkout.policies.map { |p| p["type"] }).to eq(["dev.ucp.shopping.policy.return"])
+    end
+
+    it "returns no policies, without failing the call, when the shop has none or the query errors" do
+      stub_admin({ data: { order: order_node } })
+      stub_policies({ data: { shop: { refundPolicy: nil, shippingPolicy: nil } } })
+      expect(adapter.get_order(order_id: "gid://shopify/Order/1").to_wire_h).not_to have_key("policies")
+
+      failing = described_class.new(client: client)
+      stub_policies({ errors: [{ message: "Access denied" }] })
+      expect(failing.get_order(order_id: "gid://shopify/Order/1").policies).to eq([])
     end
   end
 end
