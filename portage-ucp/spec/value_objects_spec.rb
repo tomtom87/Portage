@@ -435,13 +435,13 @@ RSpec.describe "Portage::Ucp value objects" do
         expect(checkout.to_wire_h["messages"].map { |m| m["code"] }).to eq(["dev.ucp.shopping.policy.return"])
       end
 
-      it "use markdown content when there is no plain text, and the type for html-only policies" do
+      it "use markdown content when there is no plain text, and stripped html for html-only policies" do
         md = policy.merge("description" => { "markdown" => "**30** days" })
-        html = policy.merge("description" => { "html" => "<p>30 days</p>" })
+        html = policy.merge("description" => { "html" => "<p>30 days &amp; free</p><p>returns</p>" })
         messages = Portage::Ucp::Cart.new(**cart, policies: [md, html]).to_wire_h["messages"]
 
         expect(messages.map { |m| [m["content"], m["content_type"]] })
-          .to eq([["**30** days", "markdown"], ["dev.ucp.shopping.policy.return", nil]])
+          .to eq([["**30** days", "markdown"], ["30 days & free\nreturns", nil]])
       end
 
       it "are left off when there are no policies, and off orders" do
