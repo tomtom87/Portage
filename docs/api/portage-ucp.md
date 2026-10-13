@@ -167,7 +167,7 @@ Catalog:
 | `CatalogSearchResult` | `products`, `messages: []`, `policies: []` |
 | `ProductDetail` | `product`, `policies: []` |
 
-Cart, checkout and order. `policies:` (also on `Product`, `CatalogSearchResult` and `ProductDetail`) is an optional array of UCP `policy.json` hashes, e.g. `{ "type" => "dev.ucp.shopping.policy.return", "description" => { "plain" => "30-day returns" }, "url" => "https://..." }`; omitted from the response when empty. On `Cart` and `Checkout` each policy also produces a `messages[]` warning (`code` = policy `type`, `presentation: "disclosure"`) derived at serialization; orders do not:
+Cart, checkout and order. `policies:` (also on `Product`, `CatalogSearchResult` and `ProductDetail`) is an optional array of UCP `policy.json` hashes, e.g. `{ "type" => "dev.ucp.shopping.policy.return", "description" => { "plain" => "30-day returns" }, "url" => "https://..." }`; omitted from the response when empty. On `Cart` and `Checkout` each policy also produces a `messages[]` warning (`code` = policy `type`, `presentation: "disclosure"`) derived at serialization; orders do not. `messages:` on `Cart` and `Checkout` is an optional array of wire-shaped message hashes an adapter adds itself; they are emitted first, then the derived policy warnings, except that a derived warning is left out when the adapter already supplied a `"type" => "warning"` with the same `code`:
 
 | Class | Attributes |
 |---|---|
@@ -177,8 +177,8 @@ Cart, checkout and order. `policies:` (also on `Product`, `CatalogSearchResult` 
 | `Link` | `type`, `url`, `title: nil` |
 | `AppliedDiscount` | `title`, `amount`, `code: nil`, `automatic: false`, `allocation_method: nil`, `priority: nil`, `provisional: false`, `eligibility: nil`, `allocations: []` |
 | `Discounts` | `codes: []`, `applied: []` |
-| `Cart` | `id`, `line_items`, `currency`, `totals`, `discounts: Discounts.new`, `policies: []` |
-| `Checkout` | `id`, `status`, `line_items`, `currency`, `totals`, `links`, `order: nil`, `discounts: Discounts.new`, `fulfillment: CheckoutFulfillment.new`, `policies: []` |
+| `Cart` | `id`, `line_items`, `currency`, `totals`, `discounts: Discounts.new`, `policies: []`, `messages: []` |
+| `Checkout` | `id`, `status`, `line_items`, `currency`, `totals`, `links`, `order: nil`, `discounts: Discounts.new`, `fulfillment: CheckoutFulfillment.new`, `policies: []`, `messages: []` |
 | `OrderConfirmation` | `id`, `permalink_url`, `label: nil` (goes in `Checkout#order`) |
 | `OrderLineItem` | `id`, `item`, `quantity`, `totals`, `status`, `parent_id: nil`. `quantity` is a hash with `:total` and `:fulfilled`, and optionally `:original`. |
 | `Expectation` | `id`, `line_items`, `method_type`, `destination`, `description: nil`, `fulfillable_on: nil` |
