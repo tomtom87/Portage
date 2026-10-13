@@ -77,6 +77,20 @@ RSpec.describe Portage::Cli::Console do
     end
   end
 
+  describe "#unresolved_adjustments" do
+    def adjustment(id, status) = Portage::Ucp::Adjustment.new(id: id, type: "return", occurred_at: "t", status: status)
+
+    it "lists only the pending adjustments, with their order id" do
+      order_ledger.record(idempotency_key: "k1", order: build_order(id: "ord_1"))
+      order_ledger.record_adjustments(Portage::Ucp::Order.new(**build_order(id: "ord_1").to_h,
+                                                              adjustments: [adjustment("a1", "pending"),
+                                                                            adjustment("a2", "completed")]))
+
+      expect(unresolved_adjustments(order_ledger: order_ledger).map { |u| [u["order_id"], u["adjustment"]["id"]] })
+        .to eq([%w[ord_1 a1]])
+    end
+  end
+
   describe "#journal" do
     def checkout_double
       total = Portage::Ucp::Total.new(type: "total", amount: 500)
