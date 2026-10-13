@@ -233,13 +233,9 @@ module Portage
         def policy_entry(type, policy)
           return unless policy && policy["body"]
 
+          plain = Portage::Ucp.html_to_text(policy["body"])
           { "type" => type, "url" => policy["url"],
-            "description" => { "html" => policy["body"], "plain" => html_to_text(policy["body"]) } }.compact
-        end
-
-        def html_to_text(html)
-          text = html.gsub(%r{</(p|div|li|h\d)>|<br\s*/?>}i, "\n").gsub(/<[^>]*>/, "")
-          CGI.unescapeHTML(text).gsub(/\n{3,}/, "\n\n").strip
+            "description" => { "html" => policy["body"], "plain" => plain } }.compact
         end
 
         def raise_on_errors!(data, field, errors_key)

@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Changed: policy `plain` text now comes from `Portage::Ucp.html_to_text`** instead of a private copy in the adapter. The next release must require `portage-ucp` `~> 0.16`, the first release with that method; the gemspec constraint changes in that release commit.
+
 ## [0.7.0] - 2026-10-13
 
 - **Added: cart, checkout and order responses carry the shop's `policies[]`** (UCP 2026-08-25). The Storefront `shop { refundPolicy shippingPolicy }` becomes `dev.ucp.shopping.policy.return` and the custom `com.shopify.policy.shipping`, each with the policy `url` and a `description` of the sanitized `html` plus a tag-stripped `plain`. A policy the merchant never wrote is omitted. It costs one extra Storefront request per adapter instance (cached for the process, so a policy edited later shows after a restart); a failed fetch, or a client without a `storefront_access_token`, yields no policies rather than an error. Catalog responses don't carry it. Requires `portage-ucp` 0.15 (design-log §60).
