@@ -12,7 +12,7 @@ On a hand-off-only host, `portage buy <url> --query "..."` returns outcome `hand
 
 - `checkout_url`: for Amazon, a cart-add URL when a product ID is known, else its own search URL for the query, else its homepage. For walmart.com/ebay.com/bestbuy.com, and for etsy.com when no ordinary buyer credentials apply, it's the exact URL you passed to `portage buy` — the real product page, when it came from a retailer offer source (below) or from `find`. For any other host with no known pattern, its homepage. Always built, never fetched.
 - `legal_notice`: the facts-only disclaimer below.
-- `handoff`: how that URL was delivered — the same `--handoff-target` rules as any other hand-off (`default` opens it, `print` just reports it, `agent:<name>` passes it to an approved agent). See [references/outcomes.md](outcomes.md).
+- `handoff`: how that URL was delivered — the same `--handoff-target` rules as any other hand-off (`default` opens it, `print` just reports it, `agent:<name>` passes it to an approved agent). See [outcomes.md](outcomes.md).
 
 ## What you do
 

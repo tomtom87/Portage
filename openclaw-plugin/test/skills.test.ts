@@ -9,7 +9,7 @@ import { copySkills, NO_CLI_SECTION, replaceNoCliSection } from "../scripts/copy
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("copy-skills", () => {
-  it("copies buy and shop-research (with references) into the target, replaces stale copies, leaves portage-openclaw alone", () => {
+  it("copies buy and shop-research (with its reference files) into the target, replaces stale copies, leaves portage-openclaw alone", () => {
     const target = mkdtempSync(join(tmpdir(), "portage-skills-"));
     mkdirSync(join(target, "portage-openclaw"));
     writeFileSync(join(target, "portage-openclaw", "SKILL.md"), "mine");
@@ -21,7 +21,7 @@ describe("copy-skills", () => {
     const source = (n: string) => readFileSync(join(ROOT, "..", "plugins", "buy", "skills", n, "SKILL.md"), "utf8");
     expect(readFileSync(join(target, "shop-research", "SKILL.md"), "utf8")).toBe(source("shop-research"));
     expect(readFileSync(join(target, "buy", "SKILL.md"), "utf8")).toBe(replaceNoCliSection(source("buy")));
-    expect(existsSync(join(target, "buy", "references", "outcomes.md"))).toBe(true);
+    expect(existsSync(join(target, "buy", "outcomes.md"))).toBe(true);
     expect(existsSync(join(target, "buy", "stale.txt"))).toBe(false);
     expect(readFileSync(join(target, "portage-openclaw", "SKILL.md"), "utf8")).toBe("mine");
   });
@@ -30,7 +30,7 @@ describe("copy-skills", () => {
     const target = mkdtempSync(join(tmpdir(), "portage-skills-"));
     copySkills(target);
 
-    expect(existsSync(join(target, "buy", "references", "raw-ucp.md"))).toBe(false);
+    expect(existsSync(join(target, "buy", "raw-ucp.md"))).toBe(false);
     const buy = readFileSync(join(target, "buy", "SKILL.md"), "utf8");
     expect(buy).toContain(NO_CLI_SECTION);
     expect(buy.trimEnd().endsWith(NO_CLI_SECTION.trimEnd())).toBe(true);

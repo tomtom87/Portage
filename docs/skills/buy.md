@@ -46,8 +46,8 @@ This needs `portage-cli` 0.9.0 or newer, the first release with `pick` and `appr
 
 ## The skill
 
-The text below is the skill itself, as the agent reads it. Its `references/` links go to the
-[outcomes](references/outcomes.md) and [hand-off-only retailers](references/handoff-only.md)
+The text below is the skill itself, as the agent reads it. Its links to `outcomes.md` and `handoff-only.md` go to the
+[outcomes](outcomes.md) and [hand-off-only retailers](handoff-only.md)
 pages, which include those files as they ship.
 
 {% include-markdown "../../plugins/buy/skills/buy/SKILL.md" start="\n---\n\n" heading-offset=2 rewrite-relative-urls=false %}

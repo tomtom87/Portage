@@ -110,7 +110,7 @@ If the user only wants to know a price, where to get something, whether it's in 
   2. Show the user `kept[]`: domains and guessed categories only, never their full history.
   3. Save only after they approve: re-run with `--yes --json`, adding `--exclude host,host` for any they turned down. Without `--yes`, a run with no terminal saves nothing and returns `needs_confirmation: true`.
   4. `error: "full_disk_access_required"` (Safari) or `"permission_denied"`: pass `message` on to the user. They grant access themselves. Never work around it.
-  - Imported stores are ordinary untrusted index entries, never a way past the user picking a store. The import never reads passwords, cookies or autofill. Details: [references/outcomes.md](references/outcomes.md#browser-import).
+  - Imported stores are ordinary untrusted index entries, never a way past the user picking a store. The import never reads passwords, cookies or autofill. Details: [outcomes.md](outcomes.md#browser-import).
 - **Retailer offer sources** (if `portage setup` lists them). Optional, official buyer-side APIs for Walmart, eBay (Buy It Now only), Best Buy, Etsy and Amazon — each needs its own key from that retailer's developer program, set in `~/.portage/.env`. **The user types keys in themselves.** They add more real offers to `portage find`; they never let `portage buy` complete a purchase at any of these retailers — every offer from one of them still ends in hand-off, same as Amazon.
 - **Payment method.** Run `portage payment enroll <store-url>`. It stores a tokenized credential in the operating system's secure credential store, never a card number.
 - **Spending limits.** Suggest caps before the first real purchase: `portage policy set --per-transaction-cap N --currency CUR` and a `--rolling-cap`. `portage policy show --json` shows the current ones.
@@ -179,7 +179,7 @@ If the user only wants to know a price, where to get something, whether it's in 
 **Step 6: branch on `outcome`.**
 - Only `purchased` means bought.
 - Every hand-off outcome carries a `checkout_url` for the user. `decisions` explains which gate held it: each gate's `reason` is a string naming the cause, or null when that gate passed.
-- The full table, including the pick and approve outcomes and their exit codes, is in [references/outcomes.md](references/outcomes.md#pick-and-approve).
+- The full table, including the pick and approve outcomes and their exit codes, is in [outcomes.md](outcomes.md#pick-and-approve).
 
 **Step 7: track the order.**
 - `portage orders reconcile [--checkout ID] --json` checks hand-offs the user finished in the browser.
@@ -191,7 +191,7 @@ If the user only wants to know a price, where to get something, whether it's in 
 Most stores don't let a third-party agent complete payment. That's normal, not a failure. Portage builds the cart and checkout, then hands off:
 
 - **`default`**: opens the checkout URL in the user's own browser. Their account, region, saved addresses and saved cards all apply, and they press pay. This is today's behaviour: `--auto-open` / `--no-auto-open`, `PORTAGE_AUTO_OPEN_CHECKOUT`.
-- **`profile`** (if `portage --help` lists `browser profile`): drives a dedicated Portage browser profile instead of the user's own — never the default profile. First-time setup, ask the user to run it themselves: `portage browser profile open`, then sign into their shopping sites in that window once. After that, `portage buy ... --handoff-target profile` builds the cart in that same browser (via WebMCP, when the store supports it) and opens the checkout there for the user to pay — driving stays inside the store's own domain plus its checkout host; anything else stops the run. With no profile attached (not opened yet, or `portage-ucp-webmcp` isn't installed), the report explains that and falls back to just showing the link. Details: [references/outcomes.md](references/outcomes.md#browser-profile).
+- **`profile`** (if `portage --help` lists `browser profile`): drives a dedicated Portage browser profile instead of the user's own — never the default profile. First-time setup, ask the user to run it themselves: `portage browser profile open`, then sign into their shopping sites in that window once. After that, `portage buy ... --handoff-target profile` builds the cart in that same browser (via WebMCP, when the store supports it) and opens the checkout there for the user to pay — driving stays inside the store's own domain plus its checkout host; anything else stops the run. With no profile attached (not opened yet, or `portage-ucp-webmcp` isn't installed), the report explains that and falls back to just showing the link. Details: [outcomes.md](outcomes.md#browser-profile).
 - **`agent:<name>`**: available if listed. Passes the checkout URL and approved cart summary (items, qty, total, store — the same JSON `--notify-webhook` sends) to an external agent the user has approved once, such as OpenClaw, or to a store's approved agentic checkout. It passes a URL, never credentials, payment tokens or shipping details. An agent that isn't approved in the user's `~/.portage/config.json` is never invoked — the report explains why and falls back to `print`.
 - **`print`**: just report the URL.
 - Select one with `portage buy ... --handoff-target default|print|profile|agent:<name>` (or `PORTAGE_HANDOFF_TARGET`/`portage setup`). An unrecognized value is a usage error.
@@ -205,7 +205,7 @@ Amazon (every country's site) is hand-off only by default, and so is any host th
 
 - Give the user the product page or cart link and let them buy it themselves.
 - Don't fetch, scrape or drive the site with any browser tool.
-- Say why, and include the disclaimer: Portage is open source, offered as-is without warranty, and use on any site is the user's responsibility. See [references/handoff-only.md](references/handoff-only.md).
+- Say why, and include the disclaimer: Portage is open source, offered as-is without warranty, and use on any site is the user's responsibility. See [handoff-only.md](handoff-only.md).
 - Walmart, eBay, Target, Best Buy and Etsy serve no public UCP today. Offers from them also end in hand-off — including any that came from an official retailer API the user opted into (see setup, above): `checkout_url` there is the exact product page, but it's still never automated.
 
 ## 5. Hard rules, no exceptions
