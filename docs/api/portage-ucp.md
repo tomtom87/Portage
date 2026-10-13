@@ -289,7 +289,7 @@ Order of checks in `#call`:
 2. Raise `CapabilityNotAdvertisedError` if the adapter does not back it.
 3. Raise `UnknownActionError` if the capability has no such action.
 4. Run `PaymentTokenGuard` if `arguments` has `:payment_token`. Run `Ap2::MandateGuard` if `arguments[:mandate]` is set.
-5. Call the adapter. For `complete_checkout` only, the call is wrapped in a transaction-log reserve and commit, then `PolicyGuard.check!`, then the `Confirmer`. See [Security hooks](#security-hooks).
+5. Call the adapter. For `complete_checkout` only, the call is wrapped in a transaction-log reserve and commit, then `PolicyGuard.check!`, then the `Confirmer`. See [Security hooks](#security-hooks). For `cancel_order`, `refund_order` and `request_return`, the returned order's adjustments are then written to the order ledger (`Support::OrderLedger#record_adjustments`); an order with no ledger snapshot is skipped, and a write failure raises after the adapter call has already succeeded.
 6. Run `PaymentEnrollmentGuard` on any `PaymentEnrollment` result.
 7. Wrap the result. Objects with `to_wire_h` go through `WireEnvelope`. Arrays of such objects become an array payload.
 
@@ -357,7 +357,7 @@ Nothing is permissive by default. See [security hooks](../security-hooks.md) for
 
 `trusted_keys` for both signature classes is an array of JWK hashes or an object that responds to `#call`.
 
-Other classes in this area, not covered here: `Support::TransactionLog` and `Support::OrderLedger` (each takes `store:`, `path:` and `clock:`), `Support::TokenRef`, `SchemaValidator`, `Resolver`, `Check`, and `Rack::ForwardedRequest`.
+Other classes in this area, not covered here: `Support::TransactionLog` and `Support::OrderLedger` (each takes `store:`, `path:` and `clock:`; `OrderLedger#refresh(order_id, adapter:)` re-fetches an order's adjustments and `#unresolved` lists the `pending` ones), `Support::TokenRef`, `SchemaValidator`, `Resolver`, `Check`, and `Rack::ForwardedRequest`.
 
 Source: `portage-ucp/lib/portage/ucp/authenticator.rb`, `portage-ucp/lib/portage/ucp/rate_limiter.rb`, `portage-ucp/lib/portage/ucp/payment_token_guard.rb`, `portage-ucp/lib/portage/ucp/payment_enrollment_guard.rb`, `portage-ucp/lib/portage/ucp/ap2/`, `portage-ucp/lib/portage/ucp/policy.rb`, `portage-ucp/lib/portage/ucp/policy_guard.rb`, `portage-ucp/lib/portage/ucp/confirmer.rb`, `portage-ucp/lib/portage/ucp/observability.rb`, `portage-ucp/lib/portage/ucp/security/`, `portage-ucp/lib/portage/ucp/rack/`
 

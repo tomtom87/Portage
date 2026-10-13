@@ -1133,6 +1133,7 @@ transactions_since(Time.now - 86400, shop: "your-shop.example")
 
 orders                             # every settled-order snapshot
 find_order("order_123")
+unresolved_adjustments             # pending returns/disputes, with their order id
 
 journal                            # empty unless a Dispatcher was built with journal:
 ```
