@@ -7,7 +7,7 @@ module Portage
     module Security
       # Verifies that an inbound agent request carries a valid RFC 9421 HTTP
       # Message Signature, per UCP's own signature spec
-      # (ucp.dev/2026-04-08/specification/signatures/, pinned 2026-09-15 —
+      # (ucp.dev/2026-08-25/specification/signatures/, pinned 2026-09-15 —
       # this is the piece §22 of the design log flagged as unresearched
       # before writing code, now checked against the live spec rather than
       # guessed). This is a distinct concern from three other signing

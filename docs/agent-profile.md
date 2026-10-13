@@ -48,7 +48,7 @@ Same as above: commit, then `bundle exec rake agent_profile:purge`.
 ## Hosting requirements
 
 Whatever serves this document, live UCP servers reject anything that
-doesn't satisfy every one of these (from the 2026-04-08 spec):
+doesn't satisfy every one of these (from the 2026-08-25 spec):
 
 - HTTPS, reachable with no prior coordination
 - **No 3xx redirects** on the exact URL — not even http→https or a

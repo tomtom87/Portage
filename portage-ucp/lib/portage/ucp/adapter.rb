@@ -105,7 +105,7 @@ module Portage
 
       # --- Reorder (app.portage-ucp.reorder — Portage extension, not part of
       # the UCP spec: dev.ucp.dev has no reorder/cart-hydration capability as
-      # of the 2026-04-08 spec) ---
+      # of the 2026-08-25 spec) ---
       # Hydrates a cart from a previous order's line items so a caller doesn't
       # have to re-walk get_order + create_cart itself. Re-checks each item's
       # current price/availability rather than replaying the order's snapshot
