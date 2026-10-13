@@ -98,6 +98,13 @@ module Portage
           GRAPHQL
         end
 
+        # Storefront ShopPolicy (title, body as sanitized HTML, url); null when
+        # the merchant never wrote one. Fetched once per adapter, see
+        # Adapter#policies.
+        SHOP_POLICIES = <<~GRAPHQL.freeze
+          query ShopPolicies { shop { refundPolicy { body url } shippingPolicy { body url } } }
+        GRAPHQL
+
         CART_FIELDS = <<~GRAPHQL.freeze
           id
           checkoutUrl

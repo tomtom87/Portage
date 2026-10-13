@@ -1,4 +1,5 @@
 require "bigdecimal"
+require "cgi"
 
 module Portage
   module Ucp
@@ -55,6 +56,8 @@ module Portage
         include Portage::Ucp::Support::Retry
 
         SUBMIT_POLL_MAX_ATTEMPTS = 3
+        POLICY_TYPES = { "refundPolicy" => "dev.ucp.shopping.policy.return",
+                         "shippingPolicy" => "com.shopify.policy.shipping" }.freeze
 
         def initialize(client:)
           super()
@@ -81,18 +84,18 @@ module Portage
 
         def get_cart(cart_id:)
           cart_node = fetch_cart_node(cart_id)
-          cart_node && Mapper.cart(cart_node)
+          cart_node && with_policies(Mapper.cart(cart_node))
         end
 
         def create_cart(line_items:, idempotency_key:, discount_codes: nil)
-          dedup(idempotency_key) { Mapper.cart(create_cart_node(line_items, discount_codes)) }
+          dedup(idempotency_key) { with_policies(Mapper.cart(create_cart_node(line_items, discount_codes))) }
         end
 
         # Full replacement, matching UCP's real cart semantics: Storefront has
         # no atomic "replace all lines" mutation, so this removes every current
         # line then adds the desired ones back (two Storefront calls).
         def update_cart(cart_id:, line_items:, idempotency_key:, discount_codes: nil)
-          dedup(idempotency_key) { Mapper.cart(replace_lines(cart_id, line_items, discount_codes)) }
+          dedup(idempotency_key) { with_policies(Mapper.cart(replace_lines(cart_id, line_items, discount_codes))) }
         end
 
         # Shopify has no cart-cancellation mutation — carts simply expire.
@@ -107,7 +110,7 @@ module Portage
             cart_node = create_cart_node(line_items, discount_codes)
             cart_node = apply_fulfillment(cart_node["id"], fulfillment) if fulfillment
             record_checkout_status(cart_node["id"], "incomplete")
-            Mapper.checkout(cart_node, status: "incomplete")
+            with_policies(Mapper.checkout(cart_node, status: "incomplete"))
           end
         end
 
@@ -116,9 +119,10 @@ module Portage
         # #platform_checkout_order).
         def get_checkout(checkout_id:)
           cart_node = fetch_cart_node(checkout_id)
-          return checkout_from_platform_order(checkout_id) unless cart_node
+          return with_policies(checkout_from_platform_order(checkout_id)) unless cart_node
 
-          Mapper.checkout(cart_node, status: checkout_status(checkout_id), order: checkout_order(checkout_id))
+          with_policies(Mapper.checkout(cart_node, status: checkout_status(checkout_id),
+                                                   order: checkout_order(checkout_id)))
         end
 
         # Full replacement, same rationale as #update_cart — Shopify checkout
@@ -128,7 +132,7 @@ module Portage
             cart_node = replace_lines(checkout_id, line_items, discount_codes)
             cart_node = apply_fulfillment(checkout_id, fulfillment) if fulfillment
             record_checkout_status(checkout_id, "incomplete")
-            Mapper.checkout(cart_node, status: "incomplete")
+            with_policies(Mapper.checkout(cart_node, status: "incomplete"))
           end
         end
 
@@ -151,14 +155,14 @@ module Portage
           dedup(idempotency_key) do
             record_checkout_status(checkout_id, "canceled")
             cart_node = fetch_cart_node(checkout_id)
-            Mapper.checkout(cart_node, status: "canceled")
+            with_policies(Mapper.checkout(cart_node, status: "canceled"))
           end
         end
 
         def get_order(order_id:)
           data = @client.admin_query(Queries::GET_ORDER, variables: { id: order_id })
           node = data["order"]
-          node && Mapper.order(node, checkout_id: checkout_id_for(order_id))
+          node && with_policies(Mapper.order(node, checkout_id: checkout_id_for(order_id)))
         end
 
         # orderCancel returns only a (possibly still-pending) job — the
@@ -206,6 +210,37 @@ module Portage
         end
 
         private
+
+        # The shop's refund policy as a UCP `dev.ucp.shopping.policy.return`
+        # (and shipping as the custom `com.shopify.policy.shipping`), attached
+        # to cart, checkout and order responses. One Storefront query per
+        # adapter instance, cached; ponytail: no expiry, a policy edited
+        # mid-process shows after restart. A failed fetch is not cached and
+        # yields no policies, so it never breaks a cart or checkout.
+        def with_policies(result)
+          result&.with(policies: policies)
+        end
+
+        def policies
+          @policies ||= begin
+            shop = @client.storefront_query(Queries::SHOP_POLICIES)["shop"] || {}
+            POLICY_TYPES.filter_map { |key, type| policy_entry(type, shop[key]) }
+          end
+        rescue StandardError
+          []
+        end
+
+        def policy_entry(type, policy)
+          return unless policy && policy["body"]
+
+          { "type" => type, "url" => policy["url"],
+            "description" => { "html" => policy["body"], "plain" => html_to_text(policy["body"]) } }.compact
+        end
+
+        def html_to_text(html)
+          text = html.gsub(%r{</(p|div|li|h\d)>|<br\s*/?>}i, "\n").gsub(/<[^>]*>/, "")
+          CGI.unescapeHTML(text).gsub(/\n{3,}/, "\n\n").strip
+        end
 
         def raise_on_errors!(data, field, errors_key)
           errors = data.dig(field, errors_key)
@@ -339,7 +374,7 @@ module Portage
             pay_for_cart(checkout_id, cart_node.dig("cost", "totalAmount"), payment_token)
 
             status, order, resume_url = poll_submission(checkout_id, idempotency_key)
-            Mapper.checkout(cart_node, status: status, order: order, resume_url: resume_url)
+            with_policies(Mapper.checkout(cart_node, status: status, order: order, resume_url: resume_url))
           end
         end
 
