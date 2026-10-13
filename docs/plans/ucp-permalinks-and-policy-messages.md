@@ -1,6 +1,6 @@
 # UCP 2026-08-25: Shopping Permalinks and Policy Messages
 
-**Status:** Phase 1 done; Phase 2 not started. Follows [ucp-2026-08-25.md](ucp-2026-08-25.md) and design-log §60 (`policies[]`).
+**Status:** Phases 1 and 2 done. Follows [ucp-2026-08-25.md](ucp-2026-08-25.md) and design-log §60 (`policies[]`).
 
 **Goal:** advertise the `dev.ucp.shopping.permalink` capability, and emit the `messages[]` warnings that carry a buyer-facing obligation to show a policy.
 
@@ -25,3 +25,4 @@ Serving the permalink redirect route (the host app's job), parsing permalink que
 | Date | Phase | Result | Commit |
 |---|---|---|---|
 | 2026-10-13 | 1 | `Capability#config_for`, `Capabilities::PERMALINK`, `Adapter#permalink_endpoint`; manifest emits `config.endpoint` and validates against `business_schema`. No adapter supplies an endpoint. Design-log §61. | see git log |
+| 2026-10-13 | 2 | `Portage::Ucp.policy_messages`; `Cart` and `Checkout` derive a `disclosure` warning per policy in `to_wire_h`. Orders left out (post-purchase snapshot). Design-log §62. | see git log |

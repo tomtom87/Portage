@@ -3929,3 +3929,36 @@ No adapter supplies an endpoint. Shopify has a cart-permalink URL scheme
 contract, and the adapter holds no store endpoint data it could vouch for,
 so none was wired. Phase 2 (policy `messages[]`) is in
 `docs/plans/ucp-permalinks-and-policy-messages.md`.
+
+## 62. UCP 2026-08-25 policy disclosure messages (2026-10-13)
+
+`policy.json` says: "Policies are reference data; the obligation to display
+a term to the buyer is carried by a `messages[]` warning whose `code` equals
+the policy `type`". It has no display or acknowledge flag of its own, so the
+obligation applies to every policy. A warning (`message_warning.json`)
+requires `type: "warning"`, `code` (free-form string, here the policy `type`)
+and `content` (a string that "MUST be displayed"); `path` (RFC 9535),
+`content_type` (`plain` default, or `markdown`), `presentation`, `image_url`
+and `url` are optional. `presentation` is `notice` (default, may be
+dismissed) or `disclosure` (must be shown near the `path` component and not
+hidden or auto-dismissed); a compelled policy display is the latter.
+
+`Cart#to_wire_h` and `Checkout#to_wire_h` derive one warning per policy via
+`Portage::Ucp.policy_messages`: `presentation: "disclosure"`, `content` from
+`description.plain` (else `markdown`, with `content_type: "markdown"`; an
+html-only policy falls back to its `type`, since the warning has no html
+format), `url` from the policy, and `path` only when `applies_to` names a
+single node (a warning carries one path). Deriving at serialization, rather
+than storing `messages` on the value objects, is the single point every
+adapter and the dispatcher route through, and it survives
+`Support::CheckoutState` rebuilds with no duplicates because nothing is
+stored. The cost: Cart and Checkout have no other message channel, so an
+adapter cannot add its own `messages` yet; that would need a stored field
+merged with the derived ones.
+
+Cart and checkout schemas both allow `messages[]` (cart's description is
+"Validation messages, warnings, or informational notices"). Order has both
+`policies` and `messages`, but its policies are a post-purchase snapshot
+("captured on the order as a durable record") and the obligation is to
+disclose before purchase, so orders are left alone. Catalog responses carry
+`messages` but are not purchase surfaces here and are unchanged.

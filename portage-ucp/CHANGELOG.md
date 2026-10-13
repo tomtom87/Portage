@@ -7,6 +7,7 @@ pre-1.0, so APIs may still shift between minor versions.
 ## [Unreleased]
 
 - **Added: `dev.ucp.shopping.permalink` capability** (UCP 2026-08-25). An adapter that overrides `Adapter#permalink_endpoint` (default `nil`) to return its https browser endpoint is advertised with `config.endpoint`. `Capability` takes an optional `config:` callable for the manifest entry's `config`. No MCP tool: the permalink is a browser redirect the host serves (design-log §61).
+- **Added: policy disclosure warnings on `Cart` and `Checkout`** (UCP 2026-08-25). Each entry of `policies:` now also yields a `messages[]` warning with `code` equal to the policy `type`, `presentation: "disclosure"`, `content` from the description and `url`/`path` when the policy has them. Derived in `to_wire_h`, so every adapter gets it and nothing is stored. Orders are unchanged (design-log §62).
 
 ## [0.15.0] - 2026-10-13
 
