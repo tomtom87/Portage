@@ -37,6 +37,10 @@ RSpec.describe Portage::Ucp::Adapter do
     expect(adapter.fulfillment_supported?).to eq(false)
   end
 
+  it "has no permalink endpoint by default" do
+    expect(adapter.permalink_endpoint).to be_nil
+  end
+
   describe "capability advertisement (override detection)" do
     it "reports a method as NOT overridden on the base Adapter" do
       expect(described_class.instance_method(:search_catalog).owner).to eq(described_class)

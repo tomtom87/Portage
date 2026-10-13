@@ -15,7 +15,11 @@ module Portage
       # `schema:` is the capability's schema path under a UCP revision's
       # `schemas/` (e.g. "shopping/checkout.json"); the manifest turns it into
       # the `schema` URL 2026-08-25 business profiles require.
-      def initialize(name:, version:, actions:, predicate: nil, schema: nil)
+      #
+      # `config:` is a callable taking the adapter and returning the `config`
+      # object the manifest entry carries (permalink's `{endpoint:}`).
+      def initialize(name:, version:, actions:, predicate: nil, schema: nil, config: nil)
+        @config = config
         @name = name
         @schema = schema
         @version = version
@@ -31,6 +35,9 @@ module Portage
 
         actions.values.any? { |method_name| overridden?(adapter, method_name) }
       end
+
+      # @return [Hash, nil] the manifest entry's `config`, if the capability has one
+      def config_for(adapter) = @config&.call(adapter)
 
       private
 

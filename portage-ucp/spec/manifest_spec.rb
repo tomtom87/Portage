@@ -24,6 +24,35 @@ RSpec.describe Portage::Ucp::Manifest do
     expect(errors).to eq([])
   end
 
+  describe "permalink capability" do
+    let(:permalink_adapter) do
+      Class.new(Portage::Ucp::Support::FakeAdapter) { def permalink_endpoint = "https://example.com/buy" }.new
+    end
+
+    it "is left out unless the adapter names a permalink endpoint" do
+      expect(manifest.to_h[:ucp][:capabilities]).not_to have_key("dev.ucp.shopping.permalink")
+    end
+
+    it "is advertised with config.endpoint and validates against the business profile schema" do
+      document = described_class.new(adapter: permalink_adapter, business: business).to_h
+
+      expect(document[:ucp][:capabilities]["dev.ucp.shopping.permalink"]).to eq(
+        [{ version: "2026-08-25", schema: "https://ucp.dev/2026-08-25/schemas/shopping/permalink.json",
+           config: { endpoint: "https://example.com/buy" } }]
+      )
+      validator = Portage::Ucp::SchemaValidator.new(version: "2026-08-25")
+      expect(validator.errors_for("schemas/profile.json#/$defs/business_schema",
+                                  JSON.parse(JSON.generate(document)))).to eq([])
+    end
+
+    it "fails the permalink schema for a trailing-slash endpoint" do
+      validator = Portage::Ucp::SchemaValidator.new(version: "2026-08-25")
+
+      expect(validator.errors_for("schemas/shopping/permalink.json#/$defs/config",
+                                  { "endpoint" => "https://example.com/buy/" })).not_to be_empty
+    end
+  end
+
   it "reports the UCP spec version" do
     expect(manifest.to_h[:ucp][:version]).to eq("2026-08-25")
   end
