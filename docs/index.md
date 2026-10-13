@@ -55,7 +55,7 @@ and [Security](security.md).
 | `portage-ucp-webmcp` | 0.2.0 | Both | WebMCP transport: serve tools in the page, or drive a page's tools (Tier B profile, autofill) | [API](api/portage-ucp-webmcp.md), [README](adapters/webmcp.md) |
 | `portage-ucp` | 0.15.0 | Merchants | Protocol core: `Adapter` contract, capability registry, manifest builder, MCP server | [API](api/portage-ucp.md), [README](core-gems/portage-ucp.md) |
 | `serve-via-ucp` skill | – | Merchants | Set up a store's own UCP endpoint | [skill](skills/serve-via-ucp.md) |
-| `portage-ucp-shopify` | 0.6.1 | Merchants | Shopify Admin and Storefront GraphQL APIs | [README](adapters/shopify.md) |
+| `portage-ucp-shopify` | 0.7.0 | Merchants | Shopify Admin and Storefront GraphQL APIs | [README](adapters/shopify.md) |
 | `portage-ucp-wix` | 0.2.1 | Merchants | Wix Stores Catalog and eCommerce REST APIs | [README](adapters/wix.md) |
 | `portage-ucp-woocommerce` | 0.3.0 | Merchants | WooCommerce Admin REST API and Store API | [README](adapters/woocommerce.md) |
 | `portage-ucp-bigcommerce` | 0.2.1 | Merchants | BigCommerce v3 Catalog/Carts/Checkouts and v2 Orders APIs | [README](adapters/bigcommerce.md) |
