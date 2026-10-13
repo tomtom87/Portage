@@ -387,6 +387,25 @@ module Portage
       end
     end
 
+    # A policy's buyer-facing disclosure obligation is a `messages[]` warning
+    # whose `code` equals the policy `type` (policy.json). Derived at
+    # serialization for Cart and Checkout, so it needs no storage and survives
+    # any rebuild without duplicating. Content is the plain (else markdown)
+    # description; an html-only policy falls back to its type, since the
+    # warning schema has no html format.
+    def self.policy_messages(policies)
+      policies.map do |policy|
+        description = policy["description"]
+        markdown = !description["plain"] && description["markdown"]
+        message = { "type" => "warning", "code" => policy["type"], "presentation" => "disclosure",
+                    "content" => description["plain"] || description["markdown"] || policy["type"] }
+        message["content_type"] = "markdown" if markdown
+        message["url"] = policy["url"] if policy["url"]
+        message["path"] = policy["applies_to"].first if policy["applies_to"]&.one?
+        message
+      end
+    end
+
     # schemas/shopping/cart.json — requires ucp/id/line_items/currency/totals.
     # The "ucp" envelope is added centrally by Portage::Ucp::WireEnvelope, not stored
     # on the value object itself.
@@ -401,6 +420,7 @@ module Portage
               "totals" => totals.map(&:to_wire_h) }
         h["discounts"] = discounts.to_wire_h unless discounts.empty?
         h["policies"] = policies unless policies.empty?
+        h["messages"] = Ucp.policy_messages(policies) unless policies.empty?
         h
       end
     end
@@ -442,6 +462,7 @@ module Portage
         h["discounts"] = discounts.to_wire_h unless discounts.empty?
         h["fulfillment"] = fulfillment.to_wire_h unless fulfillment.empty?
         h["policies"] = policies unless policies.empty?
+        h["messages"] = Ucp.policy_messages(policies) unless policies.empty?
         h
       end
     end

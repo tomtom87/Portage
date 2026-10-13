@@ -419,6 +419,40 @@ RSpec.describe "Portage::Ucp value objects" do
       expect(Portage::Ucp::Checkout.new(**checkout).to_wire_h).not_to have_key("policies")
     end
 
+    describe "disclosure messages" do
+      let(:cart) { { id: "c1", line_items: [], currency: "USD", totals: [] } }
+      let(:full_policy) do
+        policy.merge("url" => "https://example.com/returns", "applies_to" => ["$.line_items[0]"])
+      end
+
+      it "emit a disclosure warning per policy on carts and checkouts" do
+        checkout = Portage::Ucp::Checkout.new(**cart, status: "incomplete", links: [], policies: [policy])
+
+        expect(Portage::Ucp::Cart.new(**cart, policies: [full_policy]).to_wire_h["messages"]).to eq(
+          [{ "type" => "warning", "code" => "dev.ucp.shopping.policy.return", "presentation" => "disclosure",
+             "content" => "30-day returns", "url" => "https://example.com/returns", "path" => "$.line_items[0]" }]
+        )
+        expect(checkout.to_wire_h["messages"].map { |m| m["code"] }).to eq(["dev.ucp.shopping.policy.return"])
+      end
+
+      it "use markdown content when there is no plain text, and the type for html-only policies" do
+        md = policy.merge("description" => { "markdown" => "**30** days" })
+        html = policy.merge("description" => { "html" => "<p>30 days</p>" })
+        messages = Portage::Ucp::Cart.new(**cart, policies: [md, html]).to_wire_h["messages"]
+
+        expect(messages.map { |m| [m["content"], m["content_type"]] })
+          .to eq([["**30** days", "markdown"], ["dev.ucp.shopping.policy.return", nil]])
+      end
+
+      it "are left off when there are no policies, and off orders" do
+        expect(Portage::Ucp::Cart.new(**cart).to_wire_h).not_to have_key("messages")
+        order = Portage::Ucp::Order.new(id: "o1", checkout_id: "c1", permalink_url: "https://example.com/o",
+                                        line_items: [], fulfillment: Portage::Ucp::Fulfillment.new, currency: "USD",
+                                        totals: [], policies: [policy])
+        expect(order.to_wire_h).not_to have_key("messages")
+      end
+    end
+
     it "pass through on catalog results and products" do
       expect(Portage::Ucp::CatalogSearchResult.new(products: [product]).to_wire_h).not_to have_key("policies")
       expect(Portage::Ucp::CatalogSearchResult.new(products: [product], policies: [policy])
