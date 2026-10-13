@@ -7,7 +7,7 @@ description: Set up a merchant's own backend to serve UCP/MCP commerce to shoppi
 
 You are setting up a merchant's own backend to be a UCP/MCP commerce server — the
 seller side, not the shopper side (`shop-via-ucp` is the counterpart for acting as a
-buyer's agent). The scripts in `scripts/` do the mechanical parts; you drive the
+buyer's agent). The scripts beside this file do the mechanical parts; you drive the
 sequence and make the judgment calls a script can't (which adapter gem fits, what the
 authenticator should actually check, whether the manifest looks right).
 
@@ -31,7 +31,7 @@ authenticator should actually check, whether the manifest looks right).
 
 ## Sequence
 
-1. **Detect the stack** — `scripts/detect_stack.sh` (run from the app's root). Reports
+1. **Detect the stack** — `detect_stack.sh` (run from the app's root). Reports
    framework (Rails vs. plain Rack), which `portage-ucp*` gems are already bundled, and
    whether an `Adapter` subclass already exists. Read-only.
 2. **Pick or write an Adapter.** If `detect_stack.sh` found none and no bundled
@@ -39,7 +39,7 @@ authenticator should actually check, whether the manifest looks right).
    see portage-ucp's README capability matrix for what each actually implements),
    scaffold one with `portage generate adapter Foo` (see portage-cli) rather than
    hand-rolling the boilerplate.
-3. **Install** — `scripts/install.sh [adapter-gem-name]`. Adds `portage-ucp` (+ the
+3. **Install** — `install.sh [adapter-gem-name]`. Adds `portage-ucp` (+ the
    adapter gem, if named) to the Gemfile, then either runs
    `rails generate portage:ucp:install` (Rails apps) or copies the same initializer
    template to `config/initializers/portage_ucp.rb` directly (plain Rack). Idempotent —
@@ -57,7 +57,7 @@ authenticator should actually check, whether the manifest looks right).
    part), then **verify.sh [base-url]** (default `http://localhost:3000`) — curls
    `/.well-known/ucp` and checks it nests `version`/`business`/`services`/
    `capabilities` under a top-level `ucp` object, with at least one advertised capability.
-7. **Run the conformance kit** — `scripts/conformance.sh [spec-path]`. Fails loudly
+7. **Run the conformance kit** — `conformance.sh [spec-path]`. Fails loudly
    with a worked example if no spec includes `"a portage adapter"` yet (see
    portage-ucp-etsy's conformance spec in the Portage repo for a real one to copy the
    shape of); otherwise runs it. This is the same shared-examples kit
