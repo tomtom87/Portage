@@ -3962,3 +3962,39 @@ Cart and checkout schemas both allow `messages[]` (cart's description is
 ("captured on the order as a durable record") and the obligation is to
 disclose before purchase, so orders are left alone. Catalog responses carry
 `messages` but are not purchase surfaces here and are unchanged.
+
+## 63. Adapter messages on Cart and Checkout (2026-10-13)
+
+§62 derived policy warnings in `to_wire_h` and noted that an adapter had no
+way to add its own `messages`. `Cart` and `Checkout` now take a stored
+`messages:` member (default `[]`): plain wire-shaped hashes, the same way
+`CatalogSearchResult#messages` and `policies` work, with no new value object.
+
+`to_wire_h` emits the adapter's messages first, then the derived policy
+warnings, and omits `messages` when the combined list is empty. A derived
+warning is left out when the adapter already supplied a warning
+(`"type" => "warning"`) with the same `code`. The policy's obligation is a
+warning whose `code` is the policy `type`, so an adapter warning with that
+code already discloses the policy, and a second one would show the buyer the
+same term twice. Only `warning` entries count: an `info` or `error` with the
+same code does not meet the obligation, so the derived warning stays.
+
+Only the adapter's messages are stored; the derived warnings still are not.
+So a rebuild that carries the stored fields across (`Checkout.new(**checkout.to_h, ...)`
+in the reference adapter, `with(policies:)` in the Shopify adapter) keeps the
+adapter's messages and re-derives the policy warnings, and nothing is
+duplicated. Nothing in the repo rebuilds a Cart or Checkout from a wire hash:
+`WireCheckout` in the CLI's handoff reconciler only reads a wire hash, and the
+client and journal take Checkouts as objects. `Support::CheckoutState` builds
+a fresh completed Checkout from a platform order, which has no adapter
+messages to carry. The other adapters' mappers construct with keywords and
+get the `[]` default.
+
+`portage-ucp-shopify` now calls `Portage::Ucp.html_to_text` instead of its
+private copy. That method is not in a released `portage-ucp` (0.15.0 is the
+latest), so the gemspec's `~> 0.15` stays as is and the floor rises to
+`~> 0.16` in the release commit when the core version bumps, as for the
+`policies:` release. Raising it now would make the gemspec require a version
+that does not exist. The Shopify changelog's Unreleased entry records that the
+next release needs it; specs run against the local core through the Gemfile
+path.
