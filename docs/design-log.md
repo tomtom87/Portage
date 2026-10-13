@@ -4053,3 +4053,23 @@ snapshot is `Checkout#order`, which is an `OrderConfirmation` stub
 (`id`/`permalink_url`) rather than a full `Order`, so in-process purchases
 have no line items in the ledger. `portage orders reconcile` records the
 full order via `get_order`. Adjustments attach to either shape.
+
+## 65. Flatten the serve-via-ucp skill for mcprush (2026-10-13)
+
+mcprush imports a skill straight from the repo and re-reads it on every tag,
+but it only reads the top level of the skill folder. `skills/serve-via-ucp/`
+kept its five shell scripts in `scripts/`, so an imported copy would have had
+SKILL.md and none of the scripts, the same gap closed for
+the `buy` skill's `references/` (PR #149).
+
+`conformance.sh`, `detect_stack.sh`, `doctor.sh`, `install.sh` and `verify.sh`
+now sit beside SKILL.md, executable bits kept, and `scripts/` is gone. None of
+them referred to a sibling or to their own path, so only SKILL.md's wording
+changed: the steps say `detect_stack.sh`, `install.sh` and `conformance.sh`
+without the `scripts/` prefix. The scripts still run from the app's root,
+called by their path in the installed skill folder.
+
+Copies already installed are self-contained and keep working at their old
+layout; they pick up the flat one the next time the skill is installed or
+imported. `docs/skills/serve-via-ucp.md` includes SKILL.md, so it follows
+without a change.

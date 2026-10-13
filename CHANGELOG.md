@@ -9,6 +9,7 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **The `serve-via-ucp` skill's scripts sit beside `SKILL.md`.** `conformance.sh`, `detect_stack.sh`, `doctor.sh`, `install.sh` and `verify.sh` moved up out of `scripts/`, so a registry that reads only a skill folder's top level, such as mcprush's repo import, gets the whole skill and can track it from git tags. The skill's steps now name the scripts without the `scripts/` prefix. Copies already installed keep working, since each one is self-contained.
 - **The `buy` skill's reference files sit beside `SKILL.md`.** `outcomes.md` and `handoff-only.md` moved up out of `references/`, so a registry that reads only a skill folder's top level, such as mcprush's repo import, gets the whole skill and can track it from git tags. The skill's links, the docs pages (now `docs/skills/outcomes.md` and `docs/skills/handoff-only.md`), the README install notes and the OpenClaw plugin's copy test follow the move. Copies already installed or published keep working, since each one is self-contained.
 
 ## [0.18.0] - 2026-10-07
