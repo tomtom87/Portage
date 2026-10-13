@@ -12,9 +12,9 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-shopify (0.6.1)
+    portage-ucp-shopify (0.7.0)
       bigdecimal (>= 3.1)
-      portage-ucp (~> 0.13)
+      portage-ucp (~> 0.15)
 
 GEM
   remote: https://rubygems.org/
