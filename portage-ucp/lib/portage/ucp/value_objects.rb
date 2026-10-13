@@ -409,6 +409,14 @@ module Portage
       end
     end
 
+    # Adapter messages first, then the derived policy warnings, minus any
+    # whose `code` the adapter already warned about (that warning meets the
+    # disclosure obligation). Only the adapter's `messages` are stored.
+    def self.wire_messages(messages, policies)
+      warned = messages.select { |m| m["type"] == "warning" }.to_set { |m| m["code"] }
+      messages + policy_messages(policies).reject { |m| warned.include?(m["code"]) }
+    end
+
     def self.html_to_text(html)
       text = html.gsub(%r{</(p|div|li|h\d)>|<br\s*/?>}i, "\n").gsub(/<[^>]*>/, "")
       CGI.unescapeHTML(text).gsub(/\n{3,}/, "\n\n").strip
@@ -420,15 +428,18 @@ module Portage
     # `discounts` is the dev.ucp.shopping.discount extension (optional on both
     # cart.json and its own schema) — omitted from the wire payload when empty,
     # same as Order#adjustments.
-    Cart = Data.define(:id, :line_items, :currency, :totals, :discounts, :policies) do
-      def initialize(id:, line_items:, currency:, totals:, discounts: Discounts.new, policies: []) = super
+    # `messages` holds only the adapter's own wire-shaped message hashes;
+    # policy warnings are derived in to_wire_h (see Ucp.wire_messages).
+    Cart = Data.define(:id, :line_items, :currency, :totals, :discounts, :policies, :messages) do
+      def initialize(id:, line_items:, currency:, totals:, discounts: Discounts.new, policies: [], messages: []) = super
 
       def to_wire_h
         h = { "id" => id, "line_items" => line_items.map(&:to_wire_h), "currency" => currency,
               "totals" => totals.map(&:to_wire_h) }
         h["discounts"] = discounts.to_wire_h unless discounts.empty?
         h["policies"] = policies unless policies.empty?
-        h["messages"] = Ucp.policy_messages(policies) unless policies.empty?
+        all = Ucp.wire_messages(messages, policies)
+        h["messages"] = all unless all.empty?
         h
       end
     end
@@ -457,9 +468,9 @@ module Portage
     # omitted from the wire payload when empty), same posture as
     # Order#adjustments.
     Checkout = Data.define(:id, :status, :line_items, :currency, :totals, :links, :order, :discounts,
-                           :fulfillment, :policies) do
+                           :fulfillment, :policies, :messages) do
       def initialize(id:, status:, line_items:, currency:, totals:, links:, order: nil, discounts: Discounts.new,
-                     fulfillment: CheckoutFulfillment.new, policies: [])
+                     fulfillment: CheckoutFulfillment.new, policies: [], messages: [])
         super
       end
 
@@ -470,7 +481,8 @@ module Portage
         h["discounts"] = discounts.to_wire_h unless discounts.empty?
         h["fulfillment"] = fulfillment.to_wire_h unless fulfillment.empty?
         h["policies"] = policies unless policies.empty?
-        h["messages"] = Ucp.policy_messages(policies) unless policies.empty?
+        all = Ucp.wire_messages(messages, policies)
+        h["messages"] = all unless all.empty?
         h
       end
     end

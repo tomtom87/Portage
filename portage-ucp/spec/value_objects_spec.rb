@@ -453,6 +453,38 @@ RSpec.describe "Portage::Ucp value objects" do
       end
     end
 
+    describe "adapter messages" do
+      let(:cart) { { id: "c1", line_items: [], currency: "USD", totals: [] } }
+      let(:notice) { { "type" => "info", "content" => "Ships from the EU" } }
+      let(:same_code) { { "type" => "warning", "code" => policy["type"], "content" => "Final sale" } }
+
+      it "go into the wire payload on carts and checkouts, ahead of the derived warnings" do
+        checkout = Portage::Ucp::Checkout.new(**cart, status: "incomplete", links: [], messages: [notice],
+                                                      policies: [policy])
+
+        expect(Portage::Ucp::Cart.new(**cart, messages: [notice]).to_wire_h["messages"]).to eq([notice])
+        expect(checkout.to_wire_h["messages"].map { |m| m["content"] }).to eq(["Ships from the EU", "30-day returns"])
+      end
+
+      it "suppress a derived warning only when the adapter warned with the same code" do
+        both = Portage::Ucp::Cart.new(**cart, messages: [same_code], policies: [policy]).to_wire_h["messages"]
+        info_only = Portage::Ucp::Cart.new(**cart, messages: [notice.merge("code" => policy["type"])],
+                                                   policies: [policy]).to_wire_h["messages"]
+
+        expect(both).to eq([same_code])
+        expect(info_only.size).to eq(2)
+      end
+
+      it "do not duplicate when a checkout is rebuilt from its own to_h" do
+        checkout = Portage::Ucp::Checkout.new(**cart, status: "incomplete", links: [], messages: [notice],
+                                                      policies: [policy])
+        rebuilt = Portage::Ucp::Checkout.new(**checkout.to_h, status: "completed")
+
+        expect(rebuilt.messages).to eq([notice])
+        expect(rebuilt.to_wire_h["messages"]).to eq(checkout.to_wire_h["messages"])
+      end
+    end
+
     it "pass through on catalog results and products" do
       expect(Portage::Ucp::CatalogSearchResult.new(products: [product]).to_wire_h).not_to have_key("policies")
       expect(Portage::Ucp::CatalogSearchResult.new(products: [product], policies: [policy])
