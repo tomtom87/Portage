@@ -51,6 +51,14 @@ module Portage
         redact(order_ledger.find(order_id))
       end
 
+      # Adjustments still `pending` (an open return or dispute) across every
+      # order, each with its order id. Reads the ledger as last written —
+      # `OrderLedger#refresh` needs a live adapter, which this read-only
+      # console deliberately doesn't hold.
+      def unresolved_adjustments(order_ledger: Portage::Ucp::Support::OrderLedger.new)
+        redact(order_ledger.unresolved)
+      end
+
       def journal(shop: nil, purchase_journal: Portage::Ucp::Journal::PurchaseJournal.new)
         scope(purchase_journal.all, shop: shop)
       end

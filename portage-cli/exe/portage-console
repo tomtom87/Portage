@@ -10,5 +10,6 @@ require "portage/cli/console"
 include Portage::Cli::Console # rubocop:disable Style/MixinUsage -- top-level REPL helpers, by design
 
 puts "portage-console — read-only helpers: transactions, find_transaction(key), " \
-     "transactions_since(time, shop:), orders, find_order(id), journal. Every result is redacted."
+     "transactions_since(time, shop:), orders, find_order(id), unresolved_adjustments, journal. " \
+     "Every result is redacted."
 IRB.start
