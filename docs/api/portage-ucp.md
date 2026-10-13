@@ -32,7 +32,7 @@ Every collaborator can also be passed explicitly to `Mcp::Server.build` and `Man
 | `business` | `nil` | `Manifest.new` |
 | `signer` | `nil` | `Manifest.new` |
 | `signing_keys` | `[]` | `Manifest.new` |
-| `payment_handlers` | `[]` | `Manifest.new` |
+| `payment_handlers` | `{}` | `Manifest.new` |
 | `services` | `[]` | `Manifest.new` |
 | `mandate_trusted_keys` | `nil` | `Dispatcher.new` (`mandate_trust_keys:`) |
 | `require_mandate_signature` | `false` | `Dispatcher.new` |
@@ -256,9 +256,9 @@ Source: `portage-ucp/lib/portage/ucp/value_objects.rb`, `portage-ucp/lib/portage
 | Method | Signature | Returns | Notes |
 |---|---|---|---|
 | `Manifest.new` | `Manifest.new(adapter:, business:, registry:, payment_handlers:, signing_keys:, signer:, services:)` | manifest | Every keyword except `adapter:` defaults to the matching `Portage::Ucp.configuration` value. |
-| `#to_h` | `to_h` | `Hash` | `{ ucp: { version:, business:, services:, capabilities:, payment_handlers: [, signature:] }, keys: [...] }` |
+| `#to_h` | `to_h` | `Hash` | `{ ucp: { version:, business:, services:, capabilities:, payment_handlers: [, signature:] }, keys: [...] }`. `services` and `payment_handlers` are hashes keyed by name, each value a list of entries with a `version`. |
 
-`Manifest::UCP_VERSION` is `"2026-04-08"`. `capabilities` is a hash keyed by capability name, each value `[{ version: "1" }]`.
+`Manifest::UCP_VERSION` is `"2026-08-25"`. `capabilities` is a hash keyed by capability name, each value `[{ version: "2026-08-25" }]` (plus a `schema` URL where the capability has one). `services` also accepts a bare array of entries, filed under `dev.ucp.shopping`; `payment_handlers` must be a Hash.
 
 Signing is optional. The gem never generates or stores keys. Pass a `signer` that responds to `#kid` and `#sign(canonical_json_string)`. `sign` returns raw signature bytes. The manifest adds `signature: { kid:, value: <strict base64> }` over `JSON.generate` of the `ucp` hash. The gem does not pick an algorithm. Publish the matching public keys in `signing_keys`; the manifest serves them as `keys`.
 
