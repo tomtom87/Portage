@@ -3883,7 +3883,7 @@ name would also sit next to `Portage::Ucp::Policy`, the unrelated
 authorization policy. `SchemaValidator` checks them via the existing
 `cart.json`/`order.json`/`checkout.json` specs.
 
-No adapter supplies policies, so nothing changes on the wire today. No
+No adapter supplies policies in the value-object change itself; Shopify now does (below). No
 adapter's existing queries fetch them, and none gained a call. Candidates
 for later, each needing its own fetch: Shopify (`shop { refundPolicy
 shippingPolicy privacyPolicy termsOfService }` become `url`s, with the
@@ -3893,3 +3893,11 @@ storefront settings), and Wix (its return-policy setting). Adapters that
 rebuild a `Checkout` from platform state (`checkout_state.rb`) would need
 to carry them across too. Not modelled: product-level `applies_to`
 resolution (narrowest target wins), left to the consumer.
+
+Shopify supplies it: `portage-ucp-shopify` reads the Storefront
+`shop { refundPolicy shippingPolicy }` once per adapter instance (cached, one
+extra request, failures swallowed) and attaches `dev.ucp.shopping.policy.return`
+and the custom `com.shopify.policy.shipping` (`url` plus `description.html` and
+a tag-stripped `description.plain`) to cart, checkout and order via
+`Data#with`, so `checkout_state.rb` needs no change: the adapter re-attaches
+after `checkout_from_platform_order`. Catalog responses are left out.
