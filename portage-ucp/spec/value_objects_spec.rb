@@ -396,6 +396,39 @@ RSpec.describe "Portage::Ucp value objects" do
     end
   end
 
+  describe "policies" do
+    let(:policy) { { "type" => "dev.ucp.shopping.policy.return", "description" => { "plain" => "30-day returns" } } }
+    let(:product) do
+      Portage::Ucp::Product.new(id: "p1", title: "Brew", description: Portage::Ucp::Description.new(plain: "x"),
+                                price_range: Portage::Ucp::PriceRange.new(
+                                  min: Portage::Ucp::Price.new(amount: 1, currency: "USD"),
+                                  max: Portage::Ucp::Price.new(amount: 1, currency: "USD")
+                                ), variants: [])
+    end
+
+    it "are omitted from the wire payload when empty and passed through when set" do
+      cart = { id: "c1", line_items: [], currency: "USD", totals: [] }
+      order = { id: "o1", checkout_id: "c1", permalink_url: "https://example.com/o", line_items: [],
+                fulfillment: Portage::Ucp::Fulfillment.new, currency: "USD", totals: [] }
+      checkout = cart.merge(status: "incomplete", links: [])
+
+      expect(Portage::Ucp::Cart.new(**cart).to_wire_h).not_to have_key("policies")
+      expect(Portage::Ucp::Cart.new(**cart, policies: [policy]).to_wire_h["policies"]).to eq([policy])
+      expect(Portage::Ucp::Checkout.new(**checkout, policies: [policy]).to_wire_h["policies"]).to eq([policy])
+      expect(Portage::Ucp::Order.new(**order, policies: [policy]).to_wire_h["policies"]).to eq([policy])
+      expect(Portage::Ucp::Checkout.new(**checkout).to_wire_h).not_to have_key("policies")
+    end
+
+    it "pass through on catalog results and products" do
+      expect(Portage::Ucp::CatalogSearchResult.new(products: [product]).to_wire_h).not_to have_key("policies")
+      expect(Portage::Ucp::CatalogSearchResult.new(products: [product], policies: [policy])
+        .to_wire_h["policies"]).to eq([policy])
+      expect(Portage::Ucp::ProductDetail.new(product: product, policies: [policy]).to_wire_h["policies"])
+        .to eq([policy])
+      expect(Portage::Ucp::Product.new(**product.to_h, policies: [policy]).to_wire_h["policies"]).to eq([policy])
+    end
+  end
+
   describe Portage::Ucp::Order do
     it "holds order state with checkout_id/permalink_url/fulfillment and a totals array" do
       total = Portage::Ucp::Total.new(type: "total", amount: 500)
