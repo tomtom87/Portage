@@ -6,7 +6,9 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
-- **Added: optional `policies:` on `Cart`, `Checkout`, `Order`, `Product`, `CatalogSearchResult` and `ProductDetail`** (UCP 2026-08-25 `policies[]`). An array of `policy.json` hashes (`type` and `description` required; `applies_to` and `url` optional), default `[]`, omitted from the wire payload when empty. No adapter sets it yet (design-log §60).
+## [0.15.0] - 2026-10-13
+
+- **Added: optional `policies:` on `Cart`, `Checkout`, `Order`, `Product`, `CatalogSearchResult` and `ProductDetail`** (UCP 2026-08-25 `policies[]`). An array of `policy.json` hashes (`type` and `description` required; `applies_to` and `url` optional), default `[]`, omitted from the wire payload when empty. `portage-ucp-shopify` 0.7.0 supplies it (design-log §60).
 
 ## [0.14.0] - 2026-10-09
 

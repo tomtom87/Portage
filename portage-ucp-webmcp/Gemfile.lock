@@ -9,7 +9,7 @@ PATH
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.14.0)
+    portage-ucp (0.15.0)
       base64 (~> 0.2)
       bigdecimal (>= 3.1)
       json_schemer (~> 2.5)
