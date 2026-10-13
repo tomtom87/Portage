@@ -1,6 +1,6 @@
 # Order Ledger: Durable Local Purchase History
 
-**Status:** Phases 1–2 shipped (`Support::OrderLedger` writing `~/.portage/orders.json` from `Dispatcher`, read by `portage console`'s `orders`). Phase 3 (post-purchase adjustments: write on cancel/refund/return, `refresh` for disputes) not started.
+**Status:** Phases 1–3 shipped. `Support::OrderLedger` writes `~/.portage/orders.json` from `Dispatcher`, is read by `portage-console`'s `orders`, and since Phase 3 records cancel/refund/return adjustments on dispatch, reconciles them with `OrderLedger#refresh`, and lists pending ones via `unresolved_adjustments`. See the progress log at the end.
 **Driver:** proposal for an immutable purchase-history ledger + a re-order engine. Investigation found most of both already shipped — what's actually missing is that nothing persists an `Order` locally, so "history" survives only as long as the remote platform chooses to serve it.
 
 ## Context
@@ -69,3 +69,11 @@ Resolves what was previously an open decision: the ledger does track refunds, re
 - No local re-pricing or stock simulation from snapshot data — stock and price come from the platform at re-order time, as they do today.
 - No dispute *initiation* — disputes originate at the issuer or gateway; the ledger observes them, it does not open them.
 - No background reconciliation daemon.
+
+## Progress log
+
+| Phase | Date | Summary | Design log |
+|-------|------|---------|------------|
+| 1 | 2026-09-14 | `Support::OrderLedger` (`~/.portage/orders.json`, `flock`, `0600`, raising writes), written from `Dispatcher`'s `complete_checkout` settle path after the transaction record is `complete`. | — (commit `1ac3dff`) |
+| 2 | 2026-09-16 | Pluggable `Store`/`FileStore`, `#find`/`#each_record`/`#all`, read by `portage-console`'s `orders`/`find_order`. | §33, §37 |
+| 3 | 2026-10-13 | Adjustments written on `cancel_order`/`refund_order`/`request_return` dispatch, `OrderLedger#refresh(order_id, adapter:)` replacing adjustments only, `#unresolved` and `portage-console`'s `unresolved_adjustments`. No snapshot means no write. | §64 |

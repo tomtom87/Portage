@@ -3998,3 +3998,58 @@ latest), so the gemspec's `~> 0.15` stays as is and the floor rises to
 that does not exist. The Shopify changelog's Unreleased entry records that the
 next release needs it; specs run against the local core through the Gemfile
 path.
+
+## 64. Order ledger Phase 3: post-purchase adjustments (2026-10-13)
+
+`docs/plans/order-ledger.md` Phase 3. Phase 1 (`1ac3dff`) snapshots the
+settled order into `~/.portage/orders.json`; Phase 2 (§33, §37) made the
+store pluggable and read it from `portage-console`. Neither recorded what
+happened to an order after checkout.
+
+Built, all on `Support::OrderLedger` with no new `Store` method and no new
+schema:
+
+- `#record_adjustments(order)` replaces the stored snapshot's `adjustments`
+  with `order.adjustments` (as `to_wire_h`, omitted when empty like
+  `Order#to_wire_h`). Nothing else in the passed order is read, so line
+  items, totals, currency and every other purchase fact stay as first
+  recorded.
+- `Dispatcher` calls it after a successful `cancel_order`, `refund_order` or
+  `request_return` (`ORDER_ADJUSTING_ACTIONS`).
+- `#refresh(order_id, adapter:)` re-fetches with `adapter.get_order` and
+  goes through `#record_adjustments`. Callers already hold an adapter
+  (`Dispatcher` does), so the adapter is a keyword rather than a
+  constructor dependency the ledger would otherwise not need.
+- `#unresolved` lists every adjustment with `status: "pending"` across the
+  ledger as `{ "order_id", "adjustment" }`. `portage-console` exposes it as
+  `unresolved_adjustments`.
+
+Decisions:
+
+- **No snapshot, no write.** An adjustment for an order the ledger has never
+  seen is skipped (`#record_adjustments` returns nil). A post-purchase
+  payload is not evidence of what was paid, so creating a snapshot from it
+  would break Phase 2's "report the gap, don't backfill purchase facts" rule.
+- **Replace, not merge.** Upstream is authoritative for adjustment state: a
+  `pending` return turns `completed` on the merchant's clock, and merging
+  by id would only keep stale statuses around. `type` and `status` stay
+  open strings; there is no local enum, and `#unresolved` only compares
+  `status` to `"pending"`.
+- **Failure posture is Phase 1's.** The write sits after the adapter call
+  and outside any rescue, so a ledger failure surfaces as the dispatch's
+  error only after the cancel/refund/return has already happened upstream.
+  Nothing is retried or rolled back. As with Phase 1, an MCP caller sees an
+  error for an action that succeeded; the order's own `get_order` (and a
+  later `refresh`) is the way to confirm it.
+- **`find` then `record`, not one lock.** Two writers updating the same
+  order id at once can lose one write. Adding an atomic `Store#update` would
+  mean a new method on every store; not worth it until concurrent writers
+  per order exist. Marked with a `ponytail:` comment.
+
+Deferred: a `refresh` entry point in `portage-console` (the console is
+read-only and holds no adapter, so refresh stays a Ruby call from code that
+does); any polling (plan non-goal). Not fixed here: `Dispatcher`'s Phase 1
+snapshot is `Checkout#order`, which is an `OrderConfirmation` stub
+(`id`/`permalink_url`) rather than a full `Order`, so in-process purchases
+have no line items in the ledger. `portage orders reconcile` records the
+full order via `get_order`. Adjustments attach to either shape.
