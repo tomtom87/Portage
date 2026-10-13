@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: optional `policies:` on `Cart`, `Checkout`, `Order`, `Product`, `CatalogSearchResult` and `ProductDetail`** (UCP 2026-08-25 `policies[]`). An array of `policy.json` hashes (`type` and `description` required; `applies_to` and `url` optional), default `[]`, omitted from the wire payload when empty. No adapter sets it yet (design-log §60).
+
 ## [0.14.0] - 2026-10-09
 
 Moves the gem to UCP 2026-08-25 (design-log §56-58). Minor-level for a pre-1.0 gem, with breaking config changes below.

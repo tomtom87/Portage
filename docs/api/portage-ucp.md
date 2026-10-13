@@ -162,11 +162,11 @@ Catalog:
 | `SelectedOption` | `name`, `label`, `id: nil` |
 | `Rating` | `value`, `scale_max`, `scale_min: 1`, `count: nil` |
 | `Variant` | `id`, `title`, `description`, `price`, `sku: nil`, `barcodes: []`, `list_price: nil`, `availability: nil`, `options: []`, `media: []`, `tags: []`, `metadata: nil` |
-| `Product` | `id`, `title`, `description`, `price_range`, `variants`, `handle: nil`, `url: nil`, `categories: []`, `list_price_range: nil`, `media: []`, `options: []`, `tags: []`, `metadata: nil`, `rating: nil` |
-| `CatalogSearchResult` | `products`, `messages: []` |
-| `ProductDetail` | `product` |
+| `Product` | `id`, `title`, `description`, `price_range`, `variants`, `handle: nil`, `url: nil`, `categories: []`, `list_price_range: nil`, `media: []`, `options: []`, `tags: []`, `metadata: nil`, `rating: nil`, `policies: []` |
+| `CatalogSearchResult` | `products`, `messages: []`, `policies: []` |
+| `ProductDetail` | `product`, `policies: []` |
 
-Cart, checkout and order:
+Cart, checkout and order. `policies:` (also on `Product`, `CatalogSearchResult` and `ProductDetail`) is an optional array of UCP `policy.json` hashes, e.g. `{ "type" => "dev.ucp.shopping.policy.return", "description" => { "plain" => "30-day returns" }, "url" => "https://..." }`; omitted from the response when empty:
 
 | Class | Attributes |
 |---|---|
@@ -176,15 +176,15 @@ Cart, checkout and order:
 | `Link` | `type`, `url`, `title: nil` |
 | `AppliedDiscount` | `title`, `amount`, `code: nil`, `automatic: false`, `allocation_method: nil`, `priority: nil`, `provisional: false`, `eligibility: nil`, `allocations: []` |
 | `Discounts` | `codes: []`, `applied: []` |
-| `Cart` | `id`, `line_items`, `currency`, `totals`, `discounts: Discounts.new` |
-| `Checkout` | `id`, `status`, `line_items`, `currency`, `totals`, `links`, `order: nil`, `discounts: Discounts.new`, `fulfillment: CheckoutFulfillment.new` |
+| `Cart` | `id`, `line_items`, `currency`, `totals`, `discounts: Discounts.new`, `policies: []` |
+| `Checkout` | `id`, `status`, `line_items`, `currency`, `totals`, `links`, `order: nil`, `discounts: Discounts.new`, `fulfillment: CheckoutFulfillment.new`, `policies: []` |
 | `OrderConfirmation` | `id`, `permalink_url`, `label: nil` (goes in `Checkout#order`) |
 | `OrderLineItem` | `id`, `item`, `quantity`, `totals`, `status`, `parent_id: nil`. `quantity` is a hash with `:total` and `:fulfilled`, and optionally `:original`. |
 | `Expectation` | `id`, `line_items`, `method_type`, `destination`, `description: nil`, `fulfillable_on: nil` |
 | `FulfillmentEvent` | `id`, `occurred_at`, `type`, `line_items`, `tracking_number: nil`, `tracking_url: nil`, `carrier: nil`, `description: nil` |
 | `Fulfillment` | `expectations: []`, `events: []` (the order's post-purchase container) |
 | `Adjustment` | `id`, `type`, `occurred_at`, `status`, `line_items: nil`, `totals: nil`, `description: nil` |
-| `Order` | `id`, `checkout_id`, `permalink_url`, `line_items`, `fulfillment`, `currency`, `totals`, `adjustments: []` |
+| `Order` | `id`, `checkout_id`, `permalink_url`, `line_items`, `fulfillment`, `currency`, `totals`, `adjustments: []`, `policies: []` |
 
 Fulfillment selection on a checkout:
 

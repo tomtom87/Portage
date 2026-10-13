@@ -3858,3 +3858,38 @@ Adapter constraints stay `~> 0.13`: no adapter gem or the CLI sets
 `payment_handlers` as an Array (`doctor` wraps it in `Array()`, which
 handles a Hash). Publishing and tagging are left to the release itself
 (`docs/development.md`).
+
+## 60. UCP 2026-08-25 `policies[]` (2026-10-13)
+
+`policies[]` is an array of `common/types/policy.json`: a durable business
+rule about the items in a response (return or warranty terms). Each entry
+needs `type` (open reverse-DNS vocabulary; well-known
+`dev.ucp.shopping.policy.return` and `.warranty`) and a `description`
+(`description.json`); `applies_to` (RFC 9535 JSONPaths relative to the
+response root, e.g. `$.line_items[0]`; absent means the whole response) and
+`url` are optional. The schema allows it on cart, checkout, order (a
+snapshot of what applied at checkout), catalog search and lookup responses,
+and on a looked-up product. When absent or empty, consumers fall back to
+`links[]`. It is reference data: the buyer-facing disclosure is a
+`messages[]` warning whose `code` equals the policy `type`, which this
+change does not produce.
+
+`Cart`, `Checkout`, `Order`, `Product`, `CatalogSearchResult` and
+`ProductDetail` take `policies: []`, passed through to the wire hash and
+omitted when empty, as `Order#adjustments` is. Entries are plain
+wire-shaped hashes, not a `Policy` value object: `type` is open-ended,
+`additionalProperties` is true, and `messages` already works this way. The
+name would also sit next to `Portage::Ucp::Policy`, the unrelated
+authorization policy. `SchemaValidator` checks them via the existing
+`cart.json`/`order.json`/`checkout.json` specs.
+
+No adapter supplies policies, so nothing changes on the wire today. No
+adapter's existing queries fetch them, and none gained a call. Candidates
+for later, each needing its own fetch: Shopify (`shop { refundPolicy
+shippingPolicy privacyPolicy termsOfService }` become `url`s, with the
+`Link` gap in §22 as the sibling), WooCommerce and Magento (return
+text from store config or a CMS page), BigCommerce (return policy via its
+storefront settings), and Wix (its return-policy setting). Adapters that
+rebuild a `Checkout` from platform state (`checkout_state.rb`) would need
+to carry them across too. Not modelled: product-level `applies_to`
+resolution (narrowest target wins), left to the consumer.
