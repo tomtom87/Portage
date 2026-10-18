@@ -12,8 +12,8 @@ require "portage/ucp/shopify"
 Portage::Ucp.configure { |config| config.logger = Logger.new($stderr) }
 
 client = Portage::Ucp::Shopify::Client.new(
-  shop_domain: ENV.fetch("SHOPIFY_SHOP_DOMAIN"),
-  storefront_access_token: ENV.fetch("SHOPIFY_STOREFRONT_ACCESS_TOKEN"),
+  shop_domain: ENV["SHOPIFY_SHOP_DOMAIN"],
+  storefront_access_token: ENV["SHOPIFY_STOREFRONT_ACCESS_TOKEN"],
   admin_access_token: ENV["SHOPIFY_ADMIN_ACCESS_TOKEN"]
 )
 
