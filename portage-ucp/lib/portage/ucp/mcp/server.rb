@@ -42,17 +42,38 @@ module Portage
         def self.build_tool(adapter:, capability:, action_name:, method_name:, context:)
           keyword_params = adapter.method(method_name).parameters.select { |type, _| %i[key keyreq].include?(type) }
           required = keyword_params.select { |type, _| type == :keyreq }.map { |_, name| name.to_s }
-          properties = keyword_params.to_h { |_, name| [name.to_s, {}] }
+          metadata = ToolMetadata::TOOLS[action_name]
+          properties = keyword_params.to_h { |_, name| [name.to_s, property_schema(name.to_s, metadata)] }
           mutating = keyword_params.any? { |_, name| name == :idempotency_key }
 
           ::MCP::Tool.define(
             name: action_name,
-            description: "#{capability.name}##{action_name}",
-            input_schema: { type: "object", properties: properties, required: required }
+            description: description_for(capability, action_name, metadata),
+            input_schema: { type: "object", properties: properties, required: required },
+            annotations: metadata && metadata[:annotations]
           ) do |**kwargs|
             Portage::Ucp::Mcp::Server.call_tool(context: context, capability: capability, action_name: action_name,
                                                 mutating: mutating, kwargs: kwargs)
           end
+        end
+
+        # @return [String] the documented description from ToolMetadata, or
+        #   (for an undocumented/extension action) the old namespaced
+        #   fallback, e.g. "dev.ucp.shopping.catalog#get_product".
+        def self.description_for(capability, action_name, metadata)
+          metadata ? metadata[:description] : "#{capability.name}##{action_name}"
+        end
+
+        # @return [Hash] a property's JSON Schema entry: a description from
+        #   ToolMetadata when the action has an entry (none for an
+        #   undocumented/extension action — see `metadata&.fetch` above), plus
+        #   a `type` where ToolMetadata::PARAM_TYPES pins one down for this
+        #   param name.
+        def self.property_schema(name, metadata)
+          schema = {}
+          schema[:description] = metadata[:params][name] if metadata && metadata[:params][name]
+          schema[:type] = ToolMetadata::PARAM_TYPES[name] if ToolMetadata::PARAM_TYPES[name]
+          schema
         end
 
         def self.call_tool(context:, capability:, action_name:, mutating:, kwargs:)

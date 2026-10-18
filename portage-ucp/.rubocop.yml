@@ -90,6 +90,9 @@ Metrics/ModuleLength:
     # classes (TunnelledHttp/GatewayHttp) that belong right next to the code
     # that builds them, docs/plans/proxy-support.md Phase 1.
     - "lib/portage/ucp/support/connection.rb"
+    # Breadth, not complexity — one description/params/annotations entry per
+    # MCP tool action, all flat data.
+    - "lib/portage/ucp/mcp/tool_metadata.rb"
 
 # Product/Variant's optional_wire_h methods each omit ~5 independently-
 # optional wire fields (one `if`/`unless` per field, same "omit when absent"

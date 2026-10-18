@@ -18,6 +18,18 @@ RSpec.describe Portage::Ucp::Mcp::Server do
     expect(tool_names).to include("search_catalog", "get_product", "get_cart")
   end
 
+  it "attaches a documented description, parameter descriptions, and read-only/destructive annotations" do
+    response = server.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+    tools = response[:result][:tools].to_h { |t| [t[:name], t] }
+
+    get_product = tools["get_product"]
+    expect(get_product[:description]).not_to eq("dev.ucp.shopping.catalog#get_product")
+    expect(get_product[:inputSchema][:properties][:product_id][:description]).to be_a(String)
+    expect(get_product[:annotations]).to include(readOnlyHint: true, destructiveHint: false)
+
+    expect(tools["cancel_order"][:annotations]).to include(readOnlyHint: false, destructiveHint: true)
+  end
+
   it "round-trips a tools/call through the Dispatcher to the Adapter" do
     response = server.handle({
                                jsonrpc: "2.0", id: 2, method: "tools/call",
