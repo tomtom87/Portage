@@ -13,6 +13,7 @@
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-supported-black?logo=modelcontextprotocol" alt="MCP"></a>
   <a href="https://ucp.dev"><img src="https://img.shields.io/badge/UCP-supported-4B32C3" alt="UCP"></a>
   <a href="https://clawhub.ai/tomtom87/portage-buy"><img src="https://img.shields.io/badge/openclaw-skill-14B8A6" alt="OpenClaw skill"></a>
+  <a href="https://glama.ai/mcp/servers/tomtom87/Portage"><img src="https://glama.ai/mcp/servers/tomtom87/Portage/badges/score.svg" alt="Portage-UCP MCP server – quality and maintenance score on Glama"></a>
 </p>
 
 <p align="center">
