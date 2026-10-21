@@ -626,6 +626,26 @@ RSpec.describe Portage::Ucp::Shopify::Adapter do
     end
   end
 
+  describe "#list_orders" do
+    it "searches Admin orders newest first, clamping the page size, and maps each to a Portage::Ucp::Order" do
+      search = stub_admin({ data: { orders: { nodes: [order_node] } } })
+               .with(body: hash_including("query" => a_string_matching(/query ListOrders/),
+                                          "variables" => { "first" => 25, "query" => "#1001" }))
+
+      result = adapter.list_orders(limit: 500, query: "#1001")
+
+      expect(search).to have_been_requested
+      expect(result.orders.map(&:id)).to eq(["gid://shopify/Order/1"])
+      expect(result.to_wire_h["orders"].first["permalink_url"]).to eq("https://ucp-test.myshopify.com/orders/abc123")
+    end
+
+    it "returns an empty list when nothing matches" do
+      stub_admin({ data: { orders: { nodes: [] } } })
+
+      expect(adapter.list_orders(limit: 5).orders).to eq([])
+    end
+  end
+
   let(:order_node) do
     { id: "gid://shopify/Order/1", statusPageUrl: "https://ucp-test.myshopify.com/orders/abc123",
       currentTotalPriceSet: { shopMoney: { amount: "5.00", currencyCode: "USD" } },

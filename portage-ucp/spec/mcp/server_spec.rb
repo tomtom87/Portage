@@ -84,6 +84,22 @@ RSpec.describe Portage::Ucp::Mcp::Server do
     expect(response[:result][:isError]).to be_falsey
   end
 
+  it "requires an authenticated session for list_orders even though it only reads" do
+    reference = Portage::Ucp::ReferenceAdapter.new
+    list_orders = { jsonrpc: "2.0", id: 8, method: "tools/call",
+                    params: { name: "list_orders", arguments: { limit: 5 } } }
+    authenticator = Class.new(Portage::Ucp::Authenticator) { def call(_ctx) = :authorized }.new
+
+    tools = described_class.build(adapter: reference).handle({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+    tool = tools[:result][:tools].find { |t| t[:name] == "list_orders" }
+    expect(tool[:annotations]).to include(readOnlyHint: true)
+
+    expect(described_class.build(adapter: reference).handle(list_orders)[:result][:isError]).to be true
+    authed = described_class.build(adapter: reference, authenticator: authenticator).handle(list_orders)
+    expect(authed[:result][:isError]).to be_falsey
+    expect(authed[:result][:structuredContent]).to eq("orders" => [])
+  end
+
   it "allows a mutating call once a configured authenticator approves it" do
     authenticator = Class.new(Portage::Ucp::Authenticator) { def call(_ctx) = :authorized }.new
     authed_server = described_class.build(adapter: adapter, authenticator: authenticator)

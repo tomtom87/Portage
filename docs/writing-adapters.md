@@ -15,6 +15,8 @@ See `Portage::Ucp::Adapter` for the full method contract (catalog, cart, checkou
 
 `reorder` (`app.portage-ucp.reorder`) is a Portage-owned extension, not part of the UCP spec: it hydrates a `Cart` from a past order's line items, re-checking each item's current availability rather than replaying historical prices, and reports anything no longer purchasable via `ReorderResult#unavailable_items` instead of failing outright.
 
+`list_orders` (`app.portage-ucp.order_history`) is a second Portage-owned extension: it lists placed orders newest first, at most `limit:`, optionally filtered by a free-text `query:`, and returns an `OrderList`. The orders can be lighter than `get_order`'s (no fulfillment detail, say); callers re-read one by id for the full record. Unlike every other read, `Mcp::Server` puts it behind the authenticator and rate limiter (`Mcp::Server::AUTH_REQUIRED_READS`), since it exposes every customer's orders.
+
 `payment_method` / `saved_address` / `shopper_data` (`app.portage-ucp.payment_method`, `app.portage-ucp.saved_address`, `app.portage-ucp.shopper_data`) are Portage-owned extensions too, shipped together: saved payment references and addresses, plus the erasure path that removes them (and the shopper's linked identity) in one call. `oauth_token:` is the authorization boundary on every method here, including the two `list_*` reads — see `Portage::Ucp::Adapter`'s doc comments on `save_payment_method` for why a bare `subject:` string would be a lookup vulnerability. `save_payment_method`'s `payment_token:` runs through the same `PaymentTokenGuard` Luhn/format check as `complete_checkout`, and `delete_shopper_data` is idempotent — safe to call again on an already-erased subject.
 
 ## Checking your adapter against the contract

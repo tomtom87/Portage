@@ -13,6 +13,12 @@ module Portage
         # doesn't need one keyword argument per collaborator.
         Context = Struct.new(:dispatcher, :authenticator, :rate_limiter, :logger, keyword_init: true)
 
+        # Read-only actions that still go through authorize/rate_limit, which
+        # otherwise run only for actions taking an idempotency_key. Listing
+        # orders reads, but an open list would hand any caller every
+        # customer's orders.
+        AUTH_REQUIRED_READS = %w[list_orders].freeze
+
         # @param journal [#record_checkout, nil] forwarded straight to
         #   `Dispatcher.new` (see its own doc comment) — `nil` by default and
         #   never `require`d from core (§2), same as `Dispatcher` itself.
@@ -45,7 +51,7 @@ module Portage
           required = keyword_params.select { |type, _| type == :keyreq }.map { |_, name| name.to_s }
           metadata = ToolMetadata::TOOLS[action_name]
           properties = keyword_params.to_h { |_, name| [name.to_s, property_schema(name.to_s, metadata)] }
-          mutating = keyword_params.any? { |_, name| name == :idempotency_key }
+          guarded = guarded?(keyword_params, action_name)
 
           ::MCP::Tool.define(
             name: action_name,
@@ -54,8 +60,14 @@ module Portage
             annotations: metadata && metadata[:annotations]
           ) do |**kwargs|
             Portage::Ucp::Mcp::Server.call_tool(context: context, capability: capability, action_name: action_name,
-                                                mutating: mutating, kwargs: kwargs)
+                                                guarded: guarded, kwargs: kwargs)
           end
+        end
+
+        # Whether authorize/rate_limit run for this tool: every mutating action
+        # (it takes an idempotency_key) plus AUTH_REQUIRED_READS.
+        def self.guarded?(keyword_params, action_name)
+          keyword_params.any? { |_, name| name == :idempotency_key } || AUTH_REQUIRED_READS.include?(action_name)
         end
 
         # @return [String] the documented description from ToolMetadata, or
@@ -77,15 +89,15 @@ module Portage
           schema
         end
 
-        def self.call_tool(context:, capability:, action_name:, mutating:, kwargs:)
+        def self.call_tool(context:, capability:, action_name:, guarded:, kwargs:)
           server_context = kwargs.delete(:server_context)
           correlation_id = correlation_id_for(server_context)
           agent_profile = agent_profile_for(server_context)
           log_tool_event(context.logger, "tool_call_received", correlation_id, agent_profile,
                          capability: capability.name, action: action_name)
 
-          rejection = authorize(context.authenticator, server_context, mutating: mutating) ||
-                      rate_limit(context.rate_limiter, server_context, capability.name, mutating: mutating)
+          rejection = authorize(context.authenticator, server_context, guarded: guarded) ||
+                      rate_limit(context.rate_limiter, server_context, capability.name, guarded: guarded)
           return rejection if rejection
 
           log_tool_event(context.logger, "tool_called", correlation_id, agent_profile,
@@ -134,8 +146,8 @@ module Portage
           meta && (meta["ucp-agent.profile"] || meta[:"ucp-agent.profile"])
         end
 
-        def self.authorize(authenticator, server_context, mutating:)
-          return unless mutating
+        def self.authorize(authenticator, server_context, guarded:)
+          return unless guarded
 
           authenticator.call(server_context)
           nil
@@ -146,8 +158,8 @@ module Portage
         # @param key [Object] whatever the consumer's RateLimiter derives an
         #   identity from — the gem hands over the raw MCP server_context
         #   rather than inventing its own per-session/per-key extraction (§9).
-        def self.rate_limit(rate_limiter, key, capability_name, mutating:)
-          return unless mutating
+        def self.rate_limit(rate_limiter, key, capability_name, guarded:)
+          return unless guarded
 
           rate_limiter.check!(key, capability_name)
           nil

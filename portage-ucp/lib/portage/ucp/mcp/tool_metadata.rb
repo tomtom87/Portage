@@ -25,9 +25,10 @@ module Portage
                        "get_product or lookup_catalog. Either build a cart (create_cart/update_cart) " \
                        "or go straight to create_checkout; a checkout never charges until " \
                        "complete_checkout, which must only follow the shopper's explicit approval of " \
-                       "the exact total shown by get_checkout. After purchase, use get_order, " \
-                       "cancel_order, request_return and refund_order. Catalog reads are open; every " \
-                       "tool that changes state needs an authenticated session, and a server run " \
+                       "the exact total shown by get_checkout. After purchase, find orders with " \
+                       "list_orders when you have no order ID, then use get_order, cancel_order, " \
+                       "request_return and refund_order. Catalog reads are open; list_orders and every " \
+                       "tool that changes state need an authenticated session, and a server run " \
                        "without one is read-only. Payment is a single-use token, never a card number. " \
                        "Prices and stock come live from the store and can change between calls.".freeze
 
@@ -191,9 +192,27 @@ module Portage
                          "fulfillment status, shipping details, totals, permalink and any " \
                          "cancellations, returns or refunds applied so far. Use it to answer " \
                          "\"where is my order\" or to pick line item IDs for request_return or " \
-                         "refund_order; use get_checkout for anything not yet paid. #{OPEN_NOTE} " \
+                         "refund_order; use list_orders to find an order without its ID, and " \
+                         "get_checkout for anything not yet paid. #{OPEN_NOTE} " \
                          "An unknown ID returns an empty result rather than an error.",
-            params: { "order_id" => "Order ID from a completed checkout. #{ID}" },
+            params: { "order_id" => "Order ID from a completed checkout or list_orders. #{ID}" },
+            annotations: { read_only_hint: true, destructive_hint: false, idempotent_hint: true }
+          },
+          "list_orders" => {
+            description: "List the store's placed orders, newest first, optionally filtered by a " \
+                         "free-text query, and return up to `limit` orders, each with ID, line items, " \
+                         "totals, currency, permalink and any cancellation, refund or return " \
+                         "recorded. Use it to find an order when you don't hold its ID, e.g. " \
+                         "\"what did I order last week\"; once you have the ID, use get_order for " \
+                         "the full record with fulfillment and tracking, which list results may " \
+                         "leave out. Read-only, but it exposes customers' orders, so it requires an " \
+                         "authenticated session and may be rate-limited; a rejected call returns an " \
+                         "error result. An empty list means no match, not an error.",
+            params: {
+              "query" => "Optional free-text filter, e.g. an order number, product title or customer " \
+                         "email; how it matches depends on the store. Leave out to list all orders.",
+              "limit" => "Maximum number of orders to return; 5–10 suits most lookups."
+            },
             annotations: { read_only_hint: true, destructive_hint: false, idempotent_hint: true }
           },
           "cancel_order" => {

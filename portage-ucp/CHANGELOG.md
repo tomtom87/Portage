@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: `app.portage-ucp.order_history` extension capability with a `list_orders` MCP tool.** `Adapter#list_orders(limit:, query: nil)` returns a new `OrderList` value object (`{"orders" => [...]}` on the wire, since MCP `structuredContent` must be an object): placed orders newest first, optionally filtered by free text. Not part of the UCP spec, which reads orders only by id. `ReferenceAdapter` implements it (matching order id and line item titles). `list_orders` is read-only but `Mcp::Server` runs the authenticator and rate limiter for it (`Mcp::Server::AUTH_REQUIRED_READS`), because an open list would expose every customer's orders; an unconfigured server rejects it like a mutating tool. `ToolMetadata` documents it, points `get_order` at it, and the server instructions mention it. WebMCP's default capability filter (`dev.ucp.shopping.*` only) leaves it out of page-registered tools.
+
 ## [0.16.0] - 2026-10-21
 
 - **Changed: MCP tool descriptions rewritten against the TDQS rubric** (tdqs.dev, the score Glama shows). Each tool's description now names its siblings for when and when not to use it, states the auth and rate-limit behavior of state-changing tools, and says what it returns, since tools have no output schema. Parameter descriptions say where IDs come from. `Mcp::Server.build` now sends server `instructions` (`ToolMetadata::INSTRUCTIONS`, overridable with `instructions:`) that walk the catalog → cart → checkout → order flow. `tools/list` text only; tool names, schemas and annotations are unchanged.

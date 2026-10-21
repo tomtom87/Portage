@@ -580,6 +580,13 @@ module Portage
       end
     end
 
+    # Portage extension (see Adapter#list_orders / Capabilities::ORDER_HISTORY)
+    # — wraps the list in an object because MCP's structuredContent must be a
+    # JSON object, not a bare array.
+    OrderList = Data.define(:orders) do
+      def to_wire_h = { "orders" => orders.map(&:to_wire_h) }
+    end
+
     # Portage extension (see Adapter#reorder / Capabilities::REORDER) — no
     # schemas/ counterpart to cite, since it isn't part of the UCP spec.
     # `reason` is a short adapter-chosen string (e.g. "out_of_stock",

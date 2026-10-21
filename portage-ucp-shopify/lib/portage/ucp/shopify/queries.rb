@@ -371,6 +371,34 @@ module Portage
           }
         GRAPHQL
 
+        # A lighter selection than GET_ORDER: no fulfillment orders,
+        # fulfillments or returns, because Shopify multiplies every nested
+        # connection by `first` and the full GET_ORDER shape across a page of
+        # orders blows the 1000-point query cost limit. Callers re-read one
+        # order with GET_ORDER for the full record. `query` is Shopify's
+        # order search syntax, so free text matches order name, email, etc.
+        LIST_ORDERS = <<~GRAPHQL.freeze
+          query ListOrders($first: Int!, $query: String) {
+            orders(first: $first, query: $query, sortKey: CREATED_AT, reverse: true) {
+              nodes {
+                id
+                statusPageUrl
+                cancelledAt
+                cancelReason
+                currentTotalPriceSet { shopMoney { amount currencyCode } }
+                currentSubtotalPriceSet { shopMoney { amount currencyCode } }
+                lineItems(first: 10) {
+                  nodes {
+                    id quantity currentQuantity unfulfilledQuantity
+                    discountedTotalSet { shopMoney { amount currencyCode } }
+                    variant { id title price { amount currencyCode } }
+                  }
+                }
+              }
+            }
+          }
+        GRAPHQL
+
         # Storefront's cartSubmitForCompletion never returns the resulting
         # order's id (its SubmitSuccess payload only carries attemptId) — the
         # Admin API's `orders(query:)` search supports a documented

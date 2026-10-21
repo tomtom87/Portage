@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: `Adapter#list_orders`** (`app.portage-ucp.order_history`) over the Admin API's `orders` query, newest first, with `query:` passed through as Shopify order search syntax. Uses a lighter selection than `get_order` (up to 10 line items, no fulfillment orders, fulfillments or returns) and caps a page at 25 orders, to stay under Shopify's query cost limit. Needs the Admin token's `read_orders` scope. Requires the `portage-ucp` release that adds `OrderList`; the gemspec constraint changes in that release commit.
+
 - **Changed: policy `plain` text now comes from `Portage::Ucp.html_to_text`** instead of a private copy in the adapter. The next release must require `portage-ucp` `~> 0.16`, the first release with that method; the gemspec constraint changes in that release commit.
 
 ## [0.7.0] - 2026-10-13

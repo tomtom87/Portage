@@ -116,6 +116,17 @@ module Portage
       # @return [Portage::Ucp::ReorderResult, nil] nil if the order isn't found.
       def reorder(order_id:, idempotency_key:) = not_implemented
 
+      # --- Order History (app.portage-ucp.order_history — Portage extension,
+      # not part of the UCP spec: dev.ucp.shopping.order has no list/search
+      # action as of the 2026-08-25 spec) ---
+      # Newest first, at most `limit`. `query` is free text an adapter matches
+      # however its platform searches (order number, product title, ...);
+      # nil lists everything. An adapter may return lighter Orders than
+      # #get_order (e.g. no fulfillment detail) — callers re-read one with
+      # #get_order for the full record.
+      # @return [Portage::Ucp::OrderList]
+      def list_orders(limit:, query: nil) = not_implemented
+
       # --- Discount (dev.ucp.shopping.discount) ---
       # Extends Cart/Checkout with the `discount_codes:` param above rather
       # than adding actions of its own — Capability::DISCOUNT advertises off
