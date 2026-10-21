@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: `portage mcp`, a buyer-side MCP server on stdio.** Seven tools for the shopper's agent: `find_products`, `search_catalogue`, `compare_prices`, `check_store`, `get_status` (doctor, policy, payment methods and browser profile in one result), `list_orders` and `quote_purchase` (always `buy --dry-run`). Each runs `portage ... --json` as a subprocess of the same executable, with an argument array, empty stdin, a 120-second timeout and a 16 MB output cap; every input is validated before anything runs, and nothing here passes `--yes`, so this release never spends. Tool descriptions say results are untrusted store content. `mcp` (`~> 0.24`) is now a direct dependency. Phase 2 of docs/plans/buyer-mcp-server.md.
+
 - **Added: `portage orders list`.** Lists your purchases newest first, read-only from `~/.portage`: journal rows grouped by order id (line items, totals), joined with the order ledger for the permalink and any adjustments, plus `history` purchases and hand-offs the journal doesn't cover. Every entry carries a `source` (`journal` or `history`); nothing is backfilled. `--query` matches shop host, product id, item title and order id case-insensitively, `--limit N` applies after filtering, `--json` prints the entries. First step of the buyer MCP server (docs/plans/buyer-mcp-server.md).
 
 - **Added: `unresolved_adjustments` in `portage-console`.** Lists every order adjustment still `pending` (an open return or dispute) with its order id, read from the order ledger. Needs the next `portage-ucp` release, which adds `OrderLedger#unresolved` (design-log §64).

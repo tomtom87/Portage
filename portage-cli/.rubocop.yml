@@ -101,6 +101,10 @@ Metrics/ClassLength:
 Metrics/ModuleLength:
   Exclude:
     - "lib/portage/cli.rb"
+    # Mcp::Tools is mostly one data table (each tool's description, params,
+    # annotations and argv builder) plus the small validators it uses; the
+    # length is the documented tool surface, same as Ucp::Mcp::ToolMetadata.
+    - "lib/portage/cli/mcp/tools.rb"
 
 # `cx` is Google's own name for a Programmable Search engine id (GOOGLE_CSE_CX).
 # AllowedNames replaces the default list rather than extending it, so the

@@ -97,6 +97,7 @@ module Portage
              portage setup [--json]  (interactive wizard on a TTY; --json/no TTY: today's doctor report)
              portage generate adapter NAME [--dir DIR]
              portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
+             portage mcp  (MCP server on stdio for the shopper's agent; read-only and quotes only)
              portage --version
 
            proxy flags (buy/find/compare/check/doctor/payment enroll):
@@ -110,7 +111,8 @@ module Portage
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
                  "orders" => :run_orders, "index" => :run_index, "browser" => :run_browser,
                  "doctor" => :run_doctor,
-                 "configure" => :run_doctor, "setup" => :run_setup, "generate" => :run_generate }.freeze
+                 "configure" => :run_doctor, "setup" => :run_setup, "generate" => :run_generate,
+                 "mcp" => :run_mcp }.freeze
 
     VERSION_FLAGS = %w[--version -v version].freeze
 
@@ -123,6 +125,19 @@ module Portage
 
       warn USAGE
       1
+    end
+
+    # `portage mcp` (docs/plans/buyer-mcp-server.md): the buyer MCP server
+    # on stdio. Loaded only here, so other commands don't pay for it.
+    def self.run_mcp(argv)
+      unless argv.empty?
+        warn USAGE
+        return 1
+      end
+
+      require_relative "cli/mcp/server"
+      ::MCP::Server::Transports::StdioTransport.new(Mcp::Server.build).open
+      0
     end
 
     # So a packaged install (Homebrew's `test do` block, `portage doctor`)
