@@ -3,8 +3,8 @@ module Portage
     module WebMcp
       # What ToolCatalog adds on top of Mcp::Server's generated tools/list for
       # a browser-native agent: a readable description per standard action,
-      # and typed JSON Schemas for the parameters Mcp::Server can only name
-      # (it derives properties from keyword names alone, so each is `{}`).
+      # and full JSON Schemas (array `items`, integer `minimum`) for parameters
+      # Mcp::Server types only loosely.
       module ToolSchemas
         DESCRIPTIONS = {
           "search_catalog" => "Search the store's catalog by free-text query.",
@@ -35,9 +35,8 @@ module Portage
                                          "quantity" => { "type" => "integer", "minimum" => 1 } } }
         }.freeze
 
-        # Only used where the generated schema left a property as `{}` (it
-        # always does today — Mcp::Server derives properties from keyword
-        # names alone).
+        # Merged over the generated property (ToolCatalog#typed), so these
+        # keys win and Mcp::Server's descriptions survive where none is set.
         PARAMETER_SCHEMAS = {
           "query" => STRING, "limit" => { "type" => "integer", "minimum" => 1 },
           "product_id" => STRING, "product_ids" => { "type" => "array", "items" => STRING },

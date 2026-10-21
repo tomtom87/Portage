@@ -6,6 +6,14 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- Fixed: WebMCP tool input schemas lost their typed parameters
+  (`line_items` items with required `product_id`/`quantity`,
+  `product_ids`/`discount_codes` item types, `limit`'s minimum) under
+  portage-ucp 0.16.0, which started sending a description and a bare
+  `type` for every property. `ToolCatalog` only filled in properties
+  that came through empty, so it stopped adding them. It now merges
+  `ToolSchemas::PARAMETER_SCHEMAS` over every generated property,
+  keeping portage-ucp's descriptions where WebMCP sets none.
 - Documentation only, no code change. The README said `portage buy`
   returns an unconfirmed proposal "for the caller to pass back as
   `tool_names:`". No `portage buy` flag or `Buy` keyword takes it. The

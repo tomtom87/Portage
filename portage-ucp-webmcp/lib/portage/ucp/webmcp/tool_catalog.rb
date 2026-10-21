@@ -106,9 +106,12 @@ module Portage
 
         # The page fills idempotency_key itself when the agent leaves it out
         # (see registrar.js), so it stops being required on this side.
+        # PARAMETER_SCHEMAS is laid over the generated property rather than
+        # used only when it's `{}`: Mcp::Server now emits a description and a
+        # bare `type`, which would otherwise hide `items`/`minimum` here.
         def typed(schema)
           properties = schema.fetch("properties", {}).to_h do |name, property|
-            [name, property.empty? ? ToolSchemas::PARAMETER_SCHEMAS.fetch(name, property) : property]
+            [name, property.merge(ToolSchemas::PARAMETER_SCHEMAS.fetch(name, {}))]
           end
           schema.except("$schema").merge(
             "properties" => properties,
