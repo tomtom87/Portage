@@ -23,7 +23,8 @@ module Portage
         def self.build(adapter:, registry: Portage::Ucp.configuration.registry,
                        authenticator: Portage::Ucp.configuration.authenticator,
                        rate_limiter: Portage::Ucp.configuration.rate_limiter,
-                       logger: Portage::Ucp.configuration.logger, journal: nil, **server_opts)
+                       logger: Portage::Ucp.configuration.logger, journal: nil,
+                       instructions: ToolMetadata::INSTRUCTIONS, **server_opts)
           context = Context.new(
             dispatcher: Portage::Ucp::Dispatcher.new(adapter: adapter, registry: registry, logger: logger,
                                                      journal: journal),
@@ -36,7 +37,7 @@ module Portage
             end
           end
 
-          ::MCP::Server.new(name: "portage-ucp", tools: tools, **server_opts)
+          ::MCP::Server.new(name: "portage-ucp", tools: tools, instructions: instructions, **server_opts)
         end
 
         def self.build_tool(adapter:, capability:, action_name:, method_name:, context:)
