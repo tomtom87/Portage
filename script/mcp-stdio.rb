@@ -1,5 +1,6 @@
 # Serves a Shopify store to MCP clients over stdio. Entry point for the
-# ghcr.io/tomtom87/portage-ucp image listed on the MCP Registry.
+# ghcr.io/tomtom87/portage-ucp image (Dockerfile.store), listed on the MCP
+# Registry as io.github.tomtom87/portage-ucp.
 #
 #   SHOPIFY_SHOP_DOMAIN=your-shop.myshopify.com \
 #   SHOPIFY_STOREFRONT_ACCESS_TOKEN=... ruby script/mcp-stdio.rb
