@@ -82,12 +82,12 @@ One phase per session, delegated to a Sonnet subagent; each ends with suites and
 ### Phase 5 — Packaging and listings
 
 - `Dockerfile.buyer` installing `portage-cli` (entrypoint `portage mcp`), published as `ghcr.io/tomtom87/portage-mcp`. Records need a mounted `~/.portage`; the registry entry passes it as a runtime `-v` argument.
-- `server.json` and `glama.json` updated per open decision 1; README section "Use Portage from any MCP client" with a Claude Desktop / Claude Code config (`portage mcp`) for brew and gem installs.
+- Root `Dockerfile` becomes the buyer image; the current one moves to `Dockerfile.store`. `server.json` becomes the buyer entry (`io.github.tomtom87/portage`), and a second registry file publishes `io.github.tomtom87/portage-ucp` for the store image (decision 1); README section "Use Portage from any MCP client" with a Claude Desktop / Claude Code config (`portage mcp`) for brew and gem installs.
 - Release `portage-cli` (minor), Homebrew formula bump in `tomtom87/homebrew-portage`, image push, registry publish. Then rescan on Glama.
 
 ## Open decisions
 
-1. **Which server Glama scores, and registry names.** Glama lists one server per GitHub repo, built from the root `Dockerfile`. Recommendation: since buying is the primary use case, the root `Dockerfile` and `io.github.tomtom87/portage` move to the buyer server, and the store server is published as `io.github.tomtom87/portage-ucp` from `Dockerfile.store`. Alternative: keep the store server on Glama and list the buyer server only on the registry.
+1. **Which server Glama scores, and registry names. Decided 2026-10-21:** Glama and `io.github.tomtom87/portage` move to the buyer server (root `Dockerfile`, `ghcr.io/tomtom87/portage-mcp`), since buying is the primary use case. The store server is published as `io.github.tomtom87/portage-ucp` from `Dockerfile.store` (`ghcr.io/tomtom87/portage-ucp`). Glama lists one server per repo, built from the root `Dockerfile`.
 2. **Docker usefulness.** In a container, hand-off can't open the shopper's browser and the Tier B profile can't run. The image is mainly for the registry and Glama's scan; the documented install is `brew`/`gem` plus `portage mcp`. Hand-off in the container falls back to `--handoff-target print`.
 3. **Fix the ledger stub.** `Dispatcher` could snapshot a full `get_order` instead of the confirmation, but the ledger plan chose "no re-fetch" on purpose. Phase 1 works around it with the journal; revisit only if journal rows prove insufficient.
 
