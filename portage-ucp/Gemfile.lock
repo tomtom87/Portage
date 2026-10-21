@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    portage-ucp (0.15.1)
+    portage-ucp (0.16.0)
       base64 (~> 0.2)
       bigdecimal (>= 3.1)
       json_schemer (~> 2.5)
