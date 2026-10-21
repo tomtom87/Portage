@@ -58,7 +58,19 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       ["hand_off", { store: "https://s.example", query: "kettle", product_id: "1", target: "profile" }] =>
         %w[buy https://s.example --query kettle --product-id 1 --handoff-target profile --json],
       ["reconcile_orders", {}] => %w[orders reconcile --json],
-      ["reconcile_orders", { checkout: "co_123" }] => %w[orders reconcile --checkout co_123 --json]
+      ["reconcile_orders", { checkout: "co_123" }] => %w[orders reconcile --checkout co_123 --json],
+      ["import_browser_history", {}] => %w[browser import --max-probes 15 --dry-run --json],
+      ["import_browser_history", { confirm: false }] => %w[browser import --max-probes 15 --dry-run --json],
+      ["import_browser_history", { confirm: true }] => %w[browser import --max-probes 15 --yes --json],
+      ["import_browser_history", { browser: "safari", history_days: 30, include_product_pages: true,
+                                   max_probes: 10, exclude: %w[a.example www.b.example], confirm: true }] =>
+        %w[browser import --browser safari --history-days 30 --include-product-pages --max-probes 10
+           --exclude a.example,www.b.example --yes --json],
+      ["import_browser_history", { include_product_pages: false, exclude: ["a.example"] }] =>
+        %w[browser import --max-probes 15 --exclude a.example --dry-run --json],
+      ["add_store", { url: "https://s.example" }] => %w[index add https://s.example --json],
+      ["add_store", { url: "https://s.example", crawl: false }] => %w[index add https://s.example --json],
+      ["add_store", { url: "https://s.example", crawl: true }] => %w[index add https://s.example --crawl --json]
     }.each do |(name, params), argv|
       it "#{name} #{params} runs #{argv.join(' ')}" do
         call(name, params)
@@ -114,6 +126,58 @@ RSpec.describe Portage::Cli::Mcp::Tools do
     end
   end
 
+  describe "import_browser_history" do
+    it "accepts only a strict true as confirm, and never emits both or neither of --dry-run and --yes" do
+      ["true", "false", "yes", 1, 0, nil, [], [true], {}].each do |bad|
+        expect(argv_for("import_browser_history", { confirm: bad })).to be_nil, bad.inspect
+        expect(call("import_browser_history", { confirm: bad }).error?).to be(true), bad.inspect
+      end
+      [{}, { confirm: false }, { confirm: true }].each do |params|
+        argv = argv_for("import_browser_history", params)
+
+        expect((argv & %w[--dry-run --yes]).size).to eq(1)
+      end
+    end
+
+    it "rejects an unknown or flag-shaped browser" do
+      ["netscape", "--yes", "chrome;rm", "Chrome", "", nil, 1].each do |bad|
+        expect(argv_for("import_browser_history", { browser: bad })).to be_nil, bad.inspect
+      end
+      %w[chrome edge brave arc firefox safari].each do |b|
+        expect(argv_for("import_browser_history", { browser: b })).to include("--browser", b)
+      end
+    end
+
+    it "validates each excluded host and joins them into one element" do
+      ["https://s.example", "-x", "a b", "a\nb", "a,b", "", nil, 1, "--yes"].each do |bad|
+        expect(argv_for("import_browser_history", { exclude: [bad] })).to be_nil, bad.inspect
+      end
+      expect(argv_for("import_browser_history", { exclude: [] })).to be_nil
+      expect(argv_for("import_browser_history", { exclude: "a.example" })).to be_nil
+      expect(argv_for("import_browser_history", { exclude: ["a.example", "b.example"] }))
+        .to include("--exclude", "a.example,b.example")
+    end
+
+    it "bounds max_probes at 15 so a run fits the Runner's 120s timeout" do
+      expect(argv_for("import_browser_history", { max_probes: 16 })).to be_nil
+      expect(argv_for("import_browser_history", { max_probes: 0 })).to be_nil
+      expect(argv_for("import_browser_history", { history_days: "30" })).to be_nil
+      expect(argv_for("import_browser_history", { include_product_pages: "true" })).to be_nil
+    end
+  end
+
+  describe "add_store" do
+    it "rejects bad urls and a non-boolean crawl" do
+      ["shop.example", "--crawl", "ftp://s.example", "https://s.example\n--crawl", "", nil, 1,
+       "javascript:1"].each do |bad|
+        expect(argv_for("add_store", { url: bad })).to be_nil, bad.inspect
+      end
+      ["true", 1, nil, "yes"].each do |bad|
+        expect(argv_for("add_store", { url: "https://s.example", crawl: bad })).to be_nil, bad.inspect
+      end
+    end
+  end
+
   # A port of openclaw-plugin/test/guardrails.test.ts's fuzz, over this
   # server's tools: every param of every tool, swapped for each injection.
   describe "guardrails" do
@@ -129,7 +193,10 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       "approve_quote" => { quote_id: "qt_0123456789ab", relayed_yes: false, view: false },
       "buy_quote" => { quote_id: "qt_0123456789ab" },
       "hand_off" => { offer: "of_1a2b3c", qty: 2, target: "print" },
-      "reconcile_orders" => { checkout: "co_123" }
+      "reconcile_orders" => { checkout: "co_123" },
+      "import_browser_history" => { browser: "chrome", history_days: 30, include_product_pages: false,
+                                    max_probes: 5, exclude: ["a.example"], confirm: false },
+      "add_store" => { url: "https://s.example", crawl: false }
     }
     quote_by_store = { store: "https://s.example", query: "q", product_id: "1", qty: 1 }
     hand_off_by_store = { store: "https://s.example", query: "q", product_id: "1", qty: 1, target: "default" }
@@ -150,7 +217,7 @@ RSpec.describe Portage::Cli::Mcp::Tools do
                  "pick_offer (compare)" => { compare: "of_1a2b3c" }, "pick_offer (view)" => { view: "of_1a2b3c" } }
     # The only flags a tool's own argv may carry among `forbidden`.
     allowed_flags = { "approve_quote" => %w[--via --relayed-yes], "buy_quote" => %w[--yes],
-                      "hand_off" => %w[--handoff-target] }
+                      "import_browser_history" => %w[--yes], "hand_off" => %w[--handoff-target] }
     cases = valid.merge(variants).flat_map do |label, base|
       name = label.split.first
       fuzzed = base.keys.product(injections).map { |key, bad| [name, base, key, base.merge(key => bad)] }
@@ -159,10 +226,10 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       [[name, base, nil, base], [name, base, nil, {}], *fuzzed, *undeclared]
     end
 
-    it "fuzzes all 12 tools with plenty of accepted and rejected inputs" do
+    it "fuzzes all 14 tools with plenty of accepted and rejected inputs" do
       built = cases.map { |name, _, _, params| argv_for(name, params) }
 
-      expect(cases.map(&:first).uniq.size).to eq(12)
+      expect(cases.map(&:first).uniq.size).to eq(14)
       expect(built.compact.size).to be > 50
       expect(built.count(&:nil?)).to be > 200
     end
@@ -187,12 +254,14 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       end
     end
 
-    it "puts --yes only on buy --quote ID, and --via only as --via agent on approve, in every argv" do
+    it "puts --yes only on buy --quote ID or a confirmed import, and --via only as --via agent on approve" do
       cases.each do |name, _, _, params|
         argv = argv_for(name, params) or next
         where = { name: name, params: params, argv: argv }.inspect
 
-        expect(argv.include?("--yes")).to eq(name == "buy_quote"), where
+        spends = name == "buy_quote" || (name == "import_browser_history" && params[:confirm] == true)
+        expect(argv.include?("--yes")).to eq(spends), where
+        expect(argv.include?("--dry-run")).to be(!argv.include?("--yes")), where if name == "import_browser_history"
         expect(argv).to eq(["buy", "--quote", params[:quote_id], "--yes", "--json"]), where if name == "buy_quote"
         expect(argv.include?("--via")).to eq(name == "approve_quote"), where
         expect(argv[argv.index("--via") + 1]).to eq("agent"), where if argv.include?("--via")
@@ -314,10 +383,11 @@ RSpec.describe Portage::Cli::Mcp::Tools do
   end
 
   describe "metadata" do
-    it "has exactly the Phase 3 tools, and never more than 15" do
+    it "has exactly the Phase 4 tools, and never more than 15" do
       expect(tools.keys).to contain_exactly("find_products", "search_catalogue", "compare_prices", "check_store",
                                             "get_status", "list_orders", "quote_purchase", "pick_offer",
-                                            "approve_quote", "buy_quote", "hand_off", "reconcile_orders")
+                                            "approve_quote", "buy_quote", "hand_off", "reconcile_orders",
+                                            "import_browser_history", "add_store")
       expect(tools.size).to be <= 15
     end
 
@@ -328,7 +398,8 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       "get_status" => [true, false, true, false], "list_orders" => [true, false, true, false],
       "quote_purchase" => [false, false, false, true], "pick_offer" => [false, false, false, true],
       "approve_quote" => [false, false, true, false], "buy_quote" => [false, true, false, true],
-      "hand_off" => [false, false, false, true], "reconcile_orders" => [false, false, true, true]
+      "hand_off" => [false, false, false, true], "reconcile_orders" => [false, false, true, true],
+      "import_browser_history" => [false, false, false, true], "add_store" => [false, false, false, true]
     }.each do |name, (read_only, destructive, idempotent, open_world)|
       it "annotates #{name} read_only=#{read_only} destructive=#{destructive} open_world=#{open_world}" do
         annotations = Portage::Cli::Mcp::Server.build_tool(name, tools.fetch(name), runner).annotations_value.to_h

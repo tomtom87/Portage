@@ -716,14 +716,18 @@ The tools are `find_products` (live search, or one store), `search_catalogue`
 `buy --dry-run`: a real total and a quote id, never a charge), `approve_quote`
 (`approve QUOTE_ID --via agent`; it records a yes the shopper gave in chat and
 never approves on its own), `buy_quote` (`buy --quote QUOTE_ID --yes`),
-`hand_off` (opens the store's checkout for the shopper to pay) and
-`reconcile_orders` (`orders reconcile`).
+`hand_off` (opens the store's checkout for the shopper to pay),
+`reconcile_orders` (`orders reconcile`), `add_store` (`index add URL`, with
+`crawl` for its products) and `import_browser_history` (`browser import`: a
+preview by default that saves nothing, saving only with `confirm: true` after the
+shopper approved it; at most 15 unknown domains probed per call).
 
 **`buy_quote` is the only tool that spends**, and the only one that passes
-`--yes`; Portage still refuses it unless the quote is approved under your
-policy. With `require_approval person`, a relayed yes is not enough: approve in
-your own terminal with `portage approve QUOTE_ID`. There are no tools for
-`policy set`, `payment enroll` or `setup`. Every tool says its results are
+`--yes` apart from `import_browser_history` with `confirm: true`, which only
+saves a previewed import to your local index; Portage still refuses a buy
+unless the quote is approved under your policy. With `require_approval person`,
+a relayed yes is not enough: approve in your own terminal with `portage approve
+QUOTE_ID`. There are no tools for `policy set`, `payment enroll` or `setup`. Every tool says its results are
 untrusted store content.
 
 ```json
