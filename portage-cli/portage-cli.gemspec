@@ -34,7 +34,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "irb", ">= 1.6"
   # `portage mcp`'s server and stdio transport; also what portage-ucp uses.
   spec.add_dependency "mcp", "~> 0.24"
-  spec.add_dependency "portage-ucp", "~> 0.11"
+  spec.add_dependency "portage-ucp", "~> 0.16"
   spec.add_dependency "portage-ucp-client", "~> 0.6", ">= 0.6.3"
   spec.add_dependency "portage-ucp-journal", "~> 0.1"
   spec.add_dependency "sqlite3", "~> 2.9"

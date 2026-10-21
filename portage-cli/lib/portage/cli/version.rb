@@ -1,5 +1,5 @@
 module Portage
   module Cli
-    VERSION = "0.13.1".freeze
+    VERSION = "0.14.0".freeze
   end
 end

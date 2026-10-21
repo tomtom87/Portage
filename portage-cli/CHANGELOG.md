@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-21
+
 - **Added: index and browser import tools in `portage mcp`.** Two more tools, 14 in all: `add_store` (`index add URL`, with `crawl` for `--crawl`) and `import_browser_history` (`browser import`). The import is a `--dry-run` preview unless `confirm` is exactly `true`, which passes `--yes` to save it; it is the only argv besides `buy_quote` with `--yes`, and it only writes the local index. It always passes `--max-probes`, at most 15, because probes run one at a time with a 5-second timeout each, and the CLI's default of 200 could run for about 17 minutes, well past the server's 120-second limit. `browser` must be one of the CLI's six browsers, and `exclude` must be host names. Phase 4 of docs/plans/buyer-mcp-server.md.
 
 - **Added: buying and record tools in `portage mcp`.** Five more tools, 12 in all: `pick_offer` (`pick`), `approve_quote` (`approve QUOTE_ID --via agent`, with `relayed_yes` a strict boolean defaulting to false), `buy_quote` (`buy --quote QUOTE_ID --yes`), `hand_off` (`buy` with an offer or store target and an optional `--handoff-target`, never `--yes` or `--dry-run`) and `reconcile_orders` (`orders reconcile`). `buy_quote` is the only tool that spends and the only argv with `--yes`; an agent can never approve for the shopper, and under `require_approval person` a relayed yes returns `needs_approval` so the shopper approves in their own terminal. No tool reaches `policy set`, `payment enroll` or `setup`. Phase 3 of docs/plans/buyer-mcp-server.md.
@@ -14,7 +16,7 @@ pre-1.0, so APIs may still shift between minor versions.
 
 - **Added: `portage orders list`.** Lists your purchases newest first, read-only from `~/.portage`: journal rows grouped by order id (line items, totals), joined with the order ledger for the permalink and any adjustments, plus `history` purchases and hand-offs the journal doesn't cover. Every entry carries a `source` (`journal` or `history`); nothing is backfilled. `--query` matches shop host, product id, item title and order id case-insensitively, `--limit N` applies after filtering, `--json` prints the entries. First step of the buyer MCP server (docs/plans/buyer-mcp-server.md).
 
-- **Added: `unresolved_adjustments` in `portage-console`.** Lists every order adjustment still `pending` (an open return or dispute) with its order id, read from the order ledger. Needs the next `portage-ucp` release, which adds `OrderLedger#unresolved` (design-log §64).
+- **Added: `unresolved_adjustments` in `portage-console`.** Lists every order adjustment still `pending` (an open return or dispute) with its order id, read from the order ledger. Requires `portage-ucp` 0.16, the first release with `OrderLedger#unresolved` (design-log §64).
 
 - **Fix: the agent profile now matches UCP 2026-08-25.** It declared `2026-08-25` but published its keys as `signing_keys`, a field that revision removed; they are now under `keys`. Each capability entry now also carries the `spec` and `schema` URLs a platform profile requires. `portage generate agent-profile --rotate` still carries keys forward from an older profile that used `signing_keys`. The published `agent-profile/agent-profile.json` is rewritten with the same two keys.
 
