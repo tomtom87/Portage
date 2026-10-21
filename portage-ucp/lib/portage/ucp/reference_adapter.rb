@@ -133,6 +133,18 @@ module Portage
 
       def get_order(order_id:) = @orders[order_id]
 
+      # Matches the query against the order id and line item titles.
+      def list_orders(limit:, query: nil)
+        orders = @orders.values.reverse
+        if query
+          needle = query.downcase
+          orders = orders.select do |order|
+            order.id.downcase.include?(needle) || order.line_items.any? { |li| li.item.title.downcase.include?(needle) }
+          end
+        end
+        Portage::Ucp::OrderList.new(orders: orders.first(limit))
+      end
+
       def cancel_order(order_id:, idempotency_key:, reason: nil)
         dedup(idempotency_key) do
           add_adjustment(order_id, type: "cancellation", status: "completed", description: reason)

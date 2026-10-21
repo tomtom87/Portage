@@ -14,6 +14,7 @@ A capability is advertised in the manifest as soon as an adapter overrides *any 
 | `dev.ucp.shopping.fulfillment` | ✅ | — | — | — | — | — | — |
 | `dev.ucp.shopping.identity` | — | — | — | — | — | — | — |
 | `app.portage-ucp.reorder` | — | — | — | — | — | — | — |
+| `app.portage-ucp.order_history` | ✅ | — | — | — | — | — | — |
 | `app.portage-ucp.payment_enrollment` / `payment_method` / `shopper_data` | — | — | — | — | — | — | — |
 
 - **catalog 🟡** (Wix/WooCommerce/BigCommerce/Magento/Etsy/Instagram): missing `lookup_catalog` — the batch-fetch-by-ids variant of `search_catalog`/`get_product`.

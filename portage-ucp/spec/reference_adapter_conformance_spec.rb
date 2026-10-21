@@ -122,6 +122,33 @@ RSpec.describe Portage::Ucp::ReferenceAdapter do
     end
   end
 
+  describe "#list_orders" do
+    def place_order(product_id:)
+      checkout = adapter.create_checkout(line_items: [{ product_id: product_id, quantity: 1 }],
+                                         idempotency_key: "chk-#{product_id}-#{rand(1_000_000)}")
+      adapter.complete_checkout(checkout_id: checkout.id, payment_token: "tok",
+                                idempotency_key: "cmp-#{product_id}-#{rand(1_000_000)}").order.id
+    end
+
+    before { adapter.seed_product(ProductFactory.build(id: "prod_2", title: "Espresso", price_minor: 300)) }
+
+    it "lists placed orders newest first, capped at limit" do
+      first = place_order(product_id: existing_product_id)
+      second = place_order(product_id: "prod_2")
+
+      expect(adapter.list_orders(limit: 10).orders.map(&:id)).to eq([second, first])
+      expect(adapter.list_orders(limit: 1).orders.map(&:id)).to eq([second])
+    end
+
+    it "filters by a line item title, case-insensitively" do
+      place_order(product_id: existing_product_id)
+      espresso = place_order(product_id: "prod_2")
+
+      expect(adapter.list_orders(limit: 10, query: "espresso").orders.map(&:id)).to eq([espresso])
+      expect(adapter.list_orders(limit: 10, query: "nothing like this").orders).to eq([])
+    end
+  end
+
   it "links an oauth token to a stable identity" do
     first = adapter.link_identity(oauth_token: "tok_abc")
     second = adapter.link_identity(oauth_token: "tok_abc")

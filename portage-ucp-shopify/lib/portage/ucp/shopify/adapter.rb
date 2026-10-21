@@ -165,6 +165,19 @@ module Portage
           node && with_policies(Mapper.order(node, checkout_id: checkout_id_for(order_id)))
         end
 
+        # ponytail: capped at 25 orders × 10 line items to stay under Shopify's
+        # query cost limit; paginate with a cursor if callers need more.
+        LIST_ORDERS_MAX = 25
+
+        def list_orders(limit:, query: nil)
+          data = @client.admin_query(Queries::LIST_ORDERS, variables: { first: limit.clamp(1, LIST_ORDERS_MAX),
+                                                                        query: query })
+          orders = data.dig("orders", "nodes").map do |node|
+            with_policies(Mapper.order(node, checkout_id: checkout_id_for(node["id"])))
+          end
+          Portage::Ucp::OrderList.new(orders: orders)
+        end
+
         # orderCancel returns only a (possibly still-pending) job — the
         # updated cancellation state is read back via #get_order, same
         # "trust a fresh read over the mutation payload" posture as

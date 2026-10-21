@@ -33,7 +33,7 @@ RSpec.describe Portage::Ucp::CapabilityRegistry do
 
   describe ".default" do
     it "includes the built-in catalog/cart/checkout/order/discount/fulfillment/permalink/identity/reorder/" \
-       "payment_enrollment/payment_method/saved_address/shopper_data capabilities" do
+       "order_history/payment_enrollment/payment_method/saved_address/shopper_data capabilities" do
       names = described_class.default.instance_variable_get(:@capabilities).map(&:name)
       expect(names).to contain_exactly(
         "dev.ucp.shopping.catalog",
@@ -45,6 +45,7 @@ RSpec.describe Portage::Ucp::CapabilityRegistry do
         "dev.ucp.shopping.permalink",
         "dev.ucp.shopping.identity",
         "app.portage-ucp.reorder",
+        "app.portage-ucp.order_history",
         "app.portage-ucp.payment_enrollment",
         "app.portage-ucp.payment_method",
         "app.portage-ucp.saved_address",
