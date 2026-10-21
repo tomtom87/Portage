@@ -7,9 +7,11 @@ module Portage
       # each validates its params and builds the argv of `portage ... --json`,
       # mirroring openclaw-plugin/src/tools/ so both keep one safety boundary.
       # Every user string is validated, then passed as its own argv element
-      # after its flag. `--yes` appears in exactly one place, buy_quote's
-      # `buy --quote ID --yes`; quote_purchase always adds `--dry-run`, and
-      # approve_quote always runs `--via agent`. Descriptions follow the TDQS
+      # after its flag. `--yes` appears in exactly two places, buy_quote's
+      # `buy --quote ID --yes` and import_browser_history's `--yes` (only for
+      # confirm: true; it saves a previewed import and never touches a
+      # payment); quote_purchase always adds `--dry-run`, and approve_quote
+      # always runs `--via agent`. Descriptions follow the TDQS
       # rubric like Portage::Ucp::Mcp::ToolMetadata.
       module Tools
         class InputError < StandardError; end
@@ -131,6 +133,14 @@ module Portage
         end
 
         HANDOFF_TARGETS = %w[default print profile].freeze
+        # `portage browser import --browser`: BrowserImport::Profiles::BROWSERS.
+        BROWSERS = %w[chrome edge brave arc firefox safari].freeze
+        # `browser import` probes unknown domains one at a time, each capped
+        # at Prober::TIMEOUT (5s) plus a 0.1s throttle, so 15 probes is at
+        # most ~77s: inside the Runner's 120s even on dead hosts. The CLI's
+        # own default of 200 could run ~17 minutes, so the tool always passes
+        # a cap; cached misses make a repeat run cover more.
+        MAX_PROBES = 15
 
         READ_OPEN = { read_only_hint: true, destructive_hint: false, idempotent_hint: true,
                       open_world_hint: true }.freeze
@@ -402,6 +412,81 @@ module Portage
             annotations: { read_only_hint: false, destructive_hint: true, idempotent_hint: false,
                            open_world_hint: true },
             argv: ->(p) { ["buy", "--quote", ident("quote_id", p[:quote_id]), "--yes", "--json"] }
+          },
+          "import_browser_history" => {
+            title: "Import stores from browser history (preview first)",
+            description: "Find shop domains in the shopper's own browser bookmarks and history to seed the " \
+                         "local index. It reads personal browsing data: run it only when the shopper asks, " \
+                         "and say what it does first. By default it is a preview (dry run) that saves " \
+                         "nothing and returns kept[] (domains and guessed categories only): show those, " \
+                         "never the shopper's full history. Set `confirm` true only after the shopper saw " \
+                         "the preview and approved saving it; `exclude` drops domains they turned down. " \
+                         "Never work around a permission_denied or full_disk_access_required error: pass " \
+                         "its message to the shopper. Use add_store for one store they name, and " \
+                         "search_catalogue to use the result. It adds to the local index only and never " \
+                         "touches payment or policy; it sends one plain request per unknown domain to check " \
+                         "for a store manifest (at most #{MAX_PROBES} per call). Domains already checked are " \
+                         "skipped next time, so while a preview says capped true, preview again before " \
+                         "confirming: otherwise the confirmed run probes further and can save stores the " \
+                         "shopper never saw. Returns browser, rows, domains, skipped, probed, capped, " \
+                         "kept[] (domain, origin, verdict, category_names, visits), saved (true only after " \
+                         "confirm), needs_confirmation and message; an error and message come back when the " \
+                         "browser can't be read. #{UNTRUSTED}",
+            properties: {
+              browser: { type: "string", enum: BROWSERS, description: "Browser to read. Default: Portage picks." },
+              history_days: LIMIT.merge(description: "Days of history to read (default 90)."),
+              include_product_pages: { type: "boolean", description: "Also keep product pages as catalogue entries." },
+              max_probes: { type: "integer", minimum: 1, maximum: MAX_PROBES,
+                            description: "Most unknown domains to check over the network " \
+                                         "(default and maximum #{MAX_PROBES})." },
+              exclude: { type: "array", items: { type: "string" }, maxItems: 20,
+                         description: "Hosts to leave out, e.g. [\"shop.example\"]." },
+              confirm: { type: "boolean", default: false,
+                         description: "True ONLY after the shopper approved saving the previewed import. " \
+                                      "Default false (preview, saves nothing)." }
+            },
+            required: [],
+            annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: false,
+                           open_world_hint: true },
+            argv: lambda do |p|
+              argv = %w[browser import]
+              opt(argv, "--browser", p, :browser) { |v| one_of("browser", v, BROWSERS) }
+              opt(argv, "--history-days", p, :history_days) { |v| int("history_days", v) }
+              argv << "--include-product-pages" if p.key?(:include_product_pages) &&
+                                                   flag("include_product_pages", p[:include_product_pages])
+              probes = p.key?(:max_probes) ? int("max_probes", p[:max_probes]) : MAX_PROBES
+              raise InputError, "max_probes must be an integer from 1 to #{MAX_PROBES}" if probes > MAX_PROBES
+
+              argv.push("--max-probes", probes.to_s)
+              argv.push("--exclude", list("exclude", p[:exclude]) { |n, v| host(n, v) }.join(",")) if p.key?(:exclude)
+              confirmed = p.key?(:confirm) ? flag("confirm", p[:confirm]) : false
+              argv << (confirmed ? "--yes" : "--dry-run") << "--json"
+            end
+          },
+          "add_store" => {
+            title: "Add one store to the local index",
+            description: "Add one store the shopper names to their local index, so search_catalogue finds " \
+                         "it. Use import_browser_history for many stores at once. Checks the store's UCP " \
+                         "manifest with one plain request and saves it (marked hand-off only when there is " \
+                         "no manifest); with `crawl` true it also reads the store's public /products.json " \
+                         "(Shopify, up to 20 pages, a second apart, skipped when robots.txt disallows) and " \
+                         "indexes the products: slower, and a very slow store can hit the 120s limit, in " \
+                         "which case the store is still added but the crawl is lost. Changes the local " \
+                         "index only; never a cart, payment or policy. Returns added, origin and message, " \
+                         "plus crawl (status, reason, pages, products) when crawled; added false means the " \
+                         "URL was not valid. #{UNTRUSTED}",
+            properties: {
+              url: STORE_URL,
+              crawl: { type: "boolean", description: "Also crawl and index the store's products (default false)." }
+            },
+            required: %w[url],
+            annotations: { read_only_hint: false, destructive_hint: false, idempotent_hint: false,
+                           open_world_hint: true },
+            argv: lambda do |p|
+              argv = ["index", "add", url("url", p[:url])]
+              argv << "--crawl" if p.key?(:crawl) && flag("crawl", p[:crawl])
+              argv << "--json"
+            end
           },
           "hand_off" => {
             title: "Hand the checkout to the shopper to pay",
