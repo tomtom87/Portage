@@ -2,7 +2,7 @@
 # Mount your records at /root/.portage: -v "$HOME/.portage:/root/.portage". Hand-off prints
 # the checkout link, since a container can't open your browser. portage-cli 0.14.0 must be on
 # RubyGems before this builds.
-FROM ruby:3.4-slim
+FROM ruby:4.0-slim
 LABEL io.modelcontextprotocol.server.name="io.github.tomtom87/portage"
 ENV PORTAGE_HANDOFF_TARGET=print
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
