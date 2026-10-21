@@ -891,6 +891,39 @@ RSpec.describe Portage::Cli do
     end
   end
 
+  describe "orders list" do
+    # The suite shares one HOME, so earlier examples may have journalled.
+    before do
+      allow(Portage::Cli::History).to receive(:new).and_call_original
+      FileUtils.rm_f(Portage::Ucp::Journal::FileStore::PATH)
+    end
+
+    it "reports no orders when the records are empty" do
+      output = capture_stdout { expect(described_class.run(%w[orders list])).to eq(0) }
+
+      expect(output).to include("(no orders)")
+    end
+
+    it "rejects a --limit below 1" do
+      expect { expect(described_class.run(%w[orders list --limit 0])).to eq(1) }
+        .to output(/--limit must be positive/).to_stderr
+    end
+
+    it "prints entries as JSON under --json, filtered by --query" do
+      store = Portage::Ucp::Journal::FileStore.new
+      %w[a b].each do |s|
+        store.append("shop" => "#{s}.example", "product_id" => "p", "quantity" => 1, "amount" => 500,
+                     "currency" => "USD", "order_id" => "ord_#{s}", "idempotency_key" => "k#{s}",
+                     "recorded_at" => "2026-10-01T10:00:00Z")
+      end
+
+      output = capture_stdout { described_class.run(%w[orders list --json --query b.example]) }
+
+      expect(JSON.parse(output).map { |e| e["order_id"] }).to eq(["ord_b"])
+      expect(capture_stdout { described_class.run(%w[orders list]) }).to include("ord_a").and include("[journal]")
+    end
+  end
+
   describe "orders reconcile" do
     let(:transaction_log) { Portage::Ucp::Support::TransactionLog.new }
 

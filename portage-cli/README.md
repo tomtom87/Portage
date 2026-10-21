@@ -167,6 +167,7 @@ portage policy set [--per-transaction-cap N --currency CUR]
                     [--velocity-count N --velocity-window-seconds N]
                     [--allow HOST ...] [--clear-allowlist]
                     [--require-approval person|any|off]  (lowering asks at a terminal)
+portage orders list [--query Q] [--limit N] [--json]
 portage orders reconcile [--checkout ID] [--json]
 portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
 portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
@@ -189,7 +190,7 @@ portage --version
 <!-- usage-end -->
 
 `buy`/`find`/`compare`/`doctor`/`payment enroll` (the network-touching commands —
-`orders reconcile` doesn't take these) also accept:
+`orders list` and `orders reconcile` don't take these) also accept:
 
 ```
 [--proxy URL] [--proxy-mode forward|gateway] [--proxy-header "Name: value"]
@@ -682,6 +683,21 @@ native notification), `terminal` (a printed line — forced on for a
 plain-text `--wait` regardless of configuration), and `journal` (the order
 snapshot journal write, already unconditional — listing it just documents
 that).
+
+`portage orders list` shows your purchases, newest first, from the local
+records alone — it never contacts a store. No one record is a full order, so it
+merges three: the purchase journal (line items and totals, grouped by order
+id), the order ledger (permalink and any refund or return adjustments, joined
+by order id) and `history` (hand-offs, and purchases the journal doesn't
+cover). Each entry says which it came from in `source` (`journal` or
+`history`); nothing is backfilled, so a gap shows rather than being papered
+over.
+
+```bash
+portage orders list
+portage orders list --query kettle --limit 5   # host, product id, item title or order id
+portage orders list --json
+```
 
 ### Doctor
 
