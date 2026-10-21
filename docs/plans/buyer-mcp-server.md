@@ -1,6 +1,6 @@
 # Buyer MCP Server: `portage mcp`
 
-**Status:** In progress. Phase 1 (`portage orders list`) shipped 2026-10-21. See the progress log at the end.
+**Status:** In progress. Phase 1 (`portage orders list`) and Phase 2 (`portage mcp` with the read-only tools and `quote_purchase`) shipped 2026-10-21. See the progress log at the end.
 **Driver:** Glama's TDQS scan of the store server (portage-ucp over Shopify) graded A, but its completeness note asked for order listing and search, and nothing on MCP shows what Portage is mostly used for: a shopper's agent searching many stores, comparing prices, importing stores from browser history, and buying with the shopper's approval. Those features live in `portage-cli` and reach agents only as shell commands, the Claude plugin's skills, and the OpenClaw plugin's 22 typed tools. This plan exposes them as a second MCP server, listed next to the store server.
 
 ## Context
@@ -103,3 +103,4 @@ One phase per session, delegated to a Sonnet subagent; each ends with suites and
 | Phase | Date | Summary | Design log |
 |-------|------|---------|------------|
 | 1 | 2026-10-21 | `portage orders list [--query Q] [--limit N] [--json]` and `Cli::OrderHistory`: journal rows grouped by order id, ledger joined for permalink and adjustments, history purchases and hand-offs added when no journal order covers them (linked via the TransactionLog's `checkout_id` to `idempotency_key`), each marked by `source`. Read-only. | — |
+| 2 | 2026-10-21 | `portage mcp` on stdio: `Cli::Mcp::Server` (instructions for the find, compare, quote, approve, buy flow), `Cli::Mcp::Runner` (subprocess of the gem's own `exe/portage` under the running Ruby, argv array, empty stdin, 120 s timeout and 16 MB cap with the process group killed, JSON on stdout is the result whatever the exit code, as in the OpenClaw runner) and `Cli::Mcp::Tools` with `find_products`, `search_catalogue`, `compare_prices`, `check_store`, `get_status`, `list_orders` and `quote_purchase` (always `--dry-run`, never `--yes`). Validators ported from openclaw-plugin, plus a control-character ban; guardrail fuzz ported from `guardrails.test.ts`. | — |

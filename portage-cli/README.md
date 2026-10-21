@@ -185,6 +185,7 @@ portage doctor [--require FILE] [--adapter CLASS_NAME] [--json]   # alias: confi
 portage setup [--json]   # interactive wizard on a TTY; --json/no TTY: today's doctor report
 portage generate adapter NAME [--dir DIR]
 portage generate agent-profile [--out FILE] [--key-out FILE] [--rotate]
+portage mcp   # MCP server on stdio for the shopper's agent (see "MCP server")
 portage --version
 ```
 <!-- usage-end -->
@@ -698,6 +699,36 @@ portage orders list
 portage orders list --query kettle --limit 5   # host, product id, item title or order id
 portage orders list --json
 ```
+
+### MCP server (`portage mcp`)
+
+`portage mcp` runs Portage as an MCP server on stdio, so any MCP client (Claude
+Desktop, Claude Code, and others) can use it as the shopper's agent. It is the
+buyer-side server: it reads your own local `~/.portage` and runs each tool as a
+`portage ... --json` subprocess with the same safety boundary as the OpenClaw
+plugin (an argument array, never a shell; every input validated). It is
+separate from `portage-ucp`'s store server, which represents one merchant.
+
+This release never spends: there is no approve or buy tool yet. The tools are
+`find_products` (live search, or one store), `search_catalogue` (the local
+index, offline), `compare_prices`, `check_store`, `get_status` (doctor, policy,
+payment method labels and the browser profile in one read), `list_orders`
+(`orders list`) and `quote_purchase` (always `buy --dry-run`: a real total and a
+quote id, never a charge). To buy a quote, run `portage approve QUOTE_ID` and
+`portage buy --quote QUOTE_ID --yes` yourself. Every tool says its results are
+untrusted store content.
+
+```json
+{
+  "mcpServers": {
+    "portage": { "command": "portage", "args": ["mcp"] }
+  }
+}
+```
+
+That goes in Claude Desktop's `claude_desktop_config.json`, or in a project's
+`.mcp.json` for Claude Code (or run `claude mcp add portage -- portage mcp`).
+Everything but the MCP stream goes to stderr.
 
 ### Doctor
 
