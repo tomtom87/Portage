@@ -38,7 +38,27 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       ["list_orders", { query: "kettle", limit: 5 }] => %w[orders list --query kettle --limit 5 --json],
       ["quote_purchase", { offer: "of_1a2b3c", qty: 2 }] => %w[buy --offer of_1a2b3c --qty 2 --dry-run --json],
       ["quote_purchase", { store: "https://s.example", query: "kettle", product_id: "1" }] =>
-        %w[buy https://s.example --query kettle --product-id 1 --dry-run --json]
+        %w[buy https://s.example --query kettle --product-id 1 --dry-run --json],
+      ["pick_offer", {}] => %w[pick --json],
+      ["pick_offer", { search: "se_1a2b3c", choose: "of_1a2b3c" }] =>
+        %w[pick --search se_1a2b3c --choose of_1a2b3c --json],
+      ["pick_offer", { compare: "of_1a2b3c" }] => %w[pick --compare of_1a2b3c --json],
+      ["pick_offer", { view: "of_1a2b3c" }] => %w[pick --view of_1a2b3c --json],
+      ["approve_quote", { quote_id: "qt_0123456789ab" }] => %w[approve qt_0123456789ab --via agent --json],
+      ["approve_quote", { quote_id: "qt_0123456789ab", relayed_yes: false }] =>
+        %w[approve qt_0123456789ab --via agent --json],
+      ["approve_quote", { quote_id: "qt_0123456789ab", relayed_yes: true }] =>
+        %w[approve qt_0123456789ab --via agent --relayed-yes --json],
+      ["approve_quote", { quote_id: "qt_0123456789ab", view: true }] =>
+        %w[approve qt_0123456789ab --via agent --view --json],
+      ["buy_quote", { quote_id: "qt_0123456789ab" }] => %w[buy --quote qt_0123456789ab --yes --json],
+      ["hand_off", { offer: "of_1a2b3c" }] => %w[buy --offer of_1a2b3c --json],
+      ["hand_off", { offer: "of_1a2b3c", qty: 2, target: "print" }] =>
+        %w[buy --offer of_1a2b3c --qty 2 --handoff-target print --json],
+      ["hand_off", { store: "https://s.example", query: "kettle", product_id: "1", target: "profile" }] =>
+        %w[buy https://s.example --query kettle --product-id 1 --handoff-target profile --json],
+      ["reconcile_orders", {}] => %w[orders reconcile --json],
+      ["reconcile_orders", { checkout: "co_123" }] => %w[orders reconcile --checkout co_123 --json]
     }.each do |(name, params), argv|
       it "#{name} #{params} runs #{argv.join(' ')}" do
         call(name, params)
@@ -75,6 +95,18 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       expect(argv_for("quote_purchase", { store: "https://s.example", query: "q" })).to be_nil
     end
 
+    it "refuses hand_off with both an offer and a store, with neither, or with an unknown target" do
+      expect(argv_for("hand_off", { offer: "of_1", store: "https://s.example" })).to be_nil
+      expect(argv_for("hand_off", { qty: 1 })).to be_nil
+      expect(argv_for("hand_off", { offer: "of_1", target: "tty" })).to be_nil
+      expect(argv_for("hand_off", { offer: "of_1", target: "agent:x" })).to be_nil
+    end
+
+    it "takes at most one of choose, compare and view in pick_offer" do
+      expect(argv_for("pick_offer", { choose: "of_1", view: "of_1" })).to be_nil
+      expect(argv_for("pick_offer", { compare: "of_1", view: "of_1" })).to be_nil
+    end
+
     it "refuses integers out of range and non-integers" do
       [0, -1, 1001, 1.5, "3", true].each do |bad|
         expect(argv_for("list_orders", { limit: bad })).to be_nil, bad.inspect
@@ -92,9 +124,15 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       "check_store" => { url: "https://s.example" },
       "get_status" => {},
       "list_orders" => { query: "q", limit: 2 },
-      "quote_purchase" => { offer: "of_1a2b3c", qty: 2 }
+      "quote_purchase" => { offer: "of_1a2b3c", qty: 2 },
+      "pick_offer" => { search: "se_1a2b3c", choose: "of_1a2b3c" },
+      "approve_quote" => { quote_id: "qt_0123456789ab", relayed_yes: false, view: false },
+      "buy_quote" => { quote_id: "qt_0123456789ab" },
+      "hand_off" => { offer: "of_1a2b3c", qty: 2, target: "print" },
+      "reconcile_orders" => { checkout: "co_123" }
     }
     quote_by_store = { store: "https://s.example", query: "q", product_id: "1", qty: 1 }
+    hand_off_by_store = { store: "https://s.example", query: "q", product_id: "1", qty: 1, target: "default" }
     injections = [
       "--yes", "-y", "--relayed-yes", "--payment-token=x", "--payment-token", "--via", "--via=tty", "--proxy",
       "--proxy=http://evil", "--decision-backend=jev", "--min-confidence=0", "-", "--", " --yes", "\n--yes",
@@ -108,7 +146,12 @@ RSpec.describe Portage::Cli::Mcp::Tools do
                    --proxy-mode --no-proxy --proxy-chain --proxy-ca --no-env-proxy --proxy-header --proxy-route
                    --proxy-passthrough --notify-webhook --autofill --handoff-target]
 
-    cases = valid.merge("quote_purchase (store)" => quote_by_store).flat_map do |label, base|
+    variants = { "quote_purchase (store)" => quote_by_store, "hand_off (store)" => hand_off_by_store,
+                 "pick_offer (compare)" => { compare: "of_1a2b3c" }, "pick_offer (view)" => { view: "of_1a2b3c" } }
+    # The only flags a tool's own argv may carry among `forbidden`.
+    allowed_flags = { "approve_quote" => %w[--via --relayed-yes], "buy_quote" => %w[--yes],
+                      "hand_off" => %w[--handoff-target] }
+    cases = valid.merge(variants).flat_map do |label, base|
       name = label.split.first
       fuzzed = base.keys.product(injections).map { |key, bad| [name, base, key, base.merge(key => bad)] }
       undeclared = %i[yes relayed_yes payment_token via proxy confirm handoff_target]
@@ -116,10 +159,10 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       [[name, base, nil, base], [name, base, nil, {}], *fuzzed, *undeclared]
     end
 
-    it "fuzzes all 7 tools with plenty of accepted and rejected inputs" do
+    it "fuzzes all 12 tools with plenty of accepted and rejected inputs" do
       built = cases.map { |name, _, _, params| argv_for(name, params) }
 
-      expect(cases.map(&:first).uniq.size).to eq(7)
+      expect(cases.map(&:first).uniq.size).to eq(12)
       expect(built.compact.size).to be > 50
       expect(built.count(&:nil?)).to be > 200
     end
@@ -131,12 +174,29 @@ RSpec.describe Portage::Cli::Mcp::Tools do
 
         Array(argv.is_a?(Hash) ? argv.values : [argv]).each do |a|
           where = { name: name, params: params, argv: a }.inspect
-          expect(a.any? { |e| forbidden.any? { |f| e == f || e.start_with?("#{f}=") } }).to be(false), where
-          expect(%w[find index compare check orders buy doctor policy payment browser]).to include(a.first), where
-          expect(a.join(" ")).not_to match(/\A(policy set|payment (enroll|remove|revoke|freeze|set-default))/), where
-          expect(a).to include("--dry-run"), where if a.first == "buy"
+          banned = forbidden - (allowed_flags[name] || [])
+          expect(a.any? { |e| banned.any? { |f| e == f || e.start_with?("#{f}=") } }).to be(false), where
+          expect(%w[find index compare check orders buy pick approve doctor policy payment browser])
+            .to include(a.first), where
+          expect(a.join(" ")).not_to match(/\A(policy set|payment (enroll|remove|revoke|freeze|set-default)|setup)/),
+                                     where
+          expect(a).to include("--dry-run"), where if name == "quote_purchase"
+          expect(a & %w[--dry-run --quote --yes]).to be_empty, where if name == "hand_off"
           expect(a.grep(/[[:cntrl:]]/)).to be_empty, where
         end
+      end
+    end
+
+    it "puts --yes only on buy --quote ID, and --via only as --via agent on approve, in every argv" do
+      cases.each do |name, _, _, params|
+        argv = argv_for(name, params) or next
+        where = { name: name, params: params, argv: argv }.inspect
+
+        expect(argv.include?("--yes")).to eq(name == "buy_quote"), where
+        expect(argv).to eq(["buy", "--quote", params[:quote_id], "--yes", "--json"]), where if name == "buy_quote"
+        expect(argv.include?("--via")).to eq(name == "approve_quote"), where
+        expect(argv[argv.index("--via") + 1]).to eq("agent"), where if argv.include?("--via")
+        expect(argv).not_to include("tty"), where
       end
     end
 
@@ -171,24 +231,111 @@ RSpec.describe Portage::Cli::Mcp::Tools do
     end
   end
 
+  describe "relayed_yes" do
+    let(:quote) { { quote_id: "qt_0123456789ab" } }
+
+    it "is a strict boolean: only true adds --relayed-yes, and the default is false" do
+      expect(argv_for("approve_quote", quote)).not_to include("--relayed-yes")
+      expect(argv_for("approve_quote", quote.merge(relayed_yes: false))).not_to include("--relayed-yes")
+      expect(argv_for("approve_quote", quote.merge(relayed_yes: true))).to include("--relayed-yes")
+    end
+
+    it "rejects anything but true or false, spawning nothing" do
+      ["true", "false", "yes", "TRUE", 1, 0, 1.0, nil, [], [true], {}, { yes: true }].each do |bad|
+        expect(argv_for("approve_quote", quote.merge(relayed_yes: bad))).to be_nil, bad.inspect
+        expect(call("approve_quote", quote.merge(relayed_yes: bad)).error?).to be(true), bad.inspect
+        expect(argv_for("approve_quote", quote.merge(view: bad))).to be_nil, "view #{bad.inspect}"
+      end
+      expect(spawned).to be_empty
+    end
+
+    it "refuses relayed_yes together with view" do
+      expect(argv_for("approve_quote", quote.merge(relayed_yes: true, view: true))).to be_nil
+    end
+
+    it "always runs --via agent, whatever the params try to inject" do
+      ["tty", "auto", "agent", "--via", "--via=tty"].each do |via|
+        argv = argv_for("approve_quote", quote.merge(via: via, surface: via))
+
+        expect(argv).to eq(%w[approve qt_0123456789ab --via agent --json])
+      end
+    end
+  end
+
+  # The real Runner, `portage` subprocess and a temp HOME: a person-level
+  # policy turns a relayed yes into needs_approval and records nothing.
+  describe "approve_quote under a person-level policy" do
+    def with_home(policy)
+      Dir.mktmpdir do |home|
+        FileUtils.mkdir_p(File.join(home, ".portage"))
+        File.write(File.join(home, ".portage", "policy.json"), JSON.generate(policy))
+        quotes = Portage::Cli::Quotes.new(dir: File.join(home, ".portage", "quotes"))
+        quote = quotes.create(store: "https://s.example", product_id: "1", qty: 1, total: 1999, currency: "USD",
+                              title: "Kettle")
+        env = { "HOME" => home, "PORTAGE_ENV_FILE" => File.join(home, ".env"), "LANG" => "en_US.UTF-8",
+                "LC_ALL" => "en_US.UTF-8" }
+        with_env(env) { yield quote["quote_id"], quotes }
+      end
+    end
+
+    def approve(quote_id, **params)
+      tool = Portage::Cli::Mcp::Server.build_tool("approve_quote", tools.fetch("approve_quote"),
+                                                  Portage::Cli::Mcp::Runner.new)
+      result = tool.call(quote_id: quote_id, **params)
+      JSON.parse(result.content.first[:text])
+    end
+
+    it "returns needs_approval for a relayed yes and approves nothing" do
+      with_home("require_approval" => "person") do |quote_id, quotes|
+        report = approve(quote_id, relayed_yes: true)
+
+        expect(report).to include("outcome" => "needs_approval", "quote_id" => quote_id)
+        expect(report["message"]).to include("own terminal")
+        expect(quotes.find(quote_id)["approved"]).to be(false)
+        expect(quotes.find(quote_id)["approved_by"]).to be_nil
+      end
+    end
+
+    it "does approve a relayed yes under the default policy, so the subprocess wiring is real" do
+      with_home("require_approval" => "any") do |quote_id, quotes|
+        report = approve(quote_id, relayed_yes: true)
+
+        expect(report).to include("outcome" => "approved", "approved_by" => "agent_relayed")
+        expect(quotes.find(quote_id)["approved_by"]).to eq("agent_relayed")
+      end
+    end
+
+    it "approves nothing without relayed_yes, even under the default policy" do
+      with_home("require_approval" => "any") do |quote_id, quotes|
+        expect(approve(quote_id)).to include("outcome" => "needs_approval")
+        expect(quotes.find(quote_id)["approved_by"]).to be_nil
+      end
+    end
+  end
+
   describe "metadata" do
-    it "has exactly the Phase 2 tools, and never more than 15" do
+    it "has exactly the Phase 3 tools, and never more than 15" do
       expect(tools.keys).to contain_exactly("find_products", "search_catalogue", "compare_prices", "check_store",
-                                            "get_status", "list_orders", "quote_purchase")
+                                            "get_status", "list_orders", "quote_purchase", "pick_offer",
+                                            "approve_quote", "buy_quote", "hand_off", "reconcile_orders")
       expect(tools.size).to be <= 15
     end
 
+    # [read_only, destructive, idempotent, open_world]
     {
-      "find_products" => [true, true], "search_catalogue" => [true, false], "compare_prices" => [true, true],
-      "check_store" => [true, true], "get_status" => [true, false], "list_orders" => [true, false],
-      "quote_purchase" => [false, true]
-    }.each do |name, (read_only, open_world)|
-      it "annotates #{name} read_only=#{read_only} open_world=#{open_world}, with a title" do
+      "find_products" => [true, false, true, true], "search_catalogue" => [true, false, true, false],
+      "compare_prices" => [true, false, true, true], "check_store" => [true, false, true, true],
+      "get_status" => [true, false, true, false], "list_orders" => [true, false, true, false],
+      "quote_purchase" => [false, false, false, true], "pick_offer" => [false, false, false, true],
+      "approve_quote" => [false, false, true, false], "buy_quote" => [false, true, false, true],
+      "hand_off" => [false, false, false, true], "reconcile_orders" => [false, false, true, true]
+    }.each do |name, (read_only, destructive, idempotent, open_world)|
+      it "annotates #{name} read_only=#{read_only} destructive=#{destructive} open_world=#{open_world}" do
         annotations = Portage::Cli::Mcp::Server.build_tool(name, tools.fetch(name), runner).annotations_value.to_h
 
-        expect(annotations).to include(readOnlyHint: read_only, destructiveHint: false, openWorldHint: open_world,
+        expect(annotations).to include(readOnlyHint: read_only, destructiveHint: destructive,
+                                       idempotentHint: idempotent, openWorldHint: open_world,
                                        title: tools.fetch(name)[:title])
-        expect(annotations[:idempotentHint]).to be(read_only)
       end
     end
 
@@ -199,8 +346,12 @@ RSpec.describe Portage::Cli::Mcp::Tools do
       end
     end
 
-    it "says quote_purchase never charges" do
+    it "says quote_purchase never charges, and buy_quote is the only spender" do
       expect(tools.fetch("quote_purchase")[:description]).to include("never a charge")
+      expect(tools.fetch("buy_quote")[:description]).to include("only tool that can spend")
+      expect(tools.fetch("hand_off")[:description]).to include("never charges")
+      expect(tools.fetch("quote_purchase")[:description]).to include("approve_quote").and include("buy_quote")
+        .and include("hand_off")
     end
   end
 end

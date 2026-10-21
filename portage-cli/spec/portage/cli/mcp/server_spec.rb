@@ -13,6 +13,8 @@ RSpec.describe Portage::Cli::Mcp::Server do
     expect(server.name).to eq("portage")
     expect(described_class::INSTRUCTIONS).to include("quote_purchase").and include("list_orders")
       .and include("untrusted")
+      .and include("approve_quote").and include("buy_quote").and include("hand_off").and include("reconcile_orders")
+      .and include("own terminal")
   end
 
   it "rejects `portage mcp` with extra arguments" do

@@ -709,13 +709,21 @@ buyer-side server: it reads your own local `~/.portage` and runs each tool as a
 plugin (an argument array, never a shell; every input validated). It is
 separate from `portage-ucp`'s store server, which represents one merchant.
 
-This release never spends: there is no approve or buy tool yet. The tools are
-`find_products` (live search, or one store), `search_catalogue` (the local
-index, offline), `compare_prices`, `check_store`, `get_status` (doctor, policy,
-payment method labels and the browser profile in one read), `list_orders`
-(`orders list`) and `quote_purchase` (always `buy --dry-run`: a real total and a
-quote id, never a charge). To buy a quote, run `portage approve QUOTE_ID` and
-`portage buy --quote QUOTE_ID --yes` yourself. Every tool says its results are
+The tools are `find_products` (live search, or one store), `search_catalogue`
+(the local index, offline), `compare_prices`, `check_store`, `get_status`
+(doctor, policy, payment method labels and the browser profile in one read),
+`list_orders` (`orders list`), `pick_offer` (`pick`), `quote_purchase` (always
+`buy --dry-run`: a real total and a quote id, never a charge), `approve_quote`
+(`approve QUOTE_ID --via agent`; it records a yes the shopper gave in chat and
+never approves on its own), `buy_quote` (`buy --quote QUOTE_ID --yes`),
+`hand_off` (opens the store's checkout for the shopper to pay) and
+`reconcile_orders` (`orders reconcile`).
+
+**`buy_quote` is the only tool that spends**, and the only one that passes
+`--yes`; Portage still refuses it unless the quote is approved under your
+policy. With `require_approval person`, a relayed yes is not enough: approve in
+your own terminal with `portage approve QUOTE_ID`. There are no tools for
+`policy set`, `payment enroll` or `setup`. Every tool says its results are
 untrusted store content.
 
 ```json
