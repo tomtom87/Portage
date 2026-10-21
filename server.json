@@ -2,22 +2,33 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.tomtom87/portage",
   "title": "Portage",
-  "description": "Shopify catalog search and product lookup via MCP; the Portage CLI adds full agentic buying.",
+  "description": "A shopper's agent searches stores, compares prices and buys with the shopper's approval.",
   "repository": {
     "url": "https://github.com/tomtom87/Portage",
     "source": "github"
   },
   "websiteUrl": "https://portage.readthedocs.io",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/tomtom87/portage-ucp:0.16.0",
+      "identifier": "ghcr.io/tomtom87/portage-mcp:0.14.0",
       "transport": { "type": "stdio" },
-      "environmentVariables": [
-        { "name": "SHOPIFY_SHOP_DOMAIN", "description": "Your shop, e.g. your-shop.myshopify.com", "isRequired": true },
-        { "name": "SHOPIFY_STOREFRONT_ACCESS_TOKEN", "description": "Storefront API access token", "isRequired": true, "isSecret": true },
-        { "name": "SHOPIFY_ADMIN_ACCESS_TOKEN", "description": "Admin API access token (optional)", "isSecret": true }
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-v",
+          "description": "Mount your Portage records, spending policy and keys into the container",
+          "value": "{portage_dir}:/root/.portage",
+          "isRequired": true,
+          "variables": {
+            "portage_dir": {
+              "description": "Absolute path to your ~/.portage directory, e.g. /Users/you/.portage (no ~, it is not expanded)",
+              "format": "filepath",
+              "isRequired": true
+            }
+          }
+        }
       ]
     }
   ]

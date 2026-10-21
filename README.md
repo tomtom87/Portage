@@ -13,7 +13,7 @@
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-supported-black?logo=modelcontextprotocol" alt="MCP"></a>
   <a href="https://ucp.dev"><img src="https://img.shields.io/badge/UCP-supported-4B32C3" alt="UCP"></a>
   <a href="https://clawhub.ai/tomtom87/portage-buy"><img src="https://img.shields.io/badge/openclaw-skill-14B8A6" alt="OpenClaw skill"></a>
-  <a href="https://glama.ai/mcp/servers/tomtom87/Portage"><img src="https://glama.ai/mcp/servers/tomtom87/Portage/badges/score.svg" alt="Portage-UCP MCP server – quality and maintenance score on Glama"></a>
+  <a href="https://glama.ai/mcp/servers/tomtom87/Portage"><img src="https://glama.ai/mcp/servers/tomtom87/Portage/badges/score.svg" alt="Portage MCP server – quality and maintenance score on Glama"></a>
 </p>
 
 <p align="center">
@@ -107,6 +107,24 @@ The `buy` skill is a plain [`SKILL.md`](https://github.com/tomtom87/Portage/blob
 
 - **Chat apps in a browser** (ChatGPT, Grok and similar) can't run `portage` on your machine, so they can't use the skill. Use the vendor's coding agent or CLI instead, if it loads skills.
 <!-- other-agents-end -->
+
+### Use Portage from any MCP client
+
+`portage mcp` serves the same search, quote, approve and buy tools over MCP on stdio, for any client that runs local servers. Install the CLI (`brew install tomtom87/portage/portage` or `gem install portage-cli`, 0.14.0 or newer) and run `portage setup` in a terminal first. Spending policy and approval stay in Portage: the agent can search and price, but a purchase waits for your approval.
+
+- **Claude Desktop.** Add this to `claude_desktop_config.json` (Settings, Developer, Edit Config) and restart. Claude Desktop doesn't inherit your shell `PATH`, so give the absolute path from `which portage` (typically `/opt/homebrew/bin/portage` or `/usr/local/bin/portage`):
+
+    ```json
+    {
+      "mcpServers": {
+        "portage": { "command": "/opt/homebrew/bin/portage", "args": ["mcp"] }
+      }
+    }
+    ```
+
+- **Claude Code.** `claude mcp add --scope user portage -- portage mcp` (drop `--scope user` to keep it to the current project).
+
+- **Docker.** `docker run -i --rm -v "$HOME/.portage:/root/.portage" ghcr.io/tomtom87/portage-mcp:0.14.0` runs the same server from the registry image. A container can't open your browser, so a hand-off prints the checkout link instead.
 
 ### Use the CLI yourself
 
