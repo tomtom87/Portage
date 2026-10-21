@@ -17,6 +17,7 @@ require_relative "cli/find"
 require_relative "cli/compare"
 require_relative "cli/check"
 require_relative "cli/history"
+require_relative "cli/order_history"
 require_relative "cli/quotes"
 require_relative "cli/money"
 require_relative "cli/human_prompt"
@@ -77,6 +78,7 @@ module Portage
                                  [--velocity-count N --velocity-window-seconds N]
                                  [--allow HOST ...] [--clear-allowlist]
                                  [--require-approval person|any|off]  (lowering asks at a terminal)
+             portage orders list [--query Q] [--limit N] [--json]
              portage orders reconcile [--checkout ID] [--json]
              portage index build [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
              portage index refresh [--sources a,b] [--queries FILE] [--dry-run] [--export DIR] [--json]
@@ -1217,10 +1219,47 @@ module Portage
     # an error, so a scheduled run never needs its own filtering logic.
     def self.run_orders(argv)
       sub = argv.first && !argv.first.start_with?("-") ? argv.shift : nil
+      return run_orders_list(argv) if sub == "list"
       return run_orders_reconcile(argv) if sub == "reconcile"
 
       warn USAGE
       1
+    end
+
+    def self.run_orders_list(argv)
+      opts = {}
+      OptionParser.new do |parser|
+        parser.on("--query Q") { |v| opts[:query] = v }
+        parser.on("--limit N", Integer) { |v| opts[:limit] = v }
+        parser.on("--json") { opts[:json] = true }
+      end.parse!(argv)
+      raise OptionParser::InvalidArgument, "--limit must be positive" if opts[:limit]&.<(1)
+
+      entries = OrderHistory.new.call(query: opts[:query], limit: opts[:limit])
+      puts opts[:json] ? JSON.pretty_generate(entries) : format_orders(entries)
+      0
+    rescue OptionParser::ParseError => e
+      warn "#{e.message}\n#{USAGE}"
+      1
+    end
+
+    def self.format_orders(entries)
+      return "(no orders)" if entries.empty?
+
+      entries.map { |entry| format_order(entry) }.join("\n\n")
+    end
+
+    def self.format_order(entry)
+      items = entry["items"].map { |item| "  #{item['title'] || item['product_id']} x#{item['quantity']}" }
+      link = entry.values_at("permalink_url", "checkout_url").compact.first
+      adjustments = entry["adjustments"].map { |adj| "  #{adj['type']}: #{adj['status']}" }
+      [order_head(entry), *items, ("  #{link}" if link), *adjustments].compact.join("\n")
+    end
+
+    def self.order_head(entry)
+      total = Money.format_amount(entry["total"], entry["currency"]) if entry["total"]
+      [entry["recorded_at"], entry["shop"], entry["order_id"] || entry["outcome"], total,
+       "[#{entry['source']}]"].compact.join(" — ")
     end
 
     def self.run_orders_reconcile(argv)

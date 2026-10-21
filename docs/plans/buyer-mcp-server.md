@@ -1,6 +1,6 @@
 # Buyer MCP Server: `portage mcp`
 
-**Status:** Planned (2026-10-21). No phase shipped yet. See the progress log at the end.
+**Status:** In progress. Phase 1 (`portage orders list`) shipped 2026-10-21. See the progress log at the end.
 **Driver:** Glama's TDQS scan of the store server (portage-ucp over Shopify) graded A, but its completeness note asked for order listing and search, and nothing on MCP shows what Portage is mostly used for: a shopper's agent searching many stores, comparing prices, importing stores from browser history, and buying with the shopper's approval. Those features live in `portage-cli` and reach agents only as shell commands, the Claude plugin's skills, and the OpenClaw plugin's 22 typed tools. This plan exposes them as a second MCP server, listed next to the store server.
 
 ## Context
@@ -102,3 +102,4 @@ One phase per session, delegated to a Sonnet subagent; each ends with suites and
 
 | Phase | Date | Summary | Design log |
 |-------|------|---------|------------|
+| 1 | 2026-10-21 | `portage orders list [--query Q] [--limit N] [--json]` and `Cli::OrderHistory`: journal rows grouped by order id, ledger joined for permalink and adjustments, history purchases and hand-offs added when no journal order covers them (linked via the TransactionLog's `checkout_id` to `idempotency_key`), each marked by `source`. Read-only. | — |
