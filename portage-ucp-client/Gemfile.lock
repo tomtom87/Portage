@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.16.0)
+    portage-ucp (0.17.0)
       base64 (~> 0.2)
       bigdecimal (>= 3.1)
       json_schemer (~> 2.5)
@@ -12,7 +12,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-ucp-client (0.6.3)
+    portage-ucp-client (0.7.0)
       faraday (>= 2.0)
       mcp (~> 1.8)
       portage-ucp (~> 0.8)
