@@ -6,6 +6,9 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-22
+
+- **Changed: requires `mcp` `~> 1.8`** (was `~> 0.24`), which serves MCP 2026-07-28 through `server/discover` and keeps `initialize` for 2025-11-25 and earlier. Minor bump because the `mcp` requirement moved from 0.x to 1.x; no API change and no changes under `lib/`. `portage-ucp` stays at `~> 0.8`: the client calls nothing newer, and the shared `mcp` `~> 1.8` requirement makes resolution pick `portage-ucp` 0.17.0 or later.
 - Documentation only, no code change. Fixes a wrong comment on
   `Client.ucp_section`. It said `Portage::Ucp::Manifest` still emits the old
   flat manifest shape. It hasn't since `portage-ucp` 0.8.0, which nests
