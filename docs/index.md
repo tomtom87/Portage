@@ -6,7 +6,7 @@ approve every payment. It ships as a command-line tool (`portage`), a Claude Cod
 ([MCP](https://modelcontextprotocol.io) and [UCP](https://ucp.dev)) to shopping agents.
 
 !!! info "Status"
-    Pre-1.0. APIs may still change between minor versions. Latest release set: 0.18.0
+    Pre-1.0. APIs may still change between minor versions. Latest release set: 0.22.0
     ([changelog](changelog.md)).
 
 ## Start here
