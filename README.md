@@ -22,7 +22,7 @@
 
 Portage lets an AI agent find and buy things from real online stores for you, and you approve every payment. It ships as a command-line tool (`portage`), a Claude Code plugin (`buy`) that drives it, and Ruby gems that let any store serve the same open protocols ([MCP](https://modelcontextprotocol.io) and [UCP](https://ucp.dev)) to shopping agents. It is for people who want an agent to shop for them, developers building shopping agents, and merchants who want agents to buy from their store.
 
-> **Status:** pre-1.0. APIs may still change between minor versions. Latest release set: 0.18.0 ([changelog](CHANGELOG.md)).
+> **Status:** pre-1.0. APIs may still change between minor versions. Latest release set: 0.22.0 ([changelog](CHANGELOG.md)).
 
 ## Quickstart
 
