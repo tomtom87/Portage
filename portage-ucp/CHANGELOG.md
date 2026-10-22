@@ -6,6 +6,9 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-22
+
+- **Changed: requires `mcp` `~> 1.8`** (was `~> 0.24`), which serves MCP 2026-07-28 through `server/discover` and keeps `initialize` for 2025-11-25 and earlier. Minor bump because the `mcp` requirement moved from 0.x to 1.x; no API change and no changes under `lib/`.
 - **Added: `app.portage-ucp.order_history` extension capability with a `list_orders` MCP tool.** `Adapter#list_orders(limit:, query: nil)` returns a new `OrderList` value object (`{"orders" => [...]}` on the wire, since MCP `structuredContent` must be an object): placed orders newest first, optionally filtered by free text. Not part of the UCP spec, which reads orders only by id. `ReferenceAdapter` implements it (matching order id and line item titles). `list_orders` is read-only but `Mcp::Server` runs the authenticator and rate limiter for it (`Mcp::Server::AUTH_REQUIRED_READS`), because an open list would expose every customer's orders; an unconfigured server rejects it like a mutating tool. `ToolMetadata` documents it, points `get_order` at it, and the server instructions mention it. WebMCP's default capability filter (`dev.ucp.shopping.*` only) leaves it out of page-registered tools.
 
 ## [0.16.0] - 2026-10-21
