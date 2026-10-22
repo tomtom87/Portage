@@ -238,14 +238,14 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
 | `buy` plugin | 0.10.5 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only shop-research skill | [buy skill](docs/skills/buy.md), [shop-research skill](docs/skills/shop-research.md) |
-| [`portage-cli`](portage-cli/) | 0.14.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
+| [`portage-cli`](portage-cli/) | 0.15.0 | Shoppers | The `portage` command | [CLI reference](portage-cli/README.md), [tutorial](docs/cli-usage-tutorial.md) |
 | [`shop-via-ucp`](skills/shop-via-ucp/SKILL.md) skill | – | Agent builders | Buy through a store's UCP endpoint, with or without `portage` | [skill page](docs/skills/shop-via-ucp.md) |
 | [`browse-via-ucp`](skills/browse-via-ucp/SKILL.md) skill | – | Agent builders | Read-only: a store's manifest, catalog and whether it supports automated buying | [skill page](docs/skills/browse-via-ucp.md) |
-| [`portage-ucp-client`](portage-ucp-client/) | 0.6.3 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
+| [`portage-ucp-client`](portage-ucp-client/) | 0.7.0 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [walkthrough](docs/walkthrough.md), [agent profile](docs/agent-profile.md), [tool gating](docs/ucp-tool-gating-investigation.md) |
 | [`portage-ucp-decision`](portage-ucp-decision/) | 0.1.2 | Agent builders | Offer ranking, escalation policy, confidence gate (Jev/Laya), `PolicyGuard` | – |
 | [`portage-ucp-journal`](portage-ucp-journal/) | 0.1.1 | Agent builders | Buyer-side purchase journal and its `Store` abstraction | – |
 | [`portage-ucp-webmcp`](portage-ucp-webmcp/) | 0.2.0 | Both | WebMCP transport: serve tools in the page, or drive a page's tools (Tier B profile, autofill) | – |
-| [`portage-ucp`](portage-ucp/) | 0.13.0 | Merchants | Protocol core: `Adapter` contract, capability registry, manifest builder, MCP server | [serving `/.well-known/ucp`](docs/well-known-ucp.md), [security hooks](docs/security-hooks.md), [library usage](docs/library-usage.md) |
+| [`portage-ucp`](portage-ucp/) | 0.17.0 | Merchants | Protocol core: `Adapter` contract, capability registry, manifest builder, MCP server | [serving `/.well-known/ucp`](docs/well-known-ucp.md), [security hooks](docs/security-hooks.md), [library usage](docs/library-usage.md) |
 | [`serve-via-ucp`](skills/serve-via-ucp/SKILL.md) skill | – | Merchants | Set up a store's own UCP endpoint | [skill page](docs/skills/serve-via-ucp.md) |
 | [`portage-ucp-shopify`](portage-ucp-shopify/) | 0.6.1 | Merchants | Shopify Admin and Storefront GraphQL APIs | – |
 | [`portage-ucp-wix`](portage-ucp-wix/) | 0.2.1 | Merchants | Wix Stores Catalog and eCommerce REST APIs | – |
@@ -267,7 +267,7 @@ usage: portage buy <url> --query "..." [--qty N] [--payment-token TOKEN]
 
 ## Requirements
 
-Ruby 3.2 or newer, and the `mcp` gem `~> 0.24` (pulled in by `portage-ucp`). The Homebrew formula brings its own Ruby, so a Homebrew install needs neither.
+Ruby 3.2 or newer, and the `mcp` gem `~> 1.8` (pulled in by `portage-ucp`). The Homebrew formula brings its own Ruby, so a Homebrew install needs neither.
 
 ## Contributing
 

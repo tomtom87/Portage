@@ -6,6 +6,9 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-22
+
+- **Changed: requires `mcp` `~> 1.8`** (was `~> 0.24`), which serves MCP 2026-07-28 through `server/discover` and keeps `initialize` for 2025-11-25 and earlier, so `portage mcp` speaks the new spec. Minor bump because the `mcp` requirement moved from 0.x to 1.x; no CLI or tool change and no changes under `lib/`. Requires `portage-ucp` `~> 0.17` and `portage-ucp-client` `~> 0.7`, the first releases that also take `mcp` 1.x.
 ## [0.14.0] - 2026-10-21
 
 - **Added: index and browser import tools in `portage mcp`.** Two more tools, 14 in all: `add_store` (`index add URL`, with `crawl` for `--crawl`) and `import_browser_history` (`browser import`). The import is a `--dry-run` preview unless `confirm` is exactly `true`, which passes `--yes` to save it; it is the only argv besides `buy_quote` with `--yes`, and it only writes the local index. It always passes `--max-probes`, at most 15, because probes run one at a time with a 5-second timeout each, and the CLI's default of 200 could run for about 17 minutes, well past the server's 120-second limit. `browser` must be one of the CLI's six browsers, and `exclude` must be host names. Phase 4 of docs/plans/buyer-mcp-server.md.
