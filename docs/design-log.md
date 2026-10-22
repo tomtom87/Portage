@@ -55,6 +55,8 @@ from reading the actual current specs.
   → **We build on top of this gem, we do not hand-roll JSON-RPC.** Reinventing the
   transport layer would immediately be behind "latest tech."
 
+> Update 2026-10-22: MCP 2026-07-28 is now the latest stable spec; the `mcp` gem is 1.8.1 and Portage depends on `~> 1.8`. The gem negotiates 2026-07-28 only through stateless `server/discover`; `initialize` tops out at 2025-11-25.
+
 **UCP** — [universal-commerce-protocol/ucp](https://github.com/universal-commerce-protocol/ucp), spec at [ucp.dev](https://ucp.dev/2026-04-08/specification/overview/), also documented by Google ([developers.google.com/merchant/ucp](https://developers.google.com/merchant/ucp)):
 - Current spec version: **2026-04-08**.
 - UCP is **transport-agnostic**: capabilities can be offered over REST, over MCP

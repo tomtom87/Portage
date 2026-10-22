@@ -30,7 +30,7 @@ RSpec.describe Portage::Cli::Mcp::Server do
               "LC_ALL" => "en_US.UTF-8" }
       messages = [
         { jsonrpc: "2.0", id: 1, method: "initialize",
-          params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "spec", version: "1" } } },
+          params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "spec", version: "1" } } },
         { jsonrpc: "2.0", method: "notifications/initialized" },
         { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
         { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_orders", arguments: {} } }

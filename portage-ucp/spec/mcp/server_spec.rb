@@ -42,7 +42,7 @@ RSpec.describe Portage::Ucp::Mcp::Server do
     expect(result[:content].first[:text]).to include("prod_1")
   end
 
-  it "negotiates the MCP 2025-11-25 initialize handshake" do
+  it "negotiates the MCP 2025-11-25 initialize handshake (newest legacy version)" do
     response = server.handle({
                                jsonrpc: "2.0", id: 4, method: "initialize",
                                params: { protocolVersion: "2025-11-25", capabilities: {},
@@ -53,6 +53,12 @@ RSpec.describe Portage::Ucp::Mcp::Server do
     expect(result[:protocolVersion]).to eq("2025-11-25")
     expect(result[:capabilities]).to have_key(:tools)
     expect(result[:serverInfo][:name]).to eq("portage-ucp")
+  end
+
+  it "advertises MCP 2026-07-28 via server/discover" do
+    response = server.handle({ jsonrpc: "2.0", id: 6, method: "server/discover" })
+
+    expect(response[:result][:supportedVersions]).to include("2026-07-28")
   end
 
   it "returns an MCP error for an unknown tool" do
