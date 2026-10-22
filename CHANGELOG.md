@@ -9,6 +9,10 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-22
+
+- **Release set:** `portage-ucp` 0.17.0, `portage-ucp-client` 0.7.0 and `portage-cli` 0.15.0, all on `mcp` `~> 1.8` (was `~> 0.24`), which serves MCP spec 2026-07-28 through `server/discover` and keeps `initialize` for 2025-11-25 and earlier. Minor bumps because the `mcp` requirement moved from 0.x to 1.x; no API change and no changes under `lib/`. `portage-cli` now requires `portage-ucp` `~> 0.17` and `portage-ucp-client` `~> 0.7`, and `portage-ucp` 0.17.0 also ships the `list_orders` tool added since 0.16.0. The two MCP images and both registry entries point at the new releases. The adapter gems already depended on `mcp` `~> 1.8` through `portage-ucp` in their lockfiles and are unchanged and not released, and the `buy` and OpenClaw plugins didn't change.
+
 - **The root `Dockerfile` is the buyer image; the store image moved to `Dockerfile.store`.** The root `Dockerfile` installs `portage-cli` and runs `portage mcp` (`ghcr.io/tomtom87/portage-mcp`, with `PORTAGE_HANDOFF_TARGET=print` since a container can't open the shopper's browser). Glama builds the root `Dockerfile`, so it now lists the buyer server. `server.json` is the registry entry `io.github.tomtom87/portage` for that image, taking the shopper's `~/.portage` as a mounted volume; the store server is `io.github.tomtom87/portage-ucp` in `server.store.json`. Both images now run on `ruby:4.0-slim`, and the store image installs `portage-ucp-shopify` 0.7.0 (was 0.6.1). The README has a "Use Portage from any MCP client" section.
 
 - **The `serve-via-ucp` skill's scripts sit beside `SKILL.md`.** `conformance.sh`, `detect_stack.sh`, `doctor.sh`, `install.sh` and `verify.sh` moved up out of `scripts/`, so a registry that reads only a skill folder's top level, such as mcprush's repo import, gets the whole skill and can track it from git tags. The skill's steps now name the scripts without the `scripts/` prefix. Copies already installed keep working, since each one is self-contained.
