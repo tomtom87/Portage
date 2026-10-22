@@ -1,12 +1,12 @@
 PATH
   remote: ../portage-ucp
   specs:
-    portage-ucp (0.15.0)
+    portage-ucp (0.16.0)
       base64 (~> 0.2)
       bigdecimal (>= 3.1)
       json_schemer (~> 2.5)
       logger (~> 1.5)
-      mcp (~> 0.24)
+      mcp (~> 1.8)
       rack (~> 3.0)
 
 PATH
@@ -31,7 +31,7 @@ GEM
     language_server-protocol (3.17.0.6)
     lint_roller (1.1.0)
     logger (1.7.0)
-    mcp (0.25.0)
+    mcp (1.8.1)
       json_schemer (>= 2.4)
     parallel (2.2.0)
     parser (3.3.12.0)

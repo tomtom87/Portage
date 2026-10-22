@@ -21,7 +21,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "bigdecimal", ">= 3.1"
   spec.add_dependency "json_schemer", "~> 2.5"
   spec.add_dependency "logger", "~> 1.5"
-  spec.add_dependency "mcp", "~> 0.24"
+  spec.add_dependency "mcp", "~> 1.8"
   spec.add_dependency "rack", "~> 3.0"
 
   spec.add_development_dependency "rack-test", "~> 2.1"

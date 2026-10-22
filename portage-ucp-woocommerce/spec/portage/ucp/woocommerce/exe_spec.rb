@@ -28,7 +28,7 @@ RSpec.describe "exe/portage-ucp-woocommerce" do
   it "answers a real MCP initialize + tools/list handshake over stdio" do
     initialize_request = {
       jsonrpc: "2.0", id: 1, method: "initialize",
-      params: { protocolVersion: "2024-11-05", capabilities: {},
+      params: { protocolVersion: "2025-11-25", capabilities: {},
                 clientInfo: { name: "exe_spec", version: "1.0" } }
     }
     initialized_notification = { jsonrpc: "2.0", method: "notifications/initialized" }
