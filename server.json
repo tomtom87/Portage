@@ -8,11 +8,11 @@
     "source": "github"
   },
   "websiteUrl": "https://portage.readthedocs.io",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/tomtom87/portage-mcp:0.14.0",
+      "identifier": "ghcr.io/tomtom87/portage-mcp:0.15.0",
       "transport": { "type": "stdio" },
       "runtimeArguments": [
         {

@@ -8,11 +8,11 @@
     "source": "github"
   },
   "websiteUrl": "https://portage.readthedocs.io",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/tomtom87/portage-ucp:0.16.0",
+      "identifier": "ghcr.io/tomtom87/portage-ucp:0.17.0",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         { "name": "SHOPIFY_SHOP_DOMAIN", "description": "Your shop, e.g. your-shop.myshopify.com", "isRequired": true },
