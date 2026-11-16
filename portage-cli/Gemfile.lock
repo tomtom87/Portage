@@ -52,7 +52,7 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    addressable (2.9.1)
+    addressable (2.9.2)
       public_suffix (>= 2.0.2, < 8.0)
     ast (2.4.3)
     base64 (0.2.0)
@@ -144,8 +144,8 @@ GEM
       prism (~> 1.7)
     ruby-progressbar (1.13.0)
     simpleidn (0.2.3)
-    sqlite3 (2.9.6-arm64-darwin)
-    sqlite3 (2.9.6-x86_64-linux-gnu)
+    sqlite3 (2.10.2-arm64-darwin)
+    sqlite3 (2.10.2-x86_64-linux-gnu)
     tsort (0.2.0)
     unicode-display_width (3.2.0)
       unicode-emoji (~> 4.1)
