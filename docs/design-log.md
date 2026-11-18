@@ -4100,3 +4100,25 @@ UCP `messages[].content` joined (raw body otherwise) and the parsed payload.
 any unknown name raise `UnsupportedWireShapeError` naming the action. Specs
 use WebMock (already a dev dependency); no live calls. Discovery and
 `Client.connect` are untouched.
+
+## 67. REST transport for the UCP client, Phase 2 (2026-11-18)
+
+`Client.mcp_endpoint` became `service_endpoint`, returning `[transport,
+endpoint]`: the newest `mcp` entry if the manifest has one, else the newest
+`rest` entry, so a store offering both is still driven over MCP and existing
+stores see no change. A manifest with neither raises `ManifestShapeError`
+("manifest has no mcp or rest service entry to connect to (saw: a2a,
+embedded)"). The flat legacy manifest and the nested hash-of-arrays shape go
+through the same `ucp_section`/entry flattening as before.
+
+`Client.connect` takes `transport: :mcp | :rest` (default `:mcp`), builds
+`Transports::Rest` for `:rest` with the same `headers:`/`proxy:` as Http, and
+raises `ArgumentError` for anything else. `discover` passes the transport it
+picked. `Session#transport_name` returns that symbol; it is a constructor
+argument (default `:mcp`, which covers loopback and stdio) rather than a class
+check on the transport, so it also works with doubles. The old spec asserting
+a REST-only manifest raised now asserts the REST fallback. The REST-only
+fixture is the live discovery document from issue #178 (it carries no
+credential), saved as `spec/fixtures/rest_only_manifest.json`. No other
+caller of `mcp_endpoint` exists in code; `docs/cli-usage-tutorial.md` mentions
+it only in a historical bug write-up and is left as is.

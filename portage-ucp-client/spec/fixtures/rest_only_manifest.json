@@ -1,0 +1,33 @@
+{
+    "ucp": {
+        "version": "2026-08-25",
+        "services": {
+            "dev.ucp.shopping": [
+                {
+                    "version": "2026-08-25",
+                    "transport": "rest",
+                    "endpoint": "https://agent-gateway-partner-sandbox.onrender.com/ucp/2026-08-25",
+                    "spec": "https://ucp.dev/2026-08-25/specification/overview",
+                    "schema": "https://ucp.dev/2026-08-25/services/shopping/rest.openapi.json"
+                }
+            ]
+        },
+        "capabilities": {
+            "dev.ucp.shopping.checkout": [
+                {
+                    "version": "2026-08-25",
+                    "spec": "https://ucp.dev/2026-08-25/specification/shopping/checkout",
+                    "schema": "https://ucp.dev/2026-08-25/schemas/shopping/checkout.json"
+                }
+            ]
+        },
+        "payment_handlers": {}
+    },
+    "sandbox": {
+        "experimental": true,
+        "ucp_conformant": false,
+        "payments_enabled": false,
+        "conformance_probe_mode": true,
+        "supplier_order_writes_enabled": false
+    }
+}

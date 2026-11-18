@@ -24,12 +24,16 @@ module Portage
         #   names advertised by the server, when known upfront (Client.discover
         #   populates this from the manifest; Client.for_adapter/.connect leave
         #   it nil since nothing was fetched to populate it from).
-        def initialize(transport:, capabilities: nil)
+        def initialize(transport:, capabilities: nil, transport_name: :mcp)
           @transport = transport
+          @transport_name = transport_name
           @capabilities = capabilities
         end
 
         attr_reader :capabilities
+
+        # @return [Symbol] `:rest` over the REST transport, `:mcp` otherwise.
+        attr_reader :transport_name
 
         # @return [Boolean, nil] nil when capabilities weren't known upfront
         #   (see #capabilities) — callers with a nil result can't tell either

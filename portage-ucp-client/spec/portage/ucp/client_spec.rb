@@ -48,6 +48,27 @@ RSpec.describe Portage::Ucp::Client do
     end
   end
 
+  describe ".connect transport:" do
+    it "builds a REST session for transport: :rest" do
+      transport = instance_double(Portage::Ucp::Client::Transports::Rest)
+      allow(Portage::Ucp::Client::Transports::Rest).to receive(:new)
+        .with(url: "https://shop.example/ucp", headers: { "X" => "y" }, proxy: nil).and_return(transport)
+
+      session = described_class.connect(url: "https://shop.example/ucp", headers: { "X" => "y" }, transport: :rest)
+
+      expect(session.transport_name).to eq(:rest)
+    end
+
+    it "defaults to :mcp and rejects unknown transports" do
+      allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
+        .and_return(instance_double(Portage::Ucp::Client::Transports::Http))
+
+      expect(described_class.connect(url: "https://shop.example/mcp").transport_name).to eq(:mcp)
+      expect { described_class.connect(url: "https://shop.example", transport: :a2a) }
+        .to raise_error(ArgumentError, /transport must be :mcp or :rest/)
+    end
+  end
+
   describe ".discover" do
     it "fetches the manifest, connects to its mcp service endpoint, and scopes capabilities" do
       stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
@@ -105,13 +126,55 @@ RSpec.describe Portage::Ucp::Client do
         .to raise_error(Portage::Ucp::Client::DiscoveryError, /couldn't reach/)
     end
 
-    it "raises DiscoveryError when the manifest has no mcp service entry" do
+    it "falls back to the rest service entry when the manifest has no mcp one" do
       stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
         status: 200, body: { services: [{ transport: "rest", endpoint: "https://shop.example/rest" }] }.to_json
       )
+      transport = instance_double(Portage::Ucp::Client::Transports::Rest)
+      allow(Portage::Ucp::Client::Transports::Rest).to receive(:new)
+        .with(url: "https://shop.example/rest", headers: {}, proxy: nil).and_return(transport)
+
+      expect(described_class.discover("https://shop.example").transport_name).to eq(:rest)
+    end
+
+    it "discovers the #178 REST-only sandbox manifest over REST" do
+      stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
+        status: 200, body: File.read(File.expand_path("../../fixtures/rest_only_manifest.json", __dir__))
+      )
+      endpoint = "https://agent-gateway-partner-sandbox.onrender.com/ucp/2026-08-25"
+      allow(Portage::Ucp::Client::Transports::Rest).to receive(:new)
+        .with(url: endpoint, headers: {}, proxy: nil)
+        .and_return(instance_double(Portage::Ucp::Client::Transports::Rest))
+
+      session = described_class.discover("https://shop.example")
+
+      expect(session.transport_name).to eq(:rest)
+      expect(session.capabilities).to eq(["dev.ucp.shopping.checkout"])
+    end
+
+    it "prefers mcp over rest when a store offers both" do
+      stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
+        status: 200,
+        body: { services: [{ transport: "rest", endpoint: "https://shop.example/rest" },
+                           { transport: "mcp", endpoint: "https://shop.example/mcp" }] }.to_json
+      )
+      allow(Portage::Ucp::Client::Transports::Http).to receive(:new)
+        .with(url: "https://shop.example/mcp", headers: {}, proxy: nil)
+        .and_return(instance_double(Portage::Ucp::Client::Transports::Http))
+
+      expect(described_class.discover("https://shop.example").transport_name).to eq(:mcp)
+    end
+
+    it "raises ManifestShapeError listing the transports it saw when there is no mcp or rest entry" do
+      stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
+        status: 200,
+        body: { services: [{ transport: "a2a", endpoint: "https://shop.example/a2a" },
+                           { transport: "embedded" }] }.to_json
+      )
 
       expect { described_class.discover("https://shop.example") }
-        .to raise_error(Portage::Ucp::Client::DiscoveryError, /no mcp service/)
+        .to raise_error(Portage::Ucp::Client::ManifestShapeError,
+                        "manifest has no mcp or rest service entry to connect to (saw: a2a, embedded)")
     end
 
     # Real shape served by live Shopify UCP rollouts (Casper, Allbirds,
