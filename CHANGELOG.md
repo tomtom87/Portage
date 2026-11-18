@@ -9,6 +9,10 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-18
+
+- **Release set:** `portage-ucp-client` 0.8.0 and `portage-cli` 0.16.0. Portage can now buy from stores that advertise only the UCP REST transport (UCP 2026-08-25's core transport), such as the sandbox in issue #178. The client picks MCP or REST from the manifest (MCP wins when both are offered), adds `connect(transport:)` and `Session#transport_name`, and `portage-cli` works with REST-only stores in `buy` and `find`, keeps a store's HTTP status and text in refusals, and sends the agent profile on `complete_checkout`. `portage-cli` requires `portage-ucp-client` `~> 0.8`. `portage-ucp`, the adapter gems and `portage-ucp-webmcp` (whose client range already admits 0.8) are unchanged and not released, and the `buy` and OpenClaw plugins didn't change. The root `Dockerfile` and `server.json` point at `portage-cli` 0.16.0; the store image and `server.store.json` stay put. Live interop against the #178 sandbox is still to do, waiting on its test credential.
+
 ## [0.22.0] - 2026-10-22
 
 - **Release set:** `portage-ucp` 0.17.0, `portage-ucp-client` 0.7.0 and `portage-cli` 0.15.0, all on `mcp` `~> 1.8` (was `~> 0.24`), which serves MCP spec 2026-07-28 through `server/discover` and keeps `initialize` for 2025-11-25 and earlier. Minor bumps because the `mcp` requirement moved from 0.x to 1.x; the upgrade itself needed no code changes. `portage-cli` now requires `portage-ucp` `~> 0.17` and `portage-ucp-client` `~> 0.7`, and `portage-ucp` 0.17.0 also ships the `list_orders` tool added since 0.16.0. The two MCP images and both registry entries point at the new releases. The adapter gems' `portage-ucp` ranges already admit 0.17.0, so they are unchanged and not released, and the `buy` and OpenClaw plugins didn't change.
