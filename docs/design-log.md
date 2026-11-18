@@ -4075,3 +4075,27 @@ Copies already installed are self-contained and keep working at their old
 layout; they pick up the flat one the next time the skill is installed or
 imported. `docs/skills/serve-via-ucp.md` includes SKILL.md, so it follows
 without a change.
+
+## 66. REST transport for the UCP client, Phase 1 (2026-11-18)
+
+`Portage::Ucp::Client::Transports::Rest` implements the same `call_tool`
+seam as Http over Faraday, so a REST-only store (issue #178) can be driven by
+`Session` once Phase 2 teaches discovery to pick it. It is a route table
+(verb, path, body wrapper per action) over `UcpWireShape`: the MCP body is
+built as before, the capability wrapper key (`catalog`/`cart`/`checkout`) is
+dropped, and the id goes in the path (taken from the wire body's `id`, which
+for `complete_checkout` is the same unwrap). Get and cancel actions send no
+body. `meta` becomes headers: `UCP-Agent: profile="<url>"` (a missing profile
+raises `MissingAgentProfileError`, as in Http), `Idempotency-Key` when
+present, JSON content-type/accept, plus the caller's headers and the
+`Client.USER_AGENT` default. Paths are appended to the endpoint URL by string
+join so a version prefix (`/ucp/2026-08-25`) survives.
+
+A non-2xx, or a 2xx that isn't a JSON object, raises `ServerError` with the
+UCP `messages[].content` joined (raw body otherwise) and the parsed payload.
+`complete_checkout` refusals reuse the shared `permission_refusal?` and
+`permission_error`, plus any 403 on that action, and raise
+`PaymentPermissionError`. `link_identity`, the payment-enrollment actions and
+any unknown name raise `UnsupportedWireShapeError` naming the action. Specs
+use WebMock (already a dev dependency); no live calls. Discovery and
+`Client.connect` are untouched.
