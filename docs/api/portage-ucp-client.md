@@ -1,6 +1,6 @@
 # portage-ucp-client API
 
-`portage-ucp-client` (0.6.3) is the buyer side of UCP: use it when your Ruby shopping agent needs to discover a store, or drive its own `Adapter`, and place an order through one `Session` object.
+`portage-ucp-client` (0.8.0) is the buyer side of UCP: use it when your Ruby shopping agent needs to discover a store, or drive its own `Adapter`, and place an order through one `Session` object.
 
 Require it after the core gem. The core gem's API is on [portage-ucp](portage-ucp.md).
 
@@ -16,8 +16,8 @@ All entry points are module functions on `Portage::Ucp::Client`. Each returns a 
 | Method | Signature | Returns | Notes |
 |---|---|---|---|
 | `for_adapter` | `Client.for_adapter(adapter, **server_opts)` | `Session` | Loopback. Wraps an `Adapter` in-process. `server_opts` go to `Portage::Ucp::Mcp::Server.build` (for example `authenticator:`, `rate_limiter:`, `journal:`). |
-| `connect` | `Client.connect(command: nil, args: [], env: nil, url: nil, headers: {}, capabilities: nil, proxy: nil)` | `Session` | Stdio if `command:` is given, else Streamable HTTP if `url:` is given. Raises `ArgumentError` if neither. `headers:` and `proxy:` only apply to `url:`. |
-| `discover` | `Client.discover(url, headers: {}, proxy: nil)` | `Session` | GETs `<url>/.well-known/ucp`, picks the `mcp` service endpoint, connects over HTTP. The session's `capabilities` come from the manifest. |
+| `connect` | `Client.connect(command: nil, args: [], env: nil, url: nil, headers: {}, capabilities: nil, proxy: nil, transport: :mcp)` | `Session` | Stdio if `command:` is given, else Streamable HTTP if `url:` is given, or REST with `url:` and `transport: :rest`. Raises `ArgumentError` if neither, if `transport:` is not `:mcp` or `:rest`, or for `transport: :rest` with `command:`. `headers:` and `proxy:` only apply to `url:`. |
+| `discover` | `Client.discover(url, headers: {}, proxy: nil)` | `Session` | GETs `<url>/.well-known/ucp` and connects to its `mcp` service endpoint over Streamable HTTP, else its `rest` one over REST (UCP 2026-08-25's core transport). MCP wins when both are offered; within a transport the newest `version` wins. The session's `capabilities` come from the manifest. |
 | `with_user_agent` | `Client.with_user_agent(headers)` | `Hash` | Returns `headers` unchanged if it already names a `User-Agent` (any case). Otherwise adds `USER_AGENT`. |
 
 `fetch_manifest` is a private class method. You cannot call it. Use `discover`.
@@ -55,12 +55,13 @@ You do not build these directly in normal use. They are public constants under `
 | `Loopback` | `Loopback.new(adapter:, **server_opts)` | `Client.for_adapter` | Builds `Portage::Ucp::Mcp::Server` from the adapter and calls it in-process. Runs the real authenticator, rate limiter and `Dispatcher`. Results have symbol keys. |
 | `Stdio` | `Stdio.new(command:, args: [], env: nil)` | `Client.connect(command:)` | Spawns a subprocess speaking JSON-RPC on stdin/stdout, through the `mcp` gem's client. Does the `initialize` handshake in the constructor. Results have string keys. |
 | `Http` | `Http.new(url:, headers: {}, proxy: nil)` | `Client.connect(url:)`, `Client.discover` | Streamable HTTP through the `mcp` gem's client. Handshake in the constructor. Reshapes flat arguments into the real UCP wire format. Results have string keys. |
+| `Rest` | `Rest.new(url:, headers: {}, proxy: nil)` | `Client.connect(url:, transport: :rest)`, `Client.discover` | UCP REST over Faraday. Same wire shape as `Http`, but the body is the bare capability object, ids go in the path, and `meta` becomes headers. `link_identity` and the payment-enrollment actions have no REST operation and raise `UnsupportedWireShapeError`. A non-2xx response raises `ServerError` with `HTTP <status>: <the store's text>`. Results have string keys. |
 
-Stdio and Loopback drop the arguments `context`, `handler_id` and `credential_type`. They also drop `cart_id` on `create_checkout` only (on cart calls `cart_id` is a real argument and is kept). Only HTTP uses these.
+Stdio and Loopback drop the arguments `context`, `handler_id` and `credential_type`. They also drop `cart_id` on `create_checkout` only (on cart calls `cart_id` is a real argument and is kept). Only HTTP and REST use these.
 
 Custom transports work too: `Session.new(transport:)` takes any object with `call_tool(name:, arguments:, meta: nil)`. The WebMCP gem does this. See [portage-ucp-webmcp](portage-ucp-webmcp.md).
 
-Source: `portage-ucp-client/lib/portage/ucp/client/transports/loopback.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/stdio.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/http.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/local_arguments.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/ucp_wire_shape.rb`
+Source: `portage-ucp-client/lib/portage/ucp/client/transports/loopback.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/stdio.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/http.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/rest.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/local_arguments.rb`, `portage-ucp-client/lib/portage/ucp/client/transports/ucp_wire_shape.rb`
 
 ## Session
 
@@ -72,7 +73,8 @@ Every method takes `meta:` (default `nil`). Over HTTP it must be `{ agent_profil
 
 | Method | Signature | Notes |
 |---|---|---|
-| `initialize` | `Session.new(transport:, capabilities: nil)` | `capabilities` is an Array of reverse-domain names, or nil if unknown. |
+| `initialize` | `Session.new(transport:, capabilities: nil, transport_name: :mcp)` | `capabilities` is an Array of reverse-domain names, or nil if unknown. |
+| `transport_name` | `session.transport_name` | `:mcp` or `:rest`: which wire `connect` or `discover` chose. `:mcp` for loopback and stdio. |
 | `capabilities` | `session.capabilities` | Reader. Populated by `discover`. nil after `for_adapter` and `connect` unless you pass `capabilities:`. |
 | `advertises?` | `advertises?(capability_name)` | `true` or `false`. `nil` if capabilities are unknown. Attempt the call when nil. |
 | `search_catalog` | `search_catalog(query:, limit: 20, context: nil, meta: nil)` | |
@@ -156,11 +158,11 @@ All inherit from `Portage::Ucp::Client::Error < StandardError`.
 | Class | Raised by | When |
 |---|---|---|
 | `DiscoveryError` | `Client.discover` | The manifest GET is not 2xx, the body is not JSON, or the host is unreachable (any other `StandardError`, message includes the class). Looks the same as "store does not run UCP". |
-| `ManifestShapeError < DiscoveryError` | `Client.discover` | The manifest parsed but has no `mcp` service entry. The store does run UCP, so do not treat it like a 404. Rescue it before `DiscoveryError`. |
-| `MissingAgentProfileError` | Http transport | Any HTTP call without `meta: { agent_profile: url }`. |
+| `ManifestShapeError < DiscoveryError` | `Client.discover` | The manifest parsed but has no `mcp` or `rest` service entry (the message lists the transports it saw). The store does run UCP, so do not treat it like a 404. Rescue it before `DiscoveryError`. |
+| `MissingAgentProfileError` | Http and Rest transports | Any HTTP call without `meta: { agent_profile: url }`. |
 | `ServerError` | All transports | A tool result has `isError: true`. `#message` is the server's text. See below. |
-| `PaymentPermissionError` | Http transport | `complete_checkout` is refused for lack of permission. Matched by message pattern `/forbidden\|not enabled\|not granted\|checkout.?completion/i`. Fall back to the checkout's `continue_url`. See [tool gating](../ucp-tool-gating-investigation.md). |
-| `UnsupportedWireShapeError` | Http transport | `complete_checkout` with any `handler_id:` other than the card handler `"dev.shopify.card"`. |
+| `PaymentPermissionError` | Http and Rest transports | `complete_checkout` is refused for lack of permission. Matched by message pattern `/forbidden\|not enabled\|not granted\|checkout.?completion/i`. Fall back to the checkout's `continue_url`. See [tool gating](../ucp-tool-gating-investigation.md). |
+| `UnsupportedWireShapeError` | Http and Rest transports | `complete_checkout` with any `handler_id:` other than the card handler `"dev.shopify.card"`; on REST, also `link_identity` and the payment-enrollment actions. |
 
 Two more errors reach you from outside this gem:
 

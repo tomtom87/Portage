@@ -1,6 +1,6 @@
 # CLI JSON reference
 
-This page is the machine-readable contract of `portage` (gem `portage-cli` 0.13.1) for agents and scripts that drive it with `--json`.
+This page is the machine-readable contract of `portage` (gem `portage-cli` 0.16.0) for agents and scripts that drive it with `--json`.
 
 For flags and human-readable output, see the [CLI reference](../cli-reference.md). For how an agent loop uses these reports end to end, see [Agentic flow](../agentic-flow.md).
 
@@ -8,7 +8,7 @@ Source: `portage-cli/lib/portage/cli.rb`, `portage-cli/lib/portage/cli/*.rb`
 
 ## Conventions
 
-- `--json` writes to stdout. Most commands print one pretty-printed JSON value. Some print an array, not an object (`doctor`, `orders reconcile`, `payment list`).
+- `--json` writes to stdout. Most commands print one pretty-printed JSON value. Some print an array, not an object (`doctor`, `orders list`, `orders reconcile`, `payment list`).
 - `buy --wait --json` is the exception. It streams one-line JSON events first, then the final report. See [buy --wait](#buy-wait-ndjson-stream).
 - Branch on `outcome` (buy) or on `error` (browser commands). Never branch on `message`.
 - Money is an integer in minor units (cents, pence). `--max-price 400` means 400 major units and is converted to minor units by multiplying by 100. There is no currency conversion.
@@ -33,7 +33,7 @@ Diagnostics go to stderr, never into the JSON. Examples:
 | `pick`, `approve` | `picked`, `approved`, `viewed`, `needs_pick`, `needs_approval` | Any other outcome (`cancelled`, `search_not_found`, `offer_not_found`, `quote_not_found`, `quote_used`, `view_refused`, `no_terminal`, `invalid_option`, `error`) |
 | `doctor`, `configure`, `setup` | No finding has `level: "warning"` | At least one warning |
 | `policy set` | Applied | A lowering of `--require-approval` that wasn't confirmed at a terminal (nothing changed), or a usage error |
-| `history`, `policy show`, `orders reconcile`, `index show`, `index sources`, `browser profile init/status` | Always | Not used |
+| `history`, `policy show`, `orders list`, `orders reconcile`, `index show`, `index sources`, `browser profile init/status` | Always | Not used |
 | `payment list` | Always | Not used |
 | `browser import` | No `error` key | `error` present |
 | `browser profile open` | Attached | A `BrowserProfile` error |
@@ -615,6 +615,48 @@ Purchase entry:
 Search entry: `query`, `url` (omitted for a cross-store `find`), `offer_count`, `message`, `at`. A search that kept offers also has `search_id` and `offers[]` (`offer_ref`, `store`, `product_id`, `title`, `amount`, `currency`, `url`, `checkout`, `found_at`, and `query` for a compare's offers). `compare` also records a search, with a `query` starting `compare:`.
 
 "What did I buy" is the purchases whose `outcome` is `purchased`. Every other purchase still carries the `checkout_url`. A `buy` that ends in `no_match`, `browse_only`, `dead_end` or a store error has no checkout, so it is a search entry with no `outcome`. Both lists are capped at 200 entries. `history clear` prints text, not JSON.
+
+## orders list
+
+`portage orders list [--query Q] [--limit N] --json`
+
+Prints an array of your purchases, newest first, read from `~/.portage` alone; it never contacts a store. Each entry merges the purchase journal (line items, grouped by order id), the order ledger (permalink and adjustments) and `history` (hand-offs and purchases the journal doesn't cover). Nothing is backfilled. `--query` matches shop host, product id, item title and order id, case-insensitively. `--limit` applies after filtering. It always exits `0`, and an empty array means no purchases (or none matched). `--limit` below 1 is a usage error.
+
+Source: `cli.rb` (`run_orders_list`), `cli/order_history.rb`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `source` | string | `journal` or `history`: which record the entry came from. |
+| `order_id` | string or null | The store's order id. Always null for `history`. |
+| `shop` | string | The store's host. |
+| `recorded_at` | string | ISO 8601 time of the purchase. Entries sort on it. |
+| `currency` | string | Currency. |
+| `total` | integer or null | Minor units. For `journal`, the sum of the item amounts; null when none has one. |
+| `items[]` | array | `product_id`, `title` (null when no history entry kept it), `quantity`, and `amount` (minor units, `journal` only). |
+| `permalink_url` | string or null | The order's page at the store, from the order ledger. |
+| `adjustments[]` | array | Refunds, returns and disputes from the order ledger, as the store reported them (`type`, `status`, ...). Empty when none. |
+| `outcome` | string | `history` only: `purchased`, or the hand-off's outcome. |
+| `checkout_url` | string | `history` only: the checkout link. |
+
+Keys are always present (null when unknown), except `outcome` and `checkout_url`, which only `history` entries carry.
+
+```json
+[
+  {
+    "source": "journal",
+    "order_id": "ord_456",
+    "shop": "shop.example.com",
+    "recorded_at": "2026-11-02T09:14:00Z",
+    "currency": "USD",
+    "total": 52995,
+    "items": [
+      { "product_id": "gid://shopify/Product/1", "title": "Kettle", "quantity": 1, "amount": 52995 }
+    ],
+    "permalink_url": "https://shop.example.com/orders/ord_456",
+    "adjustments": []
+  }
+]
+```
 
 ## orders reconcile
 

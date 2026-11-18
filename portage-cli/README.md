@@ -11,7 +11,8 @@ portage buy https://your-shop.example --query "snowboard" --qty 1 --payment-toke
 
 1. Tries native UCP discovery first (`GET /.well-known/ucp`, then a `<link
    rel="ucp">`-style tag on the homepage) — zero credentials, works on any
-   store that's opted in.
+   store that's opted in, over MCP or, for a store that serves only UCP REST,
+   over REST.
 2. Falls back to a `portage-ucp-<platform>` adapter **only** when this process
    already has that platform's own credentials in env — i.e. it's your own
    store, or one you're integrated with.

@@ -124,7 +124,7 @@ The `buy` skill is a plain [`SKILL.md`](https://github.com/tomtom87/Portage/blob
 
 - **Claude Code.** `claude mcp add --scope user portage -- portage mcp` (drop `--scope user` to keep it to the current project).
 
-- **Docker.** `docker run -i --rm -v "$HOME/.portage:/root/.portage" ghcr.io/tomtom87/portage-mcp:0.14.0` runs the same server from the registry image. A container can't open your browser, so a hand-off prints the checkout link instead.
+- **Docker.** `docker run -i --rm -v "$HOME/.portage:/root/.portage" ghcr.io/tomtom87/portage-mcp:0.16.0` runs the same server from the registry image. A container can't open your browser, so a hand-off prints the checkout link instead.
 
 ### Use the CLI yourself
 
