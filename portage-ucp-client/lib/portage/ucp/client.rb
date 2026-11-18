@@ -39,24 +39,33 @@ module Portage
         Session.new(transport: Transports::Loopback.new(adapter: adapter, **server_opts))
       end
 
-      # Connects over stdio (a subprocess) or Streamable HTTP (a URL) — pass
-      # exactly one of `command:` or `url:`.
+      # Connects over stdio (a subprocess), Streamable HTTP (a URL) or REST (a
+      # URL with `transport: :rest`) — pass exactly one of `command:` or `url:`.
+      # @param transport [Symbol] `:mcp` (default) or `:rest`; only for `url:`.
       # @param proxy [String, Hash, nil] forwarded to Transports::Http (a
       #   `url:` connection only) — see its own doc comment.
-      def self.connect(command: nil, args: [], env: nil, url: nil, headers: {}, capabilities: nil, proxy: nil)
-        transport = if command
-                      Transports::Stdio.new(command: command, args: args, env: env)
-                    elsif url
-                      Transports::Http.new(url: url, headers: headers, proxy: proxy)
-                    else
-                      raise ArgumentError, "connect requires either command: or url:"
-                    end
-        Session.new(transport: transport, capabilities: capabilities)
+      def self.connect(command: nil, args: [], env: nil, url: nil, headers: {}, capabilities: nil, proxy: nil,
+                       transport: :mcp)
+        unless %i[mcp rest].include?(transport)
+          raise ArgumentError, "transport must be :mcp or :rest, got #{transport.inspect}"
+        end
+
+        raise ArgumentError, "transport: :rest needs url:, not command:" if command && transport == :rest
+
+        wire = if command
+                 Transports::Stdio.new(command: command, args: args, env: env)
+               elsif url
+                 (transport == :rest ? Transports::Rest : Transports::Http).new(url: url, headers: headers,
+                                                                                proxy: proxy)
+               else
+                 raise ArgumentError, "connect requires either command: or url:"
+               end
+        Session.new(transport: wire, capabilities: capabilities, transport_name: transport)
       end
 
       # GETs `<url>/.well-known/ucp`, parses the manifest, and connects to the
-      # `mcp`-transport endpoint it advertises in `services` (see
-      # Portage::Ucp::Manifest#services — the core-gem fix this client
+      # `mcp`-transport endpoint it advertises in `services` (else its `rest`
+      # one; see Portage::Ucp::Manifest#services — the core-gem fix this client
       # depends on to know where to connect).
       # @return [Session] scoped to the manifest's advertised capabilities.
       # @param headers [Hash{String => String}] sent with the manifest GET
@@ -66,7 +75,9 @@ module Portage
       #   connection this discovers into — see Transports::Http.
       def self.discover(url, headers: {}, proxy: nil)
         manifest = fetch_manifest(url, headers)
-        connect(url: mcp_endpoint(manifest), headers: headers, capabilities: capability_names(manifest), proxy: proxy)
+        transport, endpoint = service_endpoint(manifest)
+        connect(url: endpoint, headers: headers, capabilities: capability_names(manifest), proxy: proxy,
+                transport: transport)
       end
 
       def self.fetch_manifest(url, headers = {})
@@ -106,17 +117,25 @@ module Portage
       end
       private_class_method :ucp_section
 
-      def self.mcp_endpoint(manifest)
+      # MCP when the store offers it, else REST; the newest `version` wins
+      # within a transport.
+      # @return [Array(Symbol, String)] `[:mcp | :rest, endpoint]`
+      def self.service_endpoint(manifest)
         services = ucp_section(manifest)["services"]
         entries = services.is_a?(Hash) ? services.values.flatten : Array(services)
-        endpoint = entries.select { |s| s["transport"] == "mcp" }
-                          .max_by { |s| s["version"].to_s }
-                          &.fetch("endpoint", nil)
-        raise ManifestShapeError, "manifest has no mcp service entry to connect to" unless endpoint
-
-        endpoint
+        %w[mcp rest].each do |transport|
+          endpoint = newest_endpoint(entries, transport)
+          return [transport.to_sym, endpoint] if endpoint
+        end
+        seen = entries.map { |s| s["transport"] }.compact.uniq
+        raise ManifestShapeError, "manifest has no mcp or rest service entry to connect to (saw: #{seen.join(', ')})"
       end
-      private_class_method :mcp_endpoint
+      private_class_method :service_endpoint
+
+      def self.newest_endpoint(entries, transport)
+        entries.select { |s| s["transport"] == transport }.max_by { |s| s["version"].to_s }&.fetch("endpoint", nil)
+      end
+      private_class_method :newest_endpoint
 
       def self.capability_names(manifest)
         capabilities = ucp_section(manifest)["capabilities"]
