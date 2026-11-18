@@ -80,8 +80,7 @@ module Portage
             return payload if response.success? && payload
 
             error = ServerError.new("HTTP #{response.status}: #{detail(payload, response.body)}", payload: payload)
-            raise permission_error(error) if name == "complete_checkout" &&
-                                             (response.status == 403 || permission_refusal?(error.message))
+            raise permission_error(error) if name == "complete_checkout" && permission_refusal?(error.message)
 
             raise error
           end

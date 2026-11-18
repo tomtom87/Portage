@@ -4094,7 +4094,8 @@ join so a version prefix (`/ucp/2026-08-25`) survives.
 A non-2xx, or a 2xx that isn't a JSON object, raises `ServerError` with the
 UCP `messages[].content` joined (raw body otherwise) and the parsed payload.
 `complete_checkout` refusals reuse the shared `permission_refusal?` and
-`permission_error`, plus any 403 on that action, and raise
+`permission_error` (pattern only, as Http; a bare auth 403 stays a
+`ServerError`) and raise
 `PaymentPermissionError`. `link_identity`, the payment-enrollment actions and
 any unknown name raise `UnsupportedWireShapeError` naming the action. Specs
 use WebMock (already a dev dependency); no live calls. Discovery and

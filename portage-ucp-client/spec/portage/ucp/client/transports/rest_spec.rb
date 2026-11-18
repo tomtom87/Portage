@@ -125,15 +125,15 @@ RSpec.describe Portage::Ucp::Client::Transports::Rest do
       expect { call("get_order", { order_id: "o1" }) }.to raise_error(errors::ServerError)
     end
 
-    it "maps a complete_checkout permission refusal to PaymentPermissionError" do
+    it "leaves a bare 403 on complete_checkout a ServerError (e.g. a bad API key)" do
       stub_request(:post, "#{base}/checkout-sessions/k1/complete")
-        .to_return(status: 403, body: { "messages" => [{ "content" => "Forbidden" }] }.to_json)
+        .to_return(status: 403, body: { "messages" => [{ "content" => "Invalid API key" }] }.to_json)
 
       expect { call("complete_checkout", { checkout_id: "k1", payment_token: "t" }) }
-        .to raise_error(errors::PaymentPermissionError)
+        .to raise_error(errors::ServerError) { |e| expect(e).not_to be_a(errors::PaymentPermissionError) }
     end
 
-    it "matches the shared refusal pattern on other statuses for complete_checkout" do
+    it "maps the shared refusal pattern on complete_checkout to PaymentPermissionError" do
       stub_request(:post, "#{base}/checkout-sessions/k1/complete")
         .to_return(status: 400, body: { "messages" => [{ "content" => "channel not enabled" }] }.to_json)
 
