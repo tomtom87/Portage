@@ -7,7 +7,7 @@ Ruby program *act as* the shopper's agent: connect to somebody else's
 `/.well-known/ucp` manifest, or drive your own `Adapter` directly, and place an
 order as the client.
 
-Three transports behind one `Session` interface — callers never know which they
+Four transports behind one `Session` interface — callers never know which they
 got:
 
 | Transport | Use case |
@@ -15,9 +15,10 @@ got:
 | `Portage::Ucp::Client.for_adapter(adapter)` | Loopback over an in-process `Adapter` — no subprocess, no socket. Still runs the real authenticator/rate-limiter/`Dispatcher` stack, just without the wire hop. For driving your own store's `Adapter` directly. |
 | `Portage::Ucp::Client.connect(command: ...)` | stdio, spawns a subprocess (an MCP server exe). |
 | `Portage::Ucp::Client.connect(url: ...)` | Streamable HTTP, connects to a remote MCP endpoint. |
-| `Portage::Ucp::Client.discover(url)` | Fetches `<url>/.well-known/ucp`, parses the manifest, and connects to its `mcp` service — the entry point for buying from a store you've never talked to before. |
+| `Portage::Ucp::Client.connect(url: ..., transport: :rest)` | UCP REST (2026-08-25's core transport), for stores that serve REST only. |
+| `Portage::Ucp::Client.discover(url)` | Fetches `<url>/.well-known/ucp`, parses the manifest, and connects to its `mcp` service, else its `rest` one — the entry point for buying from a store you've never talked to before. `session.transport_name` says which (`:mcp` or `:rest`). |
 
-Depends only on `portage-ucp` and the `mcp` gem's client half — no adapter gem is
+Depends only on `portage-ucp`, the `mcp` gem's client half and `faraday` — no adapter gem is
 a dependency.
 
 ## Installation

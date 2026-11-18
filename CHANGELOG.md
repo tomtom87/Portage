@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Docs caught up with release set 0.23.0.** The `portage-ucp-client` API page and README cover the REST transport (`connect(transport: :rest)`, `Session#transport_name`, `Transports::Rest`, and REST in `discover` and the error table), and the API pages name `portage-ucp-client` 0.8.0 and `portage-ucp-decision` 0.1.2. The CLI JSON reference names `portage-cli` 0.16.0 and documents `orders list --json`. The README's Docker example uses `portage-mcp:0.16.0`, and the `portage-cli` README says discovery works over REST too. The UCP 2026-08-25 plan is marked done.
+
 ## [0.23.0] - 2026-11-18
 
 - **Release set:** `portage-ucp-client` 0.8.0 and `portage-cli` 0.16.0. Portage can now buy from stores that advertise only the UCP REST transport (UCP 2026-08-25's core transport), such as the sandbox in issue #178. The client picks MCP or REST from the manifest (MCP wins when both are offered), adds `connect(transport:)` and `Session#transport_name`, and `portage-cli` works with REST-only stores in `buy` and `find`, keeps a store's HTTP status and text in refusals, and sends the agent profile on `complete_checkout`. `portage-cli` requires `portage-ucp-client` `~> 0.8`. `portage-ucp`, the adapter gems and `portage-ucp-webmcp` (whose client range already admits 0.8) are unchanged and not released, and the `buy` and OpenClaw plugins didn't change. The root `Dockerfile` and `server.json` point at `portage-cli` 0.16.0; the store image and `server.store.json` stay put. Live interop against the #178 sandbox is still to do, waiting on its test credential.

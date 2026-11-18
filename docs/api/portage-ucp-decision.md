@@ -1,6 +1,6 @@
 # portage-ucp-decision API
 
-`portage-ucp-decision` (0.1.1) gives a shopping agent typed, inspectable purchase decisions: rank offers, decide whether to escalate, gate on a confidence score, and check spend policy.
+`portage-ucp-decision` (0.1.2) gives a shopping agent typed, inspectable purchase decisions: rank offers, decide whether to escalate, gate on a confidence score, and check spend policy.
 
 Use it between your agent loop and the [client](portage-ucp-client.md). It depends on the core gem ([portage-ucp](portage-ucp.md)) and Faraday.
 
