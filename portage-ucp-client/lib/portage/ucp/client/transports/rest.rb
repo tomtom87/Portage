@@ -1,6 +1,6 @@
 require "faraday"
 require "json"
-require "uri"
+require "erb"
 require_relative "../errors"
 require_relative "ucp_wire_shape"
 
@@ -58,7 +58,7 @@ module Portage
           private
 
           def url_for(path, id)
-            @base + path.sub("{id}") { URI.encode_www_form_component(id.to_s) }
+            @base + path.sub("{id}") { ERB::Util.url_encode(id.to_s) }
           end
 
           def request_headers(meta, idempotency_key)

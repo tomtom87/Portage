@@ -21,7 +21,7 @@ RSpec.describe Portage::Ucp::Client::Transports::Rest do
     ["get_product", { product_id: "p1" }, :post, "/catalog/product", { "id" => "p1" }],
     ["create_cart", { line_items: [{ product_id: "p1", quantity: 2 }] }, :post, "/carts",
      { "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 2 }] }],
-    ["get_cart", { cart_id: "c 1" }, :get, "/carts/c+1", nil],
+    ["get_cart", { cart_id: "c 1" }, :get, "/carts/c%201", nil],
     ["update_cart", { cart_id: "c1", line_items: [{ product_id: "p1", quantity: 1 }] }, :put, "/carts/c1",
      { "line_items" => [{ "item" => { "id" => "p1" }, "quantity" => 1 }] }],
     ["cancel_cart", { cart_id: "c1" }, :post, "/carts/c1/cancel", nil],
