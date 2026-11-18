@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-18
+
 - **Added: stores that serve only UCP REST work in `buy` and `find`.** Discovery now picks MCP or REST (UCP 2026-08-25's core transport) from the manifest, so a REST-only store such as the one in issue #178 no longer fails with "manifest has no mcp service entry". Requires `portage-ucp-client` `~> 0.8`.
 - **Fix: a store's refusal keeps its HTTP status and text.** `buy` reports a REST refusal as `HTTP 403: Invalid API key` rather than dropping the status, and a refused completion now includes the store's text next to the permission-denied message.
 - **Fix: `buy` sends the agent profile on `complete_checkout`.** The call was made without `meta`, so the client raised `MissingAgentProfileError` at the last step instead of completing the purchase.
