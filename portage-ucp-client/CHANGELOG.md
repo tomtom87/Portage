@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-18
+
 - **Added: REST transport.** `Client.discover` now falls back to a store's
   `rest` service entry when it has no `mcp` one (MCP still wins when both are
   offered; the newest `version` wins within a transport), so REST-only stores
