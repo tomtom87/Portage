@@ -58,9 +58,9 @@ Run `mcp-publisher validate`, then `mcp-publisher publish` for `server.json` and
 
 Use Claude in Chrome (the user is logged in). Glama does not use our `Dockerfile`.
 
-1. Open `glama.ai/mcp/servers/tomtom87/Portage/admin/dockerfile`. Edit the Build steps code editor so it reads `gem install --no-document portage-cli:<ver>`. It is a div, not a textarea: click the line, press End, use the arrow keys, retype.
-2. Open `admin/repository` and press Sync Server until the head commit equals the merge sha.
-3. Glama's Auto-Release builds a release named after the GitHub tag. Do not press Build & Release: it creates a stray extra release.
+1. Open `admin/repository` and press Sync Server until Last known commit equals the merge sha. Do this first: the Dockerfile page pins whatever head it loaded with.
+2. Open `glama.ai/mcp/servers/tomtom87/Portage/admin/dockerfile` (reload it after the sync and check Pinned commit SHA shows the merge sha). Edit the Build steps code editor so it reads `gem install --no-document portage-cli:<ver>`. It is a div, not a textarea: click the line, press End, use the arrow keys, retype. The editor does not autosave: press **Build** (a test build) to save it, and wait for it to pass.
+3. Glama's Auto-Release then builds a release named after the GitHub tag. Do not press Build & Release: it creates a stray extra release.
 4. On `admin/releases`, confirm the build test log shows the new commit, the new `portage-cli` version and the new `serverInfo` version.
 
 ## Finish
