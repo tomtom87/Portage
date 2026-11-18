@@ -86,3 +86,7 @@ tools/call get_order { order_id: "gid://shopify/Order/9001" }
 ```
 
 Five tool calls, one snowboard bought. [The walkthrough](walkthrough.md) shows what's actually running behind each of those — auth checks, PAN rejection, idempotent retries — plus how to serve the discovery manifest and order webhooks, from the shopper agent's side.
+
+## Calling a store (client side)
+
+`Portage::Ucp::Client.discover(url)` reads a store's `/.well-known/ucp` and returns a `Session` over whichever transport the store advertises: MCP when it offers one, else REST (UCP 2026-08-25). Callers use the same `Session` methods either way, and `session.transport_name` says which it is (`:mcp` or `:rest`). `Client.connect(url:, transport: :rest)` skips discovery. On REST, `link_identity` and the payment-enrollment actions raise `UnsupportedWireShapeError`, because 2026-08-25's REST OpenAPI has no operation for them. A non-2xx REST response raises `ServerError` with the message `HTTP <status>: <the store's own text>`.

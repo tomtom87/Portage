@@ -5,3 +5,7 @@
 See [Writing adapters](writing-adapters.md#checking-your-adapter-against-the-contract) for
 the RSpec conformance kit that layers behavioral checks (idempotency, PAN rejection) on top
 of schema validity.
+
+## Client transports
+
+`portage-ucp-client` speaks both of the 2026-08-25 transports it can reach: MCP and REST. The REST routes are the `operationId`s in `https://ucp.dev/2026-08-25/services/shopping/rest.openapi.json`, which match the MCP tool names. Response signatures (`Signature`/`Content-Digest`) are not verified on either transport. `portage-ucp` stores still serve MCP only; a Rack REST endpoint for stores is not built. A2A and embedded are not supported.

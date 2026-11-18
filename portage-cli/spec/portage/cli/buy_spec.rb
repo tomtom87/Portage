@@ -226,7 +226,8 @@ RSpec.describe Portage::Cli::Buy do
       expect(report[:message]).to eq("Purchased.")
       expect(report[:outcome]).to eq("purchased")
       expect(report[:checkout_status]).to eq("completed")
-      expect(session).to have_received(:complete_checkout).with(checkout_id: "chk_1", payment_token: "tok_1")
+      expect(session).to have_received(:complete_checkout).with(checkout_id: "chk_1", payment_token: "tok_1",
+                                                                meta: hash_including(:agent_profile))
     end
 
     it "checks out the product's first variant id, not the product id, when the product has variants" do
@@ -282,7 +283,8 @@ RSpec.describe Portage::Cli::Buy do
       report = described_class.new(url: "shop.example", query: "cold", yes: true).call
 
       expect(report[:message]).to eq("Purchased.")
-      expect(session).to have_received(:complete_checkout).with(checkout_id: "chk_1", payment_token: "tok_default")
+      expect(session).to have_received(:complete_checkout).with(checkout_id: "chk_1", payment_token: "tok_default",
+                                                                meta: hash_including(:agent_profile))
     end
 
     it "surfaces requires_escalation as data, not an error, with the checkout_url" do

@@ -58,7 +58,7 @@ One phase per session, delegated to a Sonnet subagent, each ending with `LC_ALL=
 
 **Phase 2 ✅: discovery picks the transport** (`portage-ucp-client`). Teach `mcp_endpoint` to become `service_endpoint` returning `[transport, endpoint]`: MCP first, then REST, otherwise `ManifestShapeError` with the message listing the transports it saw. Add `connect(transport:)` and `Session#transport_name`. Specs: an MCP-only manifest (unchanged), a REST-only one (the #178 document, saved as a fixture), both (MCP wins), neither, and the flat legacy manifest. Changelog entry.
 
-**Phase 3: the app** (`portage-cli`, buyer MCP server). Make `offer_sources.rb` go through the same transport choice. Have `portage check`/`doctor` print the transport it connected over. Update the `buy.rb` warning text if it still implies MCP. **Errors must reach the user intact:** check every CLI and buyer-MCP `rescue` of `ServerError`/`PaymentPermissionError` and make sure the printed or returned message keeps the HTTP status and the store's own text (e.g. `HTTP 403: Invalid API key`), not a generic line. Add a spec per command that stubs a REST 4xx and asserts that text shows up in the output. Raise the gemspec to `portage-ucp-client ~> 0.8` (the CLI now needs `transport_name`). Run one CLI spec per command against a stubbed REST-only store, so `buy`, `find` and `check` are proven end to end, not just the transport. Docs: `docs/well-known-ucp.md`, `docs/library-usage.md`, `docs/spec-conformance.md`, `docs/capability-coverage.md`.
+**Phase 3 ✅: the app** (`portage-cli`, buyer MCP server). Make `offer_sources.rb` go through the same transport choice. Have `portage check`/`doctor` print the transport it connected over. Update the `buy.rb` warning text if it still implies MCP. **Errors must reach the user intact:** check every CLI and buyer-MCP `rescue` of `ServerError`/`PaymentPermissionError` and make sure the printed or returned message keeps the HTTP status and the store's own text (e.g. `HTTP 403: Invalid API key`), not a generic line. Add a spec per command that stubs a REST 4xx and asserts that text shows up in the output. Raise the gemspec to `portage-ucp-client ~> 0.8` (the CLI now needs `transport_name`). Run one CLI spec per command against a stubbed REST-only store, so `buy`, `find` and `check` are proven end to end, not just the transport. Docs: `docs/well-known-ucp.md`, `docs/library-usage.md`, `docs/spec-conformance.md`, `docs/capability-coverage.md`.
 
 **Phase 4: live interop against #178.** Needs the restricted test credential from the issue author, passed in `headers:` at run time and never written to the repo or config. Run discovery, `create_checkout` for the $29 demo item, check the total, `get_checkout`, `cancel_checkout`. Record the results in the design log and post a summary on the issue (ask first). Fix anything it turns up before the release.
 
@@ -82,7 +82,7 @@ Pins: `Dockerfile` (portage-cli 0.16.0), `server.json` (version bump plus image 
 
 ## Open questions
 
-- Does any app code read `Session` internals that assume MCP (`@client`, tool listing)? Phase 3 greps for it.
+- ~~Does any app code read `Session` internals that assume MCP (`@client`, tool listing)?~~ No (Phase 3 grepped: everything uses the public `Session` methods).
 - Should `portage check` try both transports when a store offers both? It's not needed for #178, so the default is no.
 
 ## Progress log
@@ -92,3 +92,4 @@ Pins: `Dockerfile` (portage-cli 0.16.0), `server.json` (version bump plus image 
 | 2026-11-18 | Plan | Written from the #178 discovery doc and the 2026-08-25 REST OpenAPI. |
 | 2026-11-18 | 1 | `Transports::Rest` added with 28 specs (client suite 79 to 107), rspec and rubocop green. Design log 66. |
 | 2026-11-18 | 2 | `service_endpoint` (MCP first, REST fallback), `connect(transport:)`, `Session#transport_name`, #178 fixture. Client suite 107 to 112, rspec and rubocop green. Design log 67. |
+| 2026-11-18 | 3 | CLI errors keep `HTTP <status>: <store text>` (`Buy#server_error_report`, permission report); `complete_checkout` now sends `meta`; `rest_store_spec.rb` covers `buy`/`find`/`check` and 403s over REST; gemspec `~> 0.8` (client version constant bumped to 0.8.0 to resolve). `ShopifyCatalog` stays on its fixed MCP URL; `check`/`doctor` open no session, so no transport line. CLI suite 1459 to 1464, client 112, rspec and rubocop green. Design log 68. |

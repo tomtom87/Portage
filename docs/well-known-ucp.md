@@ -82,3 +82,5 @@ Everything nests under `ucp`, and `services`, `capabilities` and `payment_handle
 The gap is signing. There's no `keys` and no signature, so an agent has nothing to verify the manifest against. `Portage::Ucp::Manifest` emits `keys` (a JWK Set, a sibling of `ucp` at the document root, as UCP 2026-08-25 requires), and signs the body when you give it a signer. The config option is still called `signing_keys`.
 
 Cart and catalog are both advertised. Shopify splits catalog into `dev.ucp.shopping.catalog.search` and `dev.ucp.shopping.catalog.lookup`. `Portage::Ucp::Manifest` advertises one `dev.ucp.shopping.catalog` for all three catalog actions (see the [tool-gating investigation](ucp-tool-gating-investigation.md)).
+
+A store may list `mcp`, `rest`, or both under `dev.ucp.shopping`. `discover` connects over `mcp` when the manifest has one (newest `version` first), and falls back to `rest` otherwise, so a REST-only store, such as the one in [issue #178](https://github.com/tomtom87/Portage/issues/178), works with `buy`, `find` and the rest. A manifest with neither raises `ManifestShapeError`, naming the transports it did see. `embedded` and `a2a` entries are skipped.

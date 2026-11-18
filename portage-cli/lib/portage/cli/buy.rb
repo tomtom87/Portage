@@ -318,8 +318,15 @@ module Portage
         url = error.continue_url
         build_report(
           source: "native_ucp", outcome: "store_refused", browse: true, checkout: false, checkout_url: url,
-          message: "#{@uri} couldn't complete this: #{error.summary}#{url && " — finish it at #{url}"}"
+          message: "#{@uri} couldn't complete this: #{server_error_text(error)}#{url && " — finish it at #{url}"}"
         )
+      end
+
+      # A REST refusal's message is already the store's own text led by its
+      # HTTP status ("HTTP 403: Invalid API key"); #summary would drop the
+      # status. An MCP refusal's message is the whole envelope, so #summary.
+      def server_error_text(error)
+        error.message.start_with?("HTTP ") ? error.message : error.summary
       end
 
       def catalog_only(session)
@@ -1173,7 +1180,7 @@ module Portage
         return held if held
 
         completed = recording_transaction(source, checkout) do
-          session.complete_checkout(checkout_id: checkout["id"], payment_token: @payment_token)
+          session.complete_checkout(checkout_id: checkout["id"], payment_token: @payment_token, meta: agent_meta)
         end
         # `complete_checkout` can hand back `requires_escalation` too (e.g.
         # Shopify's cartSubmitForCompletion result carrying `errors`) — this
@@ -1184,8 +1191,8 @@ module Portage
 
         checkout_report(source, products, completed, outcome: "purchased", message: "Purchased.",
                                                      warnings: warnings + Array(@unrecorded_warning))
-      rescue Portage::Ucp::Client::PaymentPermissionError
-        permission_denied_report(source, products, checkout, warnings)
+      rescue Portage::Ucp::Client::PaymentPermissionError => e
+        permission_denied_report(source, products, checkout, warnings, e)
       end
 
       # PolicyGuard's rolling cap and velocity limit count the completed
@@ -1349,11 +1356,18 @@ module Portage
       # shopper finishes on the merchant's own continue_url/checkout link,
       # same hand-off requires_escalation already uses (see
       # Client::PaymentPermissionError).
-      def permission_denied_report(source, products, checkout, warnings)
+      def permission_denied_report(source, products, checkout, warnings, error)
         handoff_report(source, products, checkout, warnings,
                        outcome: "permission_denied",
-                       message: "This agent isn't yet granted permission to complete checkout on this store — " \
-                                "visit the link to finish it yourself.")
+                       message: "This agent isn't yet granted permission to complete checkout on this store " \
+                                "(#{permission_text(error)}) — visit the link to finish it yourself.")
+      end
+
+      # Over MCP the refusal wraps the store's ServerError as its cause, whose
+      # message is the whole envelope, so trim it the same way. REST raises
+      # it with the status and store text already in the message.
+      def permission_text(error)
+        error.cause.is_a?(Portage::Ucp::Client::ServerError) ? server_error_text(error.cause) : error.message
       end
 
       def escalation_report(source, products, checkout, warnings)
