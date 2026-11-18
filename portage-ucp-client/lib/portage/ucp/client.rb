@@ -12,6 +12,7 @@ require_relative "client/transports/local_arguments"
 require_relative "client/transports/loopback"
 require_relative "client/transports/stdio"
 require_relative "client/transports/http"
+require_relative "client/transports/rest"
 
 module Portage
   module Ucp

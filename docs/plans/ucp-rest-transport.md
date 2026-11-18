@@ -54,7 +54,7 @@ Paths are relative to the service entry's `endpoint`. The MCP `meta` object beco
 
 One phase per session, delegated to a Sonnet subagent, each ending with `LC_ALL=en_US.UTF-8 bundle exec rspec && bundle exec rubocop` green in every touched gem, a design-log entry, a progress-log row here, a commit on branch `ucp-rest-transport`, and a restart prompt.
 
-**Phase 1: `Transports::Rest`** (`portage-ucp-client`). Add `transports/rest.rb` with the table above and `call_tool`, reusing `UcpWireShape` for the inner body and unwrapping the capability key. Faraday connection with `proxy:` handled the same way as Http. Add header mapping, error mapping and the unsupported-action error. Specs stub HTTP (no live calls) and cover each row of the table, the headers, a 4xx/5xx mapped to `ServerError`, the permission refusal and a missing profile.
+**Phase 1 ✅: `Transports::Rest`** (`portage-ucp-client`). Add `transports/rest.rb` with the table above and `call_tool`, reusing `UcpWireShape` for the inner body and unwrapping the capability key. Faraday connection with `proxy:` handled the same way as Http. Add header mapping, error mapping and the unsupported-action error. Specs stub HTTP (no live calls) and cover each row of the table, the headers, a 4xx/5xx mapped to `ServerError`, the permission refusal and a missing profile.
 
 **Phase 2: discovery picks the transport** (`portage-ucp-client`). Teach `mcp_endpoint` to become `service_endpoint` returning `[transport, endpoint]`: MCP first, then REST, otherwise `ManifestShapeError` with the message listing the transports it saw. Add `connect(transport:)` and `Session#transport_name`. Specs: an MCP-only manifest (unchanged), a REST-only one (the #178 document, saved as a fixture), both (MCP wins), neither, and the flat legacy manifest. Changelog entry.
 
@@ -90,3 +90,4 @@ Pins: `Dockerfile` (portage-cli 0.16.0), `server.json` (version bump plus image 
 | Date | Phase | Result |
 |---|---|---|
 | 2026-11-18 | Plan | Written from the #178 discovery doc and the 2026-08-25 REST OpenAPI. |
+| 2026-11-18 | 1 | `Transports::Rest` added with 28 specs (client suite 79 to 107), rspec and rubocop green. Design log 66. |
