@@ -4122,3 +4122,40 @@ fixture is the live discovery document from issue #178 (it carries no
 credential), saved as `spec/fixtures/rest_only_manifest.json`. No other
 caller of `mcp_endpoint` exists in code; `docs/cli-usage-tutorial.md` mentions
 it only in a historical bug write-up and is left as is.
+
+## 68. REST transport for the UCP client, Phase 3: the app (2026-11-18)
+
+`portage-cli` needs `portage-ucp-client` `~> 0.8`; the client's version
+constant was bumped from 0.7.0 to 0.8.0 so the path-gem bundle resolves (the
+release itself is Phase 5). Every app caller already went through
+`Client.discover`, so `buy`, `find`, the reconciler, payment methods, browser
+import and the index builder pick REST up unchanged.
+
+Three places the plan guessed wrong. `OfferSources::ShopifyCatalog` connects
+to a fixed global MCP URL (`catalog.shopify.com/api/ucp/mcp`), not a store
+origin, so there is no manifest to choose a transport from and it is left on
+`connect(url:)`, which defaults to MCP. `portage check` and `portage doctor`
+open no `Session`: `check` fetches the manifest through `Portage::Ucp::Check`
+and `doctor` inspects the seller's own setup, so there is no
+`transport_name` to print and nothing was added. No app code reads `Session`
+internals (`@client`, tool listing, `instance_variable_get`): everything
+calls the public methods, which closes the plan's open question.
+
+Errors. `Buy#server_error_report` printed `ServerError#summary`, which keeps
+only the `messages[].content` and so dropped the status from the REST
+message; it now prints the message as is when it starts with `HTTP `
+(`HTTP 403: Invalid API key`) and `#summary` otherwise, which still trims
+Shopify's multi-kilobyte MCP envelope. The permission-denied report now
+appends the refusal's own text (the trimmed MCP cause, or the REST message). `find` swallows every per-store failure by
+design (one store down must not end the search), so a 4xx there returns no
+offers rather than a message; the handoff reconciler turns an error into a
+note via `#summary`, and is unchanged. A webmcp rescue already quotes
+`e.message`.
+
+A real bug turned up writing the end-to-end spec: `Buy#complete` called
+`session.complete_checkout` without `meta:`, so both transports raised
+`MissingAgentProfileError` at the last step. This was masked only because
+the specs fake the session. It now passes `agent_meta`.
+`spec/portage/cli/rest_store_spec.rb` drives `buy`, `find` and `check`
+against a WebMock-stubbed REST-only store built from the #178 fixture, plus
+the 403 cases.

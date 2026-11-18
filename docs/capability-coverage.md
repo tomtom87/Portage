@@ -27,3 +27,7 @@ auth-type columns, and the Instagram order deprecation — lives on the
 [feature matrix](adapters/feature-matrix.md).
 
 **Who needs credentials here, and who doesn't:** the merchant sets this up *once*, using their own store's credentials (Shopify Admin token, WooCommerce consumer key, whatever). That's the only credentialed step in the whole system. After that manifest is live at `/.well-known/ucp`, **any shopper's AI agent — on any harness, with zero credentials of its own — can discover it and buy from it.** The shopper never sees a Shopify token or a WooCommerce key; they authenticate (if at all) with their own payment handler, not with your store. This is the same trust model as a merchant integrating hosted checkout today — one-time setup by the merchant, open-ended public use by anyone who finds it. See [the walkthrough](walkthrough.md) for the full "shopper agent → your live manifest → bought" path, credential-free the whole way.
+
+## Client side
+
+The table above is what an adapter serves, and it is served over MCP only. The client (`portage-ucp-client`) is wider: it calls a store's catalog, cart, checkout and order operations over MCP or REST. Over REST, `link_identity` and the payment-enrollment actions are unavailable, because 2026-08-25's REST OpenAPI defines no operation for them.
