@@ -6,7 +6,7 @@ approve every payment. It ships as a command-line tool (`portage`), a Claude Cod
 ([MCP](https://modelcontextprotocol.io) and [UCP](https://ucp.dev)) to shopping agents.
 
 !!! info "Status"
-    Pre-1.0. APIs may still change between minor versions. Latest release set: 0.23.0
+    Pre-1.0. APIs may still change between minor versions. Latest release set: 0.24.0
     ([changelog](changelog.md)).
 
 ## Start here
@@ -45,8 +45,8 @@ and [Security](security.md).
 
 | Package | Version | For | What it does | Docs |
 |---|---|---|---|---|
-| `buy` plugin | 0.10.5 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only shop-research skill | [buy skill](skills/buy.md), [shop-research skill](skills/shop-research.md) |
-| `portage-cli` | 0.16.0 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
+| `buy` plugin | 0.10.6 | Shoppers | Claude Code plugin that shops through `portage`, plus a read-only shop-research skill | [buy skill](skills/buy.md), [shop-research skill](skills/shop-research.md) |
+| `portage-cli` | 0.16.1 | Shoppers, agent builders | The `portage` command | [CLI reference](cli-reference.md), [tutorial](cli-usage-tutorial.md), [JSON reference](api/cli-json.md) |
 | `shop-via-ucp` skill | – | Agent builders | Buy through a store's UCP endpoint, with or without `portage` | [skill](skills/shop-via-ucp.md) |
 | `browse-via-ucp` skill | – | Agent builders | Read-only: a store's manifest, catalog and whether it supports automated buying | [skill](skills/browse-via-ucp.md) |
 | `portage-ucp-client` | 0.8.0 | Agent builders | Ruby client: connect to a store's manifest, or drive your own `Adapter`, as the shopper's agent | [API](api/portage-ucp-client.md), [README](core-gems/portage-ucp-client.md) |
