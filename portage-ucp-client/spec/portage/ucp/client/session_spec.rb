@@ -36,6 +36,47 @@ RSpec.describe Portage::Ucp::Client::Session do
     end
   end
 
+  describe "#ask" do
+    let(:meta) { { agent_profile: "https://agent.example/profile" } }
+
+    it "sends only the keys given, with no idempotency_key" do
+      expect(transport).to receive(:call_tool)
+        .with(name: "ask_business", arguments: { query: "trial?" }, meta: meta).and_return("answer" => {})
+
+      session.ask(query: "trial?", meta: meta)
+    end
+
+    it "sends ids, conversation and context when given, and returns the wire hash" do
+      wire = { "answer" => { "plain" => "Yes" }, "messages" => [{ "type" => "info" }] }
+      expect(transport).to receive(:call_tool)
+        .with(name: "ask_business",
+              arguments: { query: "q", ids: ["p1"], conversation: { id: "c1" }, context: { language: "en" } },
+              meta: meta).and_return(wire)
+
+      expect(session.ask(query: "q", ids: ["p1"], conversation: { id: "c1" }, context: { language: "en" },
+                         meta: meta)).to eq(wire)
+    end
+
+    context "with a separate dev.ucp.common transport" do
+      let(:common) { instance_double(Portage::Ucp::Client::Transports::Http) }
+      let(:opened) { [] }
+      let(:session) do
+        described_class.new(transport: transport, common_transport: -> { opened.push(1) && common })
+      end
+
+      it "sends ask there, opening it once, and every other call to the main transport" do
+        expect(common).to receive(:call_tool).twice.and_return({})
+        expect(transport).to receive(:call_tool).with(name: "get_order", arguments: { order_id: "o1" }, meta: nil)
+
+        session.ask(query: "a", meta: meta)
+        session.ask(query: "b", meta: meta)
+        session.get_order(order_id: "o1")
+
+        expect(opened.size).to eq(1)
+      end
+    end
+  end
+
   describe "mutating actions" do
     it "generates an idempotency_key when the caller doesn't supply one" do
       expect(transport).to receive(:call_tool) do |name:, arguments:, **|

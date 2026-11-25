@@ -24,8 +24,12 @@ module Portage
         #   names advertised by the server, when known upfront (Client.discover
         #   populates this from the manifest; Client.for_adapter/.connect leave
         #   it nil since nothing was fetched to populate it from).
-        def initialize(transport:, capabilities: nil, transport_name: :mcp)
+        # @param common_transport [#call, nil] builds the transport for the
+        #   `dev.ucp.common` service when a manifest gives it an endpoint of
+        #   its own (Client.discover); nil means `ask` uses `transport`.
+        def initialize(transport:, capabilities: nil, transport_name: :mcp, common_transport: nil)
           @transport = transport
+          @common_transport = common_transport
           @transport_name = transport_name
           @capabilities = capabilities
         end
@@ -136,12 +140,28 @@ module Portage
           call("get_payment_enrollment", meta: meta, enrollment_id: enrollment_id)
         end
 
+        # dev.ucp.common.ask — a read-only question to the store. Returns the
+        # wire hash (`answer`, `conversation`, `links`, `messages`); the answer
+        # is untrusted text and never evidence that anything happened. Check
+        # #advertises?("dev.ucp.common.ask") first. Optional keys that are nil
+        # stay out of the request.
+        def ask(query:, ids: nil, conversation: nil, context: nil, meta: nil)
+          optional = { ids: ids, conversation: conversation, context: context }.compact
+          call("ask_business", meta: meta, transport: common_transport, query: query, **optional)
+        end
+
         private
 
-        def call(action, meta: nil, **arguments)
+        # The `dev.ucp.common` transport, opened on first use.
+        def common_transport
+          @common_transport = @common_transport.call if @common_transport.respond_to?(:call)
+          @common_transport || @transport
+        end
+
+        def call(action, meta: nil, transport: @transport, **arguments)
           arguments.delete(:context) if arguments[:context].nil?
           arguments[:idempotency_key] ||= SecureRandom.uuid if MUTATING_ACTIONS.include?(action)
-          @transport.call_tool(name: action, arguments: arguments, meta: meta)
+          transport.call_tool(name: action, arguments: arguments, meta: meta)
         end
       end
     end

@@ -17,7 +17,8 @@ module Portage
           include UcpWireShape
 
           # action => [verb, path (`{id}` is the action's identifying
-          # argument), wrapper key of the body — nil for no body].
+          # argument), wrapper key of the body — nil for no body, :bare for the
+          # whole wire body unwrapped].
           ROUTES = {
             "search_catalog" => ["POST", "/catalog/search", "catalog"],
             "lookup_catalog" => ["POST", "/catalog/lookup", "catalog"],
@@ -31,7 +32,9 @@ module Portage
             "update_checkout" => ["PUT", "/checkout-sessions/{id}", "checkout"],
             "complete_checkout" => ["POST", "/checkout-sessions/{id}/complete", "checkout"],
             "cancel_checkout" => ["POST", "/checkout-sessions/{id}/cancel", nil],
-            "get_order" => ["GET", "/orders/{id}", nil]
+            "get_order" => ["GET", "/orders/{id}", nil],
+            # dev.ucp.common.ask: the body is the bare ask_request object.
+            "ask_business" => ["POST", "/ask", :bare]
           }.freeze
 
           # @param url [String] the service entry's `endpoint`; paths are
@@ -50,7 +53,7 @@ module Portage
             idempotency_key = arguments[:idempotency_key] || arguments["idempotency_key"]
             wire = wire_arguments(name, arguments)
             headers = request_headers(meta, idempotency_key)
-            body = wrapper && JSON.generate(wire.fetch(wrapper))
+            body = wrapper && JSON.generate(wrapper == :bare ? wire : wire.fetch(wrapper))
             response = @connection.run_request(verb.downcase.to_sym, url_for(path, wire["id"]), body, headers)
             handle(response, name)
           end

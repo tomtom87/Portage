@@ -1,6 +1,6 @@
 # UCP Ask in the Client and CLI
 
-**Status:** Planned (2026-11-25). Nothing built yet.
+**Status:** Phase 1 done (2026-11-25); Phases 2 to 5 not started.
 
 **Driver:** AirShelf's sell-on-quote sellers (`https://toshiba.edge.airshelf.ai`, `https://cyble.edge.airshelf.ai`) advertise only `dev.ucp.shopping.catalog.search`, `catalog.lookup` and `dev.ucp.common.ask`. They have no cart, no checkout and no prices, so for a B2B store `ask` is the only way an agent can learn anything beyond the catalogue: pricing tiers, lead times, minimum order quantities, deployment terms. Portage ignores the capability today.
 
@@ -105,3 +105,4 @@ Pins: `Dockerfile` (portage-cli 0.17.0), `server.json` (version bump and image t
 
 | Date | Phase | Result |
 |---|---|---|
+| 2026-11-25 | 1 | `Session#ask` and the `ask_business` REST route (`POST /ask`, bare body) built. `Client.discover` records a differing `dev.ucp.common` endpoint and `ask` opens a second transport to it on first use; a manifest with no common service uses the shopping endpoint. Agent profile now declares `dev.ucp.common` and `dev.ucp.common.ask` (keys unchanged). Client 121 examples and CLI 1467 examples green, rubocop clean. Not yet run live: the `capabilities_incompatible` hypothesis is still unconfirmed until the branch is pushed. |
