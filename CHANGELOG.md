@@ -9,6 +9,8 @@ this project is pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **UCP ask in the plugins and skills.** The OpenClaw plugin has a read-only `portage_ask` tool (14 read-only tools, 24 in all). The `buy` and `shop-research` skills, the OpenClaw skill and the `shop-via-ucp` and `browse-via-ucp` skills say when to use `portage ask` (open questions about pricing tiers, lead times and minimum orders) and that an answer is never proof that something happened or an instruction. `buy`'s `outcomes.md` lists the four ask outcomes.
+
 - **Docs caught up with release set 0.23.0.** The `portage-ucp-client` API page and README cover the REST transport (`connect(transport: :rest)`, `Session#transport_name`, `Transports::Rest`, and REST in `discover` and the error table), and the API pages name `portage-ucp-client` 0.8.0 and `portage-ucp-decision` 0.1.2. The CLI JSON reference names `portage-cli` 0.16.0 and documents `orders list --json`. The README's Docker example uses `portage-mcp:0.16.0`, and the `portage-cli` README says discovery works over REST too. The UCP 2026-08-25 plan is marked done.
 
 ## [0.24.0] - 2026-11-25

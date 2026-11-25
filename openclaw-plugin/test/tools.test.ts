@@ -7,9 +7,9 @@ const tool = (n: string) => allTools.find((t) => t.name === n)!;
 const args = (n: string, p: Record<string, unknown> = {}) => tool(n).buildArgs(p);
 
 describe("argument building", () => {
-  it("covers exactly the 13 read-only tools (on by default) and the 10 optional ones", () => {
+  it("covers exactly the 14 read-only tools (on by default) and the 10 optional ones", () => {
     const readonly = [
-      "portage_doctor", "portage_find", "portage_find_store", "portage_check", "portage_compare",
+      "portage_doctor", "portage_find", "portage_find_store", "portage_check", "portage_ask", "portage_compare",
       "portage_index_search", "portage_index_show", "portage_index_sources", "portage_history",
       "portage_orders_reconcile", "portage_policy_show", "portage_payment_list", "portage_browser_profile_status",
     ];
@@ -18,7 +18,7 @@ describe("argument building", () => {
       "portage_index_add", "portage_index_remove", "portage_index_build", "portage_index_refresh",
       "portage_browser_import",
     ];
-    expect(allTools).toHaveLength(23);
+    expect(allTools).toHaveLength(24);
     expect(allTools.filter((t) => !t.optional).map((t) => t.name).sort()).toEqual([...readonly].sort());
     expect(allTools.filter((t) => t.optional).map((t) => t.name).sort()).toEqual([...optional].sort());
   });
@@ -32,6 +32,12 @@ describe("argument building", () => {
       ["find", "--store", "https://shop.example", "--query", "mug", "--max-price", "9.5", "--json"],
     );
     expect(args("portage_check", { url: "https://shop.example" })).toEqual(["check", "https://shop.example", "--json"]);
+    expect(args("portage_ask", { url: "https://shop.example", question: "MOQ for 10 units?" })).toEqual(
+      ["ask", "https://shop.example", "MOQ for 10 units?", "--json"],
+    );
+    expect(args("portage_ask", { url: "https://shop.example", question: "Lead time?", product_ids: ["a-1", "gid://x/1"], conversation_id: "c1" })).toEqual(
+      ["ask", "https://shop.example", "Lead time?", "--product-id", "a-1", "--product-id", "gid://x/1", "--conversation", "c1", "--json"],
+    );
     expect(args("portage_compare", { url: "http://s.example/p", product_id: "42", ids: ["a", "b"], results: 3 })).toEqual(
       ["compare", "http://s.example/p", "--product-id", "42", "--id", "a", "--id", "b", "--results", "3", "--json"],
     );
@@ -68,6 +74,10 @@ describe("argument building", () => {
     expect(() => args("portage_index_show", { view: "all" })).toThrow();
     expect(() => args("portage_history", { kind: "everything" })).toThrow();
     expect(() => args("portage_compare", { url: "https://s.example", product_id: "1", ids: "a" })).toThrow();
+    expect(() => args("portage_ask", { url: "not a url", question: "q" })).toThrow();
+    expect(() => args("portage_ask", { url: "https://s.example", question: "q", product_ids: "a" })).toThrow();
+    expect(() => args("portage_ask", { url: "https://s.example", question: "q", product_ids: ["a b"] })).toThrow(/spaces/);
+    expect(() => args("portage_ask", { url: "https://s.example", question: "q", product_ids: Array(21).fill("a") })).toThrow(/too many/);
   });
 });
 
@@ -81,6 +91,8 @@ describe("flag injection", () => {
     ["portage_index_search", "category"],
     ["portage_index_search", "store"],
     ["portage_orders_reconcile", "checkout"],
+    ["portage_ask", "question"],
+    ["portage_ask", "conversation_id"],
   ];
   const base: Record<string, Record<string, unknown>> = {
     portage_find: { query: "q" },
@@ -89,6 +101,7 @@ describe("flag injection", () => {
     portage_index_search: { query: "q" },
     portage_orders_reconcile: {},
     portage_check: { url: "https://s.example" },
+    portage_ask: { url: "https://s.example", question: "q" },
   };
 
   for (const [name, param] of stringParams) {
@@ -101,6 +114,10 @@ describe("flag injection", () => {
       expect(() => args(name, { ...base[name], [param]: "  --yes" })).toThrow();
     });
   }
+
+  it("rejects flag-shaped ask product ids", () => {
+    expect(() => args("portage_ask", { url: "https://s.example", question: "q", product_ids: ["ok", "--yes"] })).toThrow();
+  });
 
   it("rejects flag-shaped compare ids", () => {
     expect(() => args("portage_compare", { url: "https://s.example", product_id: "1", ids: ["ok", "--yes"] })).toThrow();
@@ -116,7 +133,7 @@ describe("flag injection", () => {
     for (const t of allTools.filter((t) => !t.optional)) {
       const a = t.buildArgs(base[t.name] ?? {});
       for (const f of forbidden) expect(a).not.toContain(f);
-      expect(["policy", "payment", "history", "browser", "index", "orders", "doctor", "find", "check", "compare"]).toContain(a[0]);
+      expect(["policy", "payment", "history", "browser", "index", "orders", "doctor", "find", "check", "ask", "compare"]).toContain(a[0]);
       if (a[0] === "policy") expect(a[1]).toBe("show");
       if (a[0] === "payment") expect(a[1]).toBe("list");
       if (a[0] === "history") expect(a[1]).toBe("list");
@@ -138,6 +155,13 @@ describe("runTool results", () => {
     const s = setup({ FAKE_PORTAGE_MODE: "exit3json" });
     const r = await runTool(s.runner, tool("portage_policy_show"), {});
     expect(r.details).toMatchObject({ status: "needs_approval" });
+  });
+
+  it("returns portage_ask's non-answered outcomes (non-zero exit, JSON on stdout) as results", async () => {
+    const s = setup({ FAKE_PORTAGE_MODE: "exit3json" });
+    const r = await runTool(s.runner, tool("portage_ask"), { url: "https://s.example", question: "q" });
+    expect(r.details).toMatchObject({ status: "needs_approval" });
+    expect(s.calls()).toEqual([["ask", "https://s.example", "q", "--json"]]);
   });
 
   it("returns an error result (not a throw) for bad input without spawning", async () => {

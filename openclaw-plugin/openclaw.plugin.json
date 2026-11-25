@@ -11,6 +11,7 @@
       "portage_find",
       "portage_find_store",
       "portage_check",
+      "portage_ask",
       "portage_compare",
       "portage_index_search",
       "portage_index_show",

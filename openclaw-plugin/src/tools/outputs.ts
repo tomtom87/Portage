@@ -61,6 +61,19 @@ export const checkOutput = loose({
   index_hint: str("A `portage index add` command, only for a Shopify or native UCP store."),
 });
 
+/** `ask`: `outcome` is answered, not_offered, handoff_only or error; only answered exits 0. */
+export const askOutput = loose({
+  ...common,
+  url: str(),
+  query: str(),
+  ids: anyList(),
+  outcome: str("answered, not_offered, handoff_only or error."),
+  answer: obj(),
+  links: objs(),
+  conversation: obj(),
+  messages: objs(),
+});
+
 /** `compare`: `find`'s report with each offer scored (`match`: confirmed, likely or unconfirmed). */
 export const compareOutput = loose({
   ...common,

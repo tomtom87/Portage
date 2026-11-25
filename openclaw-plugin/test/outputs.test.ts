@@ -19,6 +19,8 @@ const SAMPLES: unknown[] = [
   { checks: [{ name: "shipping", ok: true }], ok: false },
   { url: "https://shop.example", native_ucp: null, platform: "Shopify", recommended_gem: "portage-ucp-shopify", handoff_only: false, adapter: null, webmcp: { status: "skipped", tools: [], reason: "x" }, live_probe: { status: "ok" }, verdict: "automated", next_step: "Run portage buy.", index_hint: "portage index add https://shop.example --crawl" },
   { query: "mug", search_id: "se_0123456789ab", candidates: ["https://shop.example"], stores: [{ origin: "https://shop.example", source: null, checkout: true, handoff_only: false }], offers: [{ offer_ref: "of_1a2b3c", match: "likely", store_host: "shop.example", identity_values: { barcodes: [], sku: null } }], message: "Found 1 offer(s)." },
+  { url: "https://s.example", query: "MOQ?", ids: ["a"], outcome: "answered", answer: { plain: "10 units." }, links: [{ title: "Terms", url: "https://s.example/t" }], conversation: { id: "c1", expires_at: null }, messages: [{ type: "info", code: "operation_not_performed" }], message: null },
+  { url: "https://s.example", query: "q", ids: [], outcome: "not_offered", answer: null, links: [], conversation: null, messages: [], message: "This store doesn't offer ask." },
   { purchases: [{ url: "https://shop.example", query: "mug", outcome: "purchased", source: null, checkout_id: "c1", checkout_status: "completed", checkout_url: null, total: 2400, currency: "USD", items: [{ id: "1", title: "Mug", quantity: 2 }], message: "ok", at: 1790000000 }], searches: [] },
   { purchases: [], searches: [{ search_id: "se_0123456789ab", query: "mug", url: null, offer_count: 1, message: "m", offers: [{ offer_ref: "of_1a2b3c", found_at: 1790000000 }], at: 1790000000 }, { query: "old", offer_count: 0, message: "m", at: 1 }] },
 ];
@@ -32,9 +34,9 @@ const DOCTOR_FINDINGS = [
 describe("output schemas", () => {
   const withSchema = allTools.filter((t) => t.outputSchema);
 
-  it("covers find, find_store, check, compare, doctor, history, pick, dry_run, approve, buy_quote and handoff", () => {
+  it("covers find, find_store, check, ask, compare, doctor, history, pick, dry_run, approve, buy_quote and handoff", () => {
     expect(withSchema.map((t) => t.name).sort()).toEqual(
-      ["portage_approve", "portage_buy_quote", "portage_check", "portage_compare", "portage_doctor", "portage_dry_run",
+      ["portage_approve", "portage_ask", "portage_buy_quote", "portage_check", "portage_compare", "portage_doctor", "portage_dry_run",
         "portage_find", "portage_find_store", "portage_handoff", "portage_history", "portage_pick"].sort(),
     );
   });

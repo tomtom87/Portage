@@ -19,7 +19,7 @@ describe("plugin entry", () => {
       registerTool: (tool: unknown, opts: unknown) => registered.push({ tool, opts }),
       runtime: { system: { runCommandWithTimeout } },
     });
-    expect(registered).toHaveLength(23);
+    expect(registered).toHaveLength(24);
     const optional = new Set([
       "portage_pick", "portage_dry_run", "portage_approve", "portage_buy_quote", "portage_handoff",
       "portage_index_add", "portage_index_remove", "portage_index_build", "portage_index_refresh",
@@ -31,7 +31,7 @@ describe("plugin entry", () => {
       expect(tool.description.length).toBeGreaterThan(10);
     }
     expect(registered.filter((r) => r.opts.optional)).toHaveLength(10);
-    expect(registered.filter((r) => !r.opts.optional)).toHaveLength(13);
+    expect(registered.filter((r) => !r.opts.optional)).toHaveLength(14);
     const find = registered.find((r) => r.tool.name === "portage_find")!.tool;
     const res = await find.execute("call1", { query: "mug" });
     expect(res.details.ok).toBe(true);

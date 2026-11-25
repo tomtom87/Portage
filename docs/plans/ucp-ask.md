@@ -1,6 +1,6 @@
 # UCP Ask in the Client and CLI
 
-**Status:** Phases 1 and 2 done (2026-11-25); Phases 3 to 5 not started.
+**Status:** Phases 1 to 3 done (2026-11-25); Phases 4 and 5 not started.
 
 **Driver:** AirShelf's sell-on-quote sellers (`https://toshiba.edge.airshelf.ai`, `https://cyble.edge.airshelf.ai`) advertise only `dev.ucp.shopping.catalog.search`, `catalog.lookup` and `dev.ucp.common.ask`. They have no cart, no checkout and no prices, so for a B2B store `ask` is the only way an agent can learn anything beyond the catalogue: pricing tiers, lead times, minimum order quantities, deployment terms. Portage ignores the capability today.
 
@@ -107,3 +107,4 @@ Pins: `Dockerfile` (portage-cli 0.17.0), `server.json` (version bump and image t
 |---|---|---|
 | 2026-11-25 | 1 | `Session#ask` and the `ask_business` REST route (`POST /ask`, bare body) built. `Client.discover` records a differing `dev.ucp.common` endpoint and `ask` opens a second transport to it on first use; a manifest with no common service uses the shopping endpoint. Agent profile now declares `dev.ucp.common` and `dev.ucp.common.ask` (keys unchanged). Client 121 examples and CLI 1467 examples green, rubocop clean. Not yet run live: the `capabilities_incompatible` hypothesis is still unconfirmed until the branch is pushed. |
 | 2026-11-25 | 2 | `portage ask` built (`Cli::Ask`, `run_ask`): checks `advertises?("dev.ucp.common.ask")` first, short-circuits hand-off-only hosts, outcomes `answered`/`not_offered`/`handoff_only`/`error`, exit 0 only for `answered`; store errors print through `Buy.server_error_text` with the store's code. `check` text gains an `ask: available` line (text only, verdict unchanged). Buyer MCP `ask_store` added, read-only, tool count 14 to 15. README, `cli-json.md`, capability and conformance docs and the CLI changelog updated; no version bumps. CLI 1482 examples green, rubocop clean. Not run live. |
+| 2026-11-25 | 3 | OpenClaw `portage_ask` read-only tool, `askOutput` schema and a `token` validator added; manifest, README, OpenClaw skill and docs page list it (tools 23 to 24, read-only 13 to 14). No runner change: non-zero exit with JSON already comes back as a result. `buy` (`SKILL.md`, `outcomes.md`), `shop-research`, `shop-via-ucp` and `browse-via-ucp` skills and the root changelog updated. `openclaw-plugin` `npm test` 150 tests green (7 files), `tsc --noEmit` clean. `portage-cli` untouched. |
