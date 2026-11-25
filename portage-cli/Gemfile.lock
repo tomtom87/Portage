@@ -1,7 +1,7 @@
 PATH
   remote: ../portage-ucp-client
   specs:
-    portage-ucp-client (0.8.0)
+    portage-ucp-client (0.9.0)
       faraday (>= 2.0)
       mcp (~> 1.8)
       portage-ucp (~> 0.8)
@@ -40,12 +40,12 @@ PATH
 PATH
   remote: .
   specs:
-    portage-cli (0.16.1)
+    portage-cli (0.17.0)
       base64 (~> 0.2)
       irb (>= 1.6)
       mcp (~> 1.8)
       portage-ucp (~> 0.17)
-      portage-ucp-client (~> 0.8)
+      portage-ucp-client (~> 0.9)
       portage-ucp-journal (~> 0.1)
       sqlite3 (~> 2.9)
 
