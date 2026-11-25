@@ -6,6 +6,17 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: `Session#ask`** (`dev.ucp.common.ask`). `ask(query:, ids: nil,
+  conversation: nil, context: nil, meta: nil)` sends the bare ask body (nil
+  keys left out) and returns the store's `answer`, `conversation`, `links` and
+  `messages`. MCP calls the `ask_business` tool; REST is `POST /ask`
+  (`Transports::Rest::ROUTES`), with no `Idempotency-Key`. `Client.discover`
+  records the `dev.ucp.common` service's endpoint when it differs from the
+  shopping one, and `ask` opens a second connection to it on first use (same
+  headers and proxy); with no common service it uses the shopping endpoint.
+  `Client.connect` takes a matching `common: [transport, endpoint]`. Every
+  other call is unchanged.
+
 ## [0.8.0] - 2026-11-18
 
 - **Added: REST transport.** `Client.discover` now falls back to a store's

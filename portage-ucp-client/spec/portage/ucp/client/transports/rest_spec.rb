@@ -44,6 +44,38 @@ RSpec.describe Portage::Ucp::Client::Transports::Rest do
     end
   end
 
+  describe "ask_business" do
+    let(:answer) do
+      { "answer" => { "plain" => "Yes, 30 days.", "markdown" => "**Yes**, 30 days." },
+        "conversation" => { "id" => "c-1", "expires_at" => "2026-12-01T00:00:00Z" },
+        "links" => [{ "type" => "terms", "url" => "https://shop.example/terms" }],
+        "messages" => [{ "type" => "info", "code" => "operation_not_performed",
+                         "content" => "I can't add to a cart; I only answer questions." }] }
+    end
+
+    it "POSTs the bare ask body to /ask with no Idempotency-Key, and passes the answer through" do
+      body = { query: "trial?", ids: ["p1"], conversation: { id: "c-0" } }
+      stub = stub_request(:post, "#{base}/ask")
+             .with(body: body.to_json, headers: { "UCP-Agent" => %(profile="#{profile}") })
+             .to_return(status: 200, body: answer.to_json)
+
+      expect(call("ask_business", body)).to eq(answer)
+      expect(stub).to have_been_requested
+      expect(a_request(:post, "#{base}/ask").with { |r| r.headers.key?("Idempotency-Key") }).not_to have_been_made
+    end
+
+    it "surfaces a 4xx through ServerError, store text included" do
+      error = { "messages" => [{ "type" => "error", "code" => "capabilities_incompatible",
+                                 "content" => "No shared version of the requested capability." }] }
+      stub_request(:post, "#{base}/ask").to_return(status: 422, body: error.to_json)
+
+      expect { call("ask_business", { query: "x" }) }.to raise_error(errors::ServerError) { |e|
+        expect(e.message).to eq("HTTP 422: No shared version of the requested capability.")
+        expect(e.payload).to eq(error)
+      }
+    end
+  end
+
   it "sends the payment instrument as the bare checkout body, id in the path" do
     instrument = { "id" => "instrument-key-1", "handler_id" => "dev.shopify.card", "type" => "card",
                    "credential" => { "token" => "tok", "type" => "dev.shopify.card_token" } }

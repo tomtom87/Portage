@@ -48,6 +48,7 @@ module Portage
         UCP_VERSION = "2026-08-25".freeze
 
         SHOPPING_SERVICE = "dev.ucp.shopping".freeze
+        COMMON_SERVICE = "dev.ucp.common".freeze
 
         Key = Struct.new(:kid, :jwk, :private_pem, keyword_init: true)
 
@@ -89,7 +90,11 @@ module Portage
           "dev.ucp.shopping.catalog.lookup" => %w[shopping/catalog/lookup shopping/catalog_lookup.json],
           "dev.ucp.shopping.cart" => %w[shopping/cart shopping/cart.json],
           "dev.ucp.shopping.checkout" => %w[shopping/checkout shopping/checkout.json],
-          "dev.ucp.shopping.order" => %w[shopping/order shopping/order.json]
+          "dev.ucp.shopping.order" => %w[shopping/order shopping/order.json],
+          # Bound to the common service, not shopping. A store negotiates
+          # `ask` against the profile, so leaving it out gets
+          # `capabilities_incompatible` (live 2026-11-25, Cyble).
+          "dev.ucp.common.ask" => %w[common/ask common/ask.json]
         }.freeze
 
         # @param out [String] path to write the public profile JSON document
@@ -149,10 +154,13 @@ module Portage
         # agent that speaks no service at all — same class of under-declaration
         # as the coarse capability ids above.
         def service_hash
-          { SHOPPING_SERVICE => [{ "version" => UCP_VERSION,
-                                   "spec" => "https://ucp.dev/#{UCP_VERSION}/specification/overview",
-                                   "transport" => "mcp",
-                                   "schema" => "https://ucp.dev/#{UCP_VERSION}/services/shopping/mcp.openrpc.json" }] }
+          [SHOPPING_SERVICE, COMMON_SERVICE].to_h do |service|
+            name = service.split(".").last
+            [service, [{ "version" => UCP_VERSION,
+                         "spec" => "https://ucp.dev/#{UCP_VERSION}/specification/overview",
+                         "transport" => "mcp",
+                         "schema" => "https://ucp.dev/#{UCP_VERSION}/services/#{name}/mcp.openrpc.json" }]]
+          end
         end
 
         def capability_hash

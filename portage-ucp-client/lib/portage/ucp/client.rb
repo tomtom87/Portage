@@ -44,8 +44,12 @@ module Portage
       # @param transport [Symbol] `:mcp` (default) or `:rest`; only for `url:`.
       # @param proxy [String, Hash, nil] forwarded to Transports::Http (a
       #   `url:` connection only) — see its own doc comment.
+      # @param common [Array(Symbol, String), nil] `[transport, endpoint]` of
+      #   the `dev.ucp.common` service when it differs from `url`'s; `ask`
+      #   then opens its own connection to it on first use (same headers and
+      #   proxy).
       def self.connect(command: nil, args: [], env: nil, url: nil, headers: {}, capabilities: nil, proxy: nil,
-                       transport: :mcp)
+                       transport: :mcp, common: nil)
         unless %i[mcp rest].include?(transport)
           raise ArgumentError, "transport must be :mcp or :rest, got #{transport.inspect}"
         end
@@ -55,13 +59,19 @@ module Portage
         wire = if command
                  Transports::Stdio.new(command: command, args: args, env: env)
                elsif url
-                 (transport == :rest ? Transports::Rest : Transports::Http).new(url: url, headers: headers,
-                                                                                proxy: proxy)
+                 url_transport(transport, url, headers, proxy)
                else
                  raise ArgumentError, "connect requires either command: or url:"
                end
-        Session.new(transport: wire, capabilities: capabilities, transport_name: transport)
+        common_wire = common && -> { url_transport(common[0], common[1], headers, proxy) }
+        Session.new(transport: wire, capabilities: capabilities, transport_name: transport,
+                    common_transport: common_wire)
       end
+
+      def self.url_transport(transport, url, headers, proxy)
+        (transport == :rest ? Transports::Rest : Transports::Http).new(url: url, headers: headers, proxy: proxy)
+      end
+      private_class_method :url_transport
 
       # GETs `<url>/.well-known/ucp`, parses the manifest, and connects to the
       # `mcp`-transport endpoint it advertises in `services` (else its `rest`
@@ -76,8 +86,9 @@ module Portage
       def self.discover(url, headers: {}, proxy: nil)
         manifest = fetch_manifest(url, headers)
         transport, endpoint = service_endpoint(manifest)
+        common = common_endpoint(manifest)
         connect(url: endpoint, headers: headers, capabilities: capability_names(manifest), proxy: proxy,
-                transport: transport)
+                transport: transport, common: (common unless common == [transport, endpoint]))
       end
 
       def self.fetch_manifest(url, headers = {})
@@ -131,6 +142,22 @@ module Portage
         raise ManifestShapeError, "manifest has no mcp or rest service entry to connect to (saw: #{seen.join(', ')})"
       end
       private_class_method :service_endpoint
+
+      # `[transport, endpoint]` of the `dev.ucp.common` service, picked like
+      # service_endpoint, or nil when the manifest has none (or the services
+      # list isn't keyed by service name).
+      def self.common_endpoint(manifest)
+        services = ucp_section(manifest)["services"]
+        return unless services.is_a?(Hash)
+
+        entries = Array(services["dev.ucp.common"])
+        %w[mcp rest].each do |transport|
+          endpoint = newest_endpoint(entries, transport)
+          return [transport.to_sym, endpoint] if endpoint
+        end
+        nil
+      end
+      private_class_method :common_endpoint
 
       def self.newest_endpoint(entries, transport)
         entries.select { |s| s["transport"] == transport }.max_by { |s| s["version"].to_s }&.fetch("endpoint", nil)

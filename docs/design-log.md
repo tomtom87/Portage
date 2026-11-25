@@ -4159,3 +4159,44 @@ the specs fake the session. It now passes `agent_meta`.
 `spec/portage/cli/rest_store_spec.rb` drives `buy`, `find` and `check`
 against a WebMock-stubbed REST-only store built from the #178 fixture, plus
 the 403 cases.
+
+## 69. UCP ask, Phase 1: client and agent profile (2026-11-25)
+
+`Session#ask(query:, ids:, conversation:, context:, meta:)` sends the bare
+`ask_request` and returns the wire hash (`answer`, `conversation`, `links`,
+`messages`). Nil optional keys are left out. It goes through the same private
+`call` as the catalog methods, so `meta` (the agent profile) and errors behave
+the same: the REST transport raises `ServerError` with the store's text on a
+4xx, and the MCP transport calls the tool `ask_business`. `UcpWireShape`
+already passes an unknown action's arguments through untouched, so it needed
+no change. Ask is not in `MUTATING_ACTIONS`, so there is no Idempotency-Key.
+An `operation_not_performed` info message arrives in `messages` like any other.
+
+Routing. `Client.discover` now also reads the `dev.ucp.common` entries from the
+manifest (same mcp-then-rest, newest-version rule as `service_endpoint`). If
+that `[transport, endpoint]` pair differs from the shopping one, it goes to
+`connect(common:)`, and the Session holds a lambda that builds a second
+transport (same headers and proxy) the first time `ask` is called. Nothing is
+opened for a store that is never asked, and every other call still uses the
+main transport. When the pair is the same, or the manifest has no common
+service, `ask` uses the shopping transport: some stores list `ask` without a
+service entry, and the shopping endpoint is the only place to send it. A flat
+legacy manifest (services as an array) has no service names, so it never gets
+a common endpoint. This is a lambda rather than a transport built in discover
+so that connecting to a store costs nothing extra.
+
+What the plan guessed wrong. A `nil` wrapper in `Transports::Rest::ROUTES`
+already means "no body" (get and cancel), so `ask_business` uses `:bare` for
+"the whole wire body, unwrapped". The wire body keeps symbol keys, as the other
+bare-argument actions do, which JSON turns into strings.
+
+Agent profile. `generate/agent_profile.rb` declares the `dev.ucp.common`
+service (mcp, overview spec, `services/common/mcp.openrpc.json`; that schema
+URL is by analogy with shopping, not checked) and the `dev.ucp.common.ask`
+capability with the `common/ask` spec and `common/ask.json` schema. The spec
+URL has no trailing slash, like the other entries. `agent-profile.json` was
+rebuilt with the generator's own document builder over the keys already in the
+file, not with `rake`-style rotation, so no new key was minted and the
+published keys are unchanged. Whether the missing service and capability were
+the cause of `capabilities_incompatible` is still a hypothesis: it needs the
+branch pushed and a live ask with `PORTAGE_AGENT_PROFILE` pointed at it.

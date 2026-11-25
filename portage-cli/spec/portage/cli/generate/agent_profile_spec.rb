@@ -33,7 +33,8 @@ RSpec.describe Portage::Cli::Generate::AgentProfile do
     capabilities = JSON.parse(File.read("profile.json")).dig("ucp", "capabilities")
     expect(capabilities.keys).to contain_exactly(
       "dev.ucp.shopping.catalog.search", "dev.ucp.shopping.catalog.lookup",
-      "dev.ucp.shopping.cart", "dev.ucp.shopping.checkout", "dev.ucp.shopping.order"
+      "dev.ucp.shopping.cart", "dev.ucp.shopping.checkout", "dev.ucp.shopping.order",
+      "dev.ucp.common.ask"
     )
     expect(capabilities).not_to have_key("dev.ucp.shopping.catalog")
     expect(capabilities["dev.ucp.shopping.catalog.search"]).to contain_exactly(
@@ -41,7 +42,24 @@ RSpec.describe Portage::Cli::Generate::AgentProfile do
       "spec" => "https://ucp.dev/2026-08-25/specification/shopping/catalog/search",
       "schema" => "https://ucp.dev/2026-08-25/schemas/shopping/catalog_search.json"
     )
+    expect(capabilities["dev.ucp.common.ask"]).to contain_exactly(
+      "version" => "2026-08-25",
+      "spec" => "https://ucp.dev/2026-08-25/specification/common/ask",
+      "schema" => "https://ucp.dev/2026-08-25/schemas/common/ask.json"
+    )
     expect(capabilities.values.flatten).to all(include("version", "spec", "schema"))
+  end
+
+  # `ask` is a Common capability; a store won't match it without the service.
+  it "declares the common service beside the shopping one" do
+    described_class.generate(out: "profile.json", key_out: "key.pem")
+
+    services = JSON.parse(File.read("profile.json")).dig("ucp", "services")
+    expect(services.keys).to contain_exactly("dev.ucp.shopping", "dev.ucp.common")
+    expect(services["dev.ucp.common"].first).to include(
+      "version" => "2026-08-25", "transport" => "mcp",
+      "schema" => "https://ucp.dev/2026-08-25/services/common/mcp.openrpc.json"
+    )
   end
 
   it "carries keys forward from a pre-2026-08-25 profile that used signing_keys" do

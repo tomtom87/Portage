@@ -137,6 +137,68 @@ RSpec.describe Portage::Ucp::Client do
       expect(described_class.discover("https://shop.example").transport_name).to eq(:rest)
     end
 
+    describe "the dev.ucp.common service (ask)" do
+      let(:shopping) { { "transport" => "mcp", "endpoint" => "https://shop.example/mcp" } }
+      let(:mcp_session) { instance_double(Portage::Ucp::Client::Session) }
+      let(:ask_result) { { "answer" => { "plain" => "ok" } } }
+
+      def manifest_with(services)
+        stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
+          status: 200,
+          body: { ucp: { services: services, capabilities: { "dev.ucp.common.ask" => [{}] } } }.to_json
+        )
+      end
+
+      def stub_ask(transport_class, url, wire)
+        allow(transport_class).to receive(:new).with(url: url, headers: {}, proxy: nil).and_return(wire)
+        allow(wire).to receive(:call_tool).and_return(ask_result)
+      end
+
+      let(:meta) { { agent_profile: "https://agent.example/profile" } }
+
+      it "uses the one transport when common shares the shopping endpoint" do
+        manifest_with("dev.ucp.shopping" => [shopping], "dev.ucp.common" => [shopping])
+        wire = instance_double(Portage::Ucp::Client::Transports::Http)
+        stub_ask(Portage::Ucp::Client::Transports::Http, "https://shop.example/mcp", wire)
+
+        session = described_class.discover("https://shop.example")
+
+        expect(session.ask(query: "q", meta: meta)).to eq(ask_result)
+        expect(Portage::Ucp::Client::Transports::Http).to have_received(:new).once
+        expect(wire).to have_received(:call_tool).with(name: "ask_business", arguments: { query: "q" }, meta: meta)
+      end
+
+      it "sends ask to the common endpoint, over its own transport, when it differs" do
+        common = { "transport" => "rest", "endpoint" => "https://common.example/ucp" }
+        manifest_with("dev.ucp.shopping" => [shopping], "dev.ucp.common" => [common])
+        main = instance_double(Portage::Ucp::Client::Transports::Http, call_tool: {})
+        rest = instance_double(Portage::Ucp::Client::Transports::Rest)
+        stub_ask(Portage::Ucp::Client::Transports::Http, "https://shop.example/mcp", main)
+        stub_ask(Portage::Ucp::Client::Transports::Rest, "https://common.example/ucp", rest)
+
+        session = described_class.discover("https://shop.example")
+
+        expect(Portage::Ucp::Client::Transports::Rest).not_to have_received(:new)
+        expect(session.ask(query: "q", meta: meta)).to eq(ask_result)
+        expect(rest).to have_received(:call_tool).with(name: "ask_business", arguments: { query: "q" }, meta: meta)
+        expect(main).not_to have_received(:call_tool)
+      end
+
+      # Some stores list ask without a dev.ucp.common service entry; the
+      # shopping endpoint is the only place to send it.
+      it "falls back to the shopping endpoint when the manifest has no common service" do
+        manifest_with("dev.ucp.shopping" => [shopping])
+        wire = instance_double(Portage::Ucp::Client::Transports::Http)
+        stub_ask(Portage::Ucp::Client::Transports::Http, "https://shop.example/mcp", wire)
+
+        session = described_class.discover("https://shop.example")
+
+        expect(session.advertises?("dev.ucp.common.ask")).to be(true)
+        expect(session.ask(query: "q", meta: meta)).to eq(ask_result)
+        expect(Portage::Ucp::Client::Transports::Http).to have_received(:new).once
+      end
+    end
+
     it "discovers the #178 REST-only sandbox manifest over REST" do
       stub_request(:get, "https://shop.example/.well-known/ucp").to_return(
         status: 200, body: File.read(File.expand_path("../../fixtures/rest_only_manifest.json", __dir__))

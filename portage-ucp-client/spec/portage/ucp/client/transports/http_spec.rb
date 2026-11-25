@@ -53,6 +53,13 @@ RSpec.describe Portage::Ucp::Client::Transports::Http do
     )
   end
 
+  it "calls the ask_business tool with the ask body as is, plus meta, and no idempotency-key" do
+    transport.call_tool(name: "ask_business", arguments: { query: "trial?", ids: ["p1"] }, meta: agent_meta)
+
+    expect(mcp_client).to have_received(:call_tool)
+      .with(name: "ask_business", arguments: { query: "trial?", ids: ["p1"], "meta" => wire_meta })
+  end
+
   it "nests get_product under catalog with id" do
     transport.call_tool(name: "get_product", arguments: { product_id: "p1" }, meta: agent_meta)
 
