@@ -48,7 +48,7 @@ docker buildx build --builder portage-builder --platform linux/amd64,linux/arm64
 docker buildx build --builder portage-builder --platform linux/amd64,linux/arm64 -f Dockerfile.store -t ghcr.io/tomtom87/portage-ucp:<ucp ver> --push .
 ```
 
-Smoke-test the buyer image over stdio: `initialize` (protocol 2025-11-25), `tools/list` (expect 14 tools), `server/discover` (2026-07-28).
+Smoke-test the buyer image over stdio: `initialize` (protocol 2025-11-25), `tools/list` (expect 15 tools), `server/discover` (2026-07-28).
 
 ## 6. MCP Registry
 
