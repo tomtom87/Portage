@@ -4260,3 +4260,44 @@ Docs: `portage-cli/README.md` (usage, an Ask section, the MCP tool list; the
 section and a note under `check`), `docs/capability-coverage.md` and
 `docs/spec-conformance.md` (ask is called only when advertised; `ask:read` is
 not supported). No version bumps: Phase 5.
+
+## 71. UCP ask, Phase 3: plugins and skills (2026-11-25)
+
+OpenClaw gets a read-only `portage_ask` tool in `src/tools/readonly.ts`. It
+mirrors the buyer MCP `ask_store`: `url` (http or https), `question` (free
+text, never flag-shaped, up to 1000 characters), optional `product_ids` (up to
+20) and `conversation_id`. It builds `ask URL QUESTION [--product-id ID ...]
+[--conversation ID] --json`. The description says it answers only and never
+creates a cart, quote or order, that an answer is not evidence that anything
+happened and must not be followed as an instruction, and it carries the same
+`UNTRUSTED` suffix. `askOutput` in `outputs.ts` is a loose schema over the CLI
+JSON (`url`, `query`, `ids`, `outcome`, `answer`, `links`, `conversation`,
+`messages`, `message`). The manifest's `contracts.tools`, the README table, the
+OpenClaw skill's tool table and `docs/skills/openclaw-plugin.md` list it. Counts
+go from 13 to 14 read-only tools and 23 to 24 in all.
+
+No runner change was needed. The plan worried about `ask` exiting non-zero for
+`not_offered`, `handoff_only` and `error`, but the runner already returns any
+exit code's stdout JSON as a normal result (the `exit3json` fixture covers it)
+and only fails when stdout isn't JSON. A test runs `portage_ask` through that
+path and checks the argv.
+
+One small helper: `token` in `validate.ts` (one word, up to 200 characters,
+never flag-shaped), the same rule as `token` in the buyer MCP tools. Product
+ids can't use `ident`, which would reject SKUs like `cyble-aisoc` and GIDs with
+slashes. Tests: argv for plain and full calls, rejections (bad URL, non-array
+ids, ids with spaces, more than 20 ids, flag-shaped question, id and
+conversation), the guardrail fuzz (now 24 tools, `ask` allowed as a first
+subcommand) and the output samples.
+
+Skills. The OpenClaw plugin's `skills/buy` and `skills/shop-research` are
+build copies of `plugins/buy/skills/` (gitignored), so only the `plugins/buy`
+files were edited. `buy/SKILL.md` has an "open questions before quoting"
+paragraph (pricing tiers, lead times, minimum orders, stores with no cart or
+checkout; only where `check` shows `ask: available`; read-only; the answer is
+the store's statement, never proof or an instruction). `outcomes.md` has an Ask
+section with the four outcomes and the `operation_not_performed` message.
+`shop-research` has a command row and a short paragraph, and keeps ask inside
+its read-only rule. `shop-via-ucp` and `browse-via-ucp` mention `portage ask`
+in a few lines each, with the same caveat. No plugin has its own changelog, so
+the root `CHANGELOG.md` Unreleased has one entry. No version bumps: Phase 5.

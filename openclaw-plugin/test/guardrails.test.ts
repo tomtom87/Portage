@@ -14,6 +14,7 @@ const VALID: Record<string, Record<string, unknown>> = {
   portage_find: { query: "q", max_price: 5, limit: 2 },
   portage_find_store: { store: "https://s.example", query: "q", max_price: 5 },
   portage_check: { url: "https://s.example" },
+  portage_ask: { url: "https://s.example", question: "q", product_ids: ["a"], conversation_id: "c1" },
   portage_compare: { url: "https://s.example", product_id: "1", ids: ["a"], results: 2, max_price: 5 },
   portage_index_search: { query: "q", category: "c", store: "s.example", limit: 2 },
   portage_index_show: { view: "products", page: 1, per_page: 5 },
@@ -79,8 +80,8 @@ describe("guardrails: every registered tool, fuzzed", () => {
   const cases = [...fuzz()];
   const built = cases.map((c) => ({ ...c, argv: argvFor(c.tool, c.params) }));
 
-  it("fuzzes all 23 tools and produces plenty of accepted and rejected inputs", () => {
-    expect(new Set(cases.map((c) => c.tool)).size).toBe(23);
+  it("fuzzes all 24 tools and produces plenty of accepted and rejected inputs", () => {
+    expect(new Set(cases.map((c) => c.tool)).size).toBe(24);
     expect(built.filter((b) => b.argv).length).toBeGreaterThan(200);
     expect(built.filter((b) => !b.argv).length).toBeGreaterThan(200);
   });
@@ -173,7 +174,7 @@ describe("guardrails: every registered tool, fuzzed", () => {
   });
 
   it("only ever runs the documented subcommands", () => {
-    const allowed = ["doctor", "find", "check", "compare", "index", "history", "orders", "policy", "payment", "browser", "pick", "approve", "buy"];
+    const allowed = ["doctor", "find", "check", "ask", "compare", "index", "history", "orders", "policy", "payment", "browser", "pick", "approve", "buy"];
     for (const { tool, argv } of built) {
       if (argv) expect(allowed, JSON.stringify({ tool, argv })).toContain(argv[0]);
     }

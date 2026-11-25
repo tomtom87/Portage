@@ -35,7 +35,7 @@ Set these under the plugin's config in OpenClaw:
 
 ## Read-only and opt-in tools
 
-The read-only tools are on by default: `portage_doctor`, `portage_find`, `portage_find_store`, `portage_check`, `portage_compare`, `portage_index_search`, `portage_index_show`, `portage_index_sources`, `portage_history`, `portage_orders_reconcile`, `portage_policy_show`, `portage_payment_list` and `portage_browser_profile_status`. They search and report; none of them prices a purchase, buys, or writes anything.
+The read-only tools are on by default: `portage_doctor`, `portage_find`, `portage_find_store`, `portage_check`, `portage_ask`, `portage_compare`, `portage_index_search`, `portage_index_show`, `portage_index_sources`, `portage_history`, `portage_orders_reconcile`, `portage_policy_show`, `portage_payment_list` and `portage_browser_profile_status`. They search and report; none of them prices a purchase, buys, or writes anything.
 
 The tools that price, approve, buy, hand off, open a browser or change the index are optional, and OpenClaw leaves them off until you allow them in its tool settings (see [plugin tools](https://docs.openclaw.ai/tools/plugin)): `portage_pick`, `portage_dry_run`, `portage_approve`, `portage_buy_quote`, `portage_handoff`, `portage_index_add`, `portage_index_remove`, `portage_index_build`, `portage_index_refresh` and `portage_browser_import`. To buy, you typically allow `portage_dry_run`, `portage_approve`, `portage_buy_quote` and `portage_handoff`.
 

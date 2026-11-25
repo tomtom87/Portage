@@ -51,6 +51,7 @@ On by default:
 | `portage_find` | Searches stores for a product; returns offers and a `search_id`. |
 | `portage_find_store` | Searches one named store's live catalogue. |
 | `portage_check` | Says whether Portage can buy from a store (`automated`, `browse_only`, `webmcp`, `handoff`, `unsupported`). |
+| `portage_ask` | Puts a question to a store that offers UCP ask (pricing tiers, lead times, minimum orders). Answers only, never acts. |
 | `portage_compare` | Compares a product across stores. |
 | `portage_index_search`, `portage_index_show`, `portage_index_sources` | Read the local store and product index. |
 | `portage_history` | Past purchases and searches. |

@@ -54,6 +54,13 @@ export function opt(args: string[], flag: string, value: string | number | undef
   if (value !== undefined) args.push(flag, String(value));
 }
 
+/** A store's own id or SKU: one token (no whitespace), never flag-shaped. */
+export function token(name: string, v: unknown): string {
+  const s = str(name, v, 200);
+  if (/\s/.test(s)) throw new InputError(`${name} must not contain spaces`);
+  return s;
+}
+
 /** CLI-minted ids and refs (`qt_...`, `of_...`, `se_...`, `LAST`): one token, never flag-shaped. */
 export function ident(name: string, v: unknown): string {
   const s = str(name, v, 100);
