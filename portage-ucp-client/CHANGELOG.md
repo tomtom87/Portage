@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-25
+
 - **Added: `Session#ask`** (`dev.ucp.common.ask`). `ask(query:, ids: nil,
   conversation: nil, context: nil, meta: nil)` sends the bare ask body (nil
   keys left out) and returns the store's `answer`, `conversation`, `links` and
