@@ -4406,7 +4406,7 @@ Checks: client 121 examples and CLI 1483 green with rubocop clean (the CLI
 lock resolves against the local client 0.9.0; rdoc 8.0.0 installed, no swap
 needed); OpenClaw 150 tests green and `tsc --noEmit` clean.
 
-Pending the user's approval, none of it done: push `ucp-ask`, PR and rebase
+When this entry was written, these steps were still waiting on the user's approval: push `ucp-ask`, PR and rebase
 merge to `main`, `gem push` (client, then CLI), the v0.25.0 GitHub release,
 Homebrew, the `portage-mcp:0.17.0` image and smoke test, MCP Registry
 publish, the Glama build step, then purge the jsDelivr `@main` agent profile
