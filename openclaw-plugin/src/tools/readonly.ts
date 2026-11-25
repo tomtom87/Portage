@@ -48,7 +48,7 @@ export const readonlyTools: ToolSpec[] = [
   },
   {
     name: "portage_check",
-    description: `Check whether Portage can buy from a store (param: url). Returns verdict (automated, webmcp, handoff or unsupported) and next_step; tell the user plainly which it is. Makes plain GET requests only, never a cart. Read-only. ${UNTRUSTED}`,
+    description: `Check whether Portage can buy from a store (param: url). Returns verdict (automated, browse_only, webmcp, handoff or unsupported) and next_step; tell the user plainly which it is. Makes plain GET requests only, never a cart. Read-only. ${UNTRUSTED}`,
     parameters: Type.Object({ url: Type.String({ description: URL_DESC }) }),
     outputSchema: checkOutput,
     buildArgs: (p) => ["check", httpUrl("url", p.url), "--json"],

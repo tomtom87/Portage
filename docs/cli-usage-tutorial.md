@@ -61,7 +61,7 @@ adapters load, then lists anything to fix.
 portage check https://your-shop.example
 ```
 
-Prints a verdict (`automated`, `webmcp`, `handoff` or `unsupported`), the detected
+Prints a verdict (`automated`, `browse_only`, `webmcp`, `handoff` or `unsupported`), the detected
 platform and a next step. It sends plain GET requests only, never contacts a
 hand-off-only host, and exits `0` only for `automated` and `webmcp`. Add `--json`
 for the full report, and see [Checking any store](checking-any-store.md).

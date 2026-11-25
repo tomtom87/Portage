@@ -14,8 +14,8 @@ money.
 skill.** It has the confirmation and payment guardrails a purchase needs.
 
 If the `portage` CLI is installed, `portage check <url> --json` answers "can an agent buy
-here?" with plain GET requests only (read `verdict`: `automated`, `webmcp`, `handoff` or
-`unsupported`, and `next_step`), and `portage find --query "..." --json` searches across
+here?" with plain GET requests only (read `verdict`: `automated`, `browse_only`, `webmcp`,
+`handoff` or `unsupported`, and `next_step`), and `portage find --query "..." --json` searches across
 stores (add `--store URL` to search just one). Both are read-only. Never run `portage buy` from this skill, not even with
 `--dry-run`: a dry run creates a real checkout at the store.
 

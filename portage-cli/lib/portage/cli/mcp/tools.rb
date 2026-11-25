@@ -237,7 +237,8 @@ module Portage
           "check_store" => {
             title: "Check whether Portage can buy from a store",
             description: "Read a store's UCP manifest and report how Portage can buy there: verdict " \
-                         "automated, webmcp, handoff (the shopper pays in their browser) or unsupported, " \
+                         "automated, browse_only (searchable, no UCP checkout), webmcp, handoff (the shopper pays " \
+                         "in their browser) or unsupported, " \
                          "with platform and next_step. Use it before quoting at a store you haven't bought " \
                          "from; it does not search products (find_products does). Makes plain GET requests " \
                          "only, never a cart. Read-only. #{UNTRUSTED}",
