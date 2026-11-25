@@ -37,7 +37,7 @@ UCP-Agent: profile="https://cdn.jsdelivr.net/gh/tomtom87/Portage@main/portage-cl
 
 Our agent profile (`portage-cli/agent-profile/agent-profile.json`, produced by `portage-cli/lib/portage/cli/generate/agent_profile.rb`) lists only `dev.ucp.shopping` and five shopping capabilities. UCP negotiates capabilities against the caller's profile, so the most likely cause is that the profile is missing `dev.ucp.common` and `dev.ucp.common.ask`. That is a hypothesis: Phase 1 confirms it.
 
-**The profile is served from jsDelivr at `@main`.** A profile change only reaches stores once it's on `main`, and once jsDelivr's cache has refreshed (purge: `https://purge.jsdelivr.net/gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json`). Before then, a live test can point `PORTAGE_AGENT_PROFILE` at the branch build: `https://cdn.jsdelivr.net/gh/tomtom87/Portage@ucp-ask/portage-cli/agent-profile/agent-profile.json`. That URL only works after the branch is pushed, and pushing needs the user's OK.
+**The profile is served from jsDelivr at `@main`.** A profile change only reaches stores once it's on `main`, and once jsDelivr's cache has refreshed (purge: `https://purge.jsdelivr.net/gh/tomtom87/Portage@main/portage-cli/agent-profile/agent-profile.json`). Before then, a live test can point `PORTAGE_AGENT_PROFILE` at the branch build: `https://cdn.jsdelivr.net/gh/tomtom87/Portage@ucp-ask/portage-cli/agent-profile/agent-profile.json`. That URL only works after the branch is pushed, and pushing needs the user's OK. (Done: the profile reached `main` in release set 0.25.0 and the jsDelivr cache was purged on 2026-11-25.)
 
 ## Goal
 
