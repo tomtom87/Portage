@@ -4411,3 +4411,24 @@ merge to `main`, `gem push` (client, then CLI), the v0.25.0 GitHub release,
 Homebrew, the `portage-mcp:0.17.0` image and smoke test, MCP Registry
 publish, the Glama build step, then purge the jsDelivr `@main` agent profile
 and run `portage ask` live against Cyble with it.
+
+Shipped the same day, each step on the user's go-ahead. `ucp-ask` was
+rebase-merged as PR #186 (merge `61583e3`). The user pushed
+`portage-ucp-client` 0.9.0 and `portage-cli` 0.17.0 to RubyGems. GitHub
+release v0.25.0 targets `61583e3`. The Homebrew formula is `portage 0.17.0`.
+`ghcr.io/tomtom87/portage-mcp:0.17.0` (amd64, arm64) passed the stdio smoke
+test: `initialize` 2025-11-25 with `serverInfo` 0.17.0, 15 tools including
+`ask_store`, and `server/discover` 2026-07-28. The MCP Registry lists
+`io.github.tomtom87/portage` 0.20.0, published after the user renewed the
+expired login. Glama synced to `61583e3`, its build step test passed on
+`portage-cli:0.17.0`, and Auto-Release published 0.25.0 with `serverInfo`
+0.17.0.
+
+Then jsDelivr's `@main` agent profile was purged, and the served copy now
+declares `dev.ucp.common`. `portage-cli` 0.17.0 installed from RubyGems, run
+with no `PORTAGE_AGENT_PROFILE` override, asked Cyble
+(`--product-id cyble-aisoc`) how AiSOC is billed and whether it has a free
+trial. It got `answered` with exit 0, the same monthly auto-pay answer as in
+§72, six links and an info `partial_answer`. The free-trial half is still
+unanswered. The `capabilities_incompatible` refusal from §72 is gone, so ask
+now works for anyone on the default profile.
