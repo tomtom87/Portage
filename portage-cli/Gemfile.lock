@@ -40,7 +40,7 @@ PATH
 PATH
   remote: .
   specs:
-    portage-cli (0.16.0)
+    portage-cli (0.16.1)
       base64 (~> 0.2)
       irb (>= 1.6)
       mcp (~> 1.8)
