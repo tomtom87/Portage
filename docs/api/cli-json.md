@@ -444,6 +444,28 @@ Nothing is waited on for `--dry-run`, or when the report has no `handoff` and `c
 
 Source: `cli.rb` (`wait_for_handoff`, `emit_wait_event`), `cli/handoff_waiter.rb`, `cli/handoff_wait_timeout.rb`
 
+## ask
+
+`portage ask <url> "question" [--product-id ID ...] [--conversation ID] --json`
+
+Puts a question to a store that advertises `dev.ucp.common.ask` and returns its answer. It is read-only: the store answers and never acts, and Portage never acts on the answer. The answer is the store's own text, untrusted, and no evidence that anything happened (a store asked to "add two to my cart" says it didn't, in an `operation_not_performed` message). Takes the `--proxy*` flags. `URL` must be http(s) (a bare host is read as https). A missing URL or question, or a bad URL, is a usage error (exit `1`, usage on stderr). Exits `0` only for `answered`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `url` | string | The store origin that was asked. |
+| `query` | string | The question. |
+| `ids` | array | The `--product-id` values sent, `[]` when none. |
+| `answer` | object or null | The store's answer: `plain` (always), and `markdown` or `html` when it sent them. `null` unless `outcome` is `answered`. |
+| `links` | array | The store's links, each with `url` and usually `title`. `[]` when none. |
+| `conversation` | object or null | `id` (and `expires_at` when the store sends it). Pass the id to `--conversation` to continue. |
+| `messages` | array | The store's own messages, each with `type`, `code`, `content` (for example info `operation_not_performed`). For `error`, the messages in the store's refusal. |
+| `outcome` | string | `answered`, `not_offered` (the store doesn't advertise ask, and no ask request was made), `handoff_only` (a hand-off-only host, never fetched) or `error`. |
+| `message` | string or null | `null` for `answered`; otherwise a plain explanation. For a store's refusal it carries the store's text and code, for example `capabilities_incompatible`. Also `error` when the store doesn't speak UCP or `PORTAGE_AGENT_PROFILE` is unset. |
+
+Ask is not recorded in `history`.
+
+Source: `cli/ask.rb`, `cli.rb` (`run_ask`)
+
 ## compare
 
 `portage compare <url> --product-id ID [--id VALUE ...] [--results N] [--max-price N] --json`
@@ -481,6 +503,8 @@ Reports whether Portage can buy from a store and how. The scheme defaults to `ht
 | `verdict` | string | `automated`, `browse_only`, `webmcp`, `handoff` or `unsupported`. `browse_only`: native UCP without both cart and checkout. |
 | `next_step` | string | What to do, in plain English. |
 | `index_hint` | string | Present only for a Shopify or native-UCP store: the `portage index add ORIGIN --crawl` command that would add its catalogue to your local index. `check` never runs it. |
+
+The text output adds an `ask: available (portage ask URL "...")` line when the manifest advertises `dev.ucp.common.ask`. The JSON has no such field: the capability is in `native_ucp` already, and the verdict is unaffected.
 
 Verdicts follow the order `buy` uses: hand-off-only, then native UCP, then WebMCP, then a usable adapter. Source: `cli/check.rb`, `cli/check_next_step.rb`
 

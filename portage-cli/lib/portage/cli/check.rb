@@ -60,6 +60,15 @@ module Portage
         with_index_hint(report.merge(verdict: verdict, next_step: CheckNextStep.call(verdict, report)))
       end
 
+      # @param manifest [Hash, nil] the native UCP manifest.
+      def self.advertises?(manifest, capability)
+        return false unless manifest
+
+        caps = (manifest["ucp"] || manifest)["capabilities"]
+        names = caps.is_a?(Hash) ? caps.keys : Array(caps).map { |c| c["name"] }
+        names.include?(capability)
+      end
+
       private
 
       # docs/plans/local-catalogue.md Phase 2: a Shopify (or native UCP)
@@ -165,9 +174,7 @@ module Portage
       # searched but not bought from. Reads the nested ("ucp" => {...}) and
       # the older flat manifest shapes, as Ucp::Client does.
       def native_checkout?(manifest)
-        caps = (manifest["ucp"] || manifest)["capabilities"]
-        names = caps.is_a?(Hash) ? caps.keys : Array(caps).map { |c| c["name"] }
-        names.include?(CART_CAP) && names.include?(CHECKOUT_CAP)
+        self.class.advertises?(manifest, CART_CAP) && self.class.advertises?(manifest, CHECKOUT_CAP)
       end
     end
   end

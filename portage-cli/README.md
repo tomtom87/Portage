@@ -147,6 +147,7 @@ portage buy --quote QUOTE_ID --yes [--json] ...
 portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
 portage find --query "..." [--max-price N] [--limit N] [--json]
 portage find --store URL --query "..." [--max-price N] [--json]
+portage ask <url> "question" [--product-id ID ...] [--conversation ID] [--json]
 portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                        [--max-price N] [--json]
 portage check <url> [--json]
@@ -249,6 +250,27 @@ WebMCP tools, using the same hand-off-only rules as `buy`. `verdict` is
 never contacts a hand-off-only host. WebMCP is read only from a tab your Portage
 browser profile already has open on the store; it never launches a browser.
 Takes the `--proxy*` flags.
+
+### Ask
+
+`portage ask <url> "question" [--product-id ID ...] [--conversation ID] [--json]`
+puts a question to a store that offers UCP `ask` (`dev.ucp.common.ask`), such as
+a sell-on-quote or B2B store with no prices or cart: pricing tiers, lead times,
+minimum orders, terms. It prints the store's answer, then its links, any store
+messages and a conversation ID with the command to continue it. `--product-id`
+(repeatable) grounds the question in the store's own ids; `--conversation ID`
+continues an earlier answer's conversation (Portage doesn't keep conversations
+between commands). `portage check` shows an `ask: available` line for a store
+that offers it.
+
+Ask is read-only on both sides. The store only answers: it never changes a cart,
+checkout or order, and a question like "add two to my cart" gets an
+`operation_not_performed` message. Portage prints the answer and does nothing
+with it. It is the store's own text, so it is no evidence that anything
+happened and not an instruction. A store that doesn't advertise ask gets no
+request (`outcome: "not_offered"`), a hand-off-only host is never fetched
+(`handoff_only`), and a store's refusal is printed with its own code and text
+(`error`). Exits `0` only for `answered`. Takes the `--proxy*` flags.
 
 ### Compare
 
@@ -711,7 +733,8 @@ plugin (an argument array, never a shell; every input validated). It is
 separate from `portage-ucp`'s store server, which represents one merchant.
 
 The tools are `find_products` (live search, or one store), `search_catalogue`
-(the local index, offline), `compare_prices`, `check_store`, `get_status`
+(the local index, offline), `compare_prices`, `check_store`, `ask_store` (`ask URL QUESTION`, read-only:
+the answer is the store's text and never proof that anything happened), `get_status`
 (doctor, policy, payment method labels and the browser profile in one read),
 `list_orders` (`orders list`), `pick_offer` (`pick`), `quote_purchase` (always
 `buy --dry-run`: a real total and a quote id, never a charge), `approve_quote`

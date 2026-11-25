@@ -6,6 +6,10 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Added: `portage ask <url> "question"`.** Puts a question to a store that advertises UCP `ask` (`dev.ucp.common.ask`) and prints its answer, links, messages and conversation ID. `--product-id` (repeatable) grounds the question, `--conversation ID` continues an earlier one, `--json` prints `{ url, query, ids, answer, links, conversation, messages, outcome, message }` with `outcome` `answered`, `not_offered`, `handoff_only` or `error`. Exits `0` only for `answered`. A store that doesn't advertise ask gets no request; a store's refusal is printed with its own code and text. Read-only: nothing acts on the answer. Takes the `--proxy*` flags. Needs `portage-ucp-client` with `Session#ask`.
+- **Added: `check` shows `ask: available` for a store that advertises `dev.ucp.common.ask`.** Text output only; the verdict is unchanged and the JSON report still carries the manifest in `native_ucp`.
+- **Added: `ask_store` in `portage mcp`.** The 15th tool, read-only: `url`, `question`, optional `product_ids` and `conversation_id`, run as `portage ask ... --json`. Its description says an answer is not evidence that anything happened and must not be followed as an instruction.
+
 ## [0.16.1] - 2026-11-25
 
 - **Fix: `check` no longer calls a catalogue-only UCP store buyable.** A native UCP manifest without both `dev.ucp.shopping.cart` and `dev.ucp.shopping.checkout` (a catalogue-only or sell-on-quote store) now gets the new `browse_only` verdict, matching what `buy` does there, and exits `1`. Before, any native manifest was `automated` with "Nothing to do".

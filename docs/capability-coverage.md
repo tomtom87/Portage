@@ -30,4 +30,4 @@ auth-type columns, and the Instagram order deprecation — lives on the
 
 ## Client side
 
-The table above is what an adapter serves, and it is served over MCP only. The client (`portage-ucp-client`) is wider: it calls a store's catalog, cart, checkout and order operations over MCP or REST. Over REST, `link_identity` and the payment-enrollment actions are unavailable, because 2026-08-25's REST OpenAPI defines no operation for them.
+The table above is what an adapter serves, and it is served over MCP only. The client (`portage-ucp-client`) is wider: it calls a store's catalog, cart, checkout and order operations over MCP or REST. It also calls `dev.ucp.common.ask` (`portage ask`, the buyer MCP tool `ask_store`), at the store's `dev.ucp.common` endpoint, only when the store advertises it. Over REST, `link_identity` and the payment-enrollment actions are unavailable, because 2026-08-25's REST OpenAPI defines no operation for them.
