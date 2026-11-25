@@ -1,6 +1,6 @@
 # portage-ucp-client API
 
-`portage-ucp-client` (0.8.0) is the buyer side of UCP: use it when your Ruby shopping agent needs to discover a store, or drive its own `Adapter`, and place an order through one `Session` object.
+`portage-ucp-client` (0.9.0) is the buyer side of UCP: use it when your Ruby shopping agent needs to discover a store, or drive its own `Adapter`, and place an order through one `Session` object.
 
 Require it after the core gem. The core gem's API is on [portage-ucp](portage-ucp.md).
 

@@ -4379,3 +4379,35 @@ came back in under a second. Two small profile differences, neither a
 problem: we declare `dev.ucp.common` with transport `mcp` while AirShelf
 serves REST, and our common spec URL has no trailing slash where theirs does.
 A draft note for AirShelf is in `docs/plans/ucp-ask-airshelf-note.md`.
+
+## 73. UCP ask, Phase 5: release set 0.25.0 prepared (2026-11-25)
+
+Local prep only, following the `release` skill's section 1. One deviation:
+the commits sit on `ucp-ask` rather than a new `release-0.25.0` branch,
+because `ucp-ask` hasn't reached `main` and goes there as a single PR.
+
+Released: `portage-ucp-client` 0.9.0 (`Session#ask`, the `ask_business`
+route, common-service endpoint), `portage-cli` 0.17.0 (`portage ask`,
+`ask_store`, profile lists ask; gemspec now `portage-ucp-client ~> 0.9`) and
+the `buy` and OpenClaw plugins 0.11.0 (`portage_ask`, skill and outcome
+text). Pins: `Dockerfile` on `portage-cli` 0.17.0, `server.json` image tag
+`portage-mcp:0.17.0` and its `version` 0.19.1 to 0.20.0 (the registry marks
+latest by semver, so it rises by a minor even though the tag tracks the
+CLI). `Dockerfile.store` and `server.store.json` untouched. The release
+skill's buyer-image smoke test now expects 15 tools. Glama's build step
+isn't recorded in the repo; it moves to `portage-cli:0.17.0` at release time.
+
+`portage-ucp-webmcp` is unchanged: its gemspec asks for `portage-ucp-client
+"~> 0.6", ">= 0.6.2"`, which is `>= 0.6.2, < 1.0`, so 0.9.0 is admitted
+(checked with `Gem::Requirement`). `portage-ucp`, the adapters, decision and
+journal gems have no change.
+
+Checks: client 121 examples and CLI 1483 green with rubocop clean (the CLI
+lock resolves against the local client 0.9.0; rdoc 8.0.0 installed, no swap
+needed); OpenClaw 150 tests green and `tsc --noEmit` clean.
+
+Pending the user's approval, none of it done: push `ucp-ask`, PR and rebase
+merge to `main`, `gem push` (client, then CLI), the v0.25.0 GitHub release,
+Homebrew, the `portage-mcp:0.17.0` image and smoke test, MCP Registry
+publish, the Glama build step, then purge the jsDelivr `@main` agent profile
+and run `portage ask` live against Cyble with it.
