@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-25
+
 - **Fix: `check` no longer calls a catalogue-only UCP store buyable.** A native UCP manifest without both `dev.ucp.shopping.cart` and `dev.ucp.shopping.checkout` (a catalogue-only or sell-on-quote store) now gets the new `browse_only` verdict, matching what `buy` does there, and exits `1`. Before, any native manifest was `automated` with "Nothing to do".
 
 ## [0.16.0] - 2026-11-18
