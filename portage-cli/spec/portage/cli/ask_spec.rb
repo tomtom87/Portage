@@ -89,6 +89,19 @@ RSpec.describe "portage ask" do
                                                                                    "messages" => payload["messages"])
   end
 
+  it "reports an error envelope sent with HTTP 200 (ucp.status error, no answer) as an error, as AirShelf does" do
+    messages = [{ "type" => "error", "code" => "capabilities_incompatible",
+                  "content" => "No shared version of the requested capability.", "severity" => "unrecoverable" }]
+    allow(session).to receive(:ask).and_return({ "ucp" => { "status" => "error" }, "messages" => messages })
+
+    code, out = run("https://shop.example", "lead time?")
+
+    expect(code).to eq(1)
+    expect(out).to include("No shared version of the requested capability. (capabilities_incompatible)")
+    expect(JSON.parse(run("https://shop.example", "q", "--json").last)).to include("outcome" => "error",
+                                                                                   "messages" => messages)
+  end
+
   it "reports a store that doesn't speak UCP as an error" do
     allow(Portage::Ucp::Client).to receive(:discover).and_raise(Portage::Ucp::Client::DiscoveryError)
 

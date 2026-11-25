@@ -4301,3 +4301,81 @@ section with the four outcomes and the `operation_not_performed` message.
 its read-only rule. `shop-via-ucp` and `browse-via-ucp` mention `portage ask`
 in a few lines each, with the same caveat. No plugin has its own changelog, so
 the root `CHANGELOG.md` Unreleased has one entry. No version bumps: Phase 5.
+
+## 72. UCP ask, Phase 4: live interop (2026-11-25)
+
+Run against AirShelf's Cyble and Toshiba sellers with `PORTAGE_AGENT_PROFILE`
+pointed at the branch profile on jsDelivr (`@ucp-ask`). Both manifests list
+`dev.ucp.shopping` and `dev.ucp.common` on the same REST endpoint
+(`https://mcp.airshelf.ai/ucp/<merchant>`), so `ask` went over REST as
+`POST /ask` on the shopping transport, with no second transport. Cyble now
+also lists `dev.ucp.common.identity_linking`.
+
+The profile change clears `capabilities_incompatible`. The same `POST /ask`
+with the `@main` profile (no `dev.ucp.common`) still gets it, and with the
+branch profile every call answers. So §69's hypothesis holds: AirShelf
+negotiates `ask` against the caller's declared capabilities, and a profile
+that leaves out `dev.ucp.common.ask` gets "No shared version of the requested
+capability." This is the spec's normal intersection rule, not a quirk.
+
+What came back:
+
+- Cyble, `--product-id cyble-aisoc`, "free trial, and how is it billed?":
+  `answered`, exit 0, in text and JSON. The answer says plans are "billed
+  monthly and paid automatically with the card on file", with an `[info]
+  partial_answer` message ("Part of the answer was not confirmed by the
+  verified record and was left out"). The free-trial half went unanswered.
+  Six typed links: `source`, `product`, `request_quote`, `identity_linking`,
+  `mcp_endpoint`, `quote_verify`. The two runs gave slightly different text
+  (one quoted the record in curly quotes), so answers aren't cached.
+- Toshiba: `find --store ... --query printer` gave three printers
+  (`toshiba-e-studio528p`, `-409cp`, `-409p`). Asking about lead time,
+  minimum order and pricing tiers for the 528P answered (exit 0) with a
+  pointer to `request_quote` on Toshiba's MCP endpoint and no figures, plus
+  three links (`product`, `request_quote`, `documentation`). No message codes.
+- Toshiba with no product id ("which printers print in colour?") answered
+  with a qualifying question ("Roughly how many pages a month?", info code
+  `qualifying_question`, content `speed_band`) and told the agent to ask again
+  with the answer folded into the query. A raw curl doing exactly that got a
+  list of two colour models with PDF receipt links.
+
+Conversations. Neither store returned a `conversation` object on any call,
+including the raw curl, so Portage isn't dropping it. With no id to continue,
+the follow-up used a made-up one (`--conversation conv-portage-test-1`).
+Toshiba answered fresh and said so: info `conversation_not_found` ("This is a
+fresh answer"), then another `qualifying_question`. That is graceful, and our
+request shape (`conversation: { id }`) is accepted. Multi-turn on AirShelf is
+done by restating context in the query, not by conversation ids.
+
+Action question. "Add two to my cart" (Cyble and Toshiba) and "Please place
+an order for two e-STUDIO528P" (Toshiba) each got "I could not answer that
+from ... verified record" with info `not_answered`, not the spec's
+`operation_not_performed`. Nothing was acted on: these stores have no cart or
+checkout to act on, and Portage made only the discovery fetch and one
+`POST /ask`, printed the answer and wrote no history. Worth raising with
+AirShelf: the spec asks a store to say it didn't act when a question asks for
+an action.
+
+Bug found and fixed. AirShelf sends the `capabilities_incompatible` error
+with HTTP 200 and an envelope of `ucp.status: "error"` plus `messages`, and
+no `answer`. The REST transport only raises on 4xx/5xx, so `portage ask`
+reported it as `outcome: answered` with a null answer and exit 0 (text output
+was a blank line and an `[error]` line). `Ask#answered` now treats
+`ucp.status == "error"` or a missing `answer` as `error`, with the first error
+message's content and code ("couldn't answer: No shared version of the
+requested capability. (capabilities_incompatible)") and the store's
+`messages` in the JSON, exit 1. One spec covers it. Whether the client's
+catalog calls have the same blind spot for 200-with-error was not checked;
+AirShelf's catalog calls succeed with our profile.
+
+Also fixed: `buy_skill_frontmatter_spec.rb`'s read-only command list didn't
+include `portage ask`, which Phase 3 added to the shop-research skill's
+table, so the CLI suite had one failure. CLI 1483 examples green, rubocop
+clean.
+
+Latency: answers took 4 to 10 seconds end to end (qualifying questions and
+`not_answered` were the fast ones); the `capabilities_incompatible` refusal
+came back in under a second. Two small profile differences, neither a
+problem: we declare `dev.ucp.common` with transport `mcp` while AirShelf
+serves REST, and our common spec URL has no trailing slash where theirs does.
+A draft note for AirShelf is in `docs/plans/ucp-ask-airshelf-note.md`.

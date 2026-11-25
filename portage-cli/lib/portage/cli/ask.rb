@@ -63,7 +63,11 @@ module Portage
         nil
       end
 
+      # AirShelf sends errors like capabilities_incompatible with HTTP 200 and
+      # `ucp.status: "error"` (no answer), so the transport doesn't raise.
       def answered(wire)
+        return wire_error(wire) if wire.dig("ucp", "status") == "error" || !wire["answer"]
+
         report("answered", nil, answer: wire["answer"], links: wire["links"] || [],
                                 conversation: wire["conversation"], messages: wire["messages"] || [])
       end
@@ -73,6 +77,14 @@ module Portage
         messages = Array(error.payload && error.payload["messages"])
         code = error.server_messages.filter_map { |m| m[:code] }.first
         report("error", "#{@origin} couldn't answer: #{Buy.server_error_text(error)}#{" (#{code})" if code}",
+               messages: messages)
+      end
+
+      def wire_error(wire)
+        messages = wire["messages"] || []
+        error = messages.find { |m| m["type"] == "error" } || {}
+        text = error["content"] || "no answer came back"
+        report("error", "#{@origin} couldn't answer: #{text}#{" (#{error['code']})" if error['code']}",
                messages: messages)
       end
 

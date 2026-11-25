@@ -120,7 +120,7 @@ RSpec.describe "shop-research skill scope" do
     table = section.lines.grep(/\A\|/).join
     commands = table.scan(/`(portage [^`]*)`/).flatten.map { |cmd| cmd.split(/ (?=["\[<A-Z]|--json)/).first }
     read_only = ["portage find --query", "portage find --store", "portage index search", "portage index show",
-                 "portage check", "portage pick --view", "portage history", "portage doctor"]
+                 "portage check", "portage ask", "portage pick --view", "portage history", "portage doctor"]
 
     expect(commands).not_to be_empty
     expect(commands).to all(satisfy { |cmd| read_only.include?(cmd) })
