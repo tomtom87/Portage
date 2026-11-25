@@ -1,6 +1,6 @@
 # CLI JSON reference
 
-This page is the machine-readable contract of `portage` (gem `portage-cli` 0.16.0) for agents and scripts that drive it with `--json`.
+This page is the machine-readable contract of `portage` (gem `portage-cli` 0.17.0) for agents and scripts that drive it with `--json`.
 
 For flags and human-readable output, see the [CLI reference](../cli-reference.md). For how an agent loop uses these reports end to end, see [Agentic flow](../agentic-flow.md).
 
