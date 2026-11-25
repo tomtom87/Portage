@@ -6,6 +6,9 @@ module Portage
       def self.call(verdict, report)
         case verdict
         when "automated" then automated(report)
+        when "browse_only"
+          "This store speaks UCP but advertises no cart and checkout, so Portage can search it but not buy. " \
+          "To buy, contact the store or check out on its site."
         when "webmcp" then "Portage will build the cart; you pay in your browser."
         when "handoff" then adapter(report)
         else unsupported(report)

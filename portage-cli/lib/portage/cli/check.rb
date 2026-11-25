@@ -152,12 +152,22 @@ module Portage
       # --- verdict ---
 
       def verdict_for(report)
-        return "automated" if report[:native_ucp]
+        return native_checkout?(report[:native_ucp]) ? "automated" : "browse_only" if report[:native_ucp]
         return "webmcp" if report.dig(:webmcp, :status) == "available"
         return "automated" if report.dig(:live_probe, :status) == "ok"
         return "handoff" if report[:platform]
 
         "unsupported"
+      end
+
+      # Same rule Buy and Find apply to a live session: a manifest without
+      # both cart and checkout (a catalog-only or sell-on-quote store) can be
+      # searched but not bought from. Reads the nested ("ucp" => {...}) and
+      # the older flat manifest shapes, as Ucp::Client does.
+      def native_checkout?(manifest)
+        caps = (manifest["ucp"] || manifest)["capabilities"]
+        names = caps.is_a?(Hash) ? caps.keys : Array(caps).map { |c| c["name"] }
+        names.include?(CART_CAP) && names.include?(CHECKOUT_CAP)
       end
     end
   end

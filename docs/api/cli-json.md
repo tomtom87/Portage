@@ -478,7 +478,7 @@ Reports whether Portage can buy from a store and how. The scheme defaults to `ht
 | `handoff_only` | boolean | The host is on your hand-off-only list or is a built-in hand-off retailer. Such a host is never contacted. |
 | `adapter` | object or null | `gem`, `installed` and `missing_env` for the detected platform. |
 | `webmcp` | object | `status` (`available`, `none`, `skipped`, `error`), `tools` (names) and `reason`. |
-| `verdict` | string | `automated`, `webmcp`, `handoff` or `unsupported`. |
+| `verdict` | string | `automated`, `browse_only`, `webmcp`, `handoff` or `unsupported`. `browse_only`: native UCP without both cart and checkout. |
 | `next_step` | string | What to do, in plain English. |
 | `index_hint` | string | Present only for a Shopify or native-UCP store: the `portage index add ORIGIN --crawl` command that would add its catalogue to your local index. `check` never runs it. |
 

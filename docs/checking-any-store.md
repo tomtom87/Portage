@@ -13,7 +13,8 @@ portage check your-shop.example --json
 
 | Verdict | Meaning |
 |---|---|
-| `automated` | The store speaks UCP natively, or a configured adapter answered a live probe. |
+| `automated` | The store speaks UCP natively with cart and checkout, or a configured adapter answered a live probe. |
+| `browse_only` | The store speaks UCP natively but doesn't advertise both cart and checkout (a catalogue-only or sell-on-quote store). Portage can search it but not buy. |
 | `webmcp` | Portage can build the cart through the page's WebMCP tools. You pay in your browser. |
 | `handoff` | A hand-off-only host, or a platform was detected but its adapter isn't usable. Portage opens the store and you buy. |
 | `unsupported` | Nothing usable was found. |

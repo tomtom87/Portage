@@ -2,7 +2,10 @@ require "spec_helper"
 
 RSpec.describe Portage::Cli::Check do
   let(:store) { "https://shop.example" }
-  let(:manifest) { { "ucp" => { "version" => "2026-01-11" } } }
+  let(:manifest) do
+    { "ucp" => { "version" => "2026-01-11",
+                 "capabilities" => { "dev.ucp.shopping.cart" => [], "dev.ucp.shopping.checkout" => [] } } }
+  end
   let(:shopify_tools) do
     %w[search_catalog browse_store get_product show_variant add_to_cart get_cart update_cart_lines cancel_cart
        proceed_to_checkout manage_orders search_shop_policies_and_faqs].map { |name| { "name" => name } }
@@ -42,6 +45,24 @@ RSpec.describe Portage::Cli::Check do
     expect(report[:next_step]).to match(/speaks UCP natively/)
     expect(report[:index_hint]).to eq("portage index add #{store} --crawl")
     expect(report[:webmcp][:status]).to eq("skipped")
+  end
+
+  it "reports a native UCP store without cart and checkout as browse_only" do
+    catalog_only = { "ucp" => { "capabilities" => { "dev.ucp.shopping.catalog.search" => [] } } }
+    stub_manifest(status: 200, body: JSON.generate(catalog_only))
+
+    report = described_class.call(store)
+
+    expect(report[:verdict]).to eq("browse_only")
+    expect(report[:next_step]).to match(/can search it but not buy/)
+    expect(report[:index_hint]).to eq("portage index add #{store} --crawl")
+  end
+
+  it "reads capabilities from an older flat manifest" do
+    flat = { "capabilities" => [{ "name" => "dev.ucp.shopping.cart" }, { "name" => "dev.ucp.shopping.checkout" }] }
+    stub_manifest(status: 200, body: JSON.generate(flat))
+
+    expect(described_class.call(store)[:verdict]).to eq("automated")
   end
 
   it "defaults the scheme to https" do

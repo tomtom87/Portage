@@ -6,6 +6,8 @@ pre-1.0, so APIs may still shift between minor versions.
 
 ## [Unreleased]
 
+- **Fix: `check` no longer calls a catalogue-only UCP store buyable.** A native UCP manifest without both `dev.ucp.shopping.cart` and `dev.ucp.shopping.checkout` (a catalogue-only or sell-on-quote store) now gets the new `browse_only` verdict, matching what `buy` does there, and exits `1`. Before, any native manifest was `automated` with "Nothing to do".
+
 ## [0.16.0] - 2026-11-18
 
 - **Added: stores that serve only UCP REST work in `buy` and `find`.** Discovery now picks MCP or REST (UCP 2026-08-25's core transport) from the manifest, so a REST-only store such as the one in issue #178 no longer fails with "manifest has no mcp service entry". Requires `portage-ucp-client` `~> 0.8`.

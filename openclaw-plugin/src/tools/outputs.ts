@@ -49,7 +49,7 @@ export const findOutput = loose({
 export const checkOutput = loose({
   ...common,
   url: str(),
-  verdict: str("automated, webmcp, handoff or unsupported."),
+  verdict: str("automated, browse_only, webmcp, handoff or unsupported."),
   next_step: str("What Portage will do for this store, in words."),
   native_ucp: Type.Unknown(),
   platform: Type.Unknown(),
