@@ -4378,7 +4378,7 @@ Latency: answers took 4 to 10 seconds end to end (qualifying questions and
 came back in under a second. Two small profile differences, neither a
 problem: we declare `dev.ucp.common` with transport `mcp` while AirShelf
 serves REST, and our common spec URL has no trailing slash where theirs does.
-A draft note for AirShelf is in `docs/plans/ucp-ask-airshelf-note.md`.
+The note for AirShelf is kept outside the repo.
 
 ## 73. UCP ask, Phase 5: release set 0.25.0 prepared (2026-11-25)
 
