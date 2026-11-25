@@ -186,6 +186,13 @@ module Portage
         adapter_flow(platform) || dead_end
       end
 
+      # A REST refusal's message is already the store's own text led by its HTTP
+      # status; an MCP refusal's is the whole envelope, so #summary. Shared with
+      # Ask, so every command prints a store's refusal the same way.
+      def self.server_error_text(error)
+        error.message.start_with?("HTTP ") ? error.message : error.summary
+      end
+
       private
 
       # --- Step 0: hand-off-only hosts (Tier C) ---
@@ -325,9 +332,7 @@ module Portage
       # A REST refusal's message is already the store's own text led by its
       # HTTP status ("HTTP 403: Invalid API key"); #summary would drop the
       # status. An MCP refusal's message is the whole envelope, so #summary.
-      def server_error_text(error)
-        error.message.start_with?("HTTP ") ? error.message : error.summary
-      end
+      def server_error_text(error) = self.class.server_error_text(error)
 
       def catalog_only(session)
         products = safe_search(session)

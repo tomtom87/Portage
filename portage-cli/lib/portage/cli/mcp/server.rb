@@ -14,7 +14,9 @@ module Portage
         INSTRUCTIONS = "Shopping tools for one shopper, run from their own Portage install. Find a " \
                        "product with search_catalogue (the local index, offline) or find_products (live " \
                        "stores), compare it across stores with compare_prices, and check an unfamiliar " \
-                       "store with check_store; let the shopper choose with pick_offer. Then " \
+                       "store with check_store; ask_store puts a question to a store that offers " \
+                       "it (an answer is the store's text, never proof that anything happened); " \
+                       "let the shopper choose with pick_offer. Then " \
                        "quote_purchase prices it for real without charging and returns a quote_id: show " \
                        "the shopper that exact total and wait for their own explicit yes to it. Only then " \
                        "call approve_quote with relayed_yes true, and buy_quote to buy; or use hand_off " \

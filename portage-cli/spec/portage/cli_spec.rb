@@ -2062,6 +2062,21 @@ RSpec.describe Portage::Cli, ".run check" do
     expect { expect(described_class.run(["check", "shop.example"])).to eq(1) }.to output.to_stdout
   end
 
+  it "adds an ask line when the store advertises dev.ucp.common.ask, leaving the verdict alone" do
+    manifest = { "ucp" => { "capabilities" => { "dev.ucp.common.ask" => [{ "version" => "2026-08-25" }] } } }
+    stub_check(native_ucp: manifest, verdict: "browse_only")
+
+    expect { expect(described_class.run(["check", "shop.example"])).to eq(1) }
+      .to output(%r{shop.example/: browse_only\n.*\n  ask: available \(portage ask https://shop.example/ "..."\)}m)
+      .to_stdout
+  end
+
+  it "says nothing about ask when the store doesn't advertise it" do
+    stub_check(native_ucp: { "ucp" => { "capabilities" => { "dev.ucp.shopping.cart" => [{}] } } })
+
+    expect { described_class.run(["check", "shop.example"]) }.not_to output(/ask:/).to_stdout
+  end
+
   it "prints pretty JSON with --json" do
     stub_check(verdict: "automated")
     out = StringIO.new

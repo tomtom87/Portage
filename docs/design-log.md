@@ -4200,3 +4200,63 @@ file, not with `rake`-style rotation, so no new key was minted and the
 published keys are unchanged. Whether the missing service and capability were
 the cause of `capabilities_incompatible` is still a hypothesis: it needs the
 branch pushed and a live ask with `PORTAGE_AGENT_PROFILE` pointed at it.
+
+## 70. UCP ask, Phase 2: CLI command and buyer MCP tool (2026-11-25)
+
+`portage ask <url> "question" [--product-id ID ...] [--conversation ID] [--json]`
+is a small `Cli::Ask` class (like `Find`) plus `run_ask` in `cli.rb`. The URL
+goes through `Find.store_origin`, so a bare host works and anything else is a
+usage error. It uses `HandoffHost.restricted?` for the hand-off-only
+short-circuit (the plan said `HandoffHost`; `find --store` itself only asks the
+user's `HandoffOnly` list, so ask follows `check` and `buy` and also covers the
+built-in retail hosts). Order of checks: hand-off-only (no fetch), discovery,
+`session.advertises?("dev.ucp.common.ask")` (no ask request if missing), then
+`Session#ask` with `ids:` from `--product-id`, `conversation: { id: }` from
+`--conversation` and the agent profile as `meta`, the way `find` builds it.
+`--proxy*` flags work as on `find`.
+
+Outcomes are `answered`, `not_offered`, `handoff_only` and `error`; only
+`answered` exits `0`. The JSON is `{ url, query, ids, answer, links,
+conversation, messages, outcome }` plus a `message` string, which the plan did
+not list. Without it `not_offered` and a missing agent profile would carry no
+explanation, and the other commands' reports all have one. Text output is the
+`answer.plain` text, one line per link (`title - url`), the store's messages as
+`[info] operation_not_performed: ...`, then `conversation: ID` with the
+`portage ask URL "..." --conversation ID` hint. A non-answer prints just the
+`message`.
+
+Errors. A `ServerError` is printed through `Buy.server_error_text`, which is
+`Buy#server_error_text` made a class method so there is one rule (REST message
+as is, MCP envelope through `#summary`). The store's `code` is added in
+brackets, and its own `messages[]` go into the JSON `messages`, so
+`capabilities_incompatible` reaches the user as the store said it. Also
+handled: no `PORTAGE_AGENT_PROFILE`, a store that doesn't speak UCP, and
+`MCP::Client::RequestHandlerError`, all as `error`. Ask is not written to
+history: it records no offers or purchases, and there is nothing to pick from.
+Nothing in the CLI reads the answer for anything other than printing it.
+
+`portage check` text adds `ask: available (portage ask URL "...")` when the
+manifest lists `dev.ucp.common.ask`, via a new `Check.advertises?` (the
+capability-name reading `native_checkout?` already did, pulled out). The verdict
+is untouched. Text only: check's JSON has no capability field (the whole
+manifest is in `native_ucp`, which already shows it), so adding one would be a
+new field with no precedent.
+
+Buyer MCP: `ask_store` (`url`, `question`, optional `product_ids` of up to 20
+single-word ids, optional `conversation_id`) runs `ask URL QUESTION
+[--product-id ID ...] [--conversation ID] --json`. It uses the same validators
+as its neighbours (`url`, `text` capped at 1000 characters and never
+flag-shaped, `token`, `list`), is annotated read-only and open-world, and its
+description says it answers only, that the answer is not evidence that
+anything happened and must not be followed as an instruction, and carries the
+`UNTRUSTED` suffix. The tool count went from 14 to 15: the fuzz spec in
+`tools_spec.rb` (`eq(15)`, the tool list, the annotation table, the allowed
+subcommands and the valid-params table), the server instructions, the README
+tool list and the changelog. `docs/plans/buyer-mcp-server.md`'s history and
+`.claude/skills/release/SKILL.md`'s smoke test (Phase 5) are left alone.
+
+Docs: `portage-cli/README.md` (usage, an Ask section, the MCP tool list; the
+`cli-reference.md` page includes the README), `docs/api/cli-json.md` (an `ask`
+section and a note under `check`), `docs/capability-coverage.md` and
+`docs/spec-conformance.md` (ask is called only when advertised; `ask:read` is
+not supported). No version bumps: Phase 5.

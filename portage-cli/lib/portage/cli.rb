@@ -14,6 +14,7 @@ require_relative "cli/browser_import"
 require_relative "cli/browser_profile"
 require_relative "cli/buy"
 require_relative "cli/find"
+require_relative "cli/ask"
 require_relative "cli/compare"
 require_relative "cli/check"
 require_relative "cli/history"
@@ -57,6 +58,8 @@ module Portage
              portage buy --query "..." [--store URL] [--max-price N] [--limit N] ...
              portage find --query "..." [--max-price N] [--limit N] [--json]
              portage find --store URL --query "..." [--max-price N] [--json]  (one store, live, read-only)
+             portage ask <url> "question" [--product-id ID ...] [--conversation ID] [--json]
+                                          (ask a store a question, read-only; only where it offers ask)
              portage compare <url> --product-id ID [--id VALUE ...] [--results N]
                                     [--max-price N] [--json]
              portage check <url> [--json]
@@ -100,14 +103,14 @@ module Portage
              portage mcp  (MCP server on stdio for the shopper's agent; read-only and quotes only)
              portage --version
 
-           proxy flags (buy/find/compare/check/doctor/payment enroll):
+           proxy flags (buy/find/ask/compare/check/doctor/payment enroll):
              [--proxy URL] [--proxy-mode forward|gateway] [--proxy-header "Name: value"]
              [--no-proxy HOSTS] [--proxy-route ROUTE=URL|direct] [--proxy-chain URL,URL,...]
              [--proxy-passthrough HEADER] [--proxy-ca FILE] [--no-env-proxy]
     USAGE
 
-    COMMANDS = { "buy" => :run_buy, "find" => :run_find, "compare" => :run_compare, "check" => :run_check,
-                 "pick" => :run_pick, "approve" => :run_approve,
+    COMMANDS = { "buy" => :run_buy, "find" => :run_find, "ask" => :run_ask, "compare" => :run_compare,
+                 "check" => :run_check, "pick" => :run_pick, "approve" => :run_approve,
                  "history" => :run_history, "payment" => :run_payment, "policy" => :run_policy,
                  "orders" => :run_orders, "index" => :run_index, "browser" => :run_browser,
                  "doctor" => :run_doctor,
@@ -234,6 +237,50 @@ module Portage
     # conversion, and no attempt to handle zero-decimal currencies like JPY.
     def self.to_minor_units(major) = (major * 100).round
 
+    # --- ask ---
+
+    # `portage ask <url> "question"` (docs/plans/ucp-ask.md). Exit 0 only
+    # when the store answered.
+    def self.run_ask(argv)
+      options = parse_ask_options(argv)
+      return 1 unless options
+
+      json = options.delete(:json)
+      return 1 unless apply_proxy_settings(options.delete(:proxy))
+
+      report = Ask.new(**options).call
+      puts json ? JSON.pretty_generate(report) : format_ask(report)
+      report[:outcome] == "answered" ? 0 : 1
+    end
+
+    def self.parse_ask_options(argv)
+      opts = { ids: [], proxy: {} }
+      OptionParser.new do |parser|
+        parser.on("--product-id ID") { |v| opts[:ids] << v }
+        parser.on("--conversation ID") { |v| opts[:conversation] = v }
+        parser.on("--json") { opts[:json] = true }
+        ProxySettings.add_options(parser, opts[:proxy])
+      end.parse!(argv)
+      opts[:url], opts[:query] = argv.shift(2)
+      return opts if argv.empty? && !opts[:query].to_s.strip.empty? && Find.store_origin(opts[:url])
+
+      warn USAGE
+      nil
+    end
+
+    def self.format_ask(report)
+      return report[:message] unless report[:outcome] == "answered"
+
+      lines = [report.dig(:answer, "plain").to_s]
+      report[:links].each { |link| lines << "  #{[link['title'], link['url']].compact.join(' - ')}" }
+      report[:messages].each { |m| lines << "[#{m['type']}] #{[m['code'], m['content']].compact.join(': ')}" }
+      if (id = report.dig(:conversation, "id"))
+        lines << "conversation: #{id}" \
+                 "\n  continue with: portage ask #{report[:url]} \"...\" --conversation #{id}"
+      end
+      lines.join("\n")
+    end
+
     # --- check ---
 
     # `portage check <url>` — can Portage buy from this store, and how?
@@ -274,6 +321,9 @@ module Portage
       lines << "  platform: #{report[:platform]}" if report[:platform]
       lines << "  webmcp: #{report[:webmcp][:status]}#{" (#{report[:webmcp][:reason]})" if report[:webmcp][:reason]}"
       lines << "  next: #{report[:next_step]}"
+      if Check.advertises?(report[:native_ucp], Ask::ASK_CAP)
+        lines << "  ask: available (portage ask #{report[:url]} \"...\")"
+      end
       lines << "  index: `#{report[:index_hint]}` adds its catalogue to your local index" if report[:index_hint]
       lines.join("\n")
     end
